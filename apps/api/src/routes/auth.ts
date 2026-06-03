@@ -2,13 +2,13 @@ import { Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { Env } from "@whome/config";
 import {
-  bootstrapHouseholdOnLogin,
+  HouseholdClaimError,
+  resolveLoginUserAndHousehold,
   resolveAuthContext,
   createSession,
   destroySession,
   exchangeGoogleCode,
   fetchGoogleUserInfo,
-  findOrCreateUser,
   googleAuthUrl,
   googleOAuthRedirectUri,
   GOOGLE_LOGIN_SCOPES,
@@ -35,12 +35,7 @@ export function authRoutes(db: Database, env: Env) {
     const userId = c.get("userId");
 
     if (!auth && userId && secret) {
-      try {
-        await bootstrapHouseholdOnLogin(db, env, userId);
-        auth = await resolveAuthContext(db, userId);
-      } catch (e) {
-        console.error("session bootstrap failed", e);
-      }
+      auth = await resolveAuthContext(db, userId);
     }
 
     if (!auth) return c.json({ authenticated: false });
@@ -88,18 +83,20 @@ export function authRoutes(db: Database, env: Env) {
       const redirectUri = googleOAuthRedirectUri(env, "/auth/google/login/callback");
       const tokens = await exchangeGoogleCode(env, code, redirectUri);
       const profile = await fetchGoogleUserInfo(tokens.access_token);
-      const user = await findOrCreateUser(db, {
+      const { userId } = await resolveLoginUserAndHousehold(db, env, {
         email: profile.email,
         displayName: profile.name,
         imageUrl: profile.picture,
         emailVerified: profile.email_verified,
       });
-      await bootstrapHouseholdOnLogin(db, env, user.id);
-      const { cookie } = await createSession(db, user.id, secret);
+      const { cookie } = await createSession(db, userId, secret);
       setCookie(c, SESSION_COOKIE, cookie, sessionCookieOptions(env));
       return c.redirect(`${env.PUBLIC_APP_URL}/dashboard`);
     } catch (e) {
       console.error("login callback failed", e);
+      if (e instanceof HouseholdClaimError) {
+        return c.redirect(`${env.PUBLIC_APP_URL}/login?error=${e.code}`);
+      }
       return c.redirect(`${env.PUBLIC_APP_URL}/login?error=oauth`);
     }
   });

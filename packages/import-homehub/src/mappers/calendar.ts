@@ -50,6 +50,49 @@ export async function importCalendar(ctx: ImportContext): Promise<MapperResult> 
     ctx.idMap.set(calKey, calendarId);
   }
 
+  if (sqliteTableExists(ctx.sqlite, "personal_calendar")) {
+    const pcs = ctx.sqlite
+      .prepare("SELECT id, name, color, visibility FROM personal_calendar ORDER BY id")
+      .all() as Record<string, unknown>[];
+    for (const pc of pcs) {
+      const sourceId = String(pc.id);
+      if (ctx.idMap.has(`personal_calendar:${sourceId}`)) continue;
+      const [existing] = await db
+        .select()
+        .from(importRecords)
+        .where(
+          and(
+            eq(importRecords.householdId, ctx.householdId),
+            eq(importRecords.sourceTable, "personal_calendar"),
+            eq(importRecords.sourceId, sourceId),
+          ),
+        )
+        .limit(1);
+      if (existing) {
+        ctx.idMap.set(`personal_calendar:${sourceId}`, existing.targetId);
+        continue;
+      }
+      const [cal] = await db
+        .insert(calendars)
+        .values({
+          householdId: ctx.householdId,
+          name: String(pc.name ?? "Calendar").slice(0, 128),
+          color: pc.color ? String(pc.color).slice(0, 16) : null,
+          visibility: pc.visibility === "household" ? "household" : "private",
+        })
+        .returning();
+      ctx.idMap.set(`personal_calendar:${sourceId}`, cal.id);
+      await db.insert(importRecords).values({
+        householdId: ctx.householdId,
+        sourceTable: "personal_calendar",
+        sourceId,
+        targetTable: "calendars",
+        targetId: cal.id,
+      });
+      result.imported++;
+    }
+  }
+
   for (const r of reminders) {
     const sourceId = String(r.id);
     const [existing] = await db
@@ -68,11 +111,15 @@ export async function importCalendar(ctx: ImportContext): Promise<MapperResult> 
       continue;
     }
     const startDate = String(r.date).slice(0, 10);
+    const pcId = r.personal_calendar_id
+      ? ctx.idMap.get(`personal_calendar:${r.personal_calendar_id}`)
+      : undefined;
+    const targetCalendarId = pcId ?? calendarId!;
     const [ev] = await db
       .insert(calendarEvents)
       .values({
         householdId: ctx.householdId,
-        calendarId: calendarId!,
+        calendarId: targetCalendarId,
         title: String(r.title ?? "Untitled").slice(0, 256),
         description: r.description ? String(r.description) : null,
         startDate,

@@ -15,6 +15,13 @@
       "when": 1780494975000,
       "tag": "0001_auth_and_core",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1780494976000,
+      "tag": "0002_school_submission_artifacts",
+      "breakpoints": true
     }
   ]
 }

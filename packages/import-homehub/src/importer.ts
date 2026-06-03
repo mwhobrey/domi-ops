@@ -7,6 +7,7 @@ import { importCalendar } from "./mappers/calendar.js";
 import { importExpenses } from "./mappers/expenses.js";
 import { importFiles } from "./mappers/files.js";
 import { importHousehold } from "./mappers/household.js";
+import { importNotices } from "./mappers/notices.js";
 import { importNotes } from "./mappers/notes.js";
 import { importSchool } from "./mappers/school.js";
 import { importShopping } from "./mappers/shopping.js";
@@ -65,6 +66,7 @@ export async function runImport(options: ImportOptions): Promise<ImportReport> {
     };
 
     const steps = [
+      ["notices", importNotices],
       ["calendar", importCalendar],
       ["tasks", importTasks],
       ["shopping", importShopping],

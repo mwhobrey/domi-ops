@@ -1,0 +1,18 @@
+{
+  "dryRun": true,
+  "counts": {
+    "sqlite_tables": 15,
+    "household": 2,
+    "notices": 1,
+    "calendar": 2,
+    "tasks": 2,
+    "shopping": 0,
+    "notes": 0,
+    "expenses": 0,
+    "files": 1,
+    "school": 4
+  },
+  "warnings": [],
+  "errors": [],
+  "_comment": "Sanitized baseline from minimal-homehub.db dry-run. Re-run after schema changes: npm run import:validate"
+}

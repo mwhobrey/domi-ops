@@ -28,8 +28,11 @@ docker compose up -d postgres redis minio
 npm run build
 npm run db:migrate
 
-# Validate
-npm run import:homehub -- --sqlite ./fixtures/homehub/app.db --uploads ./fixtures/homehub/uploads --dry-run
+# Validate (CI / local fixture)
+npm run import:validate
+
+# Validate real DB (strict — exit 1 on any warning)
+npm run import:homehub -- --sqlite ./fixtures/homehub/app.db --uploads ./fixtures/homehub/uploads --dry-run --strict
 
 # Live import
 npm run import:homehub -- --sqlite ./fixtures/homehub/app.db --uploads ./fixtures/homehub/uploads
@@ -40,12 +43,23 @@ npm run import:homehub -- --sqlite ./fixtures/homehub/app.db --uploads ./fixture
 
 ## Cutover order (production)
 
-1. **Import first** into prod Postgres (creates household + legacy members).
-2. **Then** Google login — links your Google user to an existing member if emails match, or creates owner household only when DB is empty.
+1. **Import first** into prod Postgres (creates household + `@imported.local` placeholder users per `home_status` row).
+2. **Then** Google login — each member claims via `HOUSEHOLD_MEMBER_EMAIL_MAP` or Google displayName ↔ `legacyDisplayName`. No new household is auto-created when `import_records` exist.
 3. Connect Google Calendar → full import.
-4. Swap Caddy to `web:3000` per [deploy/Caddyfile.example](../deploy/Caddyfile.example).
+4. Swap Caddy to `web:3000` per [deploy/CUTOVER.md](../deploy/CUTOVER.md).
 
-See [deploy/CUTOVER.md](../deploy/CUTOVER.md) for the full checklist.
+## Mappers (live)
+
+| HomeHub table | whome target |
+|---------------|--------------|
+| `notice` | `notices` |
+| `todo_item` / `chore` | `chores` |
+| `personal_calendar` | `calendars` |
+| `reminder` | `calendar_events` |
+| `school_*` + `school_submission_artifact` | school schema + S3 keys via `file` mapper |
+| `file` | S3 `imports/{householdId}/files/…` |
+
+Regression baseline: [IMPORT_REPORT.example.json](./IMPORT_REPORT.example.json).
 
 ## Tests
 

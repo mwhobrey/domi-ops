@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
 import { importCalendar } from "./mappers/calendar.js";
 import { importHousehold } from "./mappers/household.js";
+import { importNotices } from "./mappers/notices.js";
+import { importTasks } from "./mappers/tasks.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixturePath =
@@ -17,6 +19,20 @@ function ensureFixture() {
     db.exec(`
       CREATE TABLE home_status (id INTEGER PRIMARY KEY, name TEXT NOT NULL, status TEXT);
       INSERT INTO home_status VALUES (1, 'Mom', 'Home');
+      CREATE TABLE notice (id INTEGER PRIMARY KEY, content TEXT, updated_by TEXT);
+      INSERT INTO notice VALUES (1, 'Hello', 'Mom');
+      CREATE TABLE todo_list (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
+      INSERT INTO todo_list VALUES (1, 'Todos');
+      CREATE TABLE todo_item (
+        id INTEGER PRIMARY KEY, description TEXT, done INTEGER, due_date TEXT,
+        creator TEXT, tags TEXT, todo_list_id INTEGER
+      );
+      INSERT INTO todo_item (id, description, done, due_date, creator, tags, todo_list_id)
+      VALUES (1, 'Task', 0, NULL, 'Mom', '[]', 1);
+      CREATE TABLE chore (
+        id INTEGER PRIMARY KEY, description TEXT, done INTEGER, due_date TEXT, creator TEXT, tags TEXT
+      );
+      INSERT INTO chore VALUES (1, 'Dishes', 0, NULL, 'Kid', '[]');
       CREATE TABLE reminder (
         id INTEGER PRIMARY KEY, date TEXT, time TEXT, title TEXT, description TEXT,
         category TEXT, color TEXT, all_day INTEGER, end_date TEXT, end_time TEXT,
@@ -60,6 +76,40 @@ describe("import mappers dry-run", () => {
     const sqlite = new Database(fixturePath, { readonly: true });
     try {
       const result = await importCalendar({
+        sqlite,
+        dryRun: true,
+        householdId: "00000000-0000-0000-0000-000000000001",
+        databaseUrl: "postgresql://whome:whome@127.0.0.1:5432/whome_unused",
+        idMap: new Map(),
+        db: testDb,
+      });
+      expect(result.imported).toBeGreaterThan(0);
+    } finally {
+      sqlite.close();
+    }
+  });
+
+  it("counts notices without writing", async () => {
+    const sqlite = new Database(fixturePath, { readonly: true });
+    try {
+      const result = await importNotices({
+        sqlite,
+        dryRun: true,
+        householdId: "00000000-0000-0000-0000-000000000001",
+        databaseUrl: "postgresql://whome:whome@127.0.0.1:5432/whome_unused",
+        idMap: new Map(),
+        db: testDb,
+      });
+      expect(result.imported).toBeGreaterThan(0);
+    } finally {
+      sqlite.close();
+    }
+  });
+
+  it("counts chores and todo_item without writing", async () => {
+    const sqlite = new Database(fixturePath, { readonly: true });
+    try {
+      const result = await importTasks({
         sqlite,
         dryRun: true,
         householdId: "00000000-0000-0000-0000-000000000001",

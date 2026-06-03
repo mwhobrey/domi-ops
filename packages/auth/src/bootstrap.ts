@@ -6,6 +6,7 @@ import {
   users,
 } from "@whome/db";
 import { eq } from "drizzle-orm";
+import { hasImportRecords } from "./import-records.js";
 
 export interface AuthContext {
   userId: string;
@@ -26,6 +27,10 @@ export async function bootstrapHouseholdOnLogin(
     .where(eq(householdMembers.userId, userId))
     .limit(1);
   if (existing) return existing.householdId;
+
+  if (await hasImportRecords(db)) {
+    throw new Error("Imported household exists; sign in with a mapped Google account to claim your member");
+  }
 
   if (env.DEPLOYMENT_MODE !== "single") {
     throw new Error("User has no household; contact admin (non-single deployment)");

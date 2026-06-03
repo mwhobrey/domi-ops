@@ -7,6 +7,7 @@ import {
   schoolClasses,
   schoolEnrollments,
   schoolGrades,
+  schoolSubmissionArtifacts,
   schoolSubmissions,
 } from "@whome/db";
 import { and, eq } from "drizzle-orm";
@@ -357,6 +358,46 @@ export async function importSchool(ctx: ImportContext): Promise<MapperResult> {
       targetId: grade.id,
     });
     result.imported++;
+  }
+
+  if (sqliteTableExists(ctx.sqlite, "school_submission_artifact")) {
+    const artifacts = ctx.sqlite
+      .prepare(
+        `SELECT id, submission_id, artifact_type, file_id, url, note
+         FROM school_submission_artifact ORDER BY id`,
+      )
+      .all() as Record<string, unknown>[];
+
+    for (const row of artifacts) {
+      const sourceId = String(row.id);
+      if (await alreadyImported(db, ctx.householdId, "school_submission_artifact", sourceId)) {
+        result.skipped++;
+        continue;
+      }
+      const submissionId = ctx.idMap.get(`school_submission:${row.submission_id}`);
+      if (!submissionId) continue;
+      const artifactType = String(row.artifact_type ?? "file");
+      const fileKey =
+        row.file_id != null ? ctx.idMap.get(`file:${row.file_id}`) : undefined;
+      const [art] = await db
+        .insert(schoolSubmissionArtifacts)
+        .values({
+          submissionId,
+          artifactType,
+          s3Key: fileKey ?? null,
+          url: row.url ? String(row.url) : null,
+          note: String(row.note ?? ""),
+        })
+        .returning();
+      await db.insert(importRecords).values({
+        householdId: ctx.householdId,
+        sourceTable: "school_submission_artifact",
+        sourceId,
+        targetTable: "school_submission_artifacts",
+        targetId: art.id,
+      });
+      result.imported++;
+    }
   }
 
   if (sqliteTableExists(ctx.sqlite, "school_attendance")) {

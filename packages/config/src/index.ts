@@ -40,6 +40,8 @@ export const envSchema = z
           .map((m) => m.trim())
           .filter(Boolean),
       ),
+    /** Legacy display name → Google email, e.g. Mom:mom@gmail.com,Dad:dad@gmail.com */
+    HOUSEHOLD_MEMBER_EMAIL_MAP: z.string().optional(),
   })
   .superRefine((data, ctx) => {
     if (data.NODE_ENV === "production") {

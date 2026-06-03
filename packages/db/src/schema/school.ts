@@ -127,6 +127,18 @@ export const schoolGrades = pgTable("school_grades", {
   revisionRequested: boolean("revision_requested").notNull().default(false),
 });
 
+export const schoolSubmissionArtifacts = pgTable("school_submission_artifacts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  submissionId: uuid("submission_id")
+    .notNull()
+    .references(() => schoolSubmissions.id, { onDelete: "cascade" }),
+  artifactType: varchar("artifact_type", { length: 16 }).notNull(),
+  s3Key: text("s3_key"),
+  url: text("url"),
+  note: text("note").default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const schoolAttendance = pgTable(
   "school_attendance",
   {
