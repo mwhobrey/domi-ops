@@ -91,6 +91,22 @@ services:
     networks:
       - proxy
 
+  import:
+    build:
+      context: .
+      dockerfile: Dockerfile.import
+    profiles:
+      - tools
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-whome}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-whome}
+      S3_ENDPOINT: http://minio:9000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - whome_internal
+
 networks:
   whome_internal:
     driver: bridge

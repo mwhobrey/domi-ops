@@ -1,0 +1,15 @@
+# Staging stack — separate Postgres volume for cutover rehearsal.
+# Usage: docker compose -f docker-compose.prod.yml -f docker-compose.staging.yml up -d --build
+services:
+  postgres:
+    volumes:
+      - whome_pg_staging:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+
+  web:
+    ports:
+      - "3002:3000"
+
+volumes:
+  whome_pg_staging:
