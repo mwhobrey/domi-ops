@@ -17,6 +17,8 @@ export const memberRoleEnum = pgEnum("member_role", [
   "guest",
 ]);
 
+export const memberPublicLabelEnum = pgEnum("member_public_label", ["name", "nickname"]);
+
 export const deploymentTierEnum = pgEnum("deployment_tier", [
   "self_host",
   "hosted_starter",
@@ -58,7 +60,12 @@ export const householdMembers = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     role: memberRoleEnum("role").notNull().default("member"),
-    /** Legacy HomeHub display name / Firebase mapping */
+    /** Primary name; user-editable in profile */
+    name: varchar("name", { length: 128 }),
+    nickname: varchar("nickname", { length: 64 }),
+    /** Which field appears on who's home, school roster, etc. */
+    publicLabel: memberPublicLabelEnum("public_label").notNull().default("name"),
+    /** Deprecated: HomeHub status-board label only */
     legacyDisplayName: varchar("legacy_display_name", { length: 64 }),
     legacyExternalId: varchar("legacy_external_id", { length: 128 }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

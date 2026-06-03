@@ -3,7 +3,7 @@
 ## Pre-flight
 
 - [ ] `.env` on droplet: `POSTGRES_PASSWORD`, `SESSION_SECRET` (32+), `ENCRYPTION_KEY`, Google OAuth, `PUBLIC_APP_URL=https://your.domain`
-- [ ] `HOUSEHOLD_MEMBER_EMAIL_MAP=Mom:mom@gmail.com,...` for each imported member (or rely on Google displayName ↔ `legacyDisplayName`)
+- [ ] Each family member signs in with Google once (auto-joins imported household); set nicknames on Profile
 - [ ] Google Cloud: both redirect URIs on `PUBLIC_APP_URL` ([docs/GOOGLE_OAUTH_SETUP.md](../docs/GOOGLE_OAUTH_SETUP.md))
 - [ ] HomeHub `app.db` + `uploads/` paths known on server
 - [ ] Worker env includes `GOOGLE_*`, `ENCRYPTION_KEY`, `REDIS_URL` (see `docker-compose.prod.yml`)

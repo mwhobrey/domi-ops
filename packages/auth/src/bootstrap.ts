@@ -11,7 +11,11 @@ import { hasImportRecords } from "./import-records.js";
 export interface AuthContext {
   userId: string;
   householdId: string;
+  memberId: string;
   email: string;
+  name: string | null;
+  nickname: string | null;
+  publicLabel: "name" | "nickname";
   role: "owner" | "admin" | "member" | "child" | "guest";
 }
 
@@ -29,7 +33,7 @@ export async function bootstrapHouseholdOnLogin(
   if (existing) return existing.householdId;
 
   if (await hasImportRecords(db)) {
-    throw new Error("Imported household exists; sign in with a mapped Google account to claim your member");
+    throw new Error("Imported household exists; sign in with Google to join it");
   }
 
   if (env.DEPLOYMENT_MODE !== "single") {
@@ -72,7 +76,11 @@ export async function resolveAuthContext(
   return {
     userId: user.id,
     householdId: member.householdId,
+    memberId: member.id,
     email: user.email,
+    name: member.name,
+    nickname: member.nickname,
+    publicLabel: member.publicLabel,
     role: member.role,
   };
 }

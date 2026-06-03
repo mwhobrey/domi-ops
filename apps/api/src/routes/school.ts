@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { memberShownLabel } from "@whome/auth";
 import type { Env } from "@whome/config";
 import { isModuleEnabled } from "@whome/config";
 import type { Database } from "@whome/db";
@@ -42,14 +43,21 @@ export function schoolRoutes(db: Database, env: Env) {
       .select({
         id: householdMembers.id,
         role: householdMembers.role,
+        name: householdMembers.name,
+        nickname: householdMembers.nickname,
+        publicLabel: householdMembers.publicLabel,
         legacyDisplayName: householdMembers.legacyDisplayName,
         email: users.email,
-        displayName: users.displayName,
       })
       .from(householdMembers)
       .innerJoin(users, eq(householdMembers.userId, users.id))
       .where(eq(householdMembers.householdId, auth.householdId));
-    return c.json({ members: rows });
+    return c.json({
+      members: rows.map((m) => ({
+        ...m,
+        shownLabel: memberShownLabel(m),
+      })),
+    });
   });
 
   app.get("/classes", async (c) => {

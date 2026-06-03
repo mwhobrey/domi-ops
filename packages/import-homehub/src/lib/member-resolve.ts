@@ -4,26 +4,35 @@ import { and, eq } from "drizzle-orm";
 
 type Db = ReturnType<typeof createDb>;
 
-/** Map HomeHub display name (teacher_id / student_id) to household_members.id */
+/** Map school/HomeHub display name to household_members.id */
 export async function resolveMemberId(
   db: Db,
   householdId: string,
-  displayName: string,
+  label: string,
   cache: Map<string, string>,
 ): Promise<string | null> {
-  const key = displayName.trim().toLowerCase();
+  const key = label.trim().toLowerCase();
   if (!key) return null;
   const cached = cache.get(key);
   if (cached) return cached;
 
   const members = await db
-    .select()
+    .select({
+      id: householdMembers.id,
+      name: householdMembers.name,
+      nickname: householdMembers.nickname,
+      legacyDisplayName: householdMembers.legacyDisplayName,
+    })
     .from(householdMembers)
     .where(eq(householdMembers.householdId, householdId));
 
   for (const m of members) {
-    const legacy = m.legacyDisplayName?.trim().toLowerCase();
-    if (legacy && legacy === key) {
+    const keys = [
+      m.name?.trim().toLowerCase(),
+      m.nickname?.trim().toLowerCase(),
+      m.legacyDisplayName?.trim().toLowerCase(),
+    ].filter(Boolean) as string[];
+    if (keys.includes(key)) {
       cache.set(key, m.id);
       return m.id;
     }

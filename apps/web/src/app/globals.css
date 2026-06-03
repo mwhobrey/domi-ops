@@ -9,6 +9,16 @@
   --color-accent-muted: #1d4ed8;
   --color-text: #f1f5f9;
   --color-text-muted: #94a3b8;
+  --color-danger: #f87171;
+  --color-danger-muted: #991b1b;
+  --color-success: #34d399;
+  --color-success-muted: #065f46;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+  --shadow-card: 0 1px 3px rgb(0 0 0 / 0.35);
+  --ring-focus: #60a5fa;
 }
 
 html {
@@ -20,4 +30,9 @@ body {
   color: var(--color-text);
   font-family: var(--font-sans);
   min-height: 100dvh;
+}
+
+*:focus-visible {
+  outline: 2px solid var(--ring-focus);
+  outline-offset: 2px;
 }

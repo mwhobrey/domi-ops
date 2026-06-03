@@ -2,7 +2,6 @@ import { Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { Env } from "@whome/config";
 import {
-  HouseholdClaimError,
   resolveLoginUserAndHousehold,
   resolveAuthContext,
   createSession,
@@ -45,6 +44,10 @@ export function authRoutes(db: Database, env: Env) {
         id: auth.userId,
         email: auth.email,
         householdId: auth.householdId,
+        memberId: auth.memberId,
+        name: auth.name,
+        nickname: auth.nickname,
+        publicLabel: auth.publicLabel,
         role: auth.role,
       },
     });
@@ -94,9 +97,6 @@ export function authRoutes(db: Database, env: Env) {
       return c.redirect(`${env.PUBLIC_APP_URL}/dashboard`);
     } catch (e) {
       console.error("login callback failed", e);
-      if (e instanceof HouseholdClaimError) {
-        return c.redirect(`${env.PUBLIC_APP_URL}/login?error=${e.code}`);
-      }
       return c.redirect(`${env.PUBLIC_APP_URL}/login?error=oauth`);
     }
   });

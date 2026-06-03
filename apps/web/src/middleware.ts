@@ -40,5 +40,13 @@ export const config = {
     "/school/:path*",
     "/shopping",
     "/shopping/:path*",
+    "/chores",
+    "/chores/:path*",
+    "/notes",
+    "/notes/:path*",
+    "/expenses",
+    "/expenses/:path*",
+    "/profile",
+    "/profile/:path*",
   ],
 };

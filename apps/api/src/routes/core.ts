@@ -1,8 +1,17 @@
 import { Hono } from "hono";
+import { memberShownLabel, type MemberPublicLabel } from "@whome/auth";
 import type { Env } from "@whome/config";
 import { isModuleEnabled } from "@whome/config";
 import type { Database } from "@whome/db";
-import { chores, expenses, homeStatus, notes, notices, shoppingItems } from "@whome/db";
+import {
+  chores,
+  expenses,
+  homeStatus,
+  householdMembers,
+  notes,
+  notices,
+  shoppingItems,
+} from "@whome/db";
 import { and, eq } from "drizzle-orm";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -106,6 +115,15 @@ export function coreRoutes(db: Database, env: Env) {
     return c.json({ ok: true });
   });
 
+  app.delete("/shopping/:id", async (c) => {
+    const auth = c.get("auth")!;
+    const id = c.req.param("id");
+    await db
+      .delete(shoppingItems)
+      .where(and(eq(shoppingItems.id, id), eq(shoppingItems.householdId, auth.householdId)));
+    return c.json({ ok: true });
+  });
+
   app.get("/chores", async (c) => {
     const auth = c.get("auth")!;
     const rows = await db
@@ -140,6 +158,15 @@ export function coreRoutes(db: Database, env: Env) {
     await db
       .update(chores)
       .set(patch)
+      .where(and(eq(chores.id, id), eq(chores.householdId, auth.householdId)));
+    return c.json({ ok: true });
+  });
+
+  app.delete("/chores/:id", async (c) => {
+    const auth = c.get("auth")!;
+    const id = c.req.param("id");
+    await db
+      .delete(chores)
       .where(and(eq(chores.id, id), eq(chores.householdId, auth.householdId)));
     return c.json({ ok: true });
   });
@@ -218,6 +245,89 @@ export function coreRoutes(db: Database, env: Env) {
       })
       .returning();
     return c.json({ expense: row }, 201);
+  });
+
+  app.get("/profile", async (c) => {
+    const auth = c.get("auth")!;
+    const shown = memberShownLabel(auth);
+    let [status] = await db
+      .select()
+      .from(homeStatus)
+      .where(
+        and(eq(homeStatus.householdId, auth.householdId), eq(homeStatus.memberId, auth.memberId)),
+      )
+      .limit(1);
+    if (!status) {
+      const [created] = await db
+        .insert(homeStatus)
+        .values({
+          householdId: auth.householdId,
+          memberId: auth.memberId,
+          name: shown.slice(0, 64),
+          status: "Away",
+        })
+        .returning();
+      status = created;
+    }
+    return c.json({
+      email: auth.email,
+      name: auth.name,
+      nickname: auth.nickname,
+      publicLabel: auth.publicLabel,
+      shownLabel: shown,
+      role: auth.role,
+      homeStatusId: status?.id ?? null,
+      homeStatus: status?.status ?? "Away",
+    });
+  });
+
+  app.patch("/profile", async (c) => {
+    const auth = c.get("auth")!;
+    const body = await c.req.json<{
+      name?: string;
+      nickname?: string;
+      publicLabel?: MemberPublicLabel;
+    }>();
+
+    const patch: {
+      name?: string | null;
+      nickname?: string | null;
+      publicLabel?: MemberPublicLabel;
+    } = {};
+    if (body.name !== undefined) patch.name = body.name.trim().slice(0, 128) || null;
+    if (body.nickname !== undefined) patch.nickname = body.nickname.trim().slice(0, 64) || null;
+    if (body.publicLabel === "name" || body.publicLabel === "nickname") {
+      patch.publicLabel = body.publicLabel;
+    }
+
+    if (Object.keys(patch).length > 0) {
+      await db
+        .update(householdMembers)
+        .set(patch)
+        .where(eq(householdMembers.id, auth.memberId));
+    }
+
+    const [member] = await db
+      .select({
+        name: householdMembers.name,
+        nickname: householdMembers.nickname,
+        publicLabel: householdMembers.publicLabel,
+      })
+      .from(householdMembers)
+      .where(eq(householdMembers.id, auth.memberId))
+      .limit(1);
+
+    if (member) {
+      const shown = memberShownLabel(member);
+      await db
+        .update(homeStatus)
+        .set({ name: shown.slice(0, 64), updatedAt: new Date() })
+        .where(
+          and(eq(homeStatus.householdId, auth.householdId), eq(homeStatus.memberId, auth.memberId)),
+        );
+    }
+
+    return c.json({ ok: true });
   });
 
   app.patch("/expenses/:id", async (c) => {

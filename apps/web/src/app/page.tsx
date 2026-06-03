@@ -1,3 +1,7 @@
+import Link from "next/link";
+import { cookies } from "next/headers";
+import { Card, CardBody } from "../components/ui";
+
 async function getHealth() {
   try {
     const base = process.env.API_URL ?? "http://localhost:4000";
@@ -9,8 +13,29 @@ async function getHealth() {
   }
 }
 
+async function hasSession(): Promise<boolean> {
+  const cookieStore = await cookies();
+  const cookieHeader = cookieStore
+    .getAll()
+    .map((c) => `${c.name}=${c.value}`)
+    .join("; ");
+  try {
+    const base = process.env.API_URL ?? "http://localhost:4000";
+    const res = await fetch(`${base}/auth/session`, {
+      headers: { cookie: cookieHeader },
+      cache: "no-store",
+    });
+    if (!res.ok) return false;
+    const data = (await res.json()) as { authenticated?: boolean };
+    return Boolean(data.authenticated);
+  } catch {
+    return false;
+  }
+}
+
 export default async function HomePage() {
   const health = await getHealth();
+  const loggedIn = await hasSession();
 
   return (
     <main className="relative min-h-dvh overflow-hidden">
@@ -42,29 +67,39 @@ export default async function HomePage() {
             { title: "Import", desc: "whome-import from HomeHub SQLite" },
             { title: "Deploy", desc: "Docker on your DO droplet behind Caddy" },
           ].map((card) => (
-            <div
-              key={card.title}
-              className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-elevated)]/80 p-6 backdrop-blur-sm"
-            >
-              <h2 className="font-medium">{card.title}</h2>
-              <p className="mt-2 text-sm text-[var(--color-text-muted)]">{card.desc}</p>
-            </div>
+            <Card key={card.title}>
+              <CardBody>
+                <h2 className="font-medium">{card.title}</h2>
+                <p className="mt-2 text-sm text-[var(--color-text-muted)]">{card.desc}</p>
+              </CardBody>
+            </Card>
           ))}
         </section>
 
         <div className="flex flex-wrap gap-3">
-          <a
-            href="/login"
-            className="rounded-xl bg-[var(--color-accent)] px-5 py-2.5 text-sm font-medium text-white hover:bg-[var(--color-accent-muted)]"
-          >
-            Sign in
-          </a>
-          <a
-            href="/dashboard"
-            className="rounded-xl border border-[var(--color-border)] px-5 py-2.5 text-sm hover:bg-[var(--color-surface-elevated)]"
-          >
-            Dashboard
-          </a>
+          {loggedIn ? (
+            <Link
+              href="/dashboard"
+              className="rounded-[var(--radius-lg)] bg-[var(--color-accent)] px-5 py-2.5 text-sm font-medium text-white hover:bg-[var(--color-accent-muted)]"
+            >
+              Go to dashboard
+            </Link>
+          ) : (
+            <Link
+              href="/login"
+              className="rounded-[var(--radius-lg)] bg-[var(--color-accent)] px-5 py-2.5 text-sm font-medium text-white hover:bg-[var(--color-accent-muted)]"
+            >
+              Sign in
+            </Link>
+          )}
+          {!loggedIn && (
+            <Link
+              href="/dashboard"
+              className="rounded-[var(--radius-lg)] border border-[var(--color-border)] px-5 py-2.5 text-sm hover:bg-[var(--color-surface-elevated)]"
+            >
+              Dashboard
+            </Link>
+          )}
         </div>
 
         <footer className="flex items-center gap-3 text-sm text-[var(--color-text-muted)]">

@@ -1,6 +1,8 @@
 import { AppShell } from "../../../../components/AppShell";
 import { SchoolAssignmentDetail } from "../../../../components/SchoolAssignmentDetail";
 import { apiFetch } from "../../../../lib/api";
+import { loadErrorMessage } from "../../../../lib/load-error";
+import { Alert } from "../../../../components/ui";
 
 export default async function SchoolAssignmentPage({
   params,
@@ -17,6 +19,7 @@ export default async function SchoolAssignmentPage({
     artifacts: { id: string; artifactType: string; s3Key: string | null; url: string | null }[];
     grade: { score: number | null; feedbackHtml: string } | null;
   }[] = [];
+  let loadError: string | null = null;
 
   try {
     const detail = await apiFetch<{
@@ -29,18 +32,24 @@ export default async function SchoolAssignmentPage({
       `/api/school/assignments/${id}/submissions`,
     );
     submissions = subRes.submissions;
-  } catch {
-    /* */
+  } catch (e) {
+    loadError = loadErrorMessage(e, "Could not load assignment");
   }
 
   return (
-    <AppShell title={assignmentTitle}>
-      <SchoolAssignmentDetail
-        assignmentId={id}
-        assignmentTitle={assignmentTitle}
-        className={className}
-        initialSubmissions={submissions}
-      />
+    <AppShell title={assignmentTitle} description={className ? `${className}` : undefined}>
+      {loadError ? (
+        <Alert variant="error">
+          {loadError}. <a href={`/school/assignment/${id}`}>Retry</a>
+        </Alert>
+      ) : (
+        <SchoolAssignmentDetail
+          assignmentId={id}
+          assignmentTitle={assignmentTitle}
+          className={className}
+          initialSubmissions={submissions}
+        />
+      )}
     </AppShell>
   );
 }

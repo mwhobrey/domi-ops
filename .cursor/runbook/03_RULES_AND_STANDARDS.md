@@ -126,7 +126,7 @@ docker compose -f docker-compose.prod.yml up -d --build
 5. **Calendar push / recurring** — Jobs enqueue but worker only warns (`packages/calendar-sync/src/sync.ts`).
 6. **School presign** — Real `@aws-sdk/s3-request-presigner`; requires S3 env in API.
 7. **HomeHub import** — Real droplet `app.db` not in CI; use `npm run import:validate` on fixture + `--strict` on operator dry-run.
-8. **Post-import auth** — Set `HOUSEHOLD_MEMBER_EMAIL_MAP` or match Google displayName to `legacyDisplayName`; no auto household bootstrap when `import_records` exist.
+8. **Post-import auth** — Google login joins imported household; profile nickname + home/away; no env email map.
 9. **`registerSyncHandler` in calendar-sync** — Dead code path; worker calls `runCalendarSyncJob` directly.
 10. **OAuth state** — Redis-backed (`REDIS_URL` required for login/calendar CSRF).
 11. **RLS / hosted tiers** — Documented only; schema has `deployment_tier` enum but no policies.

@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { ApiError, apiClient } from "../lib/client-api";
+import { Button, ConfirmDialog, EmptyState, Input } from "./ui";
+import { ListPage } from "./lists/ListPage";
 
 interface ShoppingItem {
   id: string;
@@ -11,73 +14,118 @@ interface ShoppingItem {
 export function ShoppingList({ initialItems }: { initialItems: ShoppingItem[] }) {
   const [items, setItems] = useState(initialItems);
   const [newItem, setNewItem] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  return (
-    <div className="space-y-4">
-      <form
-        className="flex gap-2"
-        onSubmit={async (e) => {
-          e.preventDefault();
-          if (!newItem.trim()) return;
-          const res = await fetch("/api/core/shopping", {
-            method: "POST",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ item: newItem.trim() }),
-          });
-          if (res.ok) {
-            const data = (await res.json()) as { item: ShoppingItem };
-            setItems((prev) => [...prev, data.item]);
-            setNewItem("");
-          }
-        }}
+  const unchecked = items.filter((i) => !i.checked);
+  const checked = items.filter((i) => i.checked);
+
+  async function addItem(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newItem.trim()) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await apiClient.post<{ item: ShoppingItem }>("/api/core/shopping", {
+        item: newItem.trim(),
+      });
+      setItems((prev) => [...prev, data.item]);
+      setNewItem("");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to add item");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function toggleItem(id: string, checked: boolean) {
+    setItems((prev) => prev.map((x) => (x.id === id ? { ...x, checked } : x)));
+    try {
+      await apiClient.patch(`/api/core/shopping/${id}`, { checked });
+    } catch {
+      setItems((prev) => prev.map((x) => (x.id === id ? { ...x, checked: !checked } : x)));
+      setError("Failed to update item");
+    }
+  }
+
+  async function removeItem(id: string) {
+    setDeleteId(null);
+    setItems((prev) => prev.filter((x) => x.id !== id));
+    try {
+      await apiClient.delete(`/api/core/shopping/${id}`);
+    } catch {
+      setError("Failed to delete item");
+    }
+  }
+
+  function renderRow(i: ShoppingItem) {
+    return (
+      <li
+        key={i.id}
+        className="flex items-center gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border)]/60 px-4 py-3"
       >
         <input
-          className="flex-1 rounded-xl border border-[var(--color-border)] bg-transparent px-4 py-2 text-sm"
-          placeholder="Add item…"
-          value={newItem}
-          onChange={(e) => setNewItem(e.target.value)}
+          type="checkbox"
+          checked={i.checked}
+          className="h-4 w-4 accent-[var(--color-accent)]"
+          onChange={() => toggleItem(i.id, !i.checked)}
         />
-        <button
-          type="submit"
-          className="rounded-xl bg-[var(--color-accent)] px-4 py-2 text-sm text-white"
-        >
-          Add
-        </button>
-      </form>
-      <ul className="space-y-2">
-        {items.length === 0 ? (
-          <li className="text-[var(--color-text-muted)]">List is empty</li>
-        ) : (
-          items.map((i) => (
-            <li
-              key={i.id}
-              className="flex items-center gap-3 rounded-xl border border-[var(--color-border)] px-4 py-3"
-            >
-              <input
-                type="checkbox"
-                checked={i.checked}
-                className="h-4 w-4"
-                onChange={async () => {
-                  const checked = !i.checked;
-                  setItems((prev) =>
-                    prev.map((x) => (x.id === i.id ? { ...x, checked } : x)),
-                  );
-                  await fetch(`/api/core/shopping/${i.id}`, {
-                    method: "PATCH",
-                    credentials: "include",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ checked }),
-                  });
-                }}
-              />
-              <span className={i.checked ? "line-through text-[var(--color-text-muted)]" : ""}>
-                {i.item}
-              </span>
-            </li>
-          ))
-        )}
-      </ul>
-    </div>
+        <span className={`flex-1 ${i.checked ? "text-[var(--color-text-muted)] line-through" : ""}`}>
+          {i.item}
+        </span>
+        <Button variant="ghost" size="sm" onClick={() => setDeleteId(i.id)}>
+          Remove
+        </Button>
+      </li>
+    );
+  }
+
+  return (
+    <ListPage
+      error={error}
+      onDismissError={() => setError(null)}
+      addForm={
+        <form className="flex gap-2" onSubmit={addItem}>
+          <Input
+            className="flex-1"
+            placeholder="Add item…"
+            value={newItem}
+            onChange={(e) => setNewItem(e.target.value)}
+          />
+          <Button type="submit" loading={loading}>
+            Add
+          </Button>
+        </form>
+      }
+    >
+      {items.length === 0 ? (
+        <EmptyState title="List is empty" description="Add your first item above." />
+      ) : (
+        <div className="space-y-6">
+          {unchecked.length > 0 && (
+            <section>
+              <h2 className="mb-2 text-sm font-medium text-[var(--color-text-muted)]">To buy</h2>
+              <ul className="space-y-2">{unchecked.map(renderRow)}</ul>
+            </section>
+          )}
+          {checked.length > 0 && (
+            <section>
+              <h2 className="mb-2 text-sm font-medium text-[var(--color-text-muted)]">In cart</h2>
+              <ul className="space-y-2">{checked.map(renderRow)}</ul>
+            </section>
+          )}
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={deleteId !== null}
+        title="Remove item?"
+        message="This removes the item from your shopping list."
+        confirmLabel="Remove"
+        onConfirm={() => deleteId && removeItem(deleteId)}
+        onCancel={() => setDeleteId(null)}
+      />
+    </ListPage>
   );
 }

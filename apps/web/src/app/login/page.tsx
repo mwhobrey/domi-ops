@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import { googleLoginUrl } from "../../lib/api";
 
 export default async function LoginPage({
   searchParams,
@@ -32,37 +31,38 @@ export default async function LoginPage({
   }
 
   return (
-    <main className="flex min-h-dvh flex-col items-center justify-center px-6">
-      <div className="w-full max-w-md space-y-6 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-elevated)] p-8">
-        <h1 className="text-2xl font-semibold">Sign in to whome</h1>
+    <main className="relative flex min-h-dvh flex-col items-center justify-center px-6">
+      <div
+        className="pointer-events-none absolute inset-0 opacity-40"
+        style={{
+          background:
+            "radial-gradient(ellipse 80% 50% at 50% -20%, #3b82f6 0%, transparent 50%)",
+        }}
+      />
+      <div className="relative w-full max-w-md space-y-6 rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-surface-elevated)] p-8 shadow-[var(--shadow-card)]">
+        <div className="space-y-2 text-center">
+          <p className="text-xs font-medium uppercase tracking-widest text-[var(--color-text-muted)]">
+            Household operations
+          </p>
+          <h1 className="text-2xl font-semibold">Sign in to whome</h1>
+        </div>
         {params.error === "oauth" && (
-          <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
-            Sign-in failed. Check API logs and Google OAuth redirect URIs, then try again.
+          <p className="rounded-[var(--radius-lg)] border border-[var(--color-danger-muted)] bg-[var(--color-danger-muted)]/20 px-3 py-2 text-sm text-[var(--color-danger)]">
+            Sign-in failed. Check Google OAuth redirect URIs and API logs, then try again.
           </p>
         )}
-        {params.error === "no_household" && (
-          <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
-            No imported household member matches this Google account. Set{" "}
-            <code className="text-xs">HOUSEHOLD_MEMBER_EMAIL_MAP</code> or sign in with a matching
-            display name. See repo file <code className="text-xs">docs/HOMEHUB_IMPORT.md</code>.
-          </p>
-        )}
-        {params.error === "already_claimed" && (
-          <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
-            That household member was already claimed by another Google account.
-          </p>
-        )}
-        <p className="text-sm text-[var(--color-text-muted)]">
-          Use your Google account. Calendar permissions are requested separately when you connect sync.
+        <p className="text-center text-sm text-[var(--color-text-muted)]">
+          Use your household Google account. Each family member signs in once, then sets name and
+          nickname on Profile.
         </p>
         <a
-          href={googleLoginUrl()}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--color-accent)] px-4 py-3 font-medium text-white hover:bg-[var(--color-accent-muted)]"
+          href="/auth/google/login"
+          className="flex w-full items-center justify-center rounded-[var(--radius-lg)] bg-[var(--color-accent)] px-4 py-3 text-sm font-medium text-white hover:bg-[var(--color-accent-muted)]"
         >
           Continue with Google
         </a>
         <p className="text-center text-xs text-[var(--color-text-muted)]">
-          <Link href="/" className="underline">
+          <Link href="/" className="underline hover:text-[var(--color-text)]">
             Back to home
           </Link>
         </p>

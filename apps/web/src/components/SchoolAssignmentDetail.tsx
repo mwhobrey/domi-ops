@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { ApiError, apiClient } from "../lib/client-api";
+import { Alert, Button, Card, CardBody, CardHeader, Input, Textarea } from "./ui";
 
 interface Submission {
   id: string;
@@ -9,6 +11,14 @@ interface Submission {
   studentNote: string;
   artifacts: { id: string; artifactType: string; s3Key: string | null; url: string | null }[];
   grade: { score: number | null; feedbackHtml: string } | null;
+}
+
+function StatusChip({ status }: { status: string }) {
+  return (
+    <span className="rounded-full bg-[var(--color-border)]/50 px-2 py-0.5 text-xs uppercase tracking-wide">
+      {status}
+    </span>
+  );
 }
 
 export function SchoolAssignmentDetail({
@@ -26,115 +36,133 @@ export function SchoolAssignmentDetail({
   const [note, setNote] = useState("");
   const [score, setScore] = useState("");
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function submitWork() {
-    const res = await fetch(`/api/school/assignments/${assignmentId}/submit`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ studentNote: note }),
-    });
-    if (res.ok) {
-      const data = (await res.json()) as { submission: Submission };
+    setError(null);
+    try {
+      const data = await apiClient.post<{ submission: Submission }>(
+        `/api/school/assignments/${assignmentId}/submit`,
+        { studentNote: note },
+      );
       setSubmissions((prev) => {
         const rest = prev.filter((s) => s.id !== data.submission.id);
         return [...rest, { ...data.submission, artifacts: [], grade: null }];
       });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Submit failed");
     }
   }
 
   async function uploadFile(file: File, submissionId: string) {
     setUploadStatus("Presigning…");
-    const presign = await fetch("/api/school-upload/presign", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ filename: file.name, contentType: file.type }),
-    });
-    if (!presign.ok) {
-      setUploadStatus("Presign failed");
-      return;
-    }
-    const { uploadUrl, key } = (await presign.json()) as { uploadUrl: string; key: string };
-    setUploadStatus("Uploading…");
-    const put = await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
-    if (!put.ok) {
+    setUploadError(false);
+    try {
+      const { uploadUrl, key } = await apiClient.post<{ uploadUrl: string; key: string }>(
+        "/api/school/upload/presign",
+        { filename: file.name, contentType: file.type },
+      );
+      setUploadStatus("Uploading…");
+      const put = await fetch(uploadUrl, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": file.type },
+      });
+      if (!put.ok) throw new Error("upload failed");
+      await apiClient.post(`/api/school/submissions/${submissionId}/artifacts`, {
+        artifactType: "file",
+        s3Key: key,
+      });
+      setUploadStatus("Uploaded");
+    } catch {
       setUploadStatus("Upload failed");
-      return;
+      setUploadError(true);
     }
-    await fetch(`/api/school/submissions/${submissionId}/artifacts`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ artifactType: "file", s3Key: key }),
-    });
-    setUploadStatus("Uploaded");
   }
+
+  const submission = submissions[0];
 
   return (
     <div className="space-y-6">
+      {error && <Alert variant="error">{error}</Alert>}
       <p className="text-sm text-[var(--color-text-muted)]">
         <Link href="/school" className="underline">
           School
         </Link>{" "}
         / {className} / {assignmentTitle}
       </p>
-      <section className="rounded-2xl border border-[var(--color-border)] p-4">
-        <h2 className="mb-2 font-medium">Submit work</h2>
-        <textarea
-          className="mb-2 min-h-[80px] w-full rounded-lg border border-[var(--color-border)] bg-transparent p-2 text-sm"
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder="Student note"
-        />
-        <button
-          type="button"
-          className="rounded-lg bg-[var(--color-accent)] px-4 py-2 text-sm text-white"
-          onClick={submitWork}
-        >
-          Submit assignment
-        </button>
-      </section>
-      {submissions[0] && (
-        <section className="rounded-2xl border border-[var(--color-border)] p-4">
-          <h2 className="mb-2 font-medium">Upload artifact</h2>
-          <input
-            type="file"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void uploadFile(f, submissions[0].id);
-            }}
+
+      <Card>
+        <CardHeader className="flex items-center justify-between">
+          <h2 className="font-medium">1. Submit work</h2>
+          {submission && <StatusChip status={submission.status} />}
+        </CardHeader>
+        <CardBody>
+          <Textarea
+            placeholder="Student note"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
           />
-          {uploadStatus && <p className="mt-2 text-xs text-[var(--color-text-muted)]">{uploadStatus}</p>}
-        </section>
-      )}
-      <section>
-        <h2 className="mb-2 font-medium">Grade (teacher)</h2>
-        {submissions[0] && (
-          <form
-            className="flex gap-2"
-            onSubmit={async (e) => {
-              e.preventDefault();
-              await fetch(`/api/school/submissions/${submissions[0].id}/grade`, {
-                method: "POST",
-                credentials: "include",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ score: parseFloat(score) }),
-              });
-            }}
-          >
+          <Button className="mt-3" onClick={submitWork}>
+            Submit assignment
+          </Button>
+        </CardBody>
+      </Card>
+
+      {submission && (
+        <Card>
+          <CardHeader>
+            <h2 className="font-medium">2. Upload artifact</h2>
+          </CardHeader>
+          <CardBody>
             <input
-              className="w-24 rounded-lg border border-[var(--color-border)] bg-transparent px-2 py-1 text-sm"
-              placeholder="Score"
-              value={score}
-              onChange={(e) => setScore(e.target.value)}
+              type="file"
+              className="text-sm"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void uploadFile(f, submission.id);
+              }}
             />
-            <button type="submit" className="rounded-lg border border-[var(--color-border)] px-3 py-1 text-sm">
-              Save grade
-            </button>
-          </form>
-        )}
-      </section>
+            {uploadStatus && (
+              <p className="mt-2 text-xs text-[var(--color-text-muted)]">{uploadStatus}</p>
+            )}
+            {uploadError && <Alert variant="error">Upload failed — check presign / MinIO.</Alert>}
+          </CardBody>
+        </Card>
+      )}
+
+      {submission && (
+        <Card>
+          <CardHeader>
+            <h2 className="font-medium">3. Grade (teacher)</h2>
+          </CardHeader>
+          <CardBody>
+            <form
+              className="flex flex-wrap gap-2"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                await apiClient.post(`/api/school/submissions/${submission.id}/grade`, {
+                  score: parseFloat(score),
+                });
+              }}
+            >
+              <Input
+                className="w-28"
+                placeholder="Score"
+                value={score}
+                onChange={(e) => setScore(e.target.value)}
+              />
+              <Button type="submit" variant="secondary">
+                Save grade
+              </Button>
+            </form>
+            {submission.grade?.score != null && (
+              <p className="mt-2 text-sm">Current score: {submission.grade.score}</p>
+            )}
+          </CardBody>
+        </Card>
+      )}
     </div>
   );
 }

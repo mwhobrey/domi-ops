@@ -37,11 +37,21 @@ whome/
 | `src/app/calendar/page.tsx` | Calendar UI |
 | `src/app/school/page.tsx` | School LMS UI |
 | `src/app/shopping/page.tsx` | Shopping list |
+| `src/app/chores/page.tsx`, `notes/page.tsx`, `expenses/page.tsx` | Core list modules |
+| `src/app/profile/page.tsx` | Profile editor (name, nickname, public label, home status) |
+| `src/app/*/loading.tsx` | Route-level skeletons (dashboard, calendar, lists, school, profile) |
 | `src/app/auth/[[...path]]/route.ts` | Proxies `/auth/*` to API (cookies) |
 | `src/middleware.ts` | Session check for protected routes |
-| `src/lib/api.ts` | `apiFetch`, `apiBase`, OAuth link helpers |
+| `src/lib/api.ts` | Server `apiFetch`, `apiBase`, `ApiError` |
+| `src/lib/auth-links.ts` | OAuth URL helpers (client-safe import) |
+| `src/lib/load-error.ts` | SSR `loadErrorMessage()` helper |
+| `src/components/lists/ListPage.tsx` | Shared list layout (add form card + errors) |
 | `src/lib/auth-proxy.ts` | Forward auth requests to `API_URL` |
-| `src/components/AppShell.tsx` | Nav, logout POST |
+| `src/components/AppShell.tsx` | Server shell + session |
+| `src/components/AppChrome.tsx` | Top nav, active route, user menu, mobile drawer |
+| `src/components/ui/*` | Shared UI primitives |
+| `src/lib/client-api.ts` | Browser API client |
+| `docs/UI.md` | UI conventions |
 | `next.config.ts` | `standalone` output; rewrites `/api`, `/health` |
 | `Dockerfile` | Build arg `API_URL` for server-side fetch |
 
@@ -99,6 +109,9 @@ Exports: `@whome/db`, `@whome/db/schema` (package.json `exports`).
 - `session.ts` — cookie name, create/destroy session, `getSessionUserId`, `resolveAuthContext`.
 - `google.ts` — OAuth URLs, token exchange.
 - `bootstrap.ts` — first-login household creation.
+- `join-imported.ts` — Google login auto-joins imported household (no email map).
+- `member-label.ts` — `memberShownLabel()` from name/nickname/publicLabel.
+- `claim.ts` — legacy claim path; prefer join-imported for post-import users.
 
 ### `@whome/crypto` (`packages/crypto`)
 

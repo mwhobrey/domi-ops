@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import Database from "better-sqlite3";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -9,6 +9,7 @@ const outDir = join(__dirname, "..", "fixtures");
 const outPath = join(outDir, "minimal-homehub.db");
 
 mkdirSync(outDir, { recursive: true });
+if (existsSync(outPath)) unlinkSync(outPath);
 
 const db = new Database(outPath);
 db.exec(`
@@ -39,12 +40,12 @@ db.exec(`
   INSERT INTO personal_calendar (id, name, color, visibility) VALUES (1, 'Family', '#3366cc', 'household');
 
   CREATE TABLE reminder (
-    id INTEGER PRIMARY KEY, date TEXT, time TEXT, title TEXT, description TEXT,
+    id INTEGER PRIMARY KEY, "date" TEXT, "time" TEXT, title TEXT, description TEXT,
     category TEXT, color TEXT, all_day INTEGER, end_date TEXT, end_time TEXT,
     source TEXT, google_event_id TEXT, personal_calendar_id INTEGER
   );
-  INSERT INTO reminder (id, date, time, title, description, category, color, all_day, end_date, end_time, source, personal_calendar_id)
-  VALUES (1, '2026-06-01', '09:00', 'Test', '', 'family', '#000', 0, NULL, NULL, 'local', 1);
+  INSERT INTO reminder (id, "date", "time", title, description, category, color, all_day, end_date, end_time, source, personal_calendar_id)
+  VALUES (1, '2026-06-01', '09:00', 'Test', '', 'family', '#000000', 0, NULL, NULL, 'local', 1);
 
   CREATE TABLE school_class (
     id INTEGER PRIMARY KEY, name TEXT NOT NULL, subject TEXT, term TEXT,
@@ -80,8 +81,8 @@ db.exec(`
     file_id INTEGER, url TEXT, note TEXT
   );
 
-  CREATE TABLE file (id INTEGER PRIMARY KEY, filename TEXT NOT NULL, creator TEXT);
-  INSERT INTO file (id, filename, creator) VALUES (1, 'sample.txt', 'Mom');
+  CREATE TABLE "file" (id INTEGER PRIMARY KEY, filename TEXT NOT NULL, creator TEXT);
+  INSERT INTO "file" (id, filename, creator) VALUES (1, 'sample.txt', 'Mom');
 `);
 db.close();
 console.log("Wrote", outPath);

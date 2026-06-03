@@ -44,7 +44,7 @@ npm run import:homehub -- --sqlite ./fixtures/homehub/app.db --uploads ./fixture
 ## Cutover order (production)
 
 1. **Import first** into prod Postgres (creates household + `@imported.local` placeholder users per `home_status` row).
-2. **Then** Google login — each member claims via `HOUSEHOLD_MEMBER_EMAIL_MAP` or Google displayName ↔ `legacyDisplayName`. No new household is auto-created when `import_records` exist.
+2. **Then** each family member signs in with Google once — they auto-join the imported household and set a nickname on **Profile**. Home/away defaults to Away (one click on Profile or Dashboard).
 3. Connect Google Calendar → full import.
 4. Swap Caddy to `web:3000` per [deploy/CUTOVER.md](../deploy/CUTOVER.md).
 

@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { ApiError, apiClient } from "../lib/client-api";
+import { Alert, Button, Card, CardBody, EmptyState, Input } from "./ui";
 
 interface SchoolClass {
   id: string;
@@ -14,60 +16,77 @@ export function SchoolClassList({ initialClasses }: { initialClasses: SchoolClas
   const [classes, setClasses] = useState(initialClasses);
   const [name, setName] = useState("");
   const [subject, setSubject] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   return (
     <div className="space-y-6">
-      <form
-        className="flex flex-wrap gap-2"
-        onSubmit={async (e) => {
-          e.preventDefault();
-          if (!name.trim()) return;
-          const res = await fetch("/api/school/classes", {
-            method: "POST",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name: name.trim(), subject: subject.trim() || undefined }),
-          });
-          if (res.ok) {
-            const data = (await res.json()) as { class: SchoolClass };
-            setClasses((prev) => [...prev, data.class]);
-            setName("");
-            setSubject("");
-          }
-        }}
-      >
-        <input
-          className="rounded-xl border border-[var(--color-border)] bg-transparent px-3 py-2 text-sm"
-          placeholder="Class name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-        <input
-          className="rounded-xl border border-[var(--color-border)] bg-transparent px-3 py-2 text-sm"
-          placeholder="Subject"
-          value={subject}
-          onChange={(e) => setSubject(e.target.value)}
-        />
-        <button type="submit" className="rounded-xl bg-[var(--color-accent)] px-4 py-2 text-sm text-white">
-          Create class
-        </button>
-      </form>
-      <div className="grid gap-4 sm:grid-cols-2">
-        {classes.length === 0 ? (
-          <p className="text-[var(--color-text-muted)]">No classes yet.</p>
-        ) : (
-          classes.map((c) => (
-            <Link
-              key={c.id}
-              href={`/school/class/${c.id}`}
-              className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-elevated)] p-5 hover:border-[var(--color-accent)]"
-            >
-              <h2 className="font-medium">{c.name}</h2>
-              {c.subject && <p className="mt-1 text-sm text-[var(--color-text-muted)]">{c.subject}</p>}
+      {error && <Alert variant="error">{error}</Alert>}
+      <Card>
+        <CardBody>
+          <form
+            className="flex flex-wrap gap-2"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (!name.trim()) return;
+              setLoading(true);
+              setError(null);
+              try {
+                const data = await apiClient.post<{ class: SchoolClass }>("/api/school/classes", {
+                  name: name.trim(),
+                  subject: subject.trim() || undefined,
+                });
+                setClasses((prev) => [...prev, data.class]);
+                setName("");
+                setSubject("");
+              } catch (err) {
+                setError(err instanceof ApiError ? err.message : "Failed to create class");
+              } finally {
+                setLoading(false);
+              }
+            }}
+          >
+            <Input
+              className="min-w-[160px] flex-1"
+              placeholder="Class name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+            <Input
+              className="min-w-[120px]"
+              placeholder="Subject"
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+            />
+            <Button type="submit" loading={loading}>
+              Create class
+            </Button>
+          </form>
+        </CardBody>
+      </Card>
+      {classes.length === 0 ? (
+        <EmptyState title="No classes" description="Create your first class above." />
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {classes.map((c) => (
+            <Link key={c.id} href={`/school/class/${c.id}`}>
+              <Card className="h-full transition hover:border-[var(--color-accent)]">
+                <CardBody>
+                  <h2 className="font-medium">{c.name}</h2>
+                  {c.subject && (
+                    <p className="mt-1 text-sm text-[var(--color-text-muted)]">{c.subject}</p>
+                  )}
+                  {c.term && (
+                    <span className="mt-2 inline-block rounded-full bg-[var(--color-border)]/50 px-2 py-0.5 text-xs">
+                      {c.term}
+                    </span>
+                  )}
+                </CardBody>
+              </Card>
             </Link>
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

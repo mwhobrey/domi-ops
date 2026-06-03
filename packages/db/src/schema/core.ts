@@ -5,10 +5,11 @@ import {
   real,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
-import { households } from "./household.js";
+import { households, householdMembers } from "./household.js";
 
 export const shoppingItems = pgTable("shopping_items", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -68,12 +69,17 @@ export const notices = pgTable("notices", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const homeStatus = pgTable("home_status", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  householdId: uuid("household_id")
-    .notNull()
-    .references(() => households.id, { onDelete: "cascade" }),
-  name: varchar("name", { length: 64 }).notNull(),
-  status: varchar("status", { length: 16 }).notNull().default("Away"),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export const homeStatus = pgTable(
+  "home_status",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    householdId: uuid("household_id")
+      .notNull()
+      .references(() => households.id, { onDelete: "cascade" }),
+    memberId: uuid("member_id").references(() => householdMembers.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 64 }).notNull(),
+    status: varchar("status", { length: 16 }).notNull().default("Away"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("home_status_household_member").on(t.householdId, t.memberId)],
+);

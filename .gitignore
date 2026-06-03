@@ -10,4 +10,5 @@ dist
 coverage
 *.tsbuildinfo
 fixtures/homehub/
+data/
 packages/import-homehub/fixtures/*.db

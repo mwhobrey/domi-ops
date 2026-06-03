@@ -1,6 +1,6 @@
 # Current state
 
-*Updated after three-lane dogfood cutover implementation (import truth, interactive UI, ops scaffolding).*
+*Updated after four-lane web UI/UX pass + second polish pass. Dogfood/cutover still pending.*
 
 ## What is working (implemented paths)
 
@@ -18,9 +18,19 @@
 ### Auth
 
 - Google OAuth login, session cookie, logout.
-- **Multi-member claim after HomeHub import:** `HOUSEHOLD_MEMBER_EMAIL_MAP` or displayName ↔ `legacyDisplayName`; no duplicate household bootstrap when `import_records` exist (`@whome/auth/claim.ts`).
-- Login errors: `no_household`, `already_claimed` on `/login`.
+- **Post-import join:** Google login auto-joins imported household (`@whome/auth/join-imported.ts`); profile name/nickname + public label; no `HOUSEHOLD_MEMBER_EMAIL_MAP` required.
 - OAuth state in Redis (login + calendar flows).
+
+### Web UI (`apps/web`)
+
+- **Design system:** `components/ui/*` (Button, Card, Alert, EmptyState, PageHeader, ConfirmDialog, etc.), `lib/cn.ts`, `lib/client-api.ts`.
+- **Shell:** Top nav with active route, user menu, mobile drawer (`AppChrome`); `ProfileOnboardingBanner` when name unset.
+- **Calendar:** Week/agenda views, week navigation, search (`q` API), event sheet, connect card (`CalendarPageClient`).
+- **Dashboard:** Notice + who's home toggles, today-at-a-glance widgets (`DashboardBoard`).
+- **Core lists:** `ListPage` wrapper for shopping/chores/notes/expenses; DELETE shopping/chores; `loading.tsx` on all main modules.
+- **Second pass:** `Button` respects `type="submit"`; server `ApiError`; SSR load errors on profile/school detail/calendar status; TodayGlance chores due/overdue; calendar search clears to week view.
+- **School:** Card-based class list and assignment flow styling.
+- **Docs:** `docs/UI.md`
 
 ### Core module
 

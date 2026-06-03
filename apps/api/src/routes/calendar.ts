@@ -9,7 +9,7 @@ import {
   linkedGoogleCalendars,
 } from "@whome/db";
 import { enqueueSyncJob } from "@whome/calendar-sync";
-import { and, eq, gte, lte } from "drizzle-orm";
+import { and, asc, eq, gte, ilike, lte } from "drizzle-orm";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 
@@ -65,17 +65,20 @@ export function calendarRoutes(db: Database, env: Env) {
     const to =
       c.req.query("to") ??
       new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10);
+    const q = c.req.query("q")?.trim();
+
+    const conditions = [
+      eq(calendarEvents.householdId, auth.householdId),
+      gte(calendarEvents.startDate, from),
+      lte(calendarEvents.startDate, to),
+    ];
+    if (q) conditions.push(ilike(calendarEvents.title, `%${q}%`));
 
     const events = await db
       .select()
       .from(calendarEvents)
-      .where(
-        and(
-          eq(calendarEvents.householdId, auth.householdId),
-          gte(calendarEvents.startDate, from),
-          lte(calendarEvents.startDate, to),
-        ),
-      );
+      .where(and(...conditions))
+      .orderBy(asc(calendarEvents.startDate), asc(calendarEvents.startTime));
     return c.json({ events });
   });
 
