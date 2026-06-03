@@ -18,14 +18,12 @@ import {
 } from "@whome/auth";
 import type { Database } from "@whome/db";
 import type { AppVariables } from "../middleware/auth.js";
+import { consumeOAuthState, setOAuthState } from "../lib/oauth-state.js";
 
-const oauthStates = new Map<string, { created: number; kind: "login" }>();
+const LOGIN_OAUTH_PREFIX = "oauth:login";
 
-function pruneStates() {
-  const cutoff = Date.now() - 10 * 60 * 1000;
-  for (const [k, v] of oauthStates) {
-    if (v.created < cutoff) oauthStates.delete(k);
-  }
+function redisUrl(env: Env): string {
+  return env.REDIS_URL ?? "redis://localhost:6379";
 }
 
 export function authRoutes(db: Database, env: Env) {
@@ -57,13 +55,12 @@ export function authRoutes(db: Database, env: Env) {
     });
   });
 
-  app.get("/google/login", (c) => {
+  app.get("/google/login", async (c) => {
     if (!env.GOOGLE_OAUTH_CLIENT_ID) {
       return c.json({ error: "google_oauth_not_configured" }, 503);
     }
-    pruneStates();
     const state = randomOAuthState();
-    oauthStates.set(state, { created: Date.now(), kind: "login" });
+    await setOAuthState(redisUrl(env), LOGIN_OAUTH_PREFIX, state, { kind: "login" as const });
     const redirectUri = googleOAuthRedirectUri(env, "/auth/google/login/callback");
     const url = googleAuthUrl(env, {
       redirectUri,
@@ -80,10 +77,12 @@ export function authRoutes(db: Database, env: Env) {
 
     const code = c.req.query("code");
     const state = c.req.query("state");
-    if (!code || !state || !oauthStates.has(state)) {
+    const pending = state
+      ? await consumeOAuthState<{ kind: "login" }>(redisUrl(env), LOGIN_OAUTH_PREFIX, state)
+      : null;
+    if (!code || !pending) {
       return c.redirect(`${env.PUBLIC_APP_URL}/login?error=oauth`);
     }
-    oauthStates.delete(state);
 
     try {
       const redirectUri = googleOAuthRedirectUri(env, "/auth/google/login/callback");

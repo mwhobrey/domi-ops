@@ -49,6 +49,17 @@ docker compose -f docker-compose.prod.yml up -d --build
 
 Swap Caddy upstream from HomeHub to `web:3000`.
 
+## Tests
+
+```bash
+npm run fixture:homehub   # minimal SQLite for import dry-run tests
+npm run test
+```
+
+## HomeHub data paths
+
+See [docs/HOMEHUB_IMPORT.md](docs/HOMEHUB_IMPORT.md) for copying `app.db` from your droplet and running import/cutover.
+
 ## License
 
-MIT (add LICENSE file before public publish)
+MIT — see [LICENSE](LICENSE).

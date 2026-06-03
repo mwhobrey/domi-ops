@@ -2,6 +2,7 @@ import type { ImportOptions, ImportReport } from "./importer-types.js";
 export type { ImportOptions, ImportReport } from "./importer-types.js";
 
 import Database from "better-sqlite3";
+import { createDb } from "@whome/db";
 import { importCalendar } from "./mappers/calendar.js";
 import { importExpenses } from "./mappers/expenses.js";
 import { importFiles } from "./mappers/files.js";
@@ -36,6 +37,8 @@ export async function runImport(options: ImportOptions): Promise<ImportReport> {
       .all() as { name: string }[];
     report.counts.sqlite_tables = tables.length;
 
+    const db = createDb(options.databaseUrl);
+
     const { householdId, result: hhResult } = await importHousehold(
       {
         sqlite,
@@ -44,6 +47,7 @@ export async function runImport(options: ImportOptions): Promise<ImportReport> {
         databaseUrl: options.databaseUrl,
         uploadsPath: options.uploadsPath,
         idMap: new Map(),
+        db,
       },
       options.householdName,
     );
@@ -57,6 +61,7 @@ export async function runImport(options: ImportOptions): Promise<ImportReport> {
       databaseUrl: options.databaseUrl,
       uploadsPath: options.uploadsPath,
       idMap: new Map(),
+      db,
     };
 
     const steps = [
@@ -65,8 +70,8 @@ export async function runImport(options: ImportOptions): Promise<ImportReport> {
       ["shopping", importShopping],
       ["notes", importNotes],
       ["expenses", importExpenses],
-      ["school", importSchool],
       ["files", importFiles],
+      ["school", importSchool],
     ] as const;
 
     for (const [name, fn] of steps) {

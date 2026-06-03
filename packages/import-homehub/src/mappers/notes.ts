@@ -1,10 +1,15 @@
-import { createDb } from "@whome/db";
+import { requireDb } from "../lib/require-db.js";
 import { notes, importRecords } from "@whome/db";
 import { and, eq } from "drizzle-orm";
+import { sqliteTableExists } from "../lib/sqlite.js";
 import type { ImportContext, MapperResult } from "./types.js";
 
 export async function importNotes(ctx: ImportContext): Promise<MapperResult> {
   const result: MapperResult = { imported: 0, skipped: 0, warnings: [] };
+  if (!sqliteTableExists(ctx.sqlite, "note")) {
+    result.warnings.push("note table not found — skipped");
+    return result;
+  }
   const rows = ctx.sqlite
     .prepare("SELECT id, content, creator FROM note")
     .all() as Record<string, unknown>[];
@@ -14,7 +19,7 @@ export async function importNotes(ctx: ImportContext): Promise<MapperResult> {
     return result;
   }
 
-  const db = createDb(ctx.databaseUrl);
+  const db = requireDb(ctx);
   for (const r of rows) {
     const sourceId = String(r.id);
     const [existing] = await db

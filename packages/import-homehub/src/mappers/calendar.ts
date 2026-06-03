@@ -1,10 +1,15 @@
-import { createDb } from "@whome/db";
 import { calendars, calendarEvents, importRecords } from "@whome/db";
 import { eq, and } from "drizzle-orm";
+import { sqliteTableExists } from "../lib/sqlite.js";
+import { requireDb } from "../lib/require-db.js";
 import type { ImportContext, MapperResult } from "./types.js";
 
 export async function importCalendar(ctx: ImportContext): Promise<MapperResult> {
   const result: MapperResult = { imported: 0, skipped: 0, warnings: [] };
+  if (!sqliteTableExists(ctx.sqlite, "reminder")) {
+    result.warnings.push("reminder table not found — skipped");
+    return result;
+  }
   const reminders = ctx.sqlite
     .prepare(
       `SELECT id, date, time, title, description, category, color, all_day, end_date, end_time,
@@ -15,14 +20,20 @@ export async function importCalendar(ctx: ImportContext): Promise<MapperResult> 
 
   if (ctx.dryRun) {
     result.imported = reminders.length;
-    const pc = ctx.sqlite
-      .prepare("SELECT COUNT(*) as c FROM personal_calendar")
-      .get() as { c: number };
-    result.warnings.push(`dry-run: ${reminders.length} reminders, ${pc?.c ?? 0} personal calendars`);
+    let pcCount = 0;
+    try {
+      const pc = ctx.sqlite
+        .prepare("SELECT COUNT(*) as c FROM personal_calendar")
+        .get() as { c: number };
+      pcCount = pc?.c ?? 0;
+    } catch {
+      /* optional table */
+    }
+    result.warnings.push(`dry-run: ${reminders.length} reminders, ${pcCount} personal calendars`);
     return result;
   }
 
-  const db = createDb(ctx.databaseUrl);
+  const db = requireDb(ctx);
   const calKey = `household:${ctx.householdId}:imported`;
   let calendarId = ctx.idMap.get(calKey);
   if (!calendarId) {

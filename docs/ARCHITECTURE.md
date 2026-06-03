@@ -47,7 +47,7 @@ Writes `import_records` for idempotent re-runs.
 ## DigitalOcean cutover
 
 1. Build on droplet: `docker compose -f docker-compose.prod.yml up -d --build`
-2. Run migrations: `docker compose exec api npm run db:migrate` (once migrate script wired)
+2. Migrations run automatically on API container start (`apps/api/Dockerfile` entrypoint). To run manually: `docker compose -f docker-compose.prod.yml exec api node /app/packages/db/dist/migrate.js`
 3. Import: `whome-import --sqlite ...`
 4. Point Caddy `reverse_proxy` from homehub container to `web:3000`
 5. Verify calendar + school before stopping HomeHub

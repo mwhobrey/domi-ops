@@ -1,4 +1,5 @@
 import type Database from "better-sqlite3";
+import type { createDb } from "@whome/db";
 
 export interface ImportContext {
   sqlite: Database.Database;
@@ -7,6 +8,7 @@ export interface ImportContext {
   databaseUrl: string;
   uploadsPath?: string;
   idMap: Map<string, string>;
+  db: ReturnType<typeof createDb>;
 }
 
 export interface MapperResult {

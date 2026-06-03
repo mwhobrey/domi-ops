@@ -14,11 +14,15 @@
     "db:generate": "npm run generate -w @whome/db",
     "db:migrate": "npm run build -w @whome/db && npm run migrate:run -w @whome/db",
     "db:studio": "npm run studio -w @whome/db",
-    "import:homehub": "node packages/import-homehub/dist/cli.js"
+    "import:homehub": "node packages/import-homehub/dist/cli.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "fixture:homehub": "node packages/import-homehub/scripts/create-fixture.mjs"
   },
   "devDependencies": {
     "turbo": "^2.5.4",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
   },
   "engines": {
     "node": ">=20"

@@ -9,9 +9,11 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "start": "node dist/cli.js"
+    "start": "node dist/cli.js",
+    "test": "vitest run --config ../../vitest.config.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.826.0",
     "@whome/db": "*",
     "better-sqlite3": "^11.10.0",
     "commander": "^14.0.0",

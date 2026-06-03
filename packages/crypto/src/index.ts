@@ -66,10 +66,11 @@ function fernetDecrypt(value: string, secret: string): string {
   const ciphertext = token.subarray(25);
   const decipher = createDecipheriv("aes-128-cbc", encKey, iv);
   let decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+  let start = 0;
   let end = decrypted.length;
-  while (end > 0 && decrypted[end - 1] === 0) end--;
-  if (end > 0 && decrypted[end - 1] === 0x80) end--;
-  return decrypted.subarray(0, end).toString("utf8");
+  while (end > start && decrypted[end - 1] === 0) end--;
+  if (end > start && decrypted[start] === 0x80) start++;
+  return decrypted.subarray(start, end).toString("utf8");
 }
 
 export function encryptSensitive(value: string, encryptionKey: string): string {

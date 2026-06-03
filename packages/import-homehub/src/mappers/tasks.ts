@@ -1,22 +1,33 @@
-import { createDb } from "@whome/db";
+import { requireDb } from "../lib/require-db.js";
 import { chores, importRecords } from "@whome/db";
 import { and, eq } from "drizzle-orm";
+import { sqliteTableExists } from "../lib/sqlite.js";
 import type { ImportContext, MapperResult } from "./types.js";
 
 export async function importTasks(ctx: ImportContext): Promise<MapperResult> {
   const result: MapperResult = { imported: 0, skipped: 0, warnings: [] };
+  if (!sqliteTableExists(ctx.sqlite, "chore")) {
+    result.warnings.push("chore table not found — skipped");
+    return result;
+  }
   const rows = ctx.sqlite
     .prepare("SELECT id, description, done, due_date, creator, tags FROM chore")
     .all() as Record<string, unknown>[];
 
   if (ctx.dryRun) {
-    const todos = ctx.sqlite.prepare("SELECT COUNT(*) as c FROM todo_item").get() as { c: number };
-    result.imported = rows.length + (todos?.c ?? 0);
+    let todoCount = 0;
+    if (sqliteTableExists(ctx.sqlite, "todo_item")) {
+      const todos = ctx.sqlite.prepare("SELECT COUNT(*) as c FROM todo_item").get() as {
+        c: number;
+      };
+      todoCount = todos?.c ?? 0;
+    }
+    result.imported = rows.length + todoCount;
     result.warnings.push("dry-run: chores + todo_items counted");
     return result;
   }
 
-  const db = createDb(ctx.databaseUrl);
+  const db = requireDb(ctx);
   for (const r of rows) {
     const sourceId = String(r.id);
     const [existing] = await db

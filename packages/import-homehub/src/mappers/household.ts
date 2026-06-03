@@ -1,7 +1,7 @@
-import { createDb } from "@whome/db";
+import { requireDb } from "../lib/require-db.js";
 import { homeStatus, households, householdMembers, users } from "@whome/db";
 import { importRecords } from "@whome/db";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { ImportContext, MapperResult } from "./types.js";
 
 export async function importHousehold(
@@ -9,7 +9,6 @@ export async function importHousehold(
   householdName: string,
 ): Promise<{ householdId: string; result: MapperResult }> {
   const result: MapperResult = { imported: 0, skipped: 0, warnings: [] };
-  const db = createDb(ctx.databaseUrl);
 
   if (ctx.dryRun) {
     const homeRows = ctx.sqlite
@@ -20,14 +19,35 @@ export async function importHousehold(
     return { householdId: "00000000-0000-0000-0000-000000000000", result };
   }
 
-  const [household] = await db
-    .insert(households)
-    .values({ name: householdName, tier: "self_host" })
-    .returning();
+  const db = requireDb(ctx);
+  if (!db) throw new Error("ImportContext.db required for live import");
 
   const statusRows = ctx.sqlite
     .prepare("SELECT id, name, status FROM home_status")
     .all() as { id: number; name: string; status: string }[];
+
+  if (statusRows.length > 0) {
+    const [existingImport] = await db
+      .select()
+      .from(importRecords)
+      .where(
+        and(
+          eq(importRecords.sourceTable, "home_status"),
+          eq(importRecords.sourceId, String(statusRows[0].id)),
+        ),
+      )
+      .limit(1);
+    if (existingImport) {
+      result.skipped = statusRows.length;
+      result.warnings.push(`reusing household ${existingImport.householdId} from prior import`);
+      return { householdId: existingImport.householdId, result };
+    }
+  }
+
+  const [household] = await db
+    .insert(households)
+    .values({ name: householdName, tier: "self_host" })
+    .returning();
 
   for (const row of statusRows) {
     const email = `${row.name.toLowerCase().replace(/\s+/g, ".")}@imported.local`;

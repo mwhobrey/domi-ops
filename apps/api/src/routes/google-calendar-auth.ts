@@ -20,18 +20,20 @@ import { ensureAccessToken } from "@whome/calendar-sync";
 import { and, eq } from "drizzle-orm";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
+import { consumeOAuthState, setOAuthState } from "../lib/oauth-state.js";
 
-const calendarOAuthStates = new Map<
-  string,
-  { userId: string; householdId: string; created: number }
->();
+const CALENDAR_OAUTH_PREFIX = "oauth:calendar";
+
+function redisUrl(env: Env): string {
+  return env.REDIS_URL ?? "redis://localhost:6379";
+}
 
 export function googleCalendarAuthRoutes(db: Database, env: Env) {
   const app = new Hono<{ Variables: AppVariables }>();
 
   app.use("*", requireAuth(env));
 
-  app.get("/start", (c) => {
+  app.get("/start", async (c) => {
     if (!isModuleEnabled(env, "calendar_sync")) {
       return c.json({ error: "calendar_sync_disabled" }, 403);
     }
@@ -42,10 +44,9 @@ export function googleCalendarAuthRoutes(db: Database, env: Env) {
     }
 
     const state = randomOAuthState();
-    calendarOAuthStates.set(state, {
+    await setOAuthState(redisUrl(env), CALENDAR_OAUTH_PREFIX, state, {
       userId: auth.userId,
       householdId: auth.householdId,
-      created: Date.now(),
     });
 
     const redirectUri =
@@ -70,11 +71,16 @@ export function googleCalendarAuthRoutes(db: Database, env: Env) {
 
     const code = c.req.query("code");
     const state = c.req.query("state");
-    const pending = state ? calendarOAuthStates.get(state) : undefined;
+    const pending = state
+      ? await consumeOAuthState<{ userId: string; householdId: string }>(
+          redisUrl(env),
+          CALENDAR_OAUTH_PREFIX,
+          state,
+        )
+      : null;
     if (!code || !pending) {
       return c.redirect(`${env.PUBLIC_APP_URL}/calendar?error=oauth`);
     }
-    calendarOAuthStates.delete(state!);
 
     const redirectUri =
       env.GOOGLE_OAUTH_REDIRECT_URI ??

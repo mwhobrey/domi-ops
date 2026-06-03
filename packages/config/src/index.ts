@@ -81,6 +81,11 @@ export type Env = z.infer<typeof envSchema>;
 
 let cached: Env | null = null;
 
+/** Clears cached env (tests only). */
+export function resetEnvCache(): void {
+  cached = null;
+}
+
 export function loadEnv(raw: NodeJS.ProcessEnv = process.env): Env {
   if (cached) return cached;
   const parsed = envSchema.safeParse(raw);

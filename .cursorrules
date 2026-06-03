@@ -1,0 +1,31 @@
+# whome — agent instructions
+
+## Runbook (required)
+
+Before planning or executing any non-trivial task, read the federated runbook under `.cursor/runbook/`:
+
+1. Start with `.cursor/runbook/00_INDEX.md` (North Star + which file to open next).
+2. Load only the sections you need — do not read the entire runbook every turn:
+   - Architecture / data flow / external APIs → `01_ARCHITECTURE.md`
+   - Where code lives, routes, config → `02_COMPONENTS_AND_FILES.md`
+   - Conventions, errors, deploy, gotchas → `03_RULES_AND_STANDARDS.md`
+   - What works vs stubs vs next steps → `04_CURRENT_STATE.md`
+
+If runbook content conflicts with stale comments in code, **trust the code** and update the runbook in the same change set.
+
+## Runbook maintenance (before commit)
+
+When the user asks for a git commit, or you are about to commit on their behalf:
+
+1. Update `.cursor/runbook/04_CURRENT_STATE.md` if you changed behavior, fixed a stub, or added/regressed a feature.
+2. Touch `01`–`03` only when architecture, file layout, conventions, or deploy steps changed.
+3. Keep edits minimal and factual — bullets, file paths, no fluff.
+
+Skip runbook updates for typo-only or comment-only changes with zero behavioral impact.
+
+## Repo quick anchors
+
+- Monorepo: `apps/web`, `apps/api`, `apps/worker`, `packages/*`
+- Env: `@whome/config` + `.env.example`
+- Auth cookies: `/auth/*` via web Route Handler, not Next rewrites
+- Supplementary: `README.md`, `docs/ARCHITECTURE.md`

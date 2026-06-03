@@ -1,4 +1,4 @@
-import { createDb } from "@whome/db";
+import { requireDb } from "../lib/require-db.js";
 import { expenses, importRecords } from "@whome/db";
 import { and, eq } from "drizzle-orm";
 import type { ImportContext, MapperResult } from "./types.js";
@@ -22,7 +22,7 @@ export async function importExpenses(ctx: ImportContext): Promise<MapperResult> 
     return result;
   }
 
-  const db = createDb(ctx.databaseUrl);
+  const db = requireDb(ctx);
   for (const r of rows) {
     const sourceId = String(r.id);
     const [existing] = await db
