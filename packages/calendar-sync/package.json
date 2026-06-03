@@ -1,0 +1,28 @@
+{
+  "name": "@whome/calendar-sync",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@whome/auth": "*",
+    "@whome/config": "*",
+    "@whome/crypto": "*",
+    "@whome/db": "*",
+    "bullmq": "^5.53.2",
+    "drizzle-orm": "^0.44.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.30",
+    "typescript": "^5.8.3"
+  }
+}

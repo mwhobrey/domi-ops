@@ -1,0 +1,26 @@
+{
+  "name": "@whome/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@whome/calendar-sync": "*",
+    "@whome/config": "*",
+    "@whome/db": "*",
+    "bullmq": "^5.53.2",
+    "@whome/db": "*",
+    "bullmq": "^5.53.2",
+    "ioredis": "^5.6.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.30",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3"
+  }
+}

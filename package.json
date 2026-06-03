@@ -1,0 +1,26 @@
+{
+  "name": "whome",
+  "private": true,
+  "packageManager": "npm@10.9.2",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "db:generate": "npm run generate -w @whome/db",
+    "db:migrate": "npm run build -w @whome/db && npm run migrate:run -w @whome/db",
+    "db:studio": "npm run studio -w @whome/db",
+    "import:homehub": "node packages/import-homehub/dist/cli.js"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.4",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

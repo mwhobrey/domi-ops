@@ -1,0 +1,92 @@
+# Local development — matches DigitalOcean production topology (minus Caddy).
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: whome
+      POSTGRES_PASSWORD: whome
+      POSTGRES_DB: whome
+    ports:
+      - "5432:5432"
+    volumes:
+      - whome_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U whome"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: whome
+      MINIO_ROOT_PASSWORD: whome-dev-secret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - whome_minio:/data
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    env_file: .env
+    # Migrations run automatically on API container start (apps/api/Dockerfile ENTRYPOINT)
+    environment:
+      DATABASE_URL: postgresql://whome:whome@postgres:5432/whome
+      REDIS_URL: redis://redis:6379
+      S3_ENDPOINT: http://minio:9000
+      # Browser-facing URL comes from .env (PUBLIC_APP_URL, e.g. http://localhost:3001)
+      API_URL: http://api:4000
+    ports:
+      - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://whome:whome@postgres:5432/whome
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        API_URL: http://api:4000
+    env_file: .env
+    environment:
+      API_URL: http://api:4000
+    ports:
+      # Use 3001 if something else (e.g. npm run dev) already owns host :3000
+      - "3001:3000"
+    depends_on:
+      - api
+
+volumes:
+  whome_pg:
+  whome_minio:
