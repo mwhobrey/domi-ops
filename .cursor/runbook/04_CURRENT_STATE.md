@@ -1,91 +1,77 @@
 # Current state
 
-*Updated after Combined Track: Cutover + Migration + Baseline implementation.*
+*Updated after three-lane dogfood cutover implementation (import truth, interactive UI, ops scaffolding).*
 
 ## What is working (implemented paths)
 
 ### Platform
 
 - Monorepo builds via Turbo (`npm run build`).
-- Drizzle schema + SQL migrations (`packages/db/drizzle/`).
+- Drizzle schema + SQL migrations (`packages/db/drizzle/`), including `school_submission_artifacts` (`0002`).
 - `npm run db:migrate` and API Docker entrypoint apply migrations.
 - Zod env validation with production guards (`@whome/config`).
 - Docker Compose dev stack: postgres, redis, minio, api, worker, web.
 - **CI:** `.github/workflows/ci.yml` — typecheck, build, test on push/PR.
-- **Tests:** Vitest — `@whome/config` loadEnv, `@whome/crypto` round-trip, import dry-run mappers (`npm run test`).
+- **Tests:** Vitest — config, crypto, import dry-run mappers (`npm run test`).
+- **Import validate:** `npm run import:validate` — fixture dry-run with `--strict`.
 
 ### Auth
 
 - Google OAuth login, session cookie, logout.
-- `GET /auth/session` for middleware and clients.
-- First-login household bootstrap (`@whome/auth/bootstrap`).
-- Web auth proxy for cookie correctness.
-- **OAuth state in Redis** (`apps/api/src/lib/oauth-state.ts`) — login + calendar flows; TTL 10m.
+- **Multi-member claim after HomeHub import:** `HOUSEHOLD_MEMBER_EMAIL_MAP` or displayName ↔ `legacyDisplayName`; no duplicate household bootstrap when `import_records` exist (`@whome/auth/claim.ts`).
+- Login errors: `no_household`, `already_claimed` on `/login`.
+- OAuth state in Redis (login + calendar flows).
 
-### Core module (`MODULES_ENABLED` includes `core`)
+### Core module
 
-- API: dashboard (notices, home status), shopping CRUD, chores, notes, expenses (`apps/api/src/routes/core.ts`).
-- UI pages: dashboard, shopping (`apps/web/src/app/`).
+- API: dashboard notice + home status PATCH, shopping/chores/notes/expenses CRUD (`apps/api/src/routes/core.ts`).
+- UI: interactive `/dashboard`, `/shopping`, `/chores`, `/notes`, `/expenses`.
 
 ### School module
 
-- API: list/create classes, assignments, submissions (`school.ts`).
-- UI: `/school` page.
-- Schema: full LMS table set in `packages/db/src/schema/school.ts`.
-- **S3 presign:** real `PutObject` presigned URLs (`school-upload.ts`).
+- API: classes CRUD, enrollments, assignments CRUD, submit, grade, submission artifacts (`school.ts`).
+- UI: `/school`, `/school/class/[id]`, `/school/assignment/[id]` with presign upload client.
+- Import: `school_submission_artifact` → `school_submission_artifacts` + S3 keys from file mapper.
 
 ### Calendar sync module
 
-- Google Calendar OAuth connect flow (`google-calendar-auth.ts`).
-- Pull / full import jobs via BullMQ (`google.calendar.pull`, `google.calendar.full_import`).
-- API: connections, calendars, events, manual sync enqueue (`calendar.ts`).
-- UI: `/calendar` with connect/sync components.
-- Default `import_only` sync mode.
+- Google connect + pull/full import jobs (unchanged).
+- **Local event CRUD:** `POST/PATCH/DELETE /api/calendar/events`.
+- UI: `/calendar` with event form + week view.
 
 ### Import tooling
 
-- CLI `npm run import:homehub` with `--dry-run`.
-- Mappers: household, calendar, tasks, shopping, notes, expenses, **school (full LMS rows)**, **files (S3 upload + import_records)**.
-- `import_records` table for idempotency tracking.
-- Docs: `docs/HOMEHUB_IMPORT.md`, `deploy/CUTOVER.md`.
+- CLI `npm run import:homehub` with `--dry-run`, `--strict`.
+- Mappers: **notices**, **todo_item** (+ chore), **personal_calendar**, school artifacts, files→S3, full school LMS rows.
+- `docs/IMPORT_REPORT.example.json` regression baseline (fixture dry-run).
+- Real droplet `app.db` gate: operator copies DB per `docs/HOMEHUB_IMPORT.md` (not automated in CI).
 
 ### Ops
 
-- Health check with DB ping.
-- Prod compose + Caddy example for DigitalOcean-style deploy.
-- HomeHub migration documented in README and `docs/ARCHITECTURE.md`.
-- **MIT LICENSE** in repo root.
+- Prod compose + **`import` service** (`Dockerfile.import`, profile `tools`).
+- **Staging compose override** (`docker-compose.staging.yml`) — separate Postgres volume, port 5433 / web 3002.
+- **`scripts/smoke-cutover.sh`** — health, optional import dry-run, OAuth reachability.
+- Expanded **`deploy/CUTOVER.md`** — staging rehearsal, prod import, claim smoke, Caddy swap.
 
 ## Broken, stubbed, or incomplete
 
 | Area | Evidence | Impact |
 |------|----------|--------|
-| Calendar bidirectional push | `sync.ts` — `google.calendar.push` warns only | Changes in whome do not sync to Google |
+| Calendar bidirectional push | `sync.ts` — `google.calendar.push` warns only | No push to Google |
 | Recurring events | `recurring.materialize` stub | RRULE expansion not automated |
-| HomeHub school file artifacts | `school_submission_artifact` not migrated | Submission metadata only; linked files need manual re-upload if needed |
-| Hosted multi-tenant | `docs/ARCHITECTURE.md` only | RLS / Neon per household not in code |
-| Files module (product doc) | Listed in `docs/ARCHITECTURE.md` core | No `/api/core/files` routes; import stores blobs under `imports/{householdId}/files/` |
-| Production cutover | Operator checklist in `deploy/CUTOVER.md` | Caddy swap + live import on droplet not automated |
+| Hosted multi-tenant | docs only | RLS not in code |
+| `/api/core/files` product routes | not implemented | Import blobs under `imports/` only |
+| **Production cutover on droplet** | operator checklist | Staging/prod import + Caddy flip not run in this repo session |
+| Real `app.db` import counts | validated on **extended fixture** only | Droplet gate requires manual `scp` + live import |
 
-## Immediate next steps (recommended priority)
+## Immediate next steps (operator)
 
-1. **Production cutover** — Follow `deploy/CUTOVER.md`: copy `app.db` from droplet, prod compose, live import, OAuth smoke, Caddy swap.
-2. **Google OAuth console** — Both redirect URIs on `PUBLIC_APP_URL` per `docs/GOOGLE_OAUTH_SETUP.md`.
-3. **Optional:** `google.calendar.push` + `recurring.materialize` if leaving `import_only`.
-4. **Optional:** Migrate `school_submission_artifact` rows to presigned keys.
-
-## Git / release state
-
-- `a96a368` — combined cutover track: CI, Vitest, import mappers, OAuth Redis, cutover docs
-- `4b67280` — initial household operations platform
-- Production cutover on droplet is the next operator step (`deploy/CUTOVER.md`)
+1. `scp` droplet `app.db` + `uploads/` → run live import + two-Google claim test locally or on staging volume.
+2. `docker compose -f docker-compose.prod.yml -f docker-compose.staging.yml up` → `./scripts/smoke-cutover.sh` → browser module smoke.
+3. Prod import + Caddy swap per `deploy/CUTOVER.md`; 48h soak before stopping HomeHub.
 
 ## Module enablement (default)
-
-From `.env.example`:
 
 ```
 MODULES_ENABLED=core,school,calendar_sync
 ```
-
-Disable modules by removing from comma list and restarting API/worker/web.

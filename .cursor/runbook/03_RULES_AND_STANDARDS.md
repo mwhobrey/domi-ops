@@ -113,7 +113,7 @@ docker compose -f docker-compose.prod.yml up -d --build
 - Requires `POSTGRES_PASSWORD` in env.
 - Services on `whome_internal` + external `proxy` network for Caddy.
 - No host ports on postgres/redis/minio in prod file.
-- Cutover: point Caddy from HomeHub to `web:3000` (`deploy/Caddyfile.example`).
+- Cutover: follow `deploy/CUTOVER.md` — staging volume (`docker-compose.staging.yml`), import service (`Dockerfile.import`), smoke script, then Caddy → `web:3000`.
 
 **Migrate:** Automatic on API container start (not separate `docker compose exec ... db:migrate` unless running CLI manually — `docs/ARCHITECTURE.md` step 2 is outdated vs Dockerfile entrypoint).
 
@@ -124,14 +124,15 @@ docker compose -f docker-compose.prod.yml up -d --build
 3. **Middleware dev bypass** — Broken API in dev still shows protected pages; production does not bypass.
 4. **`requireAuth` dev bypass** — API allows unauthenticated access to protected routes when `AUTH_REQUIRED=false` in development.
 5. **Calendar push / recurring** — Jobs enqueue but worker only warns (`packages/calendar-sync/src/sync.ts`).
-6. **School presign** — Fake URL; no `@aws-sdk/client-s3` wired (`school-upload.ts`).
-7. **HomeHub import** — `files` and full `school` rows incomplete; always `--dry-run` first.
-8. **`registerSyncHandler` in calendar-sync** — Dead code path; worker calls `runCalendarSyncJob` directly.
-9. **OAuth state in memory** — Multi-replica API without sticky sessions breaks login unless fixed.
-10. **RLS / hosted tiers** — Documented only; schema has `deployment_tier` enum but no policies.
-11. **LICENSE** — README says add MIT before public publish.
-12. **`packages/db/dist/`** — May be committed or built locally; migrations run from `dist/migrate.js` in Docker.
-13. **better-sqlite3** — Rebuild after Node version change: `npm rebuild better-sqlite3 -w @whome/import-homehub`.
+6. **School presign** — Real `@aws-sdk/s3-request-presigner`; requires S3 env in API.
+7. **HomeHub import** — Real droplet `app.db` not in CI; use `npm run import:validate` on fixture + `--strict` on operator dry-run.
+8. **Post-import auth** — Set `HOUSEHOLD_MEMBER_EMAIL_MAP` or match Google displayName to `legacyDisplayName`; no auto household bootstrap when `import_records` exist.
+9. **`registerSyncHandler` in calendar-sync** — Dead code path; worker calls `runCalendarSyncJob` directly.
+10. **OAuth state** — Redis-backed (`REDIS_URL` required for login/calendar CSRF).
+11. **RLS / hosted tiers** — Documented only; schema has `deployment_tier` enum but no policies.
+12. **LICENSE** — MIT in repo root.
+13. **`packages/db/dist/`** — May be committed or built locally; migrations run from `dist/migrate.js` in Docker.
+14. **better-sqlite3** — Rebuild after Node version change: `npm rebuild better-sqlite3 -w @whome/import-homehub`.
 
 ## Commit message convention (project lead preference)
 
