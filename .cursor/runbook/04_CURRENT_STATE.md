@@ -76,8 +76,9 @@
 
 ## Git / release state
 
-- Combined track implementation on `master` (local) — CI, tests, import mappers, OAuth Redis, presign, docs.
-- Treat production cutover as **operator step** on existing HomeHub droplet.
+- `a96a368` — combined cutover track: CI, Vitest, import mappers, OAuth Redis, cutover docs
+- `4b67280` — initial household operations platform
+- Production cutover on droplet is the next operator step (`deploy/CUTOVER.md`)
 
 ## Module enablement (default)
 

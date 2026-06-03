@@ -37,8 +37,9 @@
 
 - **Node:** `>=20` (`package.json` `engines`)
 - **Package manager:** npm 10.9.2 workspaces + Turborepo
-- **Single initial commit** on `master` as of runbook generation — greenfield v1
-- **No CI, no automated tests** in tree (see [03_RULES_AND_STANDARDS.md](./03_RULES_AND_STANDARDS.md))
+- **Commits on `master`:** `a96a368` (cutover baseline), `4b67280` (initial platform)
+- **CI:** GitHub Actions on push/PR (`typecheck`, `build`, `test`)
+- **Tests:** Vitest — `npm run test`
 
 ## Quick commands
 
