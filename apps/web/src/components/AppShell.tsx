@@ -6,6 +6,9 @@ const nav = [
   { href: "/calendar", label: "Calendar" },
   { href: "/school", label: "School" },
   { href: "/shopping", label: "Shopping" },
+  { href: "/chores", label: "Chores" },
+  { href: "/notes", label: "Notes" },
+  { href: "/expenses", label: "Expenses" },
 ];
 
 export function AppShell({

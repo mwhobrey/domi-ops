@@ -1,4 +1,5 @@
 import { AppShell } from "../../components/AppShell";
+import { CalendarEventPanel } from "../../components/CalendarEventPanel";
 import { CalendarWeek, type CalendarEventView } from "../../components/CalendarWeek";
 import { SyncCalendarButton } from "../../components/SyncCalendarButton";
 import { apiFetch, googleCalendarConnectUrl } from "../../lib/api";
@@ -57,6 +58,9 @@ export default async function CalendarPage({
       {params.error && (
         <p className="mb-4 text-sm text-red-400">Calendar connection failed ({params.error}).</p>
       )}
+      <div className="mb-8">
+        <CalendarEventPanel initialEvents={events} />
+      </div>
       <CalendarWeek events={events} />
     </AppShell>
   );

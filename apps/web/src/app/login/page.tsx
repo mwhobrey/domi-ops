@@ -40,6 +40,18 @@ export default async function LoginPage({
             Sign-in failed. Check API logs and Google OAuth redirect URIs, then try again.
           </p>
         )}
+        {params.error === "no_household" && (
+          <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+            No imported household member matches this Google account. Set{" "}
+            <code className="text-xs">HOUSEHOLD_MEMBER_EMAIL_MAP</code> or sign in with a matching
+            display name. See repo file <code className="text-xs">docs/HOMEHUB_IMPORT.md</code>.
+          </p>
+        )}
+        {params.error === "already_claimed" && (
+          <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+            That household member was already claimed by another Google account.
+          </p>
+        )}
         <p className="text-sm text-[var(--color-text-muted)]">
           Use your Google account. Calendar permissions are requested separately when you connect sync.
         </p>

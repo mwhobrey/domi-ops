@@ -120,5 +120,91 @@ export function calendarRoutes(db: Database, env: Env) {
     return c.json({ linked });
   });
 
+  async function defaultCalendarId(householdId: string): Promise<string> {
+    const [existing] = await db
+      .select()
+      .from(calendars)
+      .where(
+        and(eq(calendars.householdId, householdId), eq(calendars.isHouseholdDefault, true)),
+      )
+      .limit(1);
+    if (existing) return existing.id;
+    const [created] = await db
+      .insert(calendars)
+      .values({
+        householdId,
+        name: "Household",
+        visibility: "household",
+        isHouseholdDefault: true,
+      })
+      .returning();
+    return created.id;
+  }
+
+  app.post("/events", async (c) => {
+    const auth = c.get("auth")!;
+    const body = await c.req.json<{
+      title: string;
+      description?: string;
+      startDate: string;
+      endDate?: string;
+      startTime?: string;
+      endTime?: string;
+      allDay?: boolean;
+      color?: string;
+      calendarId?: string;
+    }>();
+    const calendarId = body.calendarId ?? (await defaultCalendarId(auth.householdId));
+    const [ev] = await db
+      .insert(calendarEvents)
+      .values({
+        householdId: auth.householdId,
+        calendarId,
+        title: body.title,
+        description: body.description,
+        startDate: body.startDate,
+        endDate: body.endDate,
+        startTime: body.startTime,
+        endTime: body.endTime,
+        allDay: body.allDay ?? false,
+        color: body.color,
+        source: "local",
+        createdByUserId: auth.userId,
+      })
+      .returning();
+    return c.json({ event: ev }, 201);
+  });
+
+  app.patch("/events/:id", async (c) => {
+    const auth = c.get("auth")!;
+    const id = c.req.param("id");
+    const body = await c.req.json<{
+      title?: string;
+      description?: string;
+      startDate?: string;
+      endDate?: string;
+      startTime?: string;
+      endTime?: string;
+      allDay?: boolean;
+      color?: string;
+    }>();
+    const [ev] = await db
+      .update(calendarEvents)
+      .set({ ...body, updatedAt: new Date() })
+      .where(and(eq(calendarEvents.id, id), eq(calendarEvents.householdId, auth.householdId)))
+      .returning();
+    if (!ev) return c.json({ error: "not_found" }, 404);
+    return c.json({ event: ev });
+  });
+
+  app.delete("/events/:id", async (c) => {
+    const auth = c.get("auth")!;
+    const id = c.req.param("id");
+    await db
+      .delete(calendarEvents)
+      .where(and(eq(calendarEvents.id, id), eq(calendarEvents.householdId, auth.householdId)));
+    return c.json({ ok: true });
+  });
+
   return app;
 }
