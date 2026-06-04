@@ -1,38 +1,137 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
-import { Alert, Button, Card, CardBody, Input, Select } from "./ui";
+import type { HomePresence } from "../lib/home-status";
+import { CalendarReminderPushSettings } from "./CalendarReminderPushSettings";
+import { NoticePushSettings } from "./NoticePushSettings";
+import { Alert, Avatar, Button, Card, CardBody, Input, RadioGroup } from "./ui";
 
 type PublicLabel = "name" | "nickname";
+type TemperatureUnit = "fahrenheit" | "celsius";
+
+function avatarErrorMessage(body: string | undefined): string {
+  if (!body) return "Upload failed";
+  try {
+    const j = JSON.parse(body) as { error?: string };
+    if (j.error === "s3_not_configured") {
+      return "Photo storage is not configured on this server (S3/MinIO).";
+    }
+    if (j.error === "file_too_large") return "Image must be 2 MB or smaller.";
+    if (j.error === "invalid_image_type") return "Use JPEG, PNG, or WebP.";
+  } catch {
+    /* */
+  }
+  return "Upload failed";
+}
 
 export function ProfileEditor({
   initial,
 }: {
   initial: {
     email: string;
+    memberId: string;
     name: string | null;
     nickname: string | null;
     publicLabel: PublicLabel;
     shownLabel: string;
-    homeStatus: string;
     homeStatusId: string | null;
+    presence: HomePresence;
+    statusMessage: string | null;
+    temperatureUnit: TemperatureUnit;
+    pushNoticesEnabled: boolean;
+    pushCalendarRemindersEnabled: boolean;
+    pushSubscribed: boolean;
+    pushAvailable: boolean;
+    avatarUrl: string | null;
   };
 }) {
   const [name, setName] = useState(initial.name ?? "");
   const [nickname, setNickname] = useState(initial.nickname ?? "");
   const [publicLabel, setPublicLabel] = useState<PublicLabel>(initial.publicLabel);
-  const [homeStatus, setHomeStatus] = useState(initial.homeStatus);
+  const [presence, setPresence] = useState<HomePresence>(initial.presence);
+  const [statusMessage, setStatusMessage] = useState(initial.statusMessage ?? "");
+  const [temperatureUnit, setTemperatureUnit] = useState<TemperatureUnit>(initial.temperatureUnit);
   const [shownLabel, setShownLabel] = useState(initial.shownLabel);
+  const [avatarUrl, setAvatarUrl] = useState(initial.avatarUrl);
+  /** Set after mount so SSR and hydration share the same `src` (no `Date.now()` during render). */
+  const [avatarBust, setAvatarBust] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [variant, setVariant] = useState<"success" | "error" | null>(null);
   const [loading, setLoading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
+
+  useEffect(() => {
+    if (avatarUrl) setAvatarBust(String(Date.now()));
+    else setAvatarBust(null);
+  }, [avatarUrl]);
 
   function previewShown(): string {
     if (publicLabel === "nickname" && nickname.trim()) return nickname.trim();
     if (name.trim()) return name.trim();
     if (nickname.trim()) return nickname.trim();
     return "Member";
+  }
+
+  function displayAvatarSrc(): string | null {
+    if (previewUrl) return previewUrl;
+    if (!avatarUrl) return null;
+    if (!avatarBust) return avatarUrl;
+    return `${avatarUrl}?t=${avatarBust}`;
+  }
+
+  async function patchPresence(patch: { presence?: HomePresence; statusMessage?: string | null }) {
+    if (!initial.homeStatusId) return;
+    await apiClient.patch(`/api/core/dashboard/home-status/${initial.homeStatusId}`, patch);
+  }
+
+  async function uploadAvatar(file: File) {
+    setAvatarBusy(true);
+    setAvatarError(null);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(URL.createObjectURL(file));
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await apiClient.postForm<{ ok: boolean; avatarUrl: string }>(
+        "/api/core/profile/avatar",
+        form,
+      );
+      setAvatarUrl(res.avatarUrl);
+      setPreviewUrl(null);
+    } catch (err) {
+      setPreviewUrl(null);
+      setAvatarError(
+        err instanceof ApiError ? avatarErrorMessage(err.body) : "Upload failed",
+      );
+    } finally {
+      setAvatarBusy(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
+
+  async function removeAvatar() {
+    setAvatarBusy(true);
+    setAvatarError(null);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
+    try {
+      await apiClient.delete("/api/core/profile/avatar");
+      setAvatarUrl(null);
+    } catch (err) {
+      setAvatarError(err instanceof ApiError ? avatarErrorMessage(err.body) : "Could not remove photo");
+    } finally {
+      setAvatarBusy(false);
+    }
   }
 
   return (
@@ -44,6 +143,62 @@ export function ProfileEditor({
         <p className="text-sm">
           Shown to household as <span className="font-medium">{shownLabel}</span>
         </p>
+
+        <section className="flex flex-wrap items-center gap-4" aria-labelledby="profile-photo-heading">
+          <h2 id="profile-photo-heading" className="sr-only">
+            Profile photo
+          </h2>
+          <Avatar
+            id={initial.memberId}
+            name={shownLabel}
+            src={displayAvatarSrc()}
+            size="lg"
+          />
+          <div className="flex min-w-[12rem] flex-1 flex-col gap-2">
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="sr-only"
+              id="avatar-file"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void uploadAvatar(file);
+              }}
+            />
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                loading={avatarBusy}
+                onClick={() => fileRef.current?.click()}
+              >
+                {avatarUrl || previewUrl ? "Replace photo" : "Upload photo"}
+              </Button>
+              {(avatarUrl || previewUrl) && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={avatarBusy}
+                  onClick={() => void removeAvatar()}
+                >
+                  Remove
+                </Button>
+              )}
+            </div>
+            <p className="text-xs text-[var(--color-text-muted)]">
+              JPEG, PNG, or WebP · max 2 MB · resized to 256×256
+            </p>
+            {avatarError && (
+              <Alert variant="error" className="text-sm">
+                {avatarError}
+              </Alert>
+            )}
+          </div>
+        </section>
+
         <label className="block space-y-1">
           <span className="text-sm font-medium">Name</span>
           <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={128} />
@@ -57,43 +212,82 @@ export function ProfileEditor({
             placeholder="Optional"
           />
         </label>
-        <fieldset className="space-y-2">
-          <legend className="text-sm font-medium">Show on household board &amp; school</legend>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="radio"
-              checked={publicLabel === "name"}
-              onChange={() => setPublicLabel("name")}
-            />
-            Name{name.trim() ? ` (${name.trim()})` : ""}
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="radio"
-              checked={publicLabel === "nickname"}
-              onChange={() => setPublicLabel("nickname")}
-              disabled={!nickname.trim()}
-            />
-            Nickname{nickname.trim() ? ` (${nickname.trim()})` : ""}
-          </label>
-        </fieldset>
+        <RadioGroup
+          legend="Show on household board & school"
+          name="publicLabel"
+          value={publicLabel}
+          onChange={(v) => setPublicLabel(v as PublicLabel)}
+          options={[
+            { value: "name", label: `Name${name.trim() ? ` (${name.trim()})` : ""}` },
+            {
+              value: "nickname",
+              label: `Nickname${nickname.trim() ? ` (${nickname.trim()})` : ""}`,
+              disabled: !nickname.trim(),
+            },
+          ]}
+        />
+        <RadioGroup
+          legend="Temperature"
+          name="temperatureUnit"
+          value={temperatureUnit}
+          onChange={(v) => setTemperatureUnit(v as TemperatureUnit)}
+          options={[
+            { value: "fahrenheit", label: "Fahrenheit (°F)" },
+            { value: "celsius", label: "Celsius (°C)" },
+          ]}
+        />
+        <NoticePushSettings
+          initialEnabled={initial.pushNoticesEnabled}
+          initialSubscribed={initial.pushSubscribed}
+          pushAvailable={initial.pushAvailable}
+        />
+        <CalendarReminderPushSettings
+          initialEnabled={initial.pushCalendarRemindersEnabled}
+          pushAvailable={initial.pushAvailable}
+        />
         {initial.homeStatusId && (
-          <label className="block space-y-1">
-            <span className="text-sm font-medium">Home / away</span>
-            <Select
-              value={homeStatus}
-              onChange={async (e) => {
-                const status = e.target.value;
-                setHomeStatus(status);
-                await apiClient.patch(`/api/core/dashboard/home-status/${initial.homeStatusId}`, {
-                  status,
-                });
+          <fieldset className="space-y-3">
+            <legend className="text-sm font-medium">Presence</legend>
+            <RadioGroup
+              legend="Home or away"
+              name="presence"
+              value={presence}
+              onChange={async (v) => {
+                const next = v as HomePresence;
+                setPresence(next);
+                try {
+                  await patchPresence({
+                    presence: next,
+                    statusMessage: statusMessage.trim() || null,
+                  });
+                } catch {
+                  /* saved on main Save */
+                }
               }}
-            >
-              <option value="Home">Home</option>
-              <option value="Away">Away</option>
-            </Select>
-          </label>
+              options={[
+                { value: "Home", label: "Home" },
+                { value: "Away", label: "Away" },
+              ]}
+            />
+            <label className="block space-y-1">
+              <span className="text-sm text-[var(--color-text-muted)]">Status message</span>
+              <Input
+                value={statusMessage}
+                onChange={(e) => setStatusMessage(e.target.value)}
+                maxLength={64}
+                placeholder="Optional — e.g. At work"
+                onBlur={async () => {
+                  try {
+                    await patchPresence({
+                      statusMessage: statusMessage.trim() || null,
+                    });
+                  } catch {
+                    /* ignore */
+                  }
+                }}
+              />
+            </label>
+          </fieldset>
         )}
         <Button
           loading={loading}
@@ -106,7 +300,14 @@ export function ProfileEditor({
                 name: name || null,
                 nickname: nickname || null,
                 publicLabel,
+                temperatureUnit,
               });
+              if (initial.homeStatusId) {
+                await patchPresence({
+                  presence,
+                  statusMessage: statusMessage.trim() || null,
+                });
+              }
               setShownLabel(previewShown());
               setMsg("Saved");
               setVariant("success");

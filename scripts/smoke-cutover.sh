@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Default smoke URL matches docker compose web; native dev: SMOKE_BASE_URL=http://localhost:3000
 BASE_URL="${SMOKE_BASE_URL:-http://localhost:3001}"
 API_URL="${SMOKE_API_URL:-http://localhost:4000}"
 

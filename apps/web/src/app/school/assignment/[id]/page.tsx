@@ -12,6 +12,7 @@ export default async function SchoolAssignmentPage({
   const { id } = await params;
   let assignmentTitle = "Assignment";
   let className = "";
+  let classId = "";
   let submissions: {
     id: string;
     status: string;
@@ -24,10 +25,11 @@ export default async function SchoolAssignmentPage({
   try {
     const detail = await apiFetch<{
       assignment: { title: string };
-      class: { name: string };
+      class: { id: string; name: string };
     }>(`/api/school/assignments/${id}`);
     assignmentTitle = detail.assignment.title;
     className = detail.class.name;
+    classId = detail.class.id;
     const subRes = await apiFetch<{ submissions: typeof submissions }>(
       `/api/school/assignments/${id}/submissions`,
     );
@@ -37,7 +39,15 @@ export default async function SchoolAssignmentPage({
   }
 
   return (
-    <AppShell title={assignmentTitle} description={className ? `${className}` : undefined}>
+    <AppShell
+      title={assignmentTitle}
+      description={className ? `${className}` : undefined}
+      breadcrumb={[
+        { label: "School", href: "/school" },
+        ...(classId ? [{ label: className, href: `/school/class/${classId}` }] : [{ label: className }]),
+        { label: assignmentTitle },
+      ]}
+    >
       {loadError ? (
         <Alert variant="error">
           {loadError}. <a href={`/school/assignment/${id}`}>Retry</a>

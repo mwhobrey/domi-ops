@@ -1,4 +1,4 @@
-import { calendars, calendarEvents, importRecords } from "@whome/db";
+import { calendars, calendarEvents, importRecords, recurringRules } from "@whome/db";
 import { eq, and } from "drizzle-orm";
 import { sqliteTableExists } from "../lib/sqlite.js";
 import { requireDb } from "../lib/require-db.js";
@@ -34,20 +34,42 @@ export async function importCalendar(ctx: ImportContext): Promise<MapperResult> 
   }
 
   const db = requireDb(ctx);
-  const calKey = `household:${ctx.householdId}:imported`;
-  let calendarId = ctx.idMap.get(calKey);
+  const householdBucketSourceId = "imported_homehub";
+  let calendarId = ctx.idMap.get(`household_calendar:${householdBucketSourceId}`);
   if (!calendarId) {
-    const [cal] = await db
-      .insert(calendars)
-      .values({
+    const [existingRecord] = await db
+      .select()
+      .from(importRecords)
+      .where(
+        and(
+          eq(importRecords.householdId, ctx.householdId),
+          eq(importRecords.sourceTable, "household_calendar"),
+          eq(importRecords.sourceId, householdBucketSourceId),
+        ),
+      )
+      .limit(1);
+    if (existingRecord) {
+      calendarId = existingRecord.targetId;
+    } else {
+      const [cal] = await db
+        .insert(calendars)
+        .values({
+          householdId: ctx.householdId,
+          name: "Imported from HomeHub",
+          visibility: "household",
+          isHouseholdDefault: true,
+        })
+        .returning();
+      calendarId = cal.id;
+      await db.insert(importRecords).values({
         householdId: ctx.householdId,
-        name: "Imported from HomeHub",
-        visibility: "household",
-        isHouseholdDefault: true,
-      })
-      .returning();
-    calendarId = cal.id;
-    ctx.idMap.set(calKey, calendarId);
+        sourceTable: "household_calendar",
+        sourceId: householdBucketSourceId,
+        targetTable: "calendars",
+        targetId: cal.id,
+      });
+    }
+    ctx.idMap.set(`household_calendar:${householdBucketSourceId}`, calendarId);
   }
 
   if (sqliteTableExists(ctx.sqlite, "personal_calendar")) {
@@ -90,6 +112,93 @@ export async function importCalendar(ctx: ImportContext): Promise<MapperResult> 
         targetId: cal.id,
       });
       result.imported++;
+    }
+  }
+
+  const WEEKDAY = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"] as const;
+  function homeHubFreqToRrule(freq: string, startDate: string): string {
+    const f = freq.trim().toLowerCase();
+    if (f === "daily") return "FREQ=DAILY;INTERVAL=1";
+    if (f === "monthly") return "FREQ=MONTHLY;INTERVAL=1";
+    const dow = new Date(`${startDate}T12:00:00`).getDay();
+    return `FREQ=WEEKLY;BYDAY=${WEEKDAY[dow]}`;
+  }
+
+  if (sqliteTableExists(ctx.sqlite, "recurring_reminder")) {
+    const recurring = ctx.sqlite
+      .prepare(
+        `SELECT id, title, description, category, color, frequency, interval, start_date, end_date,
+                time, end_time, all_day, personal_calendar_id
+         FROM recurring_reminder`,
+      )
+      .all() as Record<string, unknown>[];
+    for (const row of recurring) {
+      const sourceId = String(row.id);
+      if (ctx.idMap.has(`recurring_reminder:${sourceId}`)) continue;
+      const [existing] = await db
+        .select()
+        .from(importRecords)
+        .where(
+          and(
+            eq(importRecords.householdId, ctx.householdId),
+            eq(importRecords.sourceTable, "recurring_reminder"),
+            eq(importRecords.sourceId, sourceId),
+          ),
+        )
+        .limit(1);
+      if (existing) {
+        ctx.idMap.set(`recurring_reminder:${sourceId}`, existing.targetId);
+        continue;
+      }
+      const startDate = String(row.start_date ?? "").slice(0, 10);
+      if (!startDate) continue;
+      const pcId = row.personal_calendar_id
+        ? ctx.idMap.get(`personal_calendar:${row.personal_calendar_id}`)
+        : undefined;
+      const targetCalendarId = pcId ?? calendarId!;
+      const allDay = Boolean(row.all_day);
+      const freq = String(row.frequency ?? "weekly");
+      const [rule] = await db
+        .insert(recurringRules)
+        .values({
+          householdId: ctx.householdId,
+          calendarId: targetCalendarId,
+          title: String(row.title ?? "Untitled").slice(0, 256),
+          description: row.description ? String(row.description) : null,
+          rrule: homeHubFreqToRrule(freq, startDate),
+          startDate,
+          endDate: row.end_date ? String(row.end_date).slice(0, 10) : null,
+          startTime: allDay ? null : row.time ? String(row.time) : null,
+          endTime: allDay ? null : row.end_time ? String(row.end_time) : null,
+          allDay,
+          categoryKey: row.category ? String(row.category) : null,
+          color: row.color ? String(row.color) : null,
+        })
+        .returning();
+      await db.insert(calendarEvents).values({
+        householdId: ctx.householdId,
+        calendarId: targetCalendarId,
+        title: String(row.title ?? "Untitled").slice(0, 256),
+        description: row.description ? String(row.description) : null,
+        startDate,
+        endDate: row.end_date ? String(row.end_date).slice(0, 10) : null,
+        startTime: allDay ? null : row.time ? String(row.time) : null,
+        endTime: allDay ? null : row.end_time ? String(row.end_time) : null,
+        allDay,
+        categoryKey: row.category ? String(row.category) : null,
+        color: row.color ? String(row.color) : null,
+        source: "local",
+        recurringRuleId: rule!.id,
+      });
+      await db.insert(importRecords).values({
+        householdId: ctx.householdId,
+        sourceTable: "recurring_reminder",
+        sourceId,
+        targetTable: "recurring_rules",
+        targetId: rule!.id,
+      });
+      ctx.idMap.set(`recurring_reminder:${sourceId}`, rule!.id);
+      result.imported += 1;
     }
   }
 

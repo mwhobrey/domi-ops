@@ -21,3 +21,18 @@ export async function enqueueSyncJob(
   const q = getSyncQueue(redisUrl);
   await q.add(name, { name, payload }, { removeOnComplete: 100, removeOnFail: 50 });
 }
+
+/** Repeatable scan for due calendar reminder pushes (every 5 minutes). */
+export async function ensureCalendarReminderScheduler(redisUrl: string): Promise<void> {
+  const q = getSyncQueue(redisUrl);
+  await q.add(
+    "calendar.reminder.scan",
+    { name: "calendar.reminder.scan", payload: { householdId: "scan" } },
+    {
+      repeat: { every: 5 * 60 * 1000 },
+      jobId: "calendar-reminder-scan",
+      removeOnComplete: 20,
+      removeOnFail: 20,
+    },
+  );
+}

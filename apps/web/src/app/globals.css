@@ -1,24 +1,46 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-inter, "Segoe UI"), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-inter, "Segoe UI"), ui-sans-serif, system-ui, sans-serif;
   --color-surface: #0c0f14;
   --color-surface-elevated: #141a24;
+  --color-surface-subtle: #101620;
+  --color-surface-muted: #161d28;
+  --color-surface-inset: #0a0d12;
   --color-border: #1f2937;
   --color-accent: #3b82f6;
   --color-accent-muted: #1d4ed8;
+  --color-accent-subtle: rgb(59 130 246 / 0.12);
   --color-text: #f1f5f9;
   --color-text-muted: #94a3b8;
   --color-danger: #f87171;
   --color-danger-muted: #991b1b;
   --color-success: #34d399;
   --color-success-muted: #065f46;
+  --color-warning: #fbbf24;
+  --color-warning-muted: #78350f;
   --radius-sm: 0.5rem;
   --radius-md: 0.75rem;
   --radius-lg: 1rem;
   --radius-xl: 1.25rem;
   --shadow-card: 0 1px 3px rgb(0 0 0 / 0.35);
+  --shadow-elevated: 0 4px 24px rgb(0 0 0 / 0.4);
   --ring-focus: #60a5fa;
+  --header-height: 3.5rem;
+}
+
+@utility text-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+@utility bg-page-gradient {
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -20%, var(--color-accent) 0%, transparent 50%),
+    radial-gradient(ellipse 60% 40% at 100% 100%, var(--color-accent-muted) 0%, transparent 40%);
 }
 
 html {
@@ -35,4 +57,164 @@ body {
 *:focus-visible {
   outline: 2px solid var(--ring-focus);
   outline-offset: 2px;
+}
+
+dialog::backdrop {
+  background: rgb(0 0 0 / 0.6);
+}
+
+/* Native <dialog> UA margin fights flex centering — reset and center via inner shell */
+dialog.dialog-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  border: none;
+  background: transparent;
+  overflow: hidden;
+}
+
+dialog.dialog-sheet::backdrop {
+  background: rgb(0 0 0 / 0.5);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  dialog.dialog-sheet {
+    animation: sheet-in 0.2s ease-out;
+  }
+
+  dialog.dialog-drawer {
+    animation: drawer-in 0.2s ease-out;
+  }
+
+  dialog.dialog-modal > div {
+    animation: dialog-in 0.15s ease-out;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  dialog.dialog-sheet,
+  dialog.dialog-drawer,
+  dialog.dialog-modal > div {
+    animation: none;
+  }
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes drawer-in {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--color-border) 0%,
+    var(--color-surface-subtle) 50%,
+    var(--color-border) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-shimmer {
+    animation: none;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* TipTap — event description (CalendarEventSheet) */
+.event-rich-editor__content .ProseMirror {
+  min-height: 7rem;
+}
+
+.event-rich-editor__content .ProseMirror:focus {
+  outline: none;
+}
+
+.event-rich-editor__content .ProseMirror > p.is-editor-empty:first-child::before {
+  color: var(--color-text-muted);
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+.event-rich-content p {
+  margin: 0.35em 0;
+}
+
+.event-rich-content ul,
+.event-rich-content ol {
+  margin: 0.35em 0;
+  padding-left: 1.25rem;
+}
+
+.event-rich-content a {
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+
+/* react-colorful — dark-theme spectrum picker (ColorField) */
+.whome-color-picker.react-colorful {
+  width: 100%;
+  max-width: none;
+  gap: 0.65rem;
+}
+
+.whome-color-picker .react-colorful__saturation {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.35);
+}
+
+.whome-color-picker .react-colorful__hue,
+.whome-color-picker .react-colorful__alpha {
+  height: 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+}
+
+.whome-color-picker .react-colorful__pointer {
+  width: 1.125rem;
+  height: 1.125rem;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.45);
 }

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
+import { AnchorButton } from "../../components/ui";
 
 export default async function LoginPage({
   searchParams,
@@ -32,18 +33,10 @@ export default async function LoginPage({
 
   return (
     <main className="relative flex min-h-dvh flex-col items-center justify-center px-6">
-      <div
-        className="pointer-events-none absolute inset-0 opacity-40"
-        style={{
-          background:
-            "radial-gradient(ellipse 80% 50% at 50% -20%, #3b82f6 0%, transparent 50%)",
-        }}
-      />
+      <div className="bg-page-gradient pointer-events-none absolute inset-0 opacity-40" aria-hidden />
       <div className="relative w-full max-w-md space-y-6 rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-surface-elevated)] p-8 shadow-[var(--shadow-card)]">
         <div className="space-y-2 text-center">
-          <p className="text-xs font-medium uppercase tracking-widest text-[var(--color-text-muted)]">
-            Household operations
-          </p>
+          <p className="text-label text-[var(--color-text-muted)]">Household operations</p>
           <h1 className="text-2xl font-semibold">Sign in to whome</h1>
         </div>
         {params.error === "oauth" && (
@@ -55,12 +48,9 @@ export default async function LoginPage({
           Use your household Google account. Each family member signs in once, then sets name and
           nickname on Profile.
         </p>
-        <a
-          href="/auth/google/login"
-          className="flex w-full items-center justify-center rounded-[var(--radius-lg)] bg-[var(--color-accent)] px-4 py-3 text-sm font-medium text-white hover:bg-[var(--color-accent-muted)]"
-        >
+        <AnchorButton href="/auth/google/login" className="flex w-full">
           Continue with Google
-        </a>
+        </AnchorButton>
         <p className="text-center text-xs text-[var(--color-text-muted)]">
           <Link href="/" className="underline hover:text-[var(--color-text)]">
             Back to home

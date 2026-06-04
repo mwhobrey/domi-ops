@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "./Button";
-import { Card, CardBody, CardFooter, CardHeader } from "./Card";
+import { Modal } from "./Modal";
 
 export function ConfirmDialog({
   open,
@@ -22,23 +22,22 @@ export function ConfirmDialog({
 }) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <h2 className="font-semibold">{title}</h2>
-        </CardHeader>
-        <CardBody>
-          <p className="text-sm text-[var(--color-text-muted)]">{message}</p>
-        </CardBody>
-        <CardFooter className="flex justify-end gap-2">
+    <Modal
+      open={open}
+      onClose={onCancel}
+      title={title}
+      footer={
+        <div className="flex justify-end gap-2 px-6 py-5">
           <Button variant="secondary" onClick={onCancel}>
             Cancel
           </Button>
           <Button variant="danger" loading={loading} onClick={onConfirm}>
             {confirmLabel}
           </Button>
-        </CardFooter>
-      </Card>
-    </div>
+        </div>
+      }
+    >
+      <p className="text-sm leading-relaxed text-[var(--color-text-muted)]">{message}</p>
+    </Modal>
   );
 }

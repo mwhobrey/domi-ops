@@ -4,11 +4,13 @@ export function EmptyState({
   title,
   description,
   action,
+  icon,
   className,
 }: {
   title: string;
   description?: string;
   action?: React.ReactNode;
+  icon?: React.ReactNode;
   className?: string;
 }) {
   return (
@@ -18,6 +20,11 @@ export function EmptyState({
         className,
       )}
     >
+      {icon && (
+        <div className="mb-3 text-[var(--color-text-muted)] opacity-60" aria-hidden>
+          {icon}
+        </div>
+      )}
       <p className="font-medium">{title}</p>
       {description && (
         <p className="mt-2 max-w-sm text-sm text-[var(--color-text-muted)]">{description}</p>

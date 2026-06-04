@@ -39,12 +39,15 @@ export async function importNotices(ctx: ImportContext): Promise<MapperResult> {
       continue;
     }
     const content = String(r.content ?? "");
+    const now = new Date();
     const [row] = await db
       .insert(notices)
       .values({
         householdId: ctx.householdId,
         content,
         updatedByDisplayName: r.updated_by ? String(r.updated_by) : null,
+        createdAt: now,
+        updatedAt: now,
       })
       .returning();
     await db.insert(importRecords).values({

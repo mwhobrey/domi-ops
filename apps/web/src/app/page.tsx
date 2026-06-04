@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { cookies } from "next/headers";
-import { Card, CardBody } from "../components/ui";
+import { Card, CardBody, LinkButton } from "../components/ui";
 
 async function getHealth() {
   try {
@@ -39,24 +38,16 @@ export default async function HomePage() {
 
   return (
     <main className="relative min-h-dvh overflow-hidden">
-      <div
-        className="pointer-events-none absolute inset-0 opacity-40"
-        style={{
-          background:
-            "radial-gradient(ellipse 80% 50% at 50% -20%, #3b82f6 0%, transparent 50%), radial-gradient(ellipse 60% 40% at 100% 100%, #6366f1 0%, transparent 40%)",
-        }}
-      />
+      <div className="bg-page-gradient pointer-events-none absolute inset-0 opacity-40" aria-hidden />
       <div className="relative mx-auto flex max-w-4xl flex-col gap-12 px-6 py-24">
         <header className="space-y-4">
-          <p className="text-sm font-medium tracking-widest text-[var(--color-text-muted)] uppercase">
-            Household operations
-          </p>
-          <h1 className="text-5xl font-semibold tracking-tight text-balance sm:text-6xl">
+          <p className="text-label text-[var(--color-text-muted)]">Household operations</p>
+          <h1 className="font-display text-5xl font-semibold tracking-tight text-balance sm:text-6xl">
             whome
           </h1>
           <p className="max-w-xl text-lg text-[var(--color-text-muted)]">
-            Enterprise-grade home management. Calendar, homeschool, shopping, and
-            the rest — private, self-hosted, open source.
+            Enterprise-grade home management. Calendar, homeschool, shopping, and the rest — private,
+            self-hosted, open source.
           </p>
         </header>
 
@@ -78,33 +69,24 @@ export default async function HomePage() {
 
         <div className="flex flex-wrap gap-3">
           {loggedIn ? (
-            <Link
-              href="/dashboard"
-              className="rounded-[var(--radius-lg)] bg-[var(--color-accent)] px-5 py-2.5 text-sm font-medium text-white hover:bg-[var(--color-accent-muted)]"
-            >
+            <LinkButton href="/dashboard" size="lg">
               Go to dashboard
-            </Link>
+            </LinkButton>
           ) : (
-            <Link
-              href="/login"
-              className="rounded-[var(--radius-lg)] bg-[var(--color-accent)] px-5 py-2.5 text-sm font-medium text-white hover:bg-[var(--color-accent-muted)]"
-            >
+            <LinkButton href="/login" size="lg">
               Sign in
-            </Link>
+            </LinkButton>
           )}
           {!loggedIn && (
-            <Link
-              href="/dashboard"
-              className="rounded-[var(--radius-lg)] border border-[var(--color-border)] px-5 py-2.5 text-sm hover:bg-[var(--color-surface-elevated)]"
-            >
+            <LinkButton href="/dashboard" variant="secondary" size="lg">
               Dashboard
-            </Link>
+            </LinkButton>
           )}
         </div>
 
         <footer className="flex items-center gap-3 text-sm text-[var(--color-text-muted)]">
           <span
-            className={`inline-block h-2 w-2 rounded-full ${health?.status === "ok" ? "bg-emerald-500" : "bg-amber-500"}`}
+            className={`inline-block h-2 w-2 rounded-full ${health?.status === "ok" ? "bg-[var(--color-success)]" : "bg-[var(--color-warning)]"}`}
           />
           API {health?.status === "ok" ? "connected" : "starting or unreachable"}
         </footer>

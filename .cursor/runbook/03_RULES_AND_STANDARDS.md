@@ -98,6 +98,13 @@ npm install && npm run build && npm run db:migrate
 npm run dev
 ```
 
+- **Fresh dev DB:** `npm run dev:reset` — `docker compose down -v`, `up -d postgres redis minio --wait`, `redis-cli FLUSHALL`, `npm run db:migrate` (see `scripts/dev-reset.mjs`).
+
+- **Default dev path:** native `npm run dev` → browser `http://localhost:3000`, `.env.example` (`WHOME_DEV_PROFILE=native`, `PORT=3000`, `PUBLIC_APP_URL=http://localhost:3000`).
+- **Alternate:** full Docker stack → host `http://localhost:3001`, use `.env.docker.example` (`WHOME_DEV_PROFILE=docker`). Do not mix profiles without updating Google OAuth redirect URIs.
+- Root `.env` is loaded by `@whome/config` `loadEnv()` (api/worker) and `apps/web/next.config.ts` (Next). Development boot warns on `PUBLIC_APP_URL` / profile mismatch; `GET /health` includes `dev.oauthRedirects`.
+- If `EADDRINUSE :3000`, stop a stale `next dev` or run only infra: `docker compose up -d postgres redis minio` (omit `web`/`api` when using native dev).
+
 ### Docker full stack
 
 - `docker compose up` builds `api`, `worker`, `web`.
@@ -117,6 +124,52 @@ docker compose -f docker-compose.prod.yml up -d --build
 
 **Migrate:** Automatic on API container start (not separate `docker compose exec ... db:migrate` unless running CLI manually — `docs/ARCHITECTURE.md` step 2 is outdated vs Dockerfile entrypoint).
 
+## Database migrations (Drizzle)
+
+Migrations live in `packages/db/drizzle/*.sql`. The runner (`packages/db/src/migrate.ts` → `npm run db:migrate` at repo root) uses Drizzle’s migrator, which **only applies SQL files listed in** `packages/db/drizzle/meta/_journal.json`. A new `.sql` file without a journal entry is **silently skipped** — schema drift without an error.
+
+### When to use `generate` vs hand-written SQL
+
+| Path | Use when |
+|------|----------|
+| `npm run generate -w @whome/db` (`drizzle-kit generate`) | Schema changed in `packages/db/src/schema/*.ts`; Kit emits SQL + journal + snapshot under `drizzle/meta/`. Review diff, then commit all three. |
+| Hand-written `NNNN_name.sql` | Small, explicit DDL (column add, index, data fix) when you already know the SQL and want full control. **You must register the file in `_journal.json` yourself.** |
+
+This repo often uses hand-written numbered migrations (`0007_home_status_presence.sql`, etc.) after updating the TypeScript schema in the same change.
+
+### Checklist — add a migration
+
+1. **Edit schema** — `packages/db/src/schema/*.ts` (Drizzle column/table definitions used by the app).
+2. **Add SQL** — `packages/db/drizzle/NNNN_short_snake_name.sql` (next index: one higher than the latest file and journal `idx`).
+3. **Register journal** — append to `packages/db/drizzle/meta/_journal.json` → `entries[]`:
+   - `idx`: same number as migration prefix (0-based sequence; must match order).
+   - `tag`: **exact** SQL basename without `.sql` (e.g. `0009_member_avatar_key`).
+   - `when`: unique increasing millisecond timestamp (e.g. `Date.now()` or +1000 ms per prior entry).
+   - `version`: `"7"`, `breakpoints`: `true` (match existing entries).
+4. **Optional snapshot** — `drizzle-kit generate` updates `drizzle/meta/*_snapshot.json`; not required for `migrate:run` but keeps Kit in sync if you use `generate` later.
+5. **Apply** — from repo root with Postgres up and `DATABASE_URL` in `.env`:
+   ```bash
+   npm run db:migrate
+   ```
+   (builds `@whome/db` then runs `dist/migrate.js`.)
+6. **Verify** — console prints `Running migrations from .../drizzle` and `Migrations complete`; no error. Re-run is idempotent. In DB, `drizzle.__drizzle_migrations` lists applied tags; spot-check new columns/tables.
+
+### Commands reference
+
+| Command | Purpose |
+|---------|---------|
+| `npm run db:migrate` (root) | Local / CI: build + apply pending journal migrations |
+| `npm run migrate:run -w @whome/db` | Apply only (after `build -w @whome/db`) |
+| `npm run migrate -w @whome/db` | `drizzle-kit migrate` (Kit CLI; prefer root `db:migrate` for this repo) |
+| `npm run generate -w @whome/db` | Generate SQL + journal from schema diff |
+| API Docker entrypoint | `packages/db/dist/migrate.js` before API start |
+
+### Common failures
+
+- **SQL exists, DB unchanged** — missing or wrong `tag` in `_journal.json`, or `idx` out of order.
+- **`relation already exists`** — migration partially applied or duplicate tag; fix DB manually or adjust migration (never re-use a deployed tag).
+- **`DATABASE_URL is required`** — no `.env` at repo root when running `migrate:run`.
+
 ## Gotchas & technical debt
 
 1. **Auth proxy vs rewrite** — `/auth` must stay on Route Handler; rewrites break `Set-Cookie` domain for Docker `:3001`.
@@ -132,7 +185,8 @@ docker compose -f docker-compose.prod.yml up -d --build
 11. **RLS / hosted tiers** — Documented only; schema has `deployment_tier` enum but no policies.
 12. **LICENSE** — MIT in repo root.
 13. **`packages/db/dist/`** — May be committed or built locally; migrations run from `dist/migrate.js` in Docker.
-14. **better-sqlite3** — Rebuild after Node version change: `npm rebuild better-sqlite3 -w @whome/import-homehub`.
+14. **Drizzle journal** — Unlisted `.sql` files are not applied; see **Database migrations (Drizzle)** above.
+15. **better-sqlite3** — Rebuild after Node version change: `npm rebuild better-sqlite3 -w @whome/import-homehub`.
 
 ## Commit message convention (project lead preference)
 

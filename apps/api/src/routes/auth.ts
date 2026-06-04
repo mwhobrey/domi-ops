@@ -16,6 +16,9 @@ import {
   SESSION_COOKIE,
 } from "@whome/auth";
 import type { Database } from "@whome/db";
+import { householdMembers } from "@whome/db";
+import { eq } from "drizzle-orm";
+import { memberAvatarUrl } from "../lib/avatar-url.js";
 import type { AppVariables } from "../middleware/auth.js";
 import { consumeOAuthState, setOAuthState } from "../lib/oauth-state.js";
 
@@ -38,6 +41,13 @@ export function authRoutes(db: Database, env: Env) {
     }
 
     if (!auth) return c.json({ authenticated: false });
+
+    const [memberRow] = await db
+      .select({ avatarKey: householdMembers.avatarKey })
+      .from(householdMembers)
+      .where(eq(householdMembers.id, auth.memberId))
+      .limit(1);
+
     return c.json({
       authenticated: true,
       user: {
@@ -49,6 +59,7 @@ export function authRoutes(db: Database, env: Env) {
         nickname: auth.nickname,
         publicLabel: auth.publicLabel,
         role: auth.role,
+        avatarUrl: memberAvatarUrl(auth.memberId, memberRow?.avatarKey),
       },
     });
   });

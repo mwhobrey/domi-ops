@@ -1,0 +1,67 @@
+---
+description: Linear (WHO team) issue lifecycle — find or create, commit with ID, close with notes
+alwaysApply: true
+---
+
+# Linear workflow (whome / WHO)
+
+**MCP server:** `user-linear-whome`  
+**Team:** `WHO` (Whome) — call `set_active_team` with `WHO` if tools fail with no team context.  
+**Backlog doc:** `docs/LINEAR_BACKLOG.md` · **Workspace map:** `docs/LINEAR.md`
+
+## Before starting work
+
+Applies to any **non-trivial** task (features, bugs, refactors with behavior change). Skip for typo-only, comment-only, or pure questions.
+
+1. **Issue id provided?** (e.g. `WHO-6`, URL, or “work on WHO-7”) → use it; confirm issue exists via `list_issues` or `save_issue` read.
+2. **No issue?** Search Linear:
+   - `list_issues` with relevant `project` / `state` filters, or
+   - Infer from task title + `docs/LINEAR_BACKLOG.md`.
+3. **No matching issue?** Create one with `create_issue`:
+   - `team`: `WHO`
+   - Sensible `projectId` / `milestoneId` (see `docs/LINEAR.md`)
+   - `stateId`: **Backlog** or **Todo**
+   - **Labels:** at most **one child label per group** (`Type`, `Area`, `Domain`) — e.g. `enhancement` + `web` + `household`, not two Domain labels.
+   - Put acceptance criteria in the description (markdown).
+4. **Start work:** `save_issue` → `stateId` = **In Progress** (or **Todo** if only planning in chat).
+
+Tell the user the issue id (e.g. `WHO-6`) when created or selected.
+
+## While working
+
+- Scope changes → update issue description or add `add_comment`.
+- Blocked → comment on issue; optional state stays **In Progress**.
+
+## Commit (when user asks to commit or you commit on their behalf)
+
+- **Include the Linear identifier** in the commit subject: `WHO-123 :gitmoji: type(scope): summary`
+- Body bullets optional; follow user gitmoji rules in `.cursorrules` / user rules.
+- Do not commit without user request unless they explicitly asked for the full fix + commit.
+
+## After work is complete
+
+1. `add_comment` on the issue with **change notes** (what shipped, files/areas, migration commands if any, QA steps).
+2. `save_issue` → `stateId` = **Done** (unless user wants **Canceled** / **Duplicate**).
+3. If behavior changed, update `.cursor/runbook/04_CURRENT_STATE.md` per runbook rules.
+
+## Issue states (WHO team)
+
+| State | When |
+|--------|------|
+| Backlog | Not scheduled |
+| Todo | Ready to pick up |
+| In Progress | Active development |
+| Done | Merged / verified in dev |
+| Canceled | Won't do |
+| Duplicate | Duplicate of another issue |
+
+**Optional (add in Linear UI → Team → Workflow):** `In Review` between In Progress and Done — MCP cannot create workflow states.
+
+## Projects (where to file new issues)
+
+| Project | Examples |
+|---------|----------|
+| Profile & identity | Presence + message, weather units, avatars |
+| Dashboard & weather | Forecast providers, cache, errors |
+| Notifications | Web Push, notice board follow-ups |
+| DevEx & platform | Drizzle journal, runbook, tooling |

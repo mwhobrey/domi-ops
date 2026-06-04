@@ -1,4 +1,15 @@
 import { z } from "zod";
+import { validateDevPublicAppUrl, oauthRedirectUris, inferDevWebProfile } from "./dev-url.js";
+import { loadRootDotenv, resetRootDotenvFlag } from "./load-dotenv.js";
+
+export {
+  DEV_WEB_PORT_DOCKER,
+  DEV_WEB_PORT_NATIVE,
+  inferDevWebProfile,
+  oauthRedirectUris,
+  validateDevPublicAppUrl,
+  type DevWebProfile,
+} from "./dev-url.js";
 
 const deploymentMode = z.enum(["single", "shared", "dedicated"]);
 const syncMode = z.enum(["import_only", "manual", "bidirectional"]);
@@ -42,6 +53,16 @@ export const envSchema = z
       ),
     /** Legacy display name → Google email, e.g. Mom:mom@gmail.com,Dad:dad@gmail.com */
     HOUSEHOLD_MEMBER_EMAIL_MAP: z.string().optional(),
+    /** Local dev: native (npm run dev :3000) or docker (compose web :3001) — validates PUBLIC_APP_URL in development */
+    WHOME_DEV_PROFILE: z.enum(["native", "docker"]).optional(),
+    /** Open-Meteo forecast (optional dashboard weather widget) */
+    WEATHER_LATITUDE: z.string().optional(),
+    WEATHER_LONGITUDE: z.string().optional(),
+    WEATHER_LOCATION_LABEL: z.string().max(64).optional(),
+    /** Web Push (VAPID) — optional; notice push disabled when unset */
+    VAPID_PUBLIC_KEY: z.string().optional(),
+    VAPID_PRIVATE_KEY: z.string().optional(),
+    VAPID_SUBJECT: z.string().optional(),
   })
   .superRefine((data, ctx) => {
     if (data.NODE_ENV === "production") {
@@ -86,17 +107,40 @@ let cached: Env | null = null;
 /** Clears cached env (tests only). */
 export function resetEnvCache(): void {
   cached = null;
+  resetRootDotenvFlag();
 }
 
-export function loadEnv(raw: NodeJS.ProcessEnv = process.env): Env {
+export function loadEnv(raw?: NodeJS.ProcessEnv): Env {
   if (cached) return cached;
-  const parsed = envSchema.safeParse(raw);
+  if (raw === undefined) {
+    loadRootDotenv();
+  }
+  const source = raw ?? process.env;
+  const parsed = envSchema.safeParse(source);
   if (!parsed.success) {
     const msg = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("\n");
     throw new Error(`Invalid environment:\n${msg}`);
   }
   cached = parsed.data;
-  return parsed.data;
+
+  if (cached.NODE_ENV === "development") {
+    const devWarnings = validateDevPublicAppUrl({
+      nodeEnv: cached.NODE_ENV,
+      publicAppUrl: cached.PUBLIC_APP_URL,
+      devProfile: cached.WHOME_DEV_PROFILE,
+      googleOAuthRedirectUri: cached.GOOGLE_OAUTH_REDIRECT_URI,
+    });
+    for (const msg of devWarnings) {
+      console.warn(`[whome config] ${msg}`);
+    }
+    const profile = cached.WHOME_DEV_PROFILE ?? inferDevWebProfile(cached.PUBLIC_APP_URL);
+    const redirects = oauthRedirectUris(cached.PUBLIC_APP_URL);
+    console.log(
+      `[whome config] dev web profile=${profile ?? "custom"} · PUBLIC_APP_URL=${cached.PUBLIC_APP_URL} · OAuth redirects: ${redirects.login} | ${redirects.calendar}`,
+    );
+  }
+
+  return cached;
 }
 
 export function isModuleEnabled(env: Env, module: string): boolean {

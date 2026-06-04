@@ -54,7 +54,9 @@ npm run import:homehub -- --sqlite ./fixtures/homehub/app.db --uploads ./fixture
 |---------------|--------------|
 | `notice` | `notices` |
 | `todo_item` / `chore` | `chores` |
-| `personal_calendar` | `calendars` |
+| `personal_calendar` | `calendars` (native lanes — Family, School, etc.) |
+| `reminder.category` | `calendar_events.category_key` (event tags, not separate lanes) |
+| HomeHub fallback bucket | one `calendars` row named &quot;Imported from HomeHub&quot; (deduped via `import_records` on re-import) |
 | `reminder` | `calendar_events` |
 | `school_*` + `school_submission_artifact` | school schema + S3 keys via `file` mapper |
 | `file` | S3 `imports/{householdId}/files/…` |

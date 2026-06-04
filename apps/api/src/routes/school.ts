@@ -13,7 +13,7 @@ import {
   schoolSubmissions,
   users,
 } from "@whome/db";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 
@@ -57,6 +57,111 @@ export function schoolRoutes(db: Database, env: Env) {
         ...m,
         shownLabel: memberShownLabel(m),
       })),
+    });
+  });
+
+  app.get("/glance", async (c) => {
+    if (!isModuleEnabled(env, "school")) {
+      return c.json({ enabled: false });
+    }
+    const auth = c.get("auth")!;
+    const classRows = await db
+      .select({ id: schoolClasses.id })
+      .from(schoolClasses)
+      .where(eq(schoolClasses.householdId, auth.householdId));
+    const classCount = classRows.length;
+    if (classCount === 0) {
+      return c.json({
+        enabled: true,
+        classCount: 0,
+        dueSoon: 0,
+        overdue: 0,
+        summary: { headline: "Set up", tone: "default" as const },
+        items: [],
+        overflow: 0,
+      });
+    }
+
+    const now = new Date();
+    const weekAhead = new Date(now);
+    weekAhead.setDate(weekAhead.getDate() + 7);
+
+    const assignments = await db
+      .select({
+        id: schoolAssignments.id,
+        title: schoolAssignments.title,
+        dueAt: schoolAssignments.dueAt,
+        className: schoolClasses.name,
+      })
+      .from(schoolAssignments)
+      .innerJoin(schoolClasses, eq(schoolAssignments.classId, schoolClasses.id))
+      .where(
+        and(
+          eq(schoolClasses.householdId, auth.householdId),
+          isNotNull(schoolAssignments.dueAt),
+          eq(schoolAssignments.visibility, "assigned"),
+        ),
+      );
+
+    type Ranked = {
+      id: string;
+      title: string;
+      className: string;
+      dueAt: string;
+      overdue: boolean;
+      sortKey: number;
+    };
+
+    const ranked: Ranked[] = assignments.map((row) => {
+      const due = row.dueAt!;
+      const overdue = due < now;
+      return {
+        id: row.id,
+        title: row.title,
+        className: row.className,
+        dueAt: due.toISOString(),
+        overdue,
+        sortKey: due.getTime(),
+      };
+    });
+
+    ranked.sort((a, b) => {
+      if (a.overdue !== b.overdue) return a.overdue ? -1 : 1;
+      return a.sortKey - b.sortKey;
+    });
+
+    const dueSoon = ranked.filter((r) => !r.overdue && new Date(r.dueAt) <= weekAhead).length;
+    const overdue = ranked.filter((r) => r.overdue).length;
+    const previewLimit = 4;
+    const items = ranked.slice(0, previewLimit).map((r) => ({
+      id: r.id,
+      title: r.title,
+      className: r.className,
+      dueAt: r.dueAt,
+      overdue: r.overdue,
+    }));
+    const overflow = Math.max(0, ranked.length - 3);
+
+    let headline: string;
+    let tone: "success" | "warning" | "default" = "default";
+    if (overdue > 0) {
+      headline = `${overdue} overdue`;
+      tone = "warning";
+    } else if (dueSoon > 0) {
+      headline = `${dueSoon} due`;
+    } else {
+      headline = `${classCount} ${classCount === 1 ? "class" : "classes"}`;
+      tone = "success";
+    }
+
+    return c.json({
+      enabled: true,
+      classCount,
+      dueSoon,
+      overdue,
+      summary: { headline, tone },
+      items,
+      overflow,
     });
   });
 

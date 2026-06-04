@@ -1,9 +1,10 @@
 "use client";
 
+import { BookOpen } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
-import { Alert, Button, Card, CardBody, EmptyState, Input } from "./ui";
+import { Alert, Badge, Button, Card, CardBody, EmptyState, Input } from "./ui";
 
 interface SchoolClass {
   id: string;
@@ -65,21 +66,25 @@ export function SchoolClassList({ initialClasses }: { initialClasses: SchoolClas
         </CardBody>
       </Card>
       {classes.length === 0 ? (
-        <EmptyState title="No classes" description="Create your first class above." />
+        <EmptyState
+          title="No classes"
+          description="Create your first class above."
+          icon={<BookOpen className="h-10 w-10" />}
+        />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {classes.map((c) => (
             <Link key={c.id} href={`/school/class/${c.id}`}>
-              <Card className="h-full transition hover:border-[var(--color-accent)]">
+              <Card className="h-full transition hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-accent-subtle)]/20">
                 <CardBody>
                   <h2 className="font-medium">{c.name}</h2>
                   {c.subject && (
                     <p className="mt-1 text-sm text-[var(--color-text-muted)]">{c.subject}</p>
                   )}
                   {c.term && (
-                    <span className="mt-2 inline-block rounded-full bg-[var(--color-border)]/50 px-2 py-0.5 text-xs">
+                    <Badge tone="default" className="mt-2">
                       {c.term}
-                    </span>
+                    </Badge>
                   )}
                 </CardBody>
               </Card>

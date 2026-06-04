@@ -30,18 +30,25 @@ export default async function SchoolClassPage({ params }: { params: Promise<{ id
   }
 
   return (
-    <AppShell title={className} description="Assignments and enrollments">
+    <AppShell
+      title={className}
+      description="Assignments and enrollments"
+      breadcrumb={[
+        { label: "School", href: "/school" },
+        { label: className },
+      ]}
+    >
       {loadError ? (
         <Alert variant="error">
           {loadError}. <a href={`/school/class/${id}`}>Retry</a>
         </Alert>
       ) : (
         <SchoolClassDetail
-        classId={id}
-        className={className}
-        initialAssignments={assignments}
-        initialEnrollments={enrollments}
-        members={members}
+          classId={id}
+          className={className}
+          initialAssignments={assignments}
+          initialEnrollments={enrollments}
+          members={members}
         />
       )}
     </AppShell>

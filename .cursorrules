@@ -23,6 +23,20 @@ When the user asks for a git commit, or you are about to commit on their behalf:
 
 Skip runbook updates for typo-only or comment-only changes with zero behavioral impact.
 
+## Linear (WHO team)
+
+Before **non-trivial** work (unless the user gave an issue id like `WHO-6`):
+
+1. Use MCP `user-linear-whome` with team `WHO` (`set_active_team` if needed).
+2. **Search** for an existing issue (`list_issues`, match title/project); if none, **create** via `create_issue` (see `docs/LINEAR.md` for projects/milestones/labels).
+3. Set state to **In Progress** when starting (`save_issue`).
+
+When **committing** (user-requested only): put the Linear id in the commit subject, e.g. `WHO-6 :bug: fix(scope): …` per user gitmoji rules.
+
+When work is **done**: `add_comment` with change notes, then `save_issue` → **Done**; update runbook `04` if behavior changed.
+
+Full protocol: `.cursor/rules/linear-workflow.mdc` · workspace map: `docs/LINEAR.md`
+
 ## Repo quick anchors
 
 - Monorepo: `apps/web`, `apps/api`, `apps/worker`, `packages/*`

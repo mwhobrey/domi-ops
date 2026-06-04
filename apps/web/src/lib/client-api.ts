@@ -32,11 +32,29 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return parseJson<T>(res);
 }
 
+async function requestForm<T>(path: string, form: FormData): Promise<T> {
+  const res = await fetch(path, {
+    method: "POST",
+    credentials: "include",
+    body: form,
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new ApiError(`API ${res.status}`, res.status, body);
+  }
+  return parseJson<T>(res);
+}
+
 export const apiClient = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined }),
+  postForm: <T>(path: string, form: FormData) => requestForm<T>(path, form),
   patch: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "PATCH", body: body ? JSON.stringify(body) : undefined }),
-  delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
+  delete: <T>(path: string, body?: unknown) =>
+    request<T>(path, {
+      method: "DELETE",
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    }),
 };

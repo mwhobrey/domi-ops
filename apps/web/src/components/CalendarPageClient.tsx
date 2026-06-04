@@ -1,54 +1,184 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
-import type { CalendarEventView } from "../lib/calendar-utils";
-import { addDays, formatDateISO, startOfWeek, weekRange } from "../lib/calendar-utils";
+import type {
+  CalendarCreateDraft,
+  CalendarEventView,
+  CalendarViewMode,
+} from "../lib/calendar-utils";
+import type { ReschedulePatch } from "../lib/calendar-time-grid";
+import {
+  addDays,
+  addMonths,
+  agendaRange,
+  CALENDAR_VIEW_STORAGE_KEY,
+  formatDateLocal,
+  monthRange,
+  parseLocalDate,
+  readStoredCalendarView,
+  searchRange,
+  startOfMonth,
+  startOfWeek,
+  weekRange,
+} from "../lib/calendar-utils";
+import { useIsDesktop } from "../lib/use-media-query";
 import { CalendarAgendaView } from "./CalendarAgendaView";
-import { CalendarConnectCard } from "./CalendarConnectCard";
 import { CalendarEventSheet } from "./CalendarEventSheet";
+import { CalendarFilterBar } from "./calendar/CalendarFilterBar";
+import {
+  CalendarGoogleSheet,
+  type CalendarConnectionSummary,
+} from "./calendar/CalendarGoogleSheet";
+import { CalendarImportWizard } from "./calendar/CalendarImportWizard";
+import { eventOverlapsDate } from "../lib/calendar-event-span";
+import { categoryCompositeKey } from "../lib/calendar-event-colors";
+import {
+  categoriesFromEvents,
+  filterEventsByCategories,
+  filterEventsByLanes,
+  filterLaneGroupsWithEvents,
+  groupLanesByName,
+  readDefaultCalendarId,
+  readHiddenCategoryKeys,
+  sortLaneGroupsForDisplay,
+  readHiddenLaneIds,
+  toggleHiddenCategory,
+  toggleLaneGroup,
+  writeDefaultCalendarId,
+  type CalendarLaneMeta,
+  type EventCategoryMeta,
+} from "../lib/calendar-filters";
+import {
+  RecurringScopeSheet,
+  type RecurringScope,
+} from "./calendar/RecurringScopeSheet";
+import { CalendarSyncProgress } from "./calendar/CalendarSyncProgress";
+import { useCalendarSyncStatus } from "../lib/use-calendar-sync-status";
+import { formatWeekPeriodLabel } from "./CalendarWeek";
+import { CalendarDaySheet } from "./calendar/CalendarDaySheet";
+import { CalendarDayView, formatDayPeriodLabel } from "./calendar/CalendarDayView";
+import { CalendarMonthView } from "./calendar/CalendarMonthView";
+import { CalendarToolbar } from "./calendar/CalendarToolbar";
 import { CalendarWeek } from "./CalendarWeek";
-import { Alert, Button, Input } from "./ui";
-
-type ViewMode = "week" | "agenda";
+import { Calendar } from "lucide-react";
+import { Alert, Button, IconButton, Input } from "./ui";
 
 export function CalendarPageClient({
   oauthConfigured,
   defaultSyncMode,
   initialConnections,
-  connectedBanner,
+  openImportWizard,
   errorBanner,
+  oauthFailureMessage,
+  publicAppUrl,
 }: {
   oauthConfigured: boolean;
   defaultSyncMode: string;
-  initialConnections: { id: string; lastSyncAt: string | null }[];
-  connectedBanner?: boolean;
+  initialConnections: CalendarConnectionSummary[];
+  openImportWizard?: boolean;
   errorBanner?: string;
+  oauthFailureMessage?: string;
+  publicAppUrl?: string;
 }) {
-  const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const isDesktop = useIsDesktop();
+  const [focusDate, setFocusDate] = useState(() => new Date());
+  const [viewMode, setViewMode] = useState<CalendarViewMode>("agenda");
+  const [viewReady, setViewReady] = useState(false);
   const [events, setEvents] = useState<CalendarEventView[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [view, setView] = useState<ViewMode>("week");
   const [search, setSearch] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selected, setSelected] = useState<CalendarEventView | null>(null);
-  const [agendaFilter, setAgendaFilter] = useState<CalendarEventView[] | null>(null);
+  const [daySheetDate, setDaySheetDate] = useState<string | null>(null);
+  const [daySheetOpen, setDaySheetOpen] = useState(false);
+  const [createDraft, setCreateDraft] = useState<CalendarCreateDraft | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [lanes, setLanes] = useState<CalendarLaneMeta[]>([]);
+  const [hiddenLaneIds, setHiddenLaneIds] = useState<Set<string>>(() => readHiddenLaneIds());
+  const [hiddenCategoryKeys, setHiddenCategoryKeys] = useState<Set<string>>(() =>
+    readHiddenCategoryKeys(),
+  );
+  const [presetCategories, setPresetCategories] = useState<EventCategoryMeta[]>([]);
+  const [defaultCalendarId, setDefaultCalendarId] = useState<string | null>(() =>
+    readDefaultCalendarId(),
+  );
+  const [recurringPending, setRecurringPending] = useState<{
+    event: CalendarEventView;
+    patch: ReschedulePatch;
+  } | null>(null);
+  const [googleSheetOpen, setGoogleSheetOpen] = useState(false);
+  const [importWizardOpen, setImportWizardOpen] = useState(false);
+  const autoOpenedImportRef = useRef(false);
+  const connected = initialConnections.length > 0;
+  const { status: syncStatus, refresh: refreshSyncStatus, isActive: syncActive } =
+    useCalendarSyncStatus(connected);
+  const syncWasActive = useRef(false);
+
+  useEffect(() => {
+    if (!openImportWizard || autoOpenedImportRef.current) return;
+    autoOpenedImportRef.current = true;
+    setImportWizardOpen(true);
+  }, [openImportWizard]);
+
+  const clearImportDeepLink = useCallback(() => {
+    const next = new URLSearchParams(searchParams.toString());
+    if (!next.has("import") && !next.has("connected")) return;
+    next.delete("import");
+    next.delete("connected");
+    const qs = next.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [pathname, router, searchParams]);
+
+  useEffect(() => {
+    setViewMode(isDesktop ? readStoredCalendarView() : "agenda");
+    setViewReady(true);
+  }, [isDesktop]);
+
+  const persistView = useCallback(
+    (v: CalendarViewMode) => {
+      setViewMode(v);
+      if (isDesktop) sessionStorage.setItem(CALENDAR_VIEW_STORAGE_KEY, v);
+    },
+    [isDesktop],
+  );
+
+  const effectiveView: CalendarViewMode = debouncedQ
+    ? "agenda"
+    : isDesktop
+      ? viewMode
+      : viewMode === "month"
+        ? "month"
+        : "agenda";
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQ(search.trim()), 300);
     return () => clearTimeout(t);
   }, [search]);
 
+  const monthStart = useMemo(() => startOfMonth(focusDate), [focusDate]);
+  const weekStart = useMemo(() => startOfWeek(focusDate), [focusDate]);
+
   const range = useMemo(() => {
-    if (debouncedQ) {
-      const from = formatDateISO(addDays(new Date(), -30));
-      const to = formatDateISO(addDays(new Date(), 365));
-      return { from, to };
+    if (debouncedQ) return searchRange();
+    switch (effectiveView) {
+      case "month":
+        return monthRange(monthStart);
+      case "week":
+        return weekRange(weekStart);
+      case "day":
+        return { from: formatDateLocal(focusDate), to: formatDateLocal(focusDate) };
+      case "agenda":
+      default:
+        return agendaRange(focusDate);
     }
-    return weekRange(weekStart);
-  }, [weekStart, debouncedQ]);
+  }, [debouncedQ, effectiveView, monthStart, weekStart, focusDate]);
 
   const loadEvents = useCallback(async () => {
     setLoading(true);
@@ -63,12 +193,24 @@ export function CalendarPageClient({
         data.events.map((e) => ({
           id: e.id,
           title: e.title,
+          description: e.description ?? null,
           startDate: e.startDate,
+          endDate: e.endDate ?? null,
           startTime: e.startTime,
           endTime: e.endTime,
           allDay: e.allDay,
           color: e.color,
+          categoryKey: e.categoryKey ?? null,
+          categoryLabel: e.categoryLabel ?? null,
+          timeZone: e.timeZone ?? null,
           calendarId: e.calendarId,
+          source: e.source,
+          googleEventId: e.googleEventId ?? null,
+          editable: e.editable,
+          pushable: e.pushable,
+          syncStatus: e.syncStatus,
+          recurringRuleId: e.recurringRuleId ?? null,
+          reminderOffsets: e.reminderOffsets ?? [],
         })),
       );
     } catch (err) {
@@ -78,22 +220,264 @@ export function CalendarPageClient({
     }
   }, [range.from, range.to, debouncedQ]);
 
+  const loadCategories = useCallback(async () => {
+    try {
+      const res = await apiClient.get<{
+        categories: {
+          id: string;
+          calendarId: string;
+          key: string;
+          label: string;
+          color: string | null;
+        }[];
+      }>("/api/calendar/event-categories");
+      const laneNames = new Map(lanes.map((l) => [l.id, l.name]));
+      setPresetCategories(
+        res.categories.map((c) => ({
+          id: categoryCompositeKey(c.calendarId, c.key),
+          calendarId: c.calendarId,
+          key: c.key,
+          label: laneNames.get(c.calendarId)
+            ? `${laneNames.get(c.calendarId)} · ${c.label}`
+            : c.label,
+          color: c.color,
+        })),
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [lanes]);
+
+  const loadLanes = useCallback(async () => {
+    try {
+      const res = await apiClient.get<{
+        calendars: { id: string; name: string; color: string | null; isHouseholdDefault: boolean }[];
+      }>("/api/calendar/calendars");
+      const meta = res.calendars.map((c) => ({
+        id: c.id,
+        name: c.name,
+        color: c.color,
+      }));
+      setLanes(meta);
+      const householdDefault = res.calendars.find((c) => c.isHouseholdDefault);
+      if (!readDefaultCalendarId() && householdDefault) {
+        setDefaultCalendarId(householdDefault.id);
+        writeDefaultCalendarId(householdDefault.id);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadLanes();
+  }, [loadLanes]);
+
+  useEffect(() => {
+    void loadCategories();
+  }, [loadCategories]);
+
   useEffect(() => {
     loadEvents();
   }, [loadEvents]);
 
-  const displayEvents = agendaFilter ?? events;
+  useEffect(() => {
+    if (syncActive) syncWasActive.current = true;
+    if (
+      syncWasActive.current &&
+      !syncActive &&
+      syncStatus?.run?.status === "idle"
+    ) {
+      syncWasActive.current = false;
+      void loadEvents();
+    }
+  }, [syncActive, syncStatus?.run?.status, loadEvents]);
+
+  const periodLabel = useMemo(() => {
+    switch (effectiveView) {
+      case "month":
+        return monthStart.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+      case "week":
+        return formatWeekPeriodLabel(weekStart);
+      case "day":
+        return formatDayPeriodLabel(focusDate);
+      default:
+        return formatWeekPeriodLabel(weekStart);
+    }
+  }, [effectiveView, monthStart, weekStart, focusDate]);
+
+  const handlePrev = useCallback(() => {
+    switch (effectiveView) {
+      case "month":
+        setFocusDate((d) => addMonths(startOfMonth(d), -1));
+        break;
+      case "week":
+        setFocusDate((d) => addDays(startOfWeek(d), -7));
+        break;
+      case "day":
+        setFocusDate((d) => addDays(d, -1));
+        break;
+      default:
+        setFocusDate((d) => addDays(startOfWeek(d), -7));
+    }
+  }, [effectiveView]);
+
+  const handleNext = useCallback(() => {
+    switch (effectiveView) {
+      case "month":
+        setFocusDate((d) => addMonths(startOfMonth(d), 1));
+        break;
+      case "week":
+        setFocusDate((d) => addDays(startOfWeek(d), 7));
+        break;
+      case "day":
+        setFocusDate((d) => addDays(d, 1));
+        break;
+      default:
+        setFocusDate((d) => addDays(startOfWeek(d), 7));
+    }
+  }, [effectiveView]);
+
+  const handleToday = useCallback(() => {
+    setFocusDate(new Date());
+  }, []);
+
+  const allLaneGroups = useMemo(
+    () => sortLaneGroupsForDisplay(groupLanesByName(lanes)),
+    [lanes],
+  );
+  const filterLaneGroups = useMemo(
+    () => filterLaneGroupsWithEvents(allLaneGroups, events),
+    [allLaneGroups, events],
+  );
+
+  const categoryColorByKey = useMemo(() => {
+    const map = new Map<string, string | null>();
+    for (const c of presetCategories) map.set(c.id, c.color);
+    return map;
+  }, [presetCategories]);
+
+  const categoryFilterGroups = useMemo(() => {
+    const fromEvents = categoriesFromEvents(events);
+    const map = new Map<string, EventCategoryMeta>();
+    for (const c of presetCategories) map.set(c.id, c);
+    for (const c of fromEvents) {
+      if (!map.has(c.id)) map.set(c.id, c);
+    }
+    return [...map.values()].sort((a, b) => a.label.localeCompare(b.label));
+  }, [presetCategories, events]);
+
+  const laneFilteredEvents = useMemo(
+    () => filterEventsByLanes(events, hiddenLaneIds),
+    [events, hiddenLaneIds],
+  );
+
+  const visibleEvents = useMemo(
+    () => filterEventsByCategories(laneFilteredEvents, hiddenCategoryKeys),
+    [laneFilteredEvents, hiddenCategoryKeys],
+  );
+
+  const dayAgendaEvents = useMemo(() => {
+    if (effectiveView !== "day" || isDesktop) return visibleEvents;
+    const key = formatDateLocal(focusDate);
+    return visibleEvents.filter((e) => eventOverlapsDate(e, key));
+  }, [effectiveView, isDesktop, visibleEvents, focusDate]);
+
+  const gridInteraction =
+    isDesktop && !debouncedQ && (effectiveView === "week" || effectiveView === "day");
+
+  const openCreateDraft = useCallback((date: string, hour: number) => {
+    setSelected(null);
+    setCreateDraft({
+      startDate: date,
+      startTime: `${String(hour).padStart(2, "0")}:00`,
+      allDay: false,
+    });
+    setSheetOpen(true);
+  }, []);
+
+  const applyReschedule = useCallback(
+    async (event: CalendarEventView, patch: ReschedulePatch, recurringScope?: RecurringScope) => {
+      const previous = events;
+      const optimistic: CalendarEventView = {
+        ...event,
+        startDate: patch.startDate,
+        startTime: patch.startTime ?? null,
+        endTime: patch.endTime ?? null,
+        recurringRuleId:
+          recurringScope === "this" ? null : event.recurringRuleId,
+      };
+      setEvents((prev) => prev.map((e) => (e.id === event.id ? optimistic : e)));
+      setActionError(null);
+      const qs = recurringScope ? `?recurringScope=${recurringScope}` : "";
+      try {
+        const body: Record<string, unknown> = {
+          startDate: patch.startDate,
+        };
+        if (patch.startTime !== undefined) body.startTime = patch.startTime;
+        if (patch.endTime !== undefined) body.endTime = patch.endTime;
+        if (patch.startTime == null && patch.endTime == null) body.allDay = true;
+
+        const data = await apiClient.patch<{ event: CalendarEventView }>(
+          `/api/calendar/events/${event.id}${qs}`,
+          body,
+        );
+        setEvents((prev) =>
+          prev.map((e) =>
+            e.id === event.id
+              ? {
+                  ...optimistic,
+                  ...data.event,
+                  startDate: data.event.startDate ?? patch.startDate,
+                  startTime: data.event.startTime ?? patch.startTime ?? null,
+                  endTime: data.event.endTime ?? patch.endTime ?? null,
+                  editable: data.event.editable ?? e.editable,
+                  pushable: data.event.pushable ?? e.pushable,
+                  syncStatus: data.event.syncStatus ?? e.syncStatus,
+                  recurringRuleId: data.event.recurringRuleId ?? optimistic.recurringRuleId,
+                }
+              : e,
+          ),
+        );
+      } catch (err) {
+        setEvents(previous);
+        let msg = "Could not move event";
+        if (err instanceof ApiError) {
+          try {
+            const parsed = err.body ? (JSON.parse(err.body) as { message?: string }) : null;
+            if (parsed?.message) msg = parsed.message;
+            else if (err.status === 403) msg = "This event cannot be edited.";
+          } catch {
+            if (err.status === 403) msg = "This event cannot be edited.";
+          }
+        }
+        setActionError(msg);
+      }
+    },
+    [events],
+  );
+
+  const requestReschedule = useCallback(
+    (event: CalendarEventView, patch: ReschedulePatch) => {
+      if (event.recurringRuleId) {
+        setRecurringPending({ event, patch });
+        return;
+      }
+      void applyReschedule(event, patch);
+    },
+    [applyReschedule],
+  );
+
+  if (!viewReady) return null;
 
   return (
     <div>
-      {connectedBanner && (
-        <Alert variant="success" className="mb-4">
-          Google Calendar connected. Initial import queued.
-        </Alert>
-      )}
       {errorBanner && (
         <Alert variant="error" className="mb-4">
-          Calendar connection failed ({errorBanner}).
+          <p>Calendar connection failed ({errorBanner}).</p>
+          {oauthFailureMessage && (
+            <p className="mt-2 text-sm font-normal opacity-90">{oauthFailureMessage}</p>
+          )}
         </Alert>
       )}
       {fetchError && (
@@ -104,49 +488,52 @@ export function CalendarPageClient({
           </button>
         </Alert>
       )}
+      {actionError && (
+        <Alert variant="error" className="mb-4">
+          {actionError}
+          <button type="button" className="ml-2 underline" onClick={() => setActionError(null)}>
+            Dismiss
+          </button>
+        </Alert>
+      )}
 
-      <CalendarConnectCard
-        oauthConfigured={oauthConfigured}
-        defaultSyncMode={defaultSyncMode}
-        connections={initialConnections}
-      />
+      {(syncActive || syncStatus?.run?.status === "failed") && (
+        <div className="mb-4 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-muted)]/30 p-4">
+          <CalendarSyncProgress status={syncStatus} />
+        </div>
+      )}
+
+      {allLaneGroups.length > 0 && !debouncedQ && (
+        <CalendarFilterBar
+          laneGroups={filterLaneGroups}
+          writeLaneGroups={allLaneGroups}
+          hiddenIds={hiddenLaneIds}
+          categoryGroups={categoryFilterGroups}
+          hiddenCategoryKeys={hiddenCategoryKeys}
+          defaultCalendarId={defaultCalendarId}
+          onToggleLaneGroup={(group) => setHiddenLaneIds(toggleLaneGroup(group, hiddenLaneIds))}
+          onToggleCategory={(key) =>
+            setHiddenCategoryKeys(toggleHiddenCategory(key))
+          }
+          onDefaultCalendarChange={(id) => {
+            setDefaultCalendarId(id);
+            writeDefaultCalendarId(id);
+          }}
+        />
+      )}
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <Input
           className="max-w-xs"
           placeholder="Search events…"
           value={search}
-          onChange={(e) => {
-            const q = e.target.value;
-            setSearch(q);
-            setAgendaFilter(null);
-            if (q.trim()) setView("agenda");
-            else setView("week");
-          }}
+          onChange={(e) => setSearch(e.target.value)}
         />
-        <div className="flex rounded-[var(--radius-lg)] border border-[var(--color-border)] p-0.5">
-          <Button
-            size="sm"
-            variant={view === "week" ? "primary" : "ghost"}
-            onClick={() => {
-              setView("week");
-              setAgendaFilter(null);
-            }}
-          >
-            Week
-          </Button>
-          <Button
-            size="sm"
-            variant={view === "agenda" ? "primary" : "ghost"}
-            onClick={() => setView("agenda")}
-          >
-            Agenda
-          </Button>
-        </div>
         <Button
           size="sm"
           onClick={() => {
             setSelected(null);
+            setCreateDraft(null);
             setSheetOpen(true);
           }}
         >
@@ -154,28 +541,100 @@ export function CalendarPageClient({
         </Button>
       </div>
 
-      {view === "week" ? (
-        <CalendarWeek
-          events={displayEvents}
-          weekStart={weekStart}
+      {!debouncedQ && (
+        <CalendarToolbar
+          viewMode={
+            !isDesktop && viewMode !== "month" ? "agenda" : viewMode
+          }
+          onViewChange={(v) => {
+            persistView(v);
+            if (v === "month") setFocusDate((d) => startOfMonth(d));
+            if (v === "week") setFocusDate((d) => startOfWeek(d));
+          }}
+          periodLabel={periodLabel}
+          onPrev={handlePrev}
+          onToday={handleToday}
+          onNext={handleNext}
+          showWeekDay={isDesktop}
           loading={loading}
-          onWeekChange={(s) => {
-            setWeekStart(s);
-            setAgendaFilter(null);
-          }}
-          onEventClick={(ev) => {
-            setSelected(ev);
-            setSheetOpen(true);
-          }}
-          onMoreClick={(date, dayEvents) => {
-            setView("agenda");
-            setAgendaFilter(dayEvents);
+          trailing={
+            <>
+              <IconButton
+                label={
+                  syncActive
+                    ? "Calendar sync in progress — open settings"
+                    : "Calendar settings"
+                }
+                onClick={() => setGoogleSheetOpen(true)}
+              >
+                <Calendar
+                  className={`h-5 w-5 ${
+                    syncActive || connected ? "text-[var(--color-accent)]" : ""
+                  }`}
+                />
+              </IconButton>
+            </>
+          }
+        />
+      )}
+
+      {!isDesktop && effectiveView !== "month" && (
+        <p className="sr-only">Week and day grid views are available on larger screens.</p>
+      )}
+
+      {effectiveView === "month" && (
+        <CalendarMonthView
+          monthStart={monthStart}
+          events={visibleEvents}
+          compact={!isDesktop}
+          onDaySelect={(date) => {
+            setDaySheetDate(date);
+            setDaySheetOpen(true);
           }}
         />
-      ) : (
-        <CalendarAgendaView
-          events={displayEvents}
+      )}
+
+      {effectiveView === "week" && isDesktop && (
+        <CalendarWeek
+          events={visibleEvents}
+          weekStart={weekStart}
           loading={loading}
+          categoryColorByKey={categoryColorByKey}
+          interactionEnabled={gridInteraction && !loading}
+          onSlotClick={openCreateDraft}
+          onEventReschedule={requestReschedule}
+          onAllDayReschedule={requestReschedule}
+          onEventClick={(ev) => {
+            setSelected(ev);
+            setCreateDraft(null);
+            setSheetOpen(true);
+          }}
+        />
+      )}
+
+      {effectiveView === "day" && isDesktop && (
+        <CalendarDayView
+          focusDate={focusDate}
+          events={visibleEvents}
+          loading={loading}
+          categoryColorByKey={categoryColorByKey}
+          interactionEnabled={gridInteraction && !loading}
+          onSlotClick={openCreateDraft}
+          onEventReschedule={requestReschedule}
+          onAllDayReschedule={requestReschedule}
+          onEventClick={(ev) => {
+            setSelected(ev);
+            setCreateDraft(null);
+            setSheetOpen(true);
+          }}
+        />
+      )}
+
+      {effectiveView === "day" && !isDesktop && (
+        <CalendarAgendaView
+          events={dayAgendaEvents}
+          loading={loading}
+          categoryColorByKey={categoryColorByKey}
           onEventClick={(ev) => {
             setSelected(ev);
             setSheetOpen(true);
@@ -183,12 +642,90 @@ export function CalendarPageClient({
         />
       )}
 
+      {effectiveView === "agenda" && (
+        <CalendarAgendaView
+          events={visibleEvents}
+          loading={loading}
+          categoryColorByKey={categoryColorByKey}
+          onEventClick={(ev) => {
+            setSelected(ev);
+            setSheetOpen(true);
+          }}
+        />
+      )}
+
+      <CalendarDaySheet
+        open={daySheetOpen}
+        date={daySheetDate}
+        events={visibleEvents}
+        categoryColorByKey={categoryColorByKey}
+        onClose={() => {
+          setDaySheetOpen(false);
+          setDaySheetDate(null);
+        }}
+        onEventClick={(ev) => {
+          setDaySheetOpen(false);
+          setSelected(ev);
+          setSheetOpen(true);
+        }}
+        onViewDay={
+          daySheetDate && isDesktop
+            ? () => {
+                setFocusDate(parseLocalDate(daySheetDate));
+                persistView("day");
+                setDaySheetOpen(false);
+              }
+            : daySheetDate && !isDesktop
+              ? () => {
+                  setFocusDate(parseLocalDate(daySheetDate));
+                  persistView("agenda");
+                  setDaySheetOpen(false);
+                }
+              : undefined
+        }
+      />
+
+      <CalendarGoogleSheet
+        open={googleSheetOpen}
+        onClose={() => setGoogleSheetOpen(false)}
+        oauthConfigured={oauthConfigured}
+        defaultSyncMode={defaultSyncMode}
+        initialConnections={initialConnections}
+        publicAppUrl={publicAppUrl}
+        oauthFailureMessage={oauthFailureMessage}
+        onOpenImport={() => setImportWizardOpen(true)}
+      />
+
+      <CalendarImportWizard
+        open={importWizardOpen}
+        onClose={() => setImportWizardOpen(false)}
+        onCommitted={async () => {
+          clearImportDeepLink();
+          await refreshSyncStatus();
+          await loadEvents();
+        }}
+      />
+
+      <RecurringScopeSheet
+        open={recurringPending != null}
+        title={recurringPending?.event.title ?? "Event"}
+        onCancel={() => setRecurringPending(null)}
+        onChoose={(scope) => {
+          const pending = recurringPending;
+          setRecurringPending(null);
+          if (pending) void applyReschedule(pending.event, pending.patch, scope);
+        }}
+      />
+
       <CalendarEventSheet
         open={sheetOpen}
         selected={selected}
+        createDraft={createDraft}
+        defaultCalendarId={defaultCalendarId}
         onClose={() => {
           setSheetOpen(false);
           setSelected(null);
+          setCreateDraft(null);
         }}
         onSaved={(ev, isNew) => {
           setEvents((prev) => (isNew ? [...prev, ev] : prev.map((x) => (x.id === ev.id ? ev : x))));

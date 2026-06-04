@@ -1,23 +1,27 @@
 "use client";
 
-import { NoticePanel } from "./NoticePanel";
+import { DashboardMonthCalendar } from "./DashboardMonthCalendar";
+import { HouseholdPanel, type SelfStatus, type StatusRow } from "./HouseholdPanel";
 import { TodayGlance } from "./TodayGlance";
-import { WhosHomePanel } from "./WhosHomePanel";
+import { WeatherPanel } from "./WeatherPanel";
 
 export function DashboardBoard({
-  notice,
   whosHome,
+  self,
 }: {
-  notice: string;
-  whosHome: { id: string; name: string; status: string }[];
+  whosHome: StatusRow[];
+  self: SelfStatus | null;
 }) {
   return (
     <div className="space-y-6">
-      <div className="grid gap-6 lg:grid-cols-2">
-        <NoticePanel initialNotice={notice} />
-        <WhosHomePanel initial={whosHome} />
+      <div className="grid gap-6 lg:grid-cols-2 lg:items-stretch">
+        <TodayGlance />
+        <DashboardMonthCalendar compact />
       </div>
-      <TodayGlance />
+      <div className="grid gap-6 lg:grid-cols-2">
+        <WeatherPanel />
+        <HouseholdPanel initial={whosHome} self={self} />
+      </div>
     </div>
   );
 }

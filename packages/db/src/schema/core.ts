@@ -9,7 +9,7 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
-import { households, householdMembers } from "./household.js";
+import { households, householdMembers, users } from "./household.js";
 
 export const shoppingItems = pgTable("shopping_items", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -65,9 +65,25 @@ export const notices = pgTable("notices", {
     .notNull()
     .references(() => households.id, { onDelete: "cascade" }),
   content: text("content").notNull().default(""),
+  postedByUserId: uuid("posted_by_user_id").references(() => users.id, { onDelete: "set null" }),
   updatedByDisplayName: varchar("updated_by_display_name", { length: 64 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const noticeReads = pgTable(
+  "notice_reads",
+  {
+    noticeId: uuid("notice_id")
+      .notNull()
+      .references(() => notices.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    readAt: timestamp("read_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("notice_reads_notice_user").on(t.noticeId, t.userId)],
+);
 
 export const homeStatus = pgTable(
   "home_status",
@@ -78,7 +94,8 @@ export const homeStatus = pgTable(
       .references(() => households.id, { onDelete: "cascade" }),
     memberId: uuid("member_id").references(() => householdMembers.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 64 }).notNull(),
-    status: varchar("status", { length: 16 }).notNull().default("Away"),
+    presence: varchar("presence", { length: 8 }).notNull().default("Away"),
+    statusMessage: varchar("status_message", { length: 64 }),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("home_status_household_member").on(t.householdId, t.memberId)],

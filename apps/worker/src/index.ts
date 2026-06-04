@@ -6,6 +6,7 @@ import {
   type SyncJobName,
   type SyncJobPayload,
   runCalendarSyncJob,
+  ensureCalendarReminderScheduler,
 } from "@whome/calendar-sync";
 
 const env = loadEnv();
@@ -26,6 +27,10 @@ worker.on("completed", (job) => {
 
 worker.on("failed", (job, err) => {
   console.error(`Job ${job?.id} failed`, err);
+});
+
+void ensureCalendarReminderScheduler(redisUrl).catch((err) => {
+  console.error("Failed to schedule calendar reminder scan", err);
 });
 
 console.log(`whome worker listening on queue ${SYNC_QUEUE}`);

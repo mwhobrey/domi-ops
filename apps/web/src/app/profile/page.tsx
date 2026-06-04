@@ -11,8 +11,16 @@ export default async function ProfilePage() {
     nickname: null as string | null,
     publicLabel: "name" as const,
     shownLabel: "Member",
-    homeStatus: "Away",
+    memberId: "",
     homeStatusId: null as string | null,
+    presence: "Away" as const,
+    statusMessage: null as string | null,
+    temperatureUnit: "fahrenheit" as const,
+    pushNoticesEnabled: true,
+    pushCalendarRemindersEnabled: true,
+    pushSubscribed: false,
+    pushAvailable: false,
+    avatarUrl: null as string | null,
   };
   let loadError: string | null = null;
   try {
@@ -22,7 +30,7 @@ export default async function ProfilePage() {
   }
 
   return (
-    <AppShell title="Profile" description="Name, nickname, and home status">
+    <AppShell title="Profile" description="Name, presence, and preferences">
       {loadError ? (
         <Alert variant="error">
           {loadError}. <a href="/profile">Retry</a>

@@ -10,12 +10,8 @@ import {
   randomOAuthState,
 } from "@whome/auth";
 import type { Database } from "@whome/db";
-import {
-  calendarConnections,
-  calendars,
-  linkedGoogleCalendars,
-} from "@whome/db";
-import { listGoogleCalendars, enqueueSyncJob } from "@whome/calendar-sync";
+import { calendarConnections, linkedGoogleCalendars } from "@whome/db";
+import { listGoogleCalendars } from "@whome/calendar-sync";
 import { ensureAccessToken } from "@whome/calendar-sync";
 import { and, eq } from "drizzle-orm";
 import type { AppVariables } from "../middleware/auth.js";
@@ -159,36 +155,29 @@ export function googleCalendarAuthRoutes(db: Database, env: Env) {
           .limit(1);
 
         if (!linked) {
-          const [cal] = await db
-            .insert(calendars)
-            .values({
-              householdId: pending.householdId,
-              ownerUserId: pending.userId,
-              name: String(item.summary ?? gId).slice(0, 128),
-              color: String(item.backgroundColor ?? "#3b82f6").slice(0, 16),
-              visibility: "private",
-            })
-            .returning();
-
           await db.insert(linkedGoogleCalendars).values({
             connectionId,
             googleCalendarId: gId,
             summary: String(item.summary ?? ""),
             backgroundColor: String(item.backgroundColor ?? ""),
-            syncEnabled: true,
-            targetCalendarId: cal.id,
+            syncEnabled: false,
+            targetCalendarId: null,
           });
+        } else {
+          await db
+            .update(linkedGoogleCalendars)
+            .set({
+              summary: String(item.summary ?? linked.summary ?? ""),
+              backgroundColor: String(
+                item.backgroundColor ?? linked.backgroundColor ?? "",
+              ),
+            })
+            .where(eq(linkedGoogleCalendars.id, linked.id));
         }
       }
 
-      const redisUrl = env.REDIS_URL ?? "redis://localhost:6379";
-      await enqueueSyncJob(redisUrl, "google.calendar.full_import", {
-        connectionId,
-        householdId: pending.householdId,
-        userId: pending.userId,
-      });
-
-      return c.redirect(`${env.PUBLIC_APP_URL}/calendar?connected=1`);
+      // User runs import wizard explicitly (HomeHub parity — no auto full_import).
+      return c.redirect(`${env.PUBLIC_APP_URL}/calendar?connected=1&import=1`);
     } catch (e) {
       console.error("calendar oauth callback", e);
       return c.redirect(`${env.PUBLIC_APP_URL}/calendar?error=oauth`);

@@ -1,9 +1,10 @@
 "use client";
 
+import { NotebookPen } from "lucide-react";
 import { useState } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
-import { Button, Card, ConfirmDialog, Textarea } from "./ui";
-import { ListPage, ListPageEmpty } from "./lists/ListPage";
+import { Button, Card, ConfirmDialog, EmptyState, Textarea } from "./ui";
+import { ListPage } from "./lists/ListPage";
 
 interface Note {
   id: string;
@@ -51,7 +52,11 @@ export function NotesList({ initialNotes }: { initialNotes: Note[] }) {
       }
     >
       {notes.length === 0 ? (
-        <ListPageEmpty title="No notes" description="Jot something down above." />
+        <EmptyState
+          title="No notes"
+          description="Jot something down above."
+          icon={<NotebookPen className="h-10 w-10" />}
+        />
       ) : (
         <ul className="space-y-3">
           {notes.map((n) => {
@@ -60,7 +65,7 @@ export function NotesList({ initialNotes }: { initialNotes: Note[] }) {
               n.content.length > 120 && !open ? `${n.content.slice(0, 120)}…` : n.content;
             return (
               <li key={n.id}>
-                <Card>
+                <Card className="transition hover:border-[var(--color-accent)]/30">
                   <div className="p-4">
                     <p className="whitespace-pre-wrap text-sm">{preview}</p>
                     <p className="mt-2 text-xs text-[var(--color-text-muted)]">

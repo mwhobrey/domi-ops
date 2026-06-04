@@ -1,18 +1,22 @@
 import { apiFetch } from "../lib/api";
 import { memberShownLabel } from "../lib/member-label";
+import { Suspense } from "react";
 import { AppChrome, type ShellUser } from "./AppChrome";
-import { PageHeader } from "./ui";
+import { NoticeBoardActions } from "./NoticeBoard";
+import { Breadcrumb, type BreadcrumbItem, PageHeader } from "./ui";
 
 export async function AppShell({
   children,
   title,
   description,
   actions,
+  breadcrumb,
 }: {
   children: React.ReactNode;
   title: string;
   description?: string;
   actions?: React.ReactNode;
+  breadcrumb?: BreadcrumbItem[];
 }) {
   let user: ShellUser | null = null;
   try {
@@ -20,15 +24,18 @@ export async function AppShell({
       authenticated: boolean;
       user?: {
         email: string;
+        memberId: string;
         name: string | null;
         nickname: string | null;
         publicLabel: "name" | "nickname";
+        avatarUrl: string | null;
       };
     }>("/auth/session");
     if (session.authenticated && session.user) {
       const u = session.user;
       user = {
         email: u.email,
+        memberId: u.memberId,
         name: u.name,
         nickname: u.nickname,
         shownLabel: memberShownLabel({
@@ -36,6 +43,7 @@ export async function AppShell({
           nickname: u.nickname,
           publicLabel: u.publicLabel,
         }),
+        avatarUrl: u.avatarUrl,
       };
     }
   } catch {
@@ -44,7 +52,19 @@ export async function AppShell({
 
   return (
     <AppChrome user={user}>
-      <PageHeader title={title} description={description} actions={actions} />
+      {breadcrumb && breadcrumb.length > 0 && <Breadcrumb items={breadcrumb} />}
+      <PageHeader
+        title={title}
+        description={description}
+        actions={
+          <>
+            <Suspense fallback={null}>
+              <NoticeBoardActions />
+            </Suspense>
+            {actions}
+          </>
+        }
+      />
       {children}
     </AppChrome>
   );

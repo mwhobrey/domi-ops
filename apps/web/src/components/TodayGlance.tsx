@@ -1,38 +1,41 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { apiClient } from "../lib/client-api";
-import { Card, CardBody, CardHeader, Skeleton } from "./ui";
+import { formatChoreDueMeta, formatSchoolDueMeta } from "../lib/glance-meta";
+import { Card, CardBody, CardHeader, GlanceTile, SectionHeader, Skeleton } from "./ui";
+
+type ChoresGlance = {
+  summary: {
+    headline: string;
+    tone: "default" | "warning" | "success";
+  };
+  items: { id: string; description: string; dueDate: string | null }[];
+  overflow: number;
+};
+
+type SchoolGlance = {
+  enabled: boolean;
+  summary?: { headline: string; tone: "default" | "warning" | "success" };
+  items?: { id: string; title: string; className: string; dueAt: string; overdue: boolean }[];
+  overflow?: number;
+};
 
 export function TodayGlance() {
   const [loading, setLoading] = useState(true);
-  const [shoppingOpen, setShoppingOpen] = useState(0);
-  const [choresSummary, setChoresSummary] = useState("");
-  const [eventsToday, setEventsToday] = useState<{ title: string; startTime: string | null }[]>([]);
+  const [chores, setChores] = useState<ChoresGlance | null>(null);
+  const [school, setSchool] = useState<SchoolGlance | null>(null);
+  const today = new Date().toISOString().slice(0, 10);
 
   useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10);
     (async () => {
       try {
-        const [shop, chores, cal] = await Promise.all([
-          apiClient.get<{ items: { checked: boolean }[] }>("/api/core/shopping"),
-          apiClient.get<{ chores: { done: boolean; dueDate: string | null }[] }>("/api/core/chores"),
-          apiClient.get<{ events: { title: string; startTime: string | null }[] }>(
-            `/api/calendar/events?from=${today}&to=${today}`,
-          ),
+        const [choresRes, schoolRes] = await Promise.all([
+          apiClient.get<ChoresGlance>("/api/core/chores/glance"),
+          apiClient.get<SchoolGlance>("/api/school/glance").catch(() => ({ enabled: false })),
         ]);
-        setShoppingOpen(shop.items.filter((i) => !i.checked).length);
-        const open = chores.chores.filter((c) => !c.done);
-        const dueToday = open.filter((c) => c.dueDate === today).length;
-        const overdue = open.filter((c) => c.dueDate && c.dueDate < today).length;
-        if (open.length === 0) setChoresSummary("all done");
-        else if (overdue > 0 && dueToday > 0)
-          setChoresSummary(`${overdue} overdue, ${dueToday} due today`);
-        else if (overdue > 0) setChoresSummary(`${overdue} overdue`);
-        else if (dueToday > 0) setChoresSummary(`${dueToday} due today`);
-        else setChoresSummary(`${open.length} open`);
-        setEventsToday(cal.events.slice(0, 3));
+        setChores(choresRes);
+        setSchool(schoolRes.enabled ? schoolRes : null);
       } catch {
         /* ignore widget errors */
       } finally {
@@ -41,67 +44,57 @@ export function TodayGlance() {
     })();
   }, []);
 
-  const links = [
-    { href: "/calendar", label: "Calendar" },
-    { href: "/school", label: "School" },
-    { href: "/shopping", label: "Shopping" },
-  ];
-
   return (
-    <Card>
+    <Card className="h-full">
       <CardHeader>
-        <h2 className="text-sm font-medium uppercase tracking-wide text-[var(--color-text-muted)]">
-          Today at a glance
-        </h2>
+        <SectionHeader title="Today at a glance" />
       </CardHeader>
-      <CardBody className="space-y-4">
+      <CardBody>
         {loading ? (
-          <>
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-4 w-2/3" />
-          </>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Skeleton className="h-28 w-full" />
+            <Skeleton className="h-28 w-full" />
+          </div>
         ) : (
-          <ul className="space-y-2 text-sm">
-            <li>
-              <Link href="/shopping" className="text-[var(--color-accent)] hover:underline">
-                Shopping
-              </Link>
-              : {shoppingOpen} item{shoppingOpen === 1 ? "" : "s"} to buy
-            </li>
-            <li>
-              <Link href="/chores" className="text-[var(--color-accent)] hover:underline">
-                Chores
-              </Link>
-              : {choresSummary}
-            </li>
-            <li>
-              <span className="text-[var(--color-text-muted)]">Calendar today:</span>
-              {eventsToday.length === 0 ? (
-                <span className="ml-1">nothing scheduled</span>
-              ) : (
-                <ul className="mt-1 list-inside list-disc">
-                  {eventsToday.map((e, i) => (
-                    <li key={i}>
-                      {e.title}
-                      {e.startTime ? ` · ${e.startTime}` : ""}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </li>
-          </ul>
+          <div className={`grid gap-3 ${school ? "sm:grid-cols-2" : ""}`}>
+            {chores && (
+              <GlanceTile
+                label="Chores"
+                headline={chores.summary.headline}
+                href="/chores"
+                tone={chores.summary.tone}
+                items={chores.items.map((c) => ({
+                  key: c.id,
+                  label: c.description,
+                  meta: formatChoreDueMeta(c.dueDate, today),
+                }))}
+                overflowCount={chores.overflow}
+                emptyHint={chores.summary.tone === "success" ? "Nothing open right now." : undefined}
+              />
+            )}
+            {school?.summary && (
+              <GlanceTile
+                label="School"
+                headline={school.summary.headline}
+                href="/school"
+                tone={school.summary.tone}
+                items={(school.items ?? []).map((a) => ({
+                  key: a.id,
+                  label: a.title,
+                  meta: `${a.className} · ${formatSchoolDueMeta(a.dueAt, a.overdue)}`,
+                }))}
+                overflowCount={school.overflow ?? 0}
+                emptyHint={
+                  school.summary.headline === "Set up"
+                    ? "Add a class to get started."
+                    : school.summary.tone === "success"
+                      ? "No urgent assignments."
+                      : undefined
+                }
+              />
+            )}
+          </div>
         )}
-        <div className="flex flex-wrap gap-2 border-t border-[var(--color-border)]/60 pt-4">
-          {links.map((l) => (
-            <Link
-              key={l.href}
-              href={l.href}
-              className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 text-sm hover:bg-[var(--color-border)]/30"
-            >
-              {l.label}
-            </Link>
-          ))}
-        </div>
       </CardBody>
     </Card>
   );

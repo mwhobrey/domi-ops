@@ -94,6 +94,45 @@ export const calendarEvents = pgTable("calendar_events", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const eventCategories = pgTable(
+  "event_categories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    householdId: uuid("household_id")
+      .notNull()
+      .references(() => households.id, { onDelete: "cascade" }),
+    calendarId: uuid("calendar_id")
+      .notNull()
+      .references(() => calendars.id, { onDelete: "cascade" }),
+    key: varchar("key", { length: 64 }).notNull(),
+    label: varchar("label", { length: 128 }).notNull(),
+    color: varchar("color", { length: 16 }),
+    isDefault: boolean("is_default").notNull().default(false),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("event_categories_calendar_key").on(t.calendarId, t.key)],
+);
+
+export const calendarEventReminders = pgTable(
+  "calendar_event_reminders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => calendarEvents.id, { onDelete: "cascade" }),
+    householdId: uuid("household_id")
+      .notNull()
+      .references(() => households.id, { onDelete: "cascade" }),
+    offsetMinutes: integer("offset_minutes").notNull(),
+    enabled: boolean("enabled").notNull().default(true),
+    lastSentAt: timestamp("last_sent_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("calendar_event_reminders_event_offset").on(t.eventId, t.offsetMinutes)],
+);
+
 export const recurringRules = pgTable("recurring_rules", {
   id: uuid("id").primaryKey().defaultRandom(),
   householdId: uuid("household_id")
@@ -107,6 +146,9 @@ export const recurringRules = pgTable("recurring_rules", {
   rrule: text("rrule").notNull(),
   startDate: date("start_date").notNull(),
   endDate: date("end_date"),
+  startTime: time("start_time"),
+  endTime: time("end_time"),
+  allDay: boolean("all_day").notNull().default(false),
   categoryKey: varchar("category_key", { length: 64 }),
   color: varchar("color", { length: 16 }),
   lastGeneratedDate: date("last_generated_date"),
@@ -130,6 +172,9 @@ export const calendarConnections = pgTable("calendar_connections", {
   timeZone: varchar("time_zone", { length: 64 }).default("UTC"),
   connectedAt: timestamp("connected_at", { withTimezone: true }).notNull().defaultNow(),
   lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
+  syncRunStatus: varchar("sync_run_status", { length: 24 }).notNull().default("idle"),
+  syncRunProgress: text("sync_run_progress"),
+  syncRunError: text("sync_run_error"),
 });
 
 export const linkedGoogleCalendars = pgTable("linked_google_calendars", {
@@ -146,6 +191,33 @@ export const linkedGoogleCalendars = pgTable("linked_google_calendars", {
   lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
   lastSyncError: text("last_sync_error"),
 });
+
+export const calendarCategoryImportMappings = pgTable(
+  "calendar_category_import_mappings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    connectionId: uuid("connection_id")
+      .notNull()
+      .references(() => calendarConnections.id, { onDelete: "cascade" }),
+    linkedCalendarId: uuid("linked_calendar_id")
+      .notNull()
+      .references(() => linkedGoogleCalendars.id, { onDelete: "cascade" }),
+    sourceKey: varchar("source_key", { length: 128 }).notNull(),
+    sourceLabel: varchar("source_label", { length: 128 }),
+    targetKey: varchar("target_key", { length: 64 }),
+    targetLabel: varchar("target_label", { length: 128 }),
+    targetColor: varchar("target_color", { length: 16 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("calendar_category_import_conn_linked_source").on(
+      t.connectionId,
+      t.linkedCalendarId,
+      t.sourceKey,
+    ),
+  ],
+);
 
 export const calendarSyncOutbox = pgTable("calendar_sync_outbox", {
   id: uuid("id").primaryKey().defaultRandom(),

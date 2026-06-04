@@ -1,6 +1,6 @@
 # Current state
 
-*Updated after four-lane web UI/UX pass + second polish pass. Dogfood/cutover still pending.*
+*Updated after design system overhaul (tokens, overlays, dashboard stat tiles, list primitives). Dogfood/cutover still pending.*
 
 ## What is working (implemented paths)
 
@@ -8,9 +8,14 @@
 
 - Monorepo builds via Turbo (`npm run build`).
 - Drizzle schema + SQL migrations (`packages/db/drizzle/`), including `school_submission_artifacts` (`0002`).
-- `npm run db:migrate` and API Docker entrypoint apply migrations.
+- `npm run db:migrate` and API Docker entrypoint apply migrations. New SQL must be registered in `packages/db/drizzle/meta/_journal.json` (see `03_RULES_AND_STANDARDS.md` → Database migrations).
 - Zod env validation with production guards (`@whome/config`).
 - Docker Compose dev stack: postgres, redis, minio, api, worker, web.
+- Native `npm run dev` (default): `.env.example` / `WHOME_DEV_PROFILE=native` / `PORT=3000` / `PUBLIC_APP_URL=http://localhost:3000`; dev boot warns on OAuth port mismatch; `.env.docker.example` for compose web on :3001.
+- Dashboard: glance (chores + school `/api/school/glance`) beside compact month calendar; weather via `/api/core/weather` (server → Open-Meteo).
+- Notice board: `NoticeBoardActions` in page header on all `AppShell` pages; multi-notice feed + per-user read state (`notice_reads`); badge for unread from others.
+- **Web Push (optional):** VAPID env (`VAPID_*`); migration `0010_push_notifications`; `push_subscriptions` + `users.push_notices_enabled`; notify household on `POST /notices` (excludes poster); profile opt-out + device subscribe; `sw.js` push/click → `/dashboard?notices=1`.
+- Linear: WHO team; projects/milestones/issues in `docs/LINEAR.md` (module backlog WHO-14–WHO-75 in `docs/MODULE_AUDIT.md`); agent workflow `.cursor/rules/linear-workflow.mdc`.
 - **CI:** `.github/workflows/ci.yml` — typecheck, build, test on push/PR.
 - **Tests:** Vitest — config, crypto, import dry-run mappers (`npm run test`).
 - **Import validate:** `npm run import:validate` — fixture dry-run with `--strict`.
@@ -23,18 +28,19 @@
 
 ### Web UI (`apps/web`)
 
-- **Design system:** `components/ui/*` (Button, Card, Alert, EmptyState, PageHeader, ConfirmDialog, etc.), `lib/cn.ts`, `lib/client-api.ts`.
-- **Shell:** Top nav with active route, user menu, mobile drawer (`AppChrome`); `ProfileOnboardingBanner` when name unset.
-- **Calendar:** Week/agenda views, week navigation, search (`q` API), event sheet, connect card (`CalendarPageClient`).
-- **Dashboard:** Notice + who's home toggles, today-at-a-glance widgets (`DashboardBoard`).
-- **Core lists:** `ListPage` wrapper for shopping/chores/notes/expenses; DELETE shopping/chores; `loading.tsx` on all main modules.
-- **Second pass:** `Button` respects `type="submit"`; server `ApiError`; SSR load errors on profile/school detail/calendar status; TodayGlance chores due/overdue; calendar search clears to week view.
-- **School:** Card-based class list and assignment flow styling.
+- **Design system:** Expanded tokens in `globals.css`; `components/ui/*` including Modal/Sheet/Drawer (native `<dialog>`), StatTile, Avatar, Breadcrumb, ListItem, Checkbox, RadioGroup, LinkButton; Inter via `next/font`; lucide-react nav icons.
+- **Shell:** Icon nav with accent active bar, user menu (ARIA), mobile Drawer with account footer; header gradient; breadcrumbs on school detail routes.
+- **Calendar:** `/calendar` — Month, Week, Day, Agenda; shared scrollable 0–24h time grid (`CalendarTimeGrid`); multi-day all-day span (`calendar-event-span.ts`, continued chip styling); desktop week/day — click slot to create, drag + resize editable timed events, **all-day drag** across columns; GET/PATCH/POST events — full DTO (`description`, `endDate`, `categoryKey`, `timeZone`, `reminderOffsets`, `repeatRule` daily/weekly/monthly); `POST .../duplicate`; GET span overlap query; **event sheet** — description, dates/times, calendar, **per-calendar category** (color from category when set), TZ, repeat builder, reminders, series delete scope; **event categories** scoped by `calendar_id` (migration `0014`) + `GET/POST/PATCH/DELETE /api/calendar/event-categories` (GET backfills default **General** per calendar); manager in Calendar settings; **category filter pills** (`whome:calendar-hidden-categories`); category color fallback on grid/agenda; **calendar filter bar** (`CalendarFilterBar`, `sessionStorage` hidden calendars, `localStorage` default write calendar); **calendar manager** in Google sheet; **recurring** — HomeHub `recurring_reminder` import, extended RRULE materialize (timed + MONTHLY subset), drag/delete `recurringScope`; **calendar reminder push** — `calendar_event_reminders`, worker `calendar.reminder.scan` (5m), profile `pushCalendarRemindersEnabled`; parity matrix `docs/CALENDAR_EVENT_PARITY.md`; Google sheet sync mode + bidirectional push; mobile Month + Agenda; import wizard (calendar name + color only); sync progress polls `GET /api/calendar/sync/status`.
+- **Dashboard:** **Today at a glance** (`GlanceTile`) — chore/school preview lines + counts via `/api/core/chores/glance` and `/api/school/glance`; weather widget (`useWeatherForecast`, Redis stale cache, structured errors); month calendar day sheet shows hourly weather per timed event when location saved; household presence + message; notice board auto-save.
+- **Profile:** `/profile` — name/nickname/label, presence + message, temperature unit, notice push opt-out + per-browser enable, **calendar reminder push** toggle (`pushCalendarRemindersEnabled`), avatar upload (JPEG/PNG/WebP → 256² WebP on S3, `GET /api/core/avatars/:memberId`).
+- **Core lists:** Shopping/chores/notes/expenses use ListItem, Checkbox, SectionHeader, EmptyState icons; expenses month StatTile.
+- **Tests:** `apps/web/src/lib/color-contrast.test.ts` in Vitest.
 - **Docs:** `docs/UI.md`
 
 ### Core module
 
-- API: dashboard notice + home status PATCH, shopping/chores/notes/expenses CRUD (`apps/api/src/routes/core.ts`).
+- API: `/api/core/weather` — `date`, `dayHourly`, `cached`, `source`, errors (`forecast_unavailable`, `location_outside_us_fallback`, `needsLocation`); `/api/core/chores/glance`; extended `/api/school/glance`; dashboard notice + home status PATCH; profile `temperatureUnit`, `pushNoticesEnabled`, `pushCalendarRemindersEnabled`; `/api/core/push/*` subscribe + VAPID public key; Web Push on new notice; shopping/chores/notes/expenses CRUD (`apps/api/src/routes/core.ts`).
+- DB: migrations `0007`–`0013` (presence, temperature unit, avatar, push notifications, event categories + calendar reminders).
 - UI: interactive `/dashboard`, `/shopping`, `/chores`, `/notes`, `/expenses`.
 
 ### School module
@@ -45,9 +51,15 @@
 
 ### Calendar sync module
 
-- Google connect + pull/full import jobs (unchanged).
-- **Local event CRUD:** `POST/PATCH/DELETE /api/calendar/events`.
-- UI: `/calendar` with event form + week view.
+- Google OAuth connect discovers linked sources (`sync_enabled` false until import wizard commit).
+- Google sync upserts by `google_event_id` **per household** (cross-lane match for HomeHub-imported events); fuzzy match when import row lacks `google_event_id`; post-sync dedupe + partial unique index `0012`.
+- `POST /api/calendar/dedupe` and Google sheet **Remove duplicates** for one-off cleanup.
+- **Calendar hierarchy:** `calendars` → **`event_categories`** (scoped by `calendar_id`, unique `(calendar_id, key)`) → `calendar_events.category_key`. Default category **`general`** per calendar (`is_default`); `GET /event-categories` backfills missing defaults. Import/sync assign new Google events there until recategorized. Event **color from category** (`event.color` null when categorized). Manage categories in Calendar settings (per calendar). Import wizard: calendar name + color only (no Google category mapping). **`@whome/calendar-sync` must be built** (`npm run build -w @whome/calendar-sync`); worker loads `dist/`.
+- **Local event CRUD:** `POST/PATCH/DELETE /api/calendar/events`; GET date-range overlap + enriched DTO; `POST .../duplicate`; event-categories CRUD; PATCH enforces `calendar-event-policy`, optional `recurringScope`, enqueues Google push when `pushable`.
+- **Lanes API:** `GET/POST/PATCH /api/calendar/calendars`, `GET /api/calendar/members`, `PATCH .../shares`, `POST /api/calendar/recurring/materialize`.
+- **Recurring:** `materializeRecurringForHousehold` (DAILY/WEEKLY RRULE v1); job `recurring.materialize`.
+- **Google push (bidirectional):** `packages/calendar-sync/src/push.ts` — outbox drain on `google.calendar.push` and after full sync.
+- UI: `/calendar` + import wizard + toolbar **Calendar settings** sheet (accordion: Google / **Calendars** public·private·shared / categories); event sheet **rich HTML description** (TipTap + DOMPurify); `GET /calendars` includes `shareCount`.
 
 ### Import tooling
 
@@ -67,8 +79,8 @@
 
 | Area | Evidence | Impact |
 |------|----------|--------|
-| Calendar bidirectional push | `sync.ts` — `google.calendar.push` warns only | No push to Google |
-| Recurring events | `recurring.materialize` stub | RRULE expansion not automated |
+| Calendar **event** UX vs HomeHub | sheet: title/date/time/all-day only; no description, category, color, end date, multi-day | Event parity pass (see `docs/UI.md` calendar section) |
+| Recurring (advanced) | weekly all-day v1 only; import skips `recurring_reminder` | Full RRULE + timed recurring + import mapper |
 | Hosted multi-tenant | docs only | RLS not in code |
 | `/api/core/files` product routes | not implemented | Import blobs under `imports/` only |
 | **Production cutover on droplet** | operator checklist | Staging/prod import + Caddy flip not run in this repo session |

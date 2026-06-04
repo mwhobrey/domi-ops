@@ -2,15 +2,25 @@ export function PageHeader({
   title,
   description,
   actions,
+  size = "default",
 }: {
   title: string;
   description?: string;
   actions?: React.ReactNode;
+  size?: "default" | "lg";
 }) {
   return (
     <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+        <h1
+          className={
+            size === "lg"
+              ? "font-display text-4xl font-semibold tracking-tight sm:text-5xl"
+              : "text-2xl font-semibold tracking-tight"
+          }
+        >
+          {title}
+        </h1>
         {description && (
           <p className="mt-1 max-w-2xl text-sm text-[var(--color-text-muted)]">{description}</p>
         )}

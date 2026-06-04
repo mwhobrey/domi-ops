@@ -38,7 +38,7 @@ async function ensureHomeStatusRow(
     householdId,
     memberId,
     name: label.slice(0, 64),
-    status: "Away",
+    presence: "Away",
   });
 }
 

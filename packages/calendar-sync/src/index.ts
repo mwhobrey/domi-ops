@@ -10,18 +10,41 @@ export type SyncJobName =
   | "google.calendar.pull"
   | "google.calendar.push"
   | "google.calendar.full_import"
-  | "recurring.materialize";
+  | "recurring.materialize"
+  | "calendar.reminder.scan";
 
 export interface SyncJobPayload {
-  connectionId: string;
   householdId: string;
+  connectionId?: string;
   linkedCalendarId?: string;
-  userId: string;
+  userId?: string;
 }
 
-export { SYNC_QUEUE, enqueueSyncJob, getSyncQueue } from "./queue.js";
+export { SYNC_QUEUE, enqueueSyncJob, getSyncQueue, ensureCalendarReminderScheduler } from "./queue.js";
 export { runCalendarSyncJob, syncConnection, pullLinkedCalendar } from "./sync.js";
-export { eventToFields, inferSourceCategory } from "./mapper.js";
+export { eventToFields, eventToGoogleBody, inferSourceCategory } from "./mapper.js";
+export { processOutboxForConnection, pushEventUpdate } from "./push.js";
+export { materializeRecurringForHousehold, parseRrule } from "./recurring.js";
+export { scanCalendarReminders } from "./reminder-scan.js";
+export {
+  inferGoogleCategories,
+  inferSourceCategoryLabel,
+  eventCategoryColor,
+  applyCategoryMapping,
+  normalizeCategorySourceKey,
+  type InferredCategory,
+} from "./categories.js";
+export {
+  setSyncRun,
+  parseSyncRunProgress,
+  type SyncRunStatus,
+  type SyncRunProgress,
+} from "./sync-run.js";
+export {
+  dedupeHouseholdGoogleEvents,
+  findExistingGoogleEvent,
+  findFuzzyGoogleEventMatch,
+} from "./google-event-match.js";
 export { listGoogleCalendars, ensureAccessToken, CalendarCredentialsError } from "./client.js";
 
 /** Job handlers registered by apps/worker */

@@ -1,8 +1,9 @@
 "use client";
 
+import { ShoppingCart } from "lucide-react";
 import { useState } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
-import { Button, ConfirmDialog, EmptyState, Input } from "./ui";
+import { Button, Checkbox, ConfirmDialog, EmptyState, Input, ListItem, SectionHeader } from "./ui";
 import { ListPage } from "./lists/ListPage";
 
 interface ShoppingItem {
@@ -61,15 +62,11 @@ export function ShoppingList({ initialItems }: { initialItems: ShoppingItem[] })
 
   function renderRow(i: ShoppingItem) {
     return (
-      <li
-        key={i.id}
-        className="flex items-center gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border)]/60 px-4 py-3"
-      >
-        <input
-          type="checkbox"
+      <ListItem key={i.id} as="li">
+        <Checkbox
           checked={i.checked}
-          className="h-4 w-4 accent-[var(--color-accent)]"
           onChange={() => toggleItem(i.id, !i.checked)}
+          aria-label={`Mark ${i.item} as ${i.checked ? "not purchased" : "purchased"}`}
         />
         <span className={`flex-1 ${i.checked ? "text-[var(--color-text-muted)] line-through" : ""}`}>
           {i.item}
@@ -77,7 +74,7 @@ export function ShoppingList({ initialItems }: { initialItems: ShoppingItem[] })
         <Button variant="ghost" size="sm" onClick={() => setDeleteId(i.id)}>
           Remove
         </Button>
-      </li>
+      </ListItem>
     );
   }
 
@@ -100,18 +97,22 @@ export function ShoppingList({ initialItems }: { initialItems: ShoppingItem[] })
       }
     >
       {items.length === 0 ? (
-        <EmptyState title="List is empty" description="Add your first item above." />
+        <EmptyState
+          title="List is empty"
+          description="Add your first item above."
+          icon={<ShoppingCart className="h-10 w-10" />}
+        />
       ) : (
         <div className="space-y-6">
           {unchecked.length > 0 && (
             <section>
-              <h2 className="mb-2 text-sm font-medium text-[var(--color-text-muted)]">To buy</h2>
+              <SectionHeader title="To buy" className="mb-2" />
               <ul className="space-y-2">{unchecked.map(renderRow)}</ul>
             </section>
           )}
           {checked.length > 0 && (
             <section>
-              <h2 className="mb-2 text-sm font-medium text-[var(--color-text-muted)]">In cart</h2>
+              <SectionHeader title="In cart" className="mb-2" />
               <ul className="space-y-2">{checked.map(renderRow)}</ul>
             </section>
           )}
@@ -121,7 +122,7 @@ export function ShoppingList({ initialItems }: { initialItems: ShoppingItem[] })
       <ConfirmDialog
         open={deleteId !== null}
         title="Remove item?"
-        message="This removes the item from your shopping list."
+        message="This will delete the item from your list."
         confirmLabel="Remove"
         onConfirm={() => deleteId && removeItem(deleteId)}
         onCancel={() => setDeleteId(null)}

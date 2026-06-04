@@ -22,6 +22,83 @@
       "when": 1780494976000,
       "tag": "0002_school_submission_artifacts",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1780494977000,
+      "tag": "0003_member_nickname",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1780494978000,
+      "tag": "0004_member_name_label",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1780494979000,
+      "tag": "0005_notice_reads",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1780494980000,
+      "tag": "0006_home_status_message",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1780494981000,
+      "tag": "0007_home_status_presence",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1780494982000,
+      "tag": "0008_user_temperature_unit",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1780494983000,
+      "tag": "0009_member_avatar_key",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1780494984000,
+      "tag": "0010_push_notifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1780494985000,
+      "tag": "0011_calendar_category_import",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1780494986000,
+      "tag": "0012_calendar_google_event_unique",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1780494988000,
+      "tag": "0014_event_categories_per_calendar",
+      "breakpoints": true
     }
   ]
 }

@@ -1,9 +1,19 @@
 "use client";
 
+import { ClipboardList } from "lucide-react";
 import { useState } from "react";
+import { cn } from "../lib/cn";
 import { ApiError, apiClient } from "../lib/client-api";
-import { Button, ConfirmDialog, Input } from "./ui";
-import { ListPage, ListPageEmpty } from "./lists/ListPage";
+import {
+  Badge,
+  Button,
+  Checkbox,
+  ConfirmDialog,
+  EmptyState,
+  Input,
+  ListItem,
+} from "./ui";
+import { ListPage } from "./lists/ListPage";
 
 interface Chore {
   id: string;
@@ -65,45 +75,51 @@ export function ChoresList({ initialChores }: { initialChores: Chore[] }) {
       }
     >
       {chores.length === 0 ? (
-        <ListPageEmpty title="No chores" description="Add one above." />
+        <EmptyState
+          title="No chores"
+          description="Add one above."
+          icon={<ClipboardList className="h-10 w-10" />}
+        />
       ) : (
         <ul className="space-y-2">
-          {chores.map((c) => (
-            <li
-              key={c.id}
-              className={`flex items-center gap-3 rounded-[var(--radius-lg)] border px-4 py-3 ${
-                isOverdue(c.dueDate, c.done)
-                  ? "border-[var(--color-danger)]/50"
-                  : "border-[var(--color-border)]/60"
-              }`}
-            >
-              <input
-                type="checkbox"
-                checked={c.done}
-                className="h-4 w-4"
-                onChange={async () => {
-                  const done = !c.done;
-                  setChores((prev) => prev.map((x) => (x.id === c.id ? { ...x, done } : x)));
-                  await apiClient.patch(`/api/core/chores/${c.id}`, { done });
-                }}
-              />
-              <div className="flex-1">
-                <span className={c.done ? "line-through text-[var(--color-text-muted)]" : ""}>
-                  {c.description}
-                </span>
-                {c.dueDate && (
-                  <p
-                    className={`text-xs ${isOverdue(c.dueDate, c.done) ? "text-[var(--color-danger)]" : "text-[var(--color-text-muted)]"}`}
-                  >
-                    Due {c.dueDate}
-                  </p>
+          {chores.map((c) => {
+            const overdue = isOverdue(c.dueDate, c.done);
+            return (
+              <ListItem
+                key={c.id}
+                as="li"
+                className={cn(overdue && "border-[var(--color-danger)]/50")}
+              >
+                <Checkbox
+                  checked={c.done}
+                  onChange={async () => {
+                    const done = !c.done;
+                    setChores((prev) => prev.map((x) => (x.id === c.id ? { ...x, done } : x)));
+                    await apiClient.patch(`/api/core/chores/${c.id}`, { done });
+                  }}
+                  aria-label={`Mark ${c.description} as ${c.done ? "incomplete" : "done"}`}
+                />
+                <div className="flex-1">
+                  <span className={c.done ? "line-through text-[var(--color-text-muted)]" : ""}>
+                    {c.description}
+                  </span>
+                  {c.dueDate && (
+                    <p
+                      className={`text-xs ${overdue ? "text-[var(--color-danger)]" : "text-[var(--color-text-muted)]"}`}
+                    >
+                      Due {c.dueDate}
+                    </p>
+                  )}
+                </div>
+                {overdue && (
+                  <Badge tone="warning">Overdue</Badge>
                 )}
-              </div>
-              <Button variant="ghost" size="sm" onClick={() => setDeleteId(c.id)}>
-                Remove
-              </Button>
-            </li>
-          ))}
+                <Button variant="ghost" size="sm" onClick={() => setDeleteId(c.id)}>
+                  Remove
+                </Button>
+              </ListItem>
+            );
+          })}
         </ul>
       )}
       <ConfirmDialog

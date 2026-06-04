@@ -45,11 +45,14 @@ whome/
 | `src/lib/api.ts` | Server `apiFetch`, `apiBase`, `ApiError` |
 | `src/lib/auth-links.ts` | OAuth URL helpers (client-safe import) |
 | `src/lib/load-error.ts` | SSR `loadErrorMessage()` helper |
+| `src/lib/use-media-query.ts` | `useIsDesktop()` for calendar responsive |
+| `src/lib/color-contrast.ts` | WCAG text color for event chips |
+| `src/lib/member-color.ts` | Deterministic avatar hues |
 | `src/components/lists/ListPage.tsx` | Shared list layout (add form card + errors) |
 | `src/lib/auth-proxy.ts` | Forward auth requests to `API_URL` |
 | `src/components/AppShell.tsx` | Server shell + session |
 | `src/components/AppChrome.tsx` | Top nav, active route, user menu, mobile drawer |
-| `src/components/ui/*` | Shared UI primitives |
+| `src/components/ui/*` | Shared UI primitives (Modal, Sheet, Drawer, StatTile, Avatar, Breadcrumb, etc.) |
 | `src/lib/client-api.ts` | Browser API client |
 | `docs/UI.md` | UI conventions |
 | `next.config.ts` | `standalone` output; rewrites `/api`, `/health` |
@@ -99,7 +102,9 @@ whome/
 | `src/schema/import.ts` | `import_records` |
 | `src/client.ts` | `createDb(url)` |
 | `src/migrate.ts` | Migration runner |
-| `drizzle/*.sql` | Applied migrations |
+| `drizzle/*.sql` | Applied migrations (must be listed in `drizzle/meta/_journal.json`) |
+| `drizzle/meta/_journal.json` | Migration order registry for `migrate:run` |
+| `src/schema/push.ts` | `push_subscriptions` for Web Push |
 | `drizzle.config.ts` | Drizzle Kit config |
 
 Exports: `@whome/db`, `@whome/db/schema` (package.json `exports`).
@@ -156,7 +161,7 @@ Browser calls use `apiBase() === ""` so fetches are same-origin; server componen
 
 ## Database entities by module
 
-- **core:** `shopping_items`, `chores`, `notes`, `expenses`, `notices`, `home_status`
+- **core:** `shopping_items`, `chores`, `notes`, `expenses`, `notices`, `notice_reads`, `home_status`
 - **school:** `school_*` tables (classes through attendance)
 - **calendar_sync:** `calendar_*`, `linked_google_calendars`, `calendar_sync_outbox`
 - **import:** `import_records`

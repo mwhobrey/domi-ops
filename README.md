@@ -24,8 +24,16 @@ npm run db:migrate   # required before first login
 npm run dev
 ```
 
-- Web: http://localhost:3001 (Docker; avoids conflict if :3000 is in use)  
-- API: http://localhost:4000/health  
+**Reset local DB** (wipe Docker volumes, re-migrate, flush Redis):
+
+```bash
+npm run dev:reset
+npm run dev
+```
+
+- **Web (default):** http://localhost:3000 — `PUBLIC_APP_URL` in `.env` must match this origin for Google OAuth.  
+- **API:** http://localhost:4000/health (includes `dev.oauthRedirects` in development).  
+- **Full stack in Docker** (web on host :3001): copy `.env.docker.example` → `.env`, then `docker compose up --build`. Do not mix with native `npm run dev` on :3000.
 
 ## HomeHub import
 

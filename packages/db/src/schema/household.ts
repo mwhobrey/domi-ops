@@ -19,6 +19,8 @@ export const memberRoleEnum = pgEnum("member_role", [
 
 export const memberPublicLabelEnum = pgEnum("member_public_label", ["name", "nickname"]);
 
+export const temperatureUnitEnum = pgEnum("temperature_unit", ["fahrenheit", "celsius"]);
+
 export const deploymentTierEnum = pgEnum("deployment_tier", [
   "self_host",
   "hosted_starter",
@@ -45,6 +47,13 @@ export const users = pgTable("users", {
   emailVerified: boolean("email_verified").notNull().default(false),
   displayName: varchar("display_name", { length: 128 }),
   imageUrl: text("image_url"),
+  temperatureUnit: temperatureUnitEnum("temperature_unit").notNull().default("fahrenheit"),
+  /** When false, household notice Web Push is not sent to this user */
+  pushNoticesEnabled: boolean("push_notices_enabled").notNull().default(true),
+  /** When false, upcoming calendar event reminder push is not sent to this user */
+  pushCalendarRemindersEnabled: boolean("push_calendar_reminders_enabled")
+    .notNull()
+    .default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -68,6 +77,8 @@ export const householdMembers = pgTable(
     /** Deprecated: HomeHub status-board label only */
     legacyDisplayName: varchar("legacy_display_name", { length: 64 }),
     legacyExternalId: varchar("legacy_external_id", { length: 128 }),
+    /** S3 object key under household-scoped `avatars/` prefix */
+    avatarKey: varchar("avatar_key", { length: 512 }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("household_members_household_user").on(t.householdId, t.userId)],

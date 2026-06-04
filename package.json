@@ -13,6 +13,7 @@
     "typecheck": "turbo run typecheck",
     "db:generate": "npm run generate -w @whome/db",
     "db:migrate": "npm run build -w @whome/db && npm run migrate:run -w @whome/db",
+    "dev:reset": "node scripts/dev-reset.mjs",
     "db:studio": "npm run studio -w @whome/db",
     "import:homehub": "node packages/import-homehub/dist/cli.js",
     "import:validate": "npm run build -w @whome/import-homehub && node packages/import-homehub/scripts/validate-import.mjs",

@@ -1,9 +1,10 @@
 "use client";
 
+import { Receipt } from "lucide-react";
 import { useMemo, useState } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
-import { Button, Card, Input } from "./ui";
-import { ListPage, ListPageEmpty } from "./lists/ListPage";
+import { Badge, Button, EmptyState, Input, ListItem, StatTile } from "./ui";
+import { ListPage } from "./lists/ListPage";
 
 interface Expense {
   id: string;
@@ -30,6 +31,14 @@ export function ExpensesList({ initialExpenses }: { initialExpenses: Expense[] }
     () => [...expenses].sort((a, b) => b.expenseDate.localeCompare(a.expenseDate)),
     [expenses],
   );
+
+  const monthTotal = useMemo(() => {
+    const now = new Date();
+    const prefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    return expenses
+      .filter((e) => e.expenseDate.startsWith(prefix))
+      .reduce((sum, e) => sum + e.amount, 0);
+  }, [expenses]);
 
   return (
     <ListPage
@@ -71,26 +80,32 @@ export function ExpensesList({ initialExpenses }: { initialExpenses: Expense[] }
         </form>
       }
     >
+      {sorted.length > 0 && (
+        <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <StatTile label="This month" value={formatMoney(monthTotal)} href="/expenses" />
+        </div>
+      )}
       {sorted.length === 0 ? (
-        <ListPageEmpty title="No expenses" description="Track spending above." />
+        <EmptyState
+          title="No expenses"
+          description="Track spending above."
+          icon={<Receipt className="h-10 w-10" />}
+        />
       ) : (
         <ul className="space-y-2">
           {sorted.map((ex) => (
-            <li
-              key={ex.id}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius-lg)] border border-[var(--color-border)]/60 px-4 py-3 text-sm"
-            >
+            <ListItem key={ex.id} as="li" className="flex-wrap justify-between text-sm">
               <div>
                 <span className="font-medium">{ex.title}</span>
                 <span className="ml-2 text-[var(--color-text-muted)]">{ex.expenseDate}</span>
                 {ex.category && (
-                  <span className="ml-2 rounded-full bg-[var(--color-border)]/50 px-2 py-0.5 text-xs">
+                  <Badge tone="default" className="ml-2">
                     {ex.category}
-                  </span>
+                  </Badge>
                 )}
               </div>
-              <span className="font-semibold">{formatMoney(ex.amount)}</span>
-            </li>
+              <span className="font-semibold tabular-nums">{formatMoney(ex.amount)}</span>
+            </ListItem>
           ))}
         </ul>
       )}

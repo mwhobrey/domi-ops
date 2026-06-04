@@ -102,6 +102,52 @@ export function eventToFields(
   };
 }
 
+export type WhomeEventForGoogle = {
+  title: string;
+  description: string | null;
+  startDate: string;
+  endDate: string | null;
+  startTime: string | null;
+  endTime: string | null;
+  allDay: boolean;
+  timeZone: string | null;
+};
+
+/** Build Google Calendar API event body from a whome event row. */
+export function eventToGoogleBody(
+  event: WhomeEventForGoogle,
+  tzName: string,
+): Record<string, unknown> {
+  const tz = event.timeZone ?? tzName;
+  const body: Record<string, unknown> = {
+    summary: event.title,
+    description: event.description ?? "",
+  };
+  if (event.allDay || !event.startTime) {
+    body.start = { date: event.startDate };
+    const endBase = event.endDate ?? event.startDate;
+    const endD = new Date(`${endBase}T12:00:00`);
+    endD.setDate(endD.getDate() + 1);
+    body.end = { date: endD.toISOString().slice(0, 10) };
+    return body;
+  }
+  const [sh, sm] = event.startTime.split(":").map((x) => Number(x));
+  const startIso = `${event.startDate}T${String(sh).padStart(2, "0")}:${String(sm ?? 0).padStart(2, "0")}:00`;
+  let endDate = event.endDate ?? event.startDate;
+  let endTime = event.endTime;
+  if (!endTime) {
+    const startMin = sh * 60 + (sm ?? 0);
+    const endMin = startMin + 60;
+    endTime = `${String(Math.floor(endMin / 60) % 24).padStart(2, "0")}:${String(endMin % 60).padStart(2, "0")}`;
+    if (endMin >= 24 * 60) endDate = event.startDate;
+  }
+  const [eh, em] = (endTime ?? "10:00").split(":").map((x) => Number(x));
+  const endIso = `${endDate}T${String(eh).padStart(2, "0")}:${String(em ?? 0).padStart(2, "0")}:00`;
+  body.start = { dateTime: startIso, timeZone: tz };
+  body.end = { dateTime: endIso, timeZone: tz };
+  return body;
+}
+
 export function syncWindow(): { timeMin: string; timeMax: string } {
   const today = new Date();
   const start = new Date(today);
