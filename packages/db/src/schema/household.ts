@@ -41,9 +41,16 @@ export const households = pgTable("households", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const users = pgTable("users", {
+export const users = pgTable(
+  "users",
+  {
   id: uuid("id").primaryKey().defaultRandom(),
-  email: varchar("email", { length: 320 }).notNull().unique(),
+  /** Set for email/Google accounts; null for household-provisioned username members */
+  email: varchar("email", { length: 320 }),
+  /** Better Auth username plugin — normalized login handle */
+  username: varchar("username", { length: 64 }),
+  /** Optional display form of username (casing preserved) */
+  displayUsername: varchar("display_username", { length: 64 }),
   emailVerified: boolean("email_verified").notNull().default(false),
   displayName: varchar("display_name", { length: 128 }),
   imageUrl: text("image_url"),
@@ -56,7 +63,9 @@ export const users = pgTable("users", {
     .default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+  },
+  (t) => [uniqueIndex("users_email_unique").on(t.email), uniqueIndex("users_username_unique").on(t.username)],
+);
 
 export const householdMembers = pgTable(
   "household_members",

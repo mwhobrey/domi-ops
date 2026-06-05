@@ -16,7 +16,7 @@ describe("dev-url", () => {
 
   it("builds oauth redirect URIs from PUBLIC_APP_URL", () => {
     expect(oauthRedirectUris("http://localhost:3000/")).toEqual({
-      login: "http://localhost:3000/auth/google/login/callback",
+      login: "http://localhost:3000/auth/callback/google",
       calendar: "http://localhost:3000/auth/google/calendar/callback",
     });
   });

@@ -63,12 +63,13 @@ export async function importFiles(ctx: ImportContext): Promise<MapperResult> {
         ),
       )
       .limit(1);
+    const filename = String(r.filename);
     if (existing) {
+      ctx.idMap.set(`file:${sourceId}`, importFileKey(ctx.householdId, sourceId, filename));
       result.skipped++;
       continue;
     }
 
-    const filename = String(r.filename);
     const localPath = homehubUploadPath(ctx.uploadsPath, filename);
     if (!existsSync(localPath)) {
       result.warnings.push(`file ${sourceId}: missing on disk: ${filename}`);

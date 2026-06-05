@@ -16,9 +16,9 @@ export function apiBase(): string {
 
 async function serverCookieHeader(): Promise<string | undefined> {
   const store = await cookies();
-  const session = store.get("whome_session");
-  if (!session) return undefined;
-  return `${session.name}=${session.value}`;
+  const all = store.getAll();
+  if (!all.length) return undefined;
+  return all.map((c) => `${c.name}=${c.value}`).join("; ");
 }
 
 export class ApiError extends Error {

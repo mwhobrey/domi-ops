@@ -7,15 +7,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixture = join(__dirname, "..", "fixtures", "minimal-homehub.db");
 const cli = join(__dirname, "..", "dist", "cli.js");
 
-const env = {
-  ...process.env,
-  DATABASE_URL: process.env.DATABASE_URL ?? "postgresql://whome:whome@127.0.0.1:5432/whome_unused",
-};
-
 const result = spawnSync(
   process.execPath,
   [cli, "--sqlite", fixture, "--dry-run"],
-  { env, encoding: "utf8" },
+  { env: process.env, encoding: "utf8" },
 );
 
 process.stdout.write(result.stdout ?? "");

@@ -18,7 +18,8 @@ npm run import:homehub -- --sqlite /path/to/homehub/data/app.db --uploads /path/
 
 ## Environment
 
-- `DATABASE_URL` — target Postgres (local Compose or prod)
+- **`--dry-run` / `npm run import:validate`:** SQLite path only — no Postgres, Docker, or `DATABASE_URL` required.
+- **Live import:** `DATABASE_URL` — target Postgres (local Compose or prod); copy `.env.example` or `export DATABASE_URL=postgresql://whome:whome@localhost:5432/whome`
 - For file uploads during import: `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`, `S3_FORCE_PATH_STYLE=true` (MinIO)
 
 ## Commands
@@ -43,8 +44,8 @@ npm run import:homehub -- --sqlite ./fixtures/homehub/app.db --uploads ./fixture
 
 ## Cutover order (production)
 
-1. **Import first** into prod Postgres (creates household + `@imported.local` placeholder users per `home_status` row).
-2. **Then** each family member signs in with Google once — they auto-join the imported household and set a nickname on **Profile**. Home/away defaults to Away (one click on Profile or Dashboard).
+1. **Import first** into prod Postgres (creates household + `@imported.local` stub users per SQLite `home_status` row with `legacy_display_name` for school/chore resolution).
+2. **Then** each family member signs in once (Google or email) — stubs are claimed via `HOUSEHOLD_MEMBER_EMAIL_MAP` and/or Google display name match. Set nicknames on **Profile** as needed. Home/away is imported from HomeHub `home_status.status`.
 3. Connect Google Calendar → full import.
 4. Swap Caddy to `web:3000` per [deploy/CUTOVER.md](../deploy/CUTOVER.md).
 

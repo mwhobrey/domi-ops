@@ -1,29 +1,19 @@
 import type { Context, Next } from "hono";
-import { getCookie } from "hono/cookie";
-import {
-  getSessionUserId,
-  resolveAuthContext,
-  SESSION_COOKIE,
-  type AuthContext,
-} from "@whome/auth";
+import { resolveAuthContext, type AuthContext, type WhomeBetterAuth } from "@whome/auth";
 import type { Env } from "@whome/config";
 import type { Database } from "@whome/db";
+
+export type { AuthContext };
 
 export type AppVariables = {
   auth: AuthContext | null;
   userId: string | null;
 };
 
-export function createAuthMiddleware(db: Database, env: Env) {
+export function createAuthMiddleware(db: Database, env: Env, auth: WhomeBetterAuth) {
   return async (c: Context<{ Variables: AppVariables }>, next: Next) => {
-    const secret = env.SESSION_SECRET;
-    if (!secret) {
-      c.set("auth", null);
-      c.set("userId", null);
-      return next();
-    }
-    const cookie = getCookie(c, SESSION_COOKIE);
-    const userId = await getSessionUserId(db, cookie, secret);
+    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    const userId = session?.user?.id ?? null;
     c.set("userId", userId);
     if (userId) {
       const ctx = await resolveAuthContext(db, userId);

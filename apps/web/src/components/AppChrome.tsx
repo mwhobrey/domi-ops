@@ -31,7 +31,8 @@ const nav = [
 ];
 
 export type ShellUser = {
-  email: string;
+  email: string | null;
+  username?: string | null;
   name: string | null;
   nickname: string | null;
   shownLabel: string | null;
@@ -176,7 +177,7 @@ export function AppChrome({
                 >
                   Profile
                 </Link>
-                <form action="/auth/logout" method="post">
+                <form action="/auth/sign-out" method="post">
                   <button
                     type="submit"
                     role="menuitem"
@@ -202,7 +203,9 @@ export function AppChrome({
                 <Avatar id={avatarId} name={label} src={user?.avatarUrl} size="md" />
                 <div className="min-w-0">
                   <p className="truncate font-medium">{label}</p>
-                  <p className="truncate text-xs text-[var(--color-text-muted)]">{user.email}</p>
+                  <p className="truncate text-xs text-[var(--color-text-muted)]">
+                    {user.username ? `@${user.username}` : user.email ?? "member"}
+                  </p>
                 </div>
               </div>
               <Link
@@ -212,7 +215,7 @@ export function AppChrome({
               >
                 Profile
               </Link>
-              <form action="/auth/logout" method="post">
+              <form action="/auth/sign-out" method="post">
                 <button
                   type="submit"
                   className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-[var(--color-border)]/40"

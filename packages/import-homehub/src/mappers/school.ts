@@ -1,4 +1,4 @@
-import { requireDb } from "../lib/require-db.js";
+import type { Database } from "@whome/db";
 import {
   importRecords,
   schoolAssignmentCategories,
@@ -11,6 +11,7 @@ import {
   schoolSubmissions,
 } from "@whome/db";
 import { and, eq } from "drizzle-orm";
+import { requireDb } from "../lib/require-db.js";
 import { defaultTeacherMemberId, resolveMemberId } from "../lib/member-resolve.js";
 import { sqliteTableExists } from "../lib/sqlite.js";
 import type { ImportContext, MapperResult } from "./types.js";
@@ -37,14 +38,15 @@ function mapAttendanceStatus(raw: unknown): "present" | "absent" | "late" | "exc
   return "present";
 }
 
-async function alreadyImported(
-  db: ImportContext["db"],
+/** Returns prior import target id so re-import runs can resolve FKs via `ctx.idMap`. */
+async function lookupImportTarget(
+  db: Database,
   householdId: string,
   sourceTable: string,
   sourceId: string,
-): Promise<boolean> {
+): Promise<string | null> {
   const [existing] = await db
-    .select()
+    .select({ targetId: importRecords.targetId })
     .from(importRecords)
     .where(
       and(
@@ -54,7 +56,7 @@ async function alreadyImported(
       ),
     )
     .limit(1);
-  return Boolean(existing);
+  return existing?.targetId ?? null;
 }
 
 export async function importSchool(ctx: ImportContext): Promise<MapperResult> {
@@ -78,6 +80,7 @@ export async function importSchool(ctx: ImportContext): Promise<MapperResult> {
       "school_submission",
       "school_grade_entry",
       "school_attendance",
+      "school_submission_artifact",
     ];
     let total = classCount;
     for (const t of tables) {
@@ -109,7 +112,9 @@ export async function importSchool(ctx: ImportContext): Promise<MapperResult> {
 
   for (const row of classes) {
     const sourceId = String(row.id);
-    if (await alreadyImported(db, ctx.householdId, "school_class", sourceId)) {
+    const existingClassId = await lookupImportTarget(db, ctx.householdId, "school_class", sourceId);
+    if (existingClassId) {
+      ctx.idMap.set(`school_class:${sourceId}`, existingClassId);
       result.skipped++;
       continue;
     }
@@ -157,7 +162,7 @@ export async function importSchool(ctx: ImportContext): Promise<MapperResult> {
 
   for (const row of enrollments) {
     const sourceId = String(row.id);
-    if (await alreadyImported(db, ctx.householdId, "school_enrollment", sourceId)) {
+    if (await lookupImportTarget(db, ctx.householdId, "school_enrollment", sourceId)) {
       result.skipped++;
       continue;
     }
@@ -206,11 +211,22 @@ export async function importSchool(ctx: ImportContext): Promise<MapperResult> {
 
   for (const row of categories) {
     const sourceId = String(row.id);
-    if (await alreadyImported(db, ctx.householdId, "school_assignment_category", sourceId)) {
+    const existingCategoryId = await lookupImportTarget(
+      db,
+      ctx.householdId,
+      "school_assignment_category",
+      sourceId,
+    );
+    if (existingCategoryId) {
+      ctx.idMap.set(`school_assignment_category:${sourceId}`, existingCategoryId);
       result.skipped++;
       continue;
     }
     const classId = row.class_id ? ctx.idMap.get(`school_class:${row.class_id}`) : null;
+    if (row.class_id && !classId) {
+      result.warnings.push(`category ${sourceId}: unknown class_id ${row.class_id}`);
+      continue;
+    }
     const [cat] = await db
       .insert(schoolAssignmentCategories)
       .values({
@@ -242,12 +258,22 @@ export async function importSchool(ctx: ImportContext): Promise<MapperResult> {
 
   for (const row of assignments) {
     const sourceId = String(row.id);
-    if (await alreadyImported(db, ctx.householdId, "school_assignment", sourceId)) {
+    const existingAssignmentId = await lookupImportTarget(
+      db,
+      ctx.householdId,
+      "school_assignment",
+      sourceId,
+    );
+    if (existingAssignmentId) {
+      ctx.idMap.set(`school_assignment:${sourceId}`, existingAssignmentId);
       result.skipped++;
       continue;
     }
     const classId = ctx.idMap.get(`school_class:${row.class_id}`);
-    if (!classId) continue;
+    if (!classId) {
+      result.warnings.push(`assignment ${sourceId}: unknown class_id ${row.class_id}`);
+      continue;
+    }
     const categoryId = row.category_id
       ? ctx.idMap.get(`school_assignment_category:${row.category_id}`)
       : null;
@@ -287,19 +313,32 @@ export async function importSchool(ctx: ImportContext): Promise<MapperResult> {
 
   for (const row of submissions) {
     const sourceId = String(row.id);
-    if (await alreadyImported(db, ctx.householdId, "school_submission", sourceId)) {
+    const existingSubmissionId = await lookupImportTarget(
+      db,
+      ctx.householdId,
+      "school_submission",
+      sourceId,
+    );
+    if (existingSubmissionId) {
+      ctx.idMap.set(`school_submission:${sourceId}`, existingSubmissionId);
       result.skipped++;
       continue;
     }
     const assignmentId = ctx.idMap.get(`school_assignment:${row.assignment_id}`);
-    if (!assignmentId) continue;
+    if (!assignmentId) {
+      result.warnings.push(`submission ${sourceId}: unknown assignment_id ${row.assignment_id}`);
+      continue;
+    }
     const studentMemberId = await resolveMemberId(
       db,
       ctx.householdId,
       String(row.student_id ?? ""),
       memberCache,
     );
-    if (!studentMemberId) continue;
+    if (!studentMemberId) {
+      result.warnings.push(`submission ${sourceId}: student "${row.student_id}" not mapped`);
+      continue;
+    }
     const [sub] = await db
       .insert(schoolSubmissions)
       .values({
@@ -334,12 +373,15 @@ export async function importSchool(ctx: ImportContext): Promise<MapperResult> {
 
   for (const row of grades) {
     const sourceId = String(row.id);
-    if (await alreadyImported(db, ctx.householdId, "school_grade_entry", sourceId)) {
+    if (await lookupImportTarget(db, ctx.householdId, "school_grade_entry", sourceId)) {
       result.skipped++;
       continue;
     }
     const submissionId = ctx.idMap.get(`school_submission:${row.submission_id}`);
-    if (!submissionId) continue;
+    if (!submissionId) {
+      result.warnings.push(`grade ${sourceId}: unknown submission_id ${row.submission_id}`);
+      continue;
+    }
     const [grade] = await db
       .insert(schoolGrades)
       .values({
@@ -370,12 +412,15 @@ export async function importSchool(ctx: ImportContext): Promise<MapperResult> {
 
     for (const row of artifacts) {
       const sourceId = String(row.id);
-      if (await alreadyImported(db, ctx.householdId, "school_submission_artifact", sourceId)) {
+      if (await lookupImportTarget(db, ctx.householdId, "school_submission_artifact", sourceId)) {
         result.skipped++;
         continue;
       }
       const submissionId = ctx.idMap.get(`school_submission:${row.submission_id}`);
-      if (!submissionId) continue;
+      if (!submissionId) {
+        result.warnings.push(`artifact ${sourceId}: unknown submission_id ${row.submission_id}`);
+        continue;
+      }
       const artifactType = String(row.artifact_type ?? "file");
       const fileKey =
         row.file_id != null ? ctx.idMap.get(`file:${row.file_id}`) : undefined;
@@ -409,7 +454,7 @@ export async function importSchool(ctx: ImportContext): Promise<MapperResult> {
 
     for (const row of attendance) {
       const sourceId = String(row.id);
-      if (await alreadyImported(db, ctx.householdId, "school_attendance", sourceId)) {
+      if (await lookupImportTarget(db, ctx.householdId, "school_attendance", sourceId)) {
         result.skipped++;
         continue;
       }
@@ -420,7 +465,12 @@ export async function importSchool(ctx: ImportContext): Promise<MapperResult> {
         String(row.student_id ?? ""),
         memberCache,
       );
-      if (!classId || !studentMemberId) continue;
+      if (!classId || !studentMemberId) {
+        result.warnings.push(
+          `attendance ${sourceId}: missing class or student mapping (class=${row.class_id}, student=${row.student_id})`,
+        );
+        continue;
+      }
       const [att] = await db
         .insert(schoolAttendance)
         .values({

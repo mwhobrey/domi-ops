@@ -53,6 +53,15 @@ export const envSchema = z
       ),
     /** Legacy display name → Google email, e.g. Mom:mom@gmail.com,Dad:dad@gmail.com */
     HOUSEHOLD_MEMBER_EMAIL_MAP: z.string().optional(),
+    SMTP_HOST: z.string().optional(),
+    SMTP_PORT: z.coerce.number().int().positive().optional(),
+    SMTP_USER: z.string().optional(),
+    SMTP_PASSWORD: z.string().optional(),
+    SMTP_FROM: z.string().email().optional(),
+    EMAIL_VERIFICATION_REQUIRED: z
+      .string()
+      .optional()
+      .transform((v) => v === "true" || v === "1"),
     /** Local dev: native (npm run dev :3000) or docker (compose web :3001) — validates PUBLIC_APP_URL in development */
     WHOME_DEV_PROFILE: z.enum(["native", "docker"]).optional(),
     /** Open-Meteo forecast (optional dashboard weather widget) */
@@ -145,4 +154,16 @@ export function loadEnv(raw?: NodeJS.ProcessEnv): Env {
 
 export function isModuleEnabled(env: Env, module: string): boolean {
   return env.MODULES_ENABLED.includes(module);
+}
+
+export {
+  IMPORTED_STUB_EMAIL_DOMAIN,
+  importedStubEmail,
+  isImportedStubEmail,
+  slugLegacyName,
+} from "./imported-stub.js";
+export { parseHouseholdMemberEmailMap } from "./household-member-map.js";
+
+export function isSmtpConfigured(env: Env): boolean {
+  return Boolean(env.SMTP_HOST && env.SMTP_FROM);
 }

@@ -2,6 +2,7 @@ import type { Env } from "@whome/config";
 import type { Database } from "@whome/db";
 import { homeStatus, householdMembers, households, users } from "@whome/db";
 import { and, eq } from "drizzle-orm";
+import { tryClaimImportedStubMember } from "./claim-imported-stub.js";
 import { findOrCreateUser } from "./bootstrap.js";
 import { getImportedHouseholdId } from "./import-records.js";
 import { memberShownLabel } from "./member-label.js";
@@ -45,7 +46,7 @@ async function ensureHomeStatusRow(
 /** Attach Google user to the imported household (no HomeHub nickname map). */
 export async function joinImportedHousehold(
   db: Database,
-  _env: Env,
+  env: Env,
   profile: {
     email: string;
     displayName?: string;
@@ -60,6 +61,29 @@ export async function joinImportedHousehold(
 
   const user = await findOrCreateUser(db, profile);
   const name = defaultNameFromProfile(profile);
+
+  const claimed = await tryClaimImportedStubMember(db, env, householdId, user.id, profile);
+  if (claimed) {
+    const [claimedMember] = await db
+      .select({
+        id: householdMembers.id,
+        name: householdMembers.name,
+        nickname: householdMembers.nickname,
+        publicLabel: householdMembers.publicLabel,
+      })
+      .from(householdMembers)
+      .where(eq(householdMembers.id, claimed.memberId))
+      .limit(1);
+    if (claimedMember) {
+      await ensureHomeStatusRow(
+        db,
+        householdId,
+        claimedMember.id,
+        memberShownLabel(claimedMember),
+      );
+    }
+    return { userId: user.id, householdId };
+  }
 
   const [onImported] = await db
     .select({

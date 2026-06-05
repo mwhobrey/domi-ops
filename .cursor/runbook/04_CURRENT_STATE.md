@@ -18,13 +18,17 @@
 - Linear: WHO team; projects/milestones/issues in `docs/LINEAR.md` (module backlog WHO-14–WHO-75 in `docs/MODULE_AUDIT.md`); agent workflow `.cursor/rules/linear-workflow.mdc`.
 - **CI:** `.github/workflows/ci.yml` — typecheck, build, test on push/PR.
 - **Tests:** Vitest — config, crypto, import dry-run mappers (`npm run test`).
-- **Import validate:** `npm run import:validate` — fixture dry-run with `--strict`.
+- **Import validate:** `npm run import:validate` — fixture dry-run; no `DATABASE_URL` or Postgres required.
 
 ### Auth
 
-- Google OAuth login, session cookie, logout.
-- **Post-import join:** Google login auto-joins imported household (`@whome/auth/join-imported.ts`); profile name/nickname + public label; no `HOUSEHOLD_MEMBER_EMAIL_MAP` required.
-- OAuth state in Redis (login + calendar flows).
+- **Better Auth** (`packages/auth/src/better-auth.ts`): email/password + **username plugin** + optional Google OAuth; Drizzle `ba_*` tables (`0015`); `users.username` / nullable `users.email` (`0016`).
+- Login UI: `/login` — email or username sign-in; owner email sign-up; optional Google; logout `POST /auth/sign-out`.
+- **Household provisioning:** `POST /api/core/household/members/provision` (owner/admin) creates username-only members (`provision-member.ts`, no synthetic email).
+- **Email verification:** Better Auth `emailVerification` + optional SMTP (`SMTP_*`, `EMAIL_VERIFICATION_REQUIRED`); dev logs link when SMTP unset (`packages/auth/src/mail.ts`).
+- **Post-import join:** session hook auto-joins imported household; stub members claimed via `HOUSEHOLD_MEMBER_EMAIL_MAP` / display name (`claim-imported-stub.ts` → `join-imported.ts`).
+- Whome session DTO: `GET /auth/session` (household member context for API/UI).
+- Calendar OAuth remains separate (`/auth/google/calendar/*`); state in Redis.
 
 ### Web UI (`apps/web`)
 
@@ -45,9 +49,12 @@
 
 ### School module
 
-- API: classes CRUD, enrollments, assignments CRUD, submit, grade, submission artifacts (`school.ts`).
-- UI: `/school`, `/school/class/[id]`, `/school/assignment/[id]` with presign upload client.
-- Import: `school_submission_artifact` → `school_submission_artifacts` + S3 keys from file mapper.
+- API: classes CRUD (PATCH term/teacher/schedule/archived), enrollments, assignments CRUD (incl. `categoryId`), **`GET /classes/:id/gradebook`**, categories CRUD, submit, grade, artifacts (`school.ts`); **`GET /api/school/context`** + role-scoped **`GET /classes`** / **`GET /glance`** (archived excluded by default); per-route **`access`** object from `apps/api/src/lib/school-access.ts` (household role + enrollment role).
+- UI: **role-aware** (WHO-47) — view banner on `/school`; admin/staff see create class + full roster/gradebook; **student** sees enrolled classes only, own progress, submit workflow, no teacher actions; **observer** read-only. Assignment sheet includes category picker when categories exist.
+- Routes: `/school`, `/school/class/[id]`, `/school/class/[id]/gradebook`, `/school/assignment/[id]` — conditional sections per `SchoolClassAccess`.
+- Parity matrix: `docs/SCHOOL_PARITY.md` (WHO-41).
+- Manual QA runbook: `.cursor/runbook/05_SCHOOL_QA.md` (smoke routes, WHO-41–48 matrix, import SQL checks).
+- Import: `school_submission_artifact` → `school_submission_artifacts` + S3 keys from file mapper; re-import hydrates `idMap` from `import_records` (school + files mappers).
 
 ### Calendar sync module
 
@@ -64,7 +71,7 @@
 ### Import tooling
 
 - CLI `npm run import:homehub` with `--dry-run`, `--strict`.
-- Mappers: **notices**, **todo_item** (+ chore), **personal_calendar**, school artifacts, files→S3, full school LMS rows.
+- Mappers: **notices**, **todo_item** (+ chore), **personal_calendar**, **`home_status` stub members** (single-pass school resolution), school artifacts, files→S3, full school LMS rows.
 - `docs/IMPORT_REPORT.example.json` regression baseline (fixture dry-run).
 - Real droplet `app.db` gate: operator copies DB per `docs/HOMEHUB_IMPORT.md` (not automated in CI).
 

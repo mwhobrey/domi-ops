@@ -1,4 +1,9 @@
+import { randomBytes } from "node:crypto";
 import type { Env } from "@whome/config";
+
+export function randomOAuthState(): string {
+  return randomBytes(24).toString("base64url");
+}
 
 /** OAuth callbacks must match Google Console — use the URL users see (PUBLIC_APP_URL), not internal API_URL. */
 export function googleOAuthRedirectUri(env: Env, callbackPath: string): string {

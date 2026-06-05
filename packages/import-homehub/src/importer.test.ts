@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
 import { importCalendar } from "./mappers/calendar.js";
+import { importHomeStatusMembers } from "./mappers/home-status-members.js";
 import { importHousehold } from "./mappers/household.js";
 import { importNotices } from "./mappers/notices.js";
 import { importTasks } from "./mappers/tasks.js";
@@ -67,6 +68,20 @@ describe("import mappers dry-run", () => {
         "Test Household",
       );
       expect(result.imported).toBeGreaterThan(0);
+
+      const homeStatusCount = (
+        sqlite.prepare("SELECT COUNT(*) as c FROM home_status").get() as { c: number }
+      ).c;
+      const members = await importHomeStatusMembers({
+        sqlite,
+        dryRun: true,
+        householdId: "00000000-0000-0000-0000-000000000001",
+        databaseUrl: "postgresql://whome:whome@127.0.0.1:5432/whome_unused",
+        idMap: new Map(),
+        db: testDb,
+      });
+      expect(members.imported).toBe(homeStatusCount);
+      expect(homeStatusCount).toBeGreaterThan(0);
     } finally {
       sqlite.close();
     }

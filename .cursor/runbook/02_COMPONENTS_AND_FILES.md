@@ -95,7 +95,8 @@ whome/
 | Path | Responsibility |
 |------|----------------|
 | `src/schema/household.ts` | `households`, `users`, `household_members` |
-| `src/schema/auth.ts` | `auth_sessions`, `oauth_accounts` |
+| `src/schema/auth.ts` | legacy `oauth_accounts` |
+| `src/schema/better-auth.ts` | `ba_sessions`, `ba_accounts`, `ba_verifications` |
 | `src/schema/calendar.ts` | Calendars, events, Google link tables, outbox |
 | `src/schema/school.ts` | LMS tables |
 | `src/schema/core.ts` | Shopping, chores, notes, expenses, notices, home_status |

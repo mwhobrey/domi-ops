@@ -1,10 +1,11 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { createBetterAuth } from "@whome/auth";
 import { loadEnv, isModuleEnabled } from "@whome/config";
 import { createDb } from "@whome/db";
 import { createAuthMiddleware, type AppVariables } from "./middleware/auth.js";
-import { authRoutes } from "./routes/auth.js";
+import { whomeSessionRoutes } from "./routes/auth.js";
 import { calendarRoutes } from "./routes/calendar.js";
 import { coreRoutes } from "./routes/core.js";
 import { googleCalendarAuthRoutes } from "./routes/google-calendar-auth.js";
@@ -14,6 +15,7 @@ import { schoolUploadRoutes } from "./routes/school-upload.js";
 
 const env = loadEnv();
 const db = createDb(env.DATABASE_URL);
+const betterAuth = createBetterAuth(db, env);
 
 const app = new Hono<{ Variables: AppVariables }>();
 
@@ -25,11 +27,14 @@ app.use(
   }),
 );
 
-app.use("*", createAuthMiddleware(db, env));
+app.route("/auth/google/calendar", googleCalendarAuthRoutes(db, env));
+app.route("/auth", whomeSessionRoutes(db, betterAuth));
+
+app.on(["POST", "GET"], "/auth/*", (c) => betterAuth.handler(c.req.raw));
+
+app.use("*", createAuthMiddleware(db, env, betterAuth));
 
 app.route("/", healthRoutes(db));
-app.route("/auth", authRoutes(db, env));
-app.route("/auth/google/calendar", googleCalendarAuthRoutes(db, env));
 app.route("/api/calendar", calendarRoutes(db, env));
 app.route("/api/core", coreRoutes(db, env));
 app.route("/api/school", schoolRoutes(db, env));

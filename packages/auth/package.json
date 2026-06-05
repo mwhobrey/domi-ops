@@ -17,10 +17,13 @@
     "@whome/config": "*",
     "@whome/crypto": "*",
     "@whome/db": "*",
-    "drizzle-orm": "^0.44.2"
+    "better-auth": "^1.6.14",
+    "drizzle-orm": "^0.44.2",
+    "nodemailer": "^8.0.10"
   },
   "devDependencies": {
     "@types/node": "^22.15.30",
+    "@types/nodemailer": "^8.0.0",
     "typescript": "^5.8.3"
   }
 }

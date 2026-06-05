@@ -63,6 +63,7 @@ Workspace-level **Bug** / **Feature** may exist; attach in Linear UI if needed. 
 | M2 — Profile preferences | [WHO-7](https://linear.app/mikewhob-whome/issue/WHO-7) |
 | M3 — Profile photos | [WHO-8](https://linear.app/mikewhob-whome/issue/WHO-8) |
 | M4 — Profile UX redesign | [WHO-16](https://linear.app/mikewhob-whome/issue/WHO-16), [WHO-17](https://linear.app/mikewhob-whome/issue/WHO-17), [WHO-18](https://linear.app/mikewhob-whome/issue/WHO-18) |
+| M5 — Better Auth & accounts | [WHO-88](https://linear.app/mikewhob-whome/issue/WHO-88) (migration + username), [WHO-89](https://linear.app/mikewhob-whome/issue/WHO-89) (email verification) |
 
 ### [Dashboard & weather](https://linear.app/mikewhob-whome/project/dashboard-and-weather-b7a05f35afba)
 
@@ -85,6 +86,7 @@ Workspace-level **Bug** / **Feature** may exist; attach in Linear UI if needed. 
 |-----------|--------|
 | M1 — DB & runbook hygiene | [WHO-9](https://linear.app/mikewhob-whome/issue/WHO-9) |
 | M2 — Dev ports & OAuth | [WHO-14](https://linear.app/mikewhob-whome/issue/WHO-14), [WHO-15](https://linear.app/mikewhob-whome/issue/WHO-15) |
+| M3 — HomeHub import | [WHO-90](https://linear.app/mikewhob-whome/issue/WHO-90) (single-pass `home_status` stubs) |
 
 ### [Calendar](https://linear.app/mikewhob-whome/project/calendar-f2b23dc55276)
 
@@ -103,6 +105,7 @@ Workspace-level **Bug** / **Feature** may exist; attach in Linear UI if needed. 
 | M2 — Class & roster UX | [WHO-42](https://linear.app/mikewhob-whome/issue/WHO-42), [WHO-43](https://linear.app/mikewhob-whome/issue/WHO-43) |
 | M3 — Assignments & grading | [WHO-44](https://linear.app/mikewhob-whome/issue/WHO-44)–[WHO-46](https://linear.app/mikewhob-whome/issue/WHO-46) |
 | M4 — Role-aware views | [WHO-47](https://linear.app/mikewhob-whome/issue/WHO-47) |
+| M5 — QA runbook | [WHO-87](https://linear.app/mikewhob-whome/issue/WHO-87) (`.cursor/runbook/05_SCHOOL_QA.md`) |
 
 ### [Shopping](https://linear.app/mikewhob-whome/project/shopping-418cd7a0c63a)
 

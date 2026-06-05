@@ -46,11 +46,12 @@ Prod adds external `proxy` network for Caddy (`docker-compose.prod.yml`).
 
 ### 1. Authentication
 
-1. User hits `/auth/google/login` (proxied to API).
-2. API (`apps/api/src/routes/auth.ts`): in-memory OAuth state → Google token exchange → `findOrCreateUser` → `bootstrapHouseholdOnLogin` → `createSession` → cookie `whome_session` (`@whome/auth`).
-3. Callback redirects to `PUBLIC_APP_URL/dashboard`.
-4. Every API request: `createAuthMiddleware` reads cookie, `getSessionUserId`, `resolveAuthContext` → `auth` + `userId` on Hono context (`apps/api/src/middleware/auth.ts`).
-5. Protected pages: Next middleware fetches `/auth/session` with forwarded cookies (`apps/web/src/middleware.ts`).
+1. User hits `/login` — email/password or Google via **Better Auth** (`packages/auth/src/better-auth.ts`).
+2. Next proxies `/auth/*` to API (`apps/web/src/app/auth/[[...path]]/route.ts`); BA handler on `POST|GET /auth/*` (`apps/api/src/index.ts`).
+3. On session create: `ensureHouseholdMembership` joins imported household or bootstraps new one.
+4. Every API request: `createAuthMiddleware` → `auth.api.getSession` → `resolveAuthContext` → `auth` + `userId` on Hono context.
+5. Whome DTO: `GET /auth/session` (household member fields for UI). Protected pages: Next middleware checks that endpoint (`apps/web/src/middleware.ts`).
+6. Calendar connect: separate OAuth at `/auth/google/calendar/*` (encrypted tokens in `calendar_connections`).
 
 ### 2. Core household data (CRUD)
 

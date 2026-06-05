@@ -14,7 +14,7 @@ export async function importHousehold(
 
   if (ctx.dryRun) {
     result.imported = 1;
-    result.warnings.push("dry-run: would create household (members join on Google login)");
+    result.warnings.push("dry-run: would create household + home_status stub members");
     return { householdId: "00000000-0000-0000-0000-000000000000", result };
   }
 
@@ -43,9 +43,6 @@ export async function importHousehold(
   });
 
   result.imported = 1;
-  result.warnings.push(
-    "home_status nicknames not imported — members set nicknames in profile after Google login",
-  );
 
   return { householdId: household.id, result };
 }

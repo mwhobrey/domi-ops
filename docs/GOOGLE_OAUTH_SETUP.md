@@ -31,13 +31,13 @@ whome sends redirects based on **`PUBLIC_APP_URL`** (Next proxies `/auth/*` to t
 
 | Purpose | Redirect URI |
 |---------|----------------|
-| Sign in | `{PUBLIC_APP_URL}/auth/google/login/callback` |
+| Sign in (Better Auth) | `{PUBLIC_APP_URL}/auth/callback/google` |
 | Calendar sync | `{PUBLIC_APP_URL}/auth/google/calendar/callback` |
 
 **Local Docker example** (`PUBLIC_APP_URL=http://localhost:3001`):
 
 ```
-http://localhost:3001/auth/google/login/callback
+http://localhost:3001/auth/callback/google
 http://localhost:3001/auth/google/calendar/callback
 ```
 
@@ -76,16 +76,16 @@ docker compose up -d api web --build
 
 Open (while logged out):
 
-`http://localhost:3001/auth/google/login`
+`http://localhost:3001/login` → **Continue with Google**
 
-On Google’s screen, check the address bar `redirect_uri` query param — it must **exactly** match one URI in GCP (encoded form is normal).
+On Google’s screen, check the address bar `redirect_uri` query param — it must **exactly** match `{PUBLIC_APP_URL}/auth/callback/google` in GCP (encoded form is normal).
 
 ## 8. Production (DigitalOcean + Caddy)
 
 Use HTTPS everywhere:
 
 - Origin: `https://home.yourdomain.com`
-- Redirects: `https://home.yourdomain.com/auth/google/login/callback` and `.../calendar/callback`
+- Redirects: `https://home.yourdomain.com/auth/callback/google` and `.../auth/google/calendar/callback`
 - `PUBLIC_APP_URL=https://home.yourdomain.com`
 
 Add the production domain under **Firebase-style** authorized domains only if you use Firebase; whome does not require Firebase.

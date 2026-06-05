@@ -12,8 +12,10 @@ const program = new Command()
   .option("--household-name <name>", "Name for the new household", "Imported Household")
   .action(async (opts) => {
     const databaseUrl = process.env.DATABASE_URL;
-    if (!databaseUrl) {
-      console.error("DATABASE_URL is required");
+    if (!opts.dryRun && !databaseUrl) {
+      console.error(
+        "DATABASE_URL is required for live import. Copy .env.example to .env or run: export DATABASE_URL=postgresql://whome:whome@localhost:5432/whome",
+      );
       process.exit(1);
     }
     const report = await runImport({

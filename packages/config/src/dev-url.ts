@@ -27,7 +27,7 @@ export function oauthRedirectUris(publicAppUrl: string): {
 } {
   const base = publicAppUrl.replace(/\/$/, "");
   return {
-    login: `${base}/auth/google/login/callback`,
+    login: `${base}/auth/callback/google`,
     calendar: `${base}/auth/google/calendar/callback`,
   };
 }

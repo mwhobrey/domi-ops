@@ -20,7 +20,7 @@
 | Service | Role |
 |---------|------|
 | `web` | Next.js UI, proxies `/api` to `api` |
-| `api` | Hono REST, OAuth callbacks, auth (TBD) |
+| `api` | Hono REST, Better Auth (`/auth/*`), calendar OAuth |
 | `worker` | BullMQ: Google pull/push, recurring materialization |
 | `postgres` | Primary data |
 | `redis` | Queues + rate limits |

@@ -6,6 +6,7 @@ import { createDb } from "@whome/db";
 import { importCalendar } from "./mappers/calendar.js";
 import { importExpenses } from "./mappers/expenses.js";
 import { importFiles } from "./mappers/files.js";
+import { importHomeStatusMembers } from "./mappers/home-status-members.js";
 import { importHousehold } from "./mappers/household.js";
 import { importNotices } from "./mappers/notices.js";
 import { importNotes } from "./mappers/notes.js";
@@ -38,7 +39,12 @@ export async function runImport(options: ImportOptions): Promise<ImportReport> {
       .all() as { name: string }[];
     report.counts.sqlite_tables = tables.length;
 
-    const db = createDb(options.databaseUrl);
+    if (!options.dryRun && !options.databaseUrl) {
+      report.errors.push("DATABASE_URL is required for live import");
+      return report;
+    }
+
+    const db = options.dryRun ? undefined : createDb(options.databaseUrl!);
 
     const { householdId, result: hhResult } = await importHousehold(
       {
@@ -64,6 +70,11 @@ export async function runImport(options: ImportOptions): Promise<ImportReport> {
       idMap: new Map(),
       db,
     };
+
+    const memberResult = await importHomeStatusMembers(ctx);
+    report.counts.home_status_members = memberResult.imported;
+    report.counts.home_status_members_skipped = memberResult.skipped;
+    report.warnings.push(...memberResult.warnings);
 
     const steps = [
       ["notices", importNotices],

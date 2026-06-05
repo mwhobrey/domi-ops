@@ -1,5 +1,13 @@
 import { Hono } from "hono";
-import { memberShownLabel, type MemberPublicLabel } from "@whome/auth";
+import {
+  canProvisionMembers,
+  isUsernameAvailable,
+  listHouseholdMembersWithAuth,
+  memberShownLabel,
+  ProvisionMemberError,
+  provisionUsernameMember,
+  type MemberPublicLabel,
+} from "@whome/auth";
 import type { Env } from "@whome/config";
 import { isModuleEnabled } from "@whome/config";
 import type { Database } from "@whome/db";
@@ -51,7 +59,7 @@ function posterLabel(auth: AuthContext): string {
       name: auth.name,
       nickname: auth.nickname,
       publicLabel: auth.publicLabel as MemberPublicLabel,
-    }) || auth.email
+    }) || auth.email || auth.username || "Member"
   );
 }
 
@@ -443,7 +451,7 @@ export function coreRoutes(db: Database, env: Env) {
         householdId: auth.householdId,
         description: body.description,
         dueDate: body.dueDate ?? null,
-        createdByDisplayName: auth.email,
+        createdByDisplayName: posterLabel(auth),
       })
       .returning();
     return c.json({ chore: row }, 201);
@@ -490,7 +498,7 @@ export function coreRoutes(db: Database, env: Env) {
       .values({
         householdId: auth.householdId,
         content: body.content,
-        createdByDisplayName: auth.email,
+        createdByDisplayName: posterLabel(auth),
       })
       .returning();
     return c.json({ note: row }, 201);
@@ -542,7 +550,7 @@ export function coreRoutes(db: Database, env: Env) {
         amount: body.amount,
         category: body.category,
         expenseDate: body.expenseDate,
-        createdByDisplayName: auth.email,
+        createdByDisplayName: posterLabel(auth),
       })
       .returning();
     return c.json({ expense: row }, 201);
@@ -600,6 +608,7 @@ export function coreRoutes(db: Database, env: Env) {
 
     return c.json({
       email: auth.email,
+      username: auth.username,
       name: auth.name,
       nickname: auth.nickname,
       publicLabel: auth.publicLabel,
@@ -793,6 +802,62 @@ export function coreRoutes(db: Database, env: Env) {
       .set(body)
       .where(and(eq(expenses.id, id), eq(expenses.householdId, auth.householdId)));
     return c.json({ ok: true });
+  });
+
+  app.get("/household/members", async (c) => {
+    const auth = c.get("auth")!;
+    if (!canProvisionMembers(auth.role)) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+    const members = await listHouseholdMembersWithAuth(db, auth.householdId);
+    return c.json({ members });
+  });
+
+  app.get("/household/usernames/available", async (c) => {
+    const auth = c.get("auth")!;
+    if (!canProvisionMembers(auth.role)) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+    const username = c.req.query("username") ?? "";
+    const available = await isUsernameAvailable(db, username);
+    return c.json({ available });
+  });
+
+  app.post("/household/members/provision", async (c) => {
+    const auth = c.get("auth")!;
+    if (!canProvisionMembers(auth.role)) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+    const body = await c.req.json<{
+      username?: string;
+      displayName?: string;
+      password?: string;
+      role?: "child" | "member" | "guest";
+      nickname?: string;
+    }>();
+    if (!body.username?.trim() || !body.password || !body.displayName?.trim()) {
+      return c.json({ error: "username_display_name_and_password_required" }, 400);
+    }
+    const role =
+      body.role === "child" || body.role === "guest" || body.role === "member"
+        ? body.role
+        : "child";
+    try {
+      const created = await provisionUsernameMember(db, {
+        householdId: auth.householdId,
+        username: body.username,
+        displayName: body.displayName,
+        password: body.password,
+        role,
+        nickname: body.nickname,
+      });
+      return c.json(created, 201);
+    } catch (e) {
+      if (e instanceof ProvisionMemberError) {
+        return c.json({ error: e.code, message: e.message }, 400);
+      }
+      throw e;
+    }
   });
 
   return app;

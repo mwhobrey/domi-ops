@@ -12,7 +12,8 @@ export interface AuthContext {
   userId: string;
   householdId: string;
   memberId: string;
-  email: string;
+  email: string | null;
+  username: string | null;
   name: string | null;
   nickname: string | null;
   publicLabel: "name" | "nickname";
@@ -33,7 +34,7 @@ export async function bootstrapHouseholdOnLogin(
   if (existing) return existing.householdId;
 
   if (await hasImportRecords(db)) {
-    throw new Error("Imported household exists; sign in with Google to join it");
+    throw new Error("Imported household exists; sign in to join it");
   }
 
   if (env.DEPLOYMENT_MODE !== "single") {
@@ -78,6 +79,7 @@ export async function resolveAuthContext(
     householdId: member.householdId,
     memberId: member.id,
     email: user.email,
+    username: user.username,
     name: member.name,
     nickname: member.nickname,
     publicLabel: member.publicLabel,

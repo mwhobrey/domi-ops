@@ -17,6 +17,7 @@
 | Fixing auth, cookies, or Docker networking | [01_ARCHITECTURE.md](./01_ARCHITECTURE.md) (auth/proxy section) + [03_RULES_AND_STANDARDS.md](./03_RULES_AND_STANDARDS.md) |
 | Shipping or deploying | [03_RULES_AND_STANDARDS.md](./03_RULES_AND_STANDARDS.md) + `docker-compose.prod.yml`, `deploy/Caddyfile.example` |
 | Prioritizing work | [04_CURRENT_STATE.md](./04_CURRENT_STATE.md) |
+| Manual School QA / import check | [05_SCHOOL_QA.md](./05_SCHOOL_QA.md) |
 
 ## Table of contents
 
@@ -26,6 +27,7 @@
 | [02_COMPONENTS_AND_FILES.md](./02_COMPONENTS_AND_FILES.md) | Directory map, modules, config/routing/state |
 | [03_RULES_AND_STANDARDS.md](./03_RULES_AND_STANDARDS.md) | Conventions, errors, testing, deployment, gotchas |
 | [04_CURRENT_STATE.md](./04_CURRENT_STATE.md) | Working vs broken, next steps |
+| [05_SCHOOL_QA.md](./05_SCHOOL_QA.md) | School module manual QA + post-import verification |
 
 ## Supplementary docs (outside runbook)
 

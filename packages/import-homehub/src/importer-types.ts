@@ -3,7 +3,8 @@ export interface ImportOptions {
   uploadsPath?: string;
   dryRun: boolean;
   householdName: string;
-  databaseUrl: string;
+  /** Required for live import; omitted for `--dry-run` (SQLite-only validation). */
+  databaseUrl?: string;
 }
 
 export interface ImportReport {

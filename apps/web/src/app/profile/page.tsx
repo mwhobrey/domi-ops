@@ -1,12 +1,17 @@
 import { AppShell } from "../../components/AppShell";
+import { HouseholdMembersPanel } from "../../components/HouseholdMembersPanel";
 import { ProfileEditor } from "../../components/ProfileEditor";
 import { apiFetch } from "../../lib/api";
 import { loadErrorMessage } from "../../lib/load-error";
 import { Alert } from "../../components/ui";
 
+type HouseholdRole = "owner" | "admin" | "member" | "child" | "guest";
+
 export default async function ProfilePage() {
   let profile = {
-    email: "",
+    email: null as string | null,
+    username: null as string | null,
+    role: "member" as HouseholdRole,
     name: null as string | null,
     nickname: null as string | null,
     publicLabel: "name" as const,
@@ -36,7 +41,10 @@ export default async function ProfilePage() {
           {loadError}. <a href="/profile">Retry</a>
         </Alert>
       ) : (
-        <ProfileEditor initial={profile} />
+        <div className="space-y-8">
+          <ProfileEditor initial={profile} />
+          <HouseholdMembersPanel canManage={profile.role === "owner" || profile.role === "admin"} />
+        </div>
       )}
     </AppShell>
   );

@@ -12,8 +12,8 @@ Implement one file per domain. Each mapper:
 2. `calendar.ts` — personal_calendar, reminder, recurring_reminder, google tables
 3. `tasks.ts` — chore, todo_list, todo_item
 4. `shopping.ts`, `notes.ts`, `expenses.ts`
-5. `school.ts` — school_* tables
-6. `files.ts` — copy uploads → S3, file metadata
+5. `files.ts` — copy uploads → S3, file metadata (**before school** in `importer.ts` so artifact `s3_key` resolves)
+6. `school.ts` — school_* tables
 
 ## HomeHub reference
 

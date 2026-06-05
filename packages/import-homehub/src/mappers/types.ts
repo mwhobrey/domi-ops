@@ -5,10 +5,11 @@ export interface ImportContext {
   sqlite: Database.Database;
   dryRun: boolean;
   householdId: string;
-  databaseUrl: string;
+  /** Present for live import; omitted for `--dry-run`. */
+  databaseUrl?: string;
   uploadsPath?: string;
   idMap: Map<string, string>;
-  db: ReturnType<typeof createDb>;
+  db?: ReturnType<typeof createDb>;
 }
 
 export interface MapperResult {

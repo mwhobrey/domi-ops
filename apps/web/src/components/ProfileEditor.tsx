@@ -29,7 +29,8 @@ export function ProfileEditor({
   initial,
 }: {
   initial: {
-    email: string;
+    email: string | null;
+    username?: string | null;
     memberId: string;
     name: string | null;
     nickname: string | null;
@@ -138,7 +139,10 @@ export function ProfileEditor({
     <Card className="max-w-lg">
       <CardBody className="space-y-6">
         <p className="text-sm text-[var(--color-text-muted)]">
-          Signed in as <span className="text-[var(--color-text)]">{initial.email}</span>
+          Signed in as{" "}
+          <span className="text-[var(--color-text)]">
+            {initial.username ? `@${initial.username}` : initial.email ?? "member"}
+          </span>
         </p>
         <p className="text-sm">
           Shown to household as <span className="font-medium">{shownLabel}</span>

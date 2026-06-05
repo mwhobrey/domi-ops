@@ -23,7 +23,8 @@ export async function AppShell({
     const session = await apiFetch<{
       authenticated: boolean;
       user?: {
-        email: string;
+        email: string | null;
+        username?: string | null;
         memberId: string;
         name: string | null;
         nickname: string | null;
@@ -35,6 +36,7 @@ export async function AppShell({
       const u = session.user;
       user = {
         email: u.email,
+        username: u.username ?? null,
         memberId: u.memberId,
         name: u.name,
         nickname: u.nickname,

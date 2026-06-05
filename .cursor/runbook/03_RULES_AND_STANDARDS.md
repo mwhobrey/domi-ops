@@ -11,11 +11,11 @@
 
 ### Naming
 
-- DB tables: snake_case plural (`shopping_items`, `auth_sessions`).
+- DB tables: snake_case plural (`shopping_items`, `ba_sessions`).
 - Drizzle schema files: domain nouns (`household.ts`, `calendar.ts`).
 - API routes: Hono `app.get("/shopping")` under mount prefix (`/api/core` + `/shopping` → `/api/core/shopping`).
 - Sync job names: dotted strings (`google.calendar.pull`, `google.calendar.full_import`).
-- Session cookie: `whome_session` (`@whome/auth` — verify in `packages/auth/src/session.ts` if changing).
+- Session cookies: Better Auth (`ba_sessions` table; cookie names managed by BA — forward all cookies in server `apiFetch`).
 
 ### Formatting & linting
 
@@ -62,7 +62,7 @@
 
 | State | Owner | Rule |
 |-------|-------|------|
-| Session | Postgres `auth_sessions` + cookie | API is source of truth; web never stores tokens in localStorage |
+| Session | Better Auth `ba_sessions` + HTTP-only cookie | API is source of truth; web never stores tokens in localStorage |
 | OAuth CSRF state | Redis keys `oauth:login:*`, `oauth:calendar:*` (10m TTL) | Requires `REDIS_URL`; API uses `ioredis` |
 | Google tokens | `oauth_accounts` encrypted | Use `@whome/crypto`; never log decrypted tokens |
 | UI data | Server fetch per request | No shared client store; refetch on navigation |
@@ -173,7 +173,7 @@ This repo often uses hand-written numbered migrations (`0007_home_status_presenc
 ## Gotchas & technical debt
 
 1. **Auth proxy vs rewrite** — `/auth` must stay on Route Handler; rewrites break `Set-Cookie` domain for Docker `:3001`.
-2. **Two Google OAuth flows** — login (`/auth/google/login`) and calendar (`/auth/google/calendar/*`); both redirect URIs must be in Google Cloud Console (`docs/GOOGLE_OAUTH_SETUP.md`).
+2. **Two Google OAuth flows** — login via Better Auth (`/auth/callback/google`) and calendar (`/auth/google/calendar/*`); both redirect URIs must be in Google Cloud Console (`docs/GOOGLE_OAUTH_SETUP.md`).
 3. **Middleware dev bypass** — Broken API in dev still shows protected pages; production does not bypass.
 4. **`requireAuth` dev bypass** — API allows unauthenticated access to protected routes when `AUTH_REQUIRED=false` in development.
 5. **Calendar push / recurring** — Jobs enqueue but worker only warns (`packages/calendar-sync/src/sync.ts`).

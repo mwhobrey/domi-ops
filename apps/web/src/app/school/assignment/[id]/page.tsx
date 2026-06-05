@@ -1,6 +1,7 @@
 import { AppShell } from "../../../../components/AppShell";
 import { SchoolAssignmentDetail } from "../../../../components/SchoolAssignmentDetail";
 import { apiFetch } from "../../../../lib/api";
+import type { SchoolClassAccess } from "../../../../lib/school-access";
 import { loadErrorMessage } from "../../../../lib/load-error";
 import { Alert } from "../../../../components/ui";
 
@@ -20,20 +21,42 @@ export default async function SchoolAssignmentPage({
     artifacts: { id: string; artifactType: string; s3Key: string | null; url: string | null }[];
     grade: { score: number | null; feedbackHtml: string } | null;
   }[] = [];
+  let assignmentMeta = {
+    instructionsHtml: "",
+    pointsPossible: 100,
+    dueAt: null as string | null,
+    visibility: "assigned",
+  };
+  let access: SchoolClassAccess | null = null;
   let loadError: string | null = null;
 
   try {
     const detail = await apiFetch<{
-      assignment: { title: string };
+      assignment: {
+        title: string;
+        instructionsHtml?: string;
+        pointsPossible?: number;
+        dueAt?: string | null;
+        visibility?: string;
+      };
       class: { id: string; name: string };
+      access: SchoolClassAccess;
     }>(`/api/school/assignments/${id}`);
     assignmentTitle = detail.assignment.title;
     className = detail.class.name;
     classId = detail.class.id;
-    const subRes = await apiFetch<{ submissions: typeof submissions }>(
+    assignmentMeta = {
+      instructionsHtml: detail.assignment.instructionsHtml ?? "",
+      pointsPossible: detail.assignment.pointsPossible ?? 100,
+      dueAt: detail.assignment.dueAt ?? null,
+      visibility: detail.assignment.visibility ?? "assigned",
+    };
+    access = detail.access;
+    const subRes = await apiFetch<{ submissions: typeof submissions; access: SchoolClassAccess }>(
       `/api/school/assignments/${id}/submissions`,
     );
     submissions = subRes.submissions;
+    if (!access) access = subRes.access;
   } catch (e) {
     loadError = loadErrorMessage(e, "Could not load assignment");
   }
@@ -52,13 +75,20 @@ export default async function SchoolAssignmentPage({
         <Alert variant="error">
           {loadError}. <a href={`/school/assignment/${id}`}>Retry</a>
         </Alert>
-      ) : (
+      ) : access ? (
         <SchoolAssignmentDetail
           assignmentId={id}
           assignmentTitle={assignmentTitle}
           className={className}
+          instructionsHtml={assignmentMeta.instructionsHtml}
+          pointsPossible={assignmentMeta.pointsPossible}
+          dueAt={assignmentMeta.dueAt}
+          visibility={assignmentMeta.visibility}
           initialSubmissions={submissions}
+          access={access}
         />
+      ) : (
+        <Alert variant="error">Could not resolve school access for this assignment.</Alert>
       )}
     </AppShell>
   );

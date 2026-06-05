@@ -5,6 +5,7 @@ import { isModuleEnabled } from "@whome/config";
 import type { Database } from "@whome/db";
 import {
   householdMembers,
+  schoolAssignmentCategories,
   schoolAssignments,
   schoolClasses,
   schoolEnrollments,
@@ -13,7 +14,14 @@ import {
   schoolSubmissions,
   users,
 } from "@whome/db";
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import {
+  isEnrollmentActiveNow,
+  resolveClassAccess,
+  resolveSchoolContext,
+  visibleClassIdsForMember,
+  type MemberEnrollmentRow,
+} from "../lib/school-access.js";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 
@@ -28,6 +36,114 @@ async function memberForUser(
     .where(and(eq(householdMembers.householdId, householdId), eq(householdMembers.userId, userId)))
     .limit(1);
   return hm ?? null;
+}
+
+async function classForHousehold(db: Database, classId: string, householdId: string) {
+  const [row] = await db
+    .select({ id: schoolClasses.id })
+    .from(schoolClasses)
+    .where(and(eq(schoolClasses.id, classId), eq(schoolClasses.householdId, householdId)))
+    .limit(1);
+  return row ?? null;
+}
+
+async function enrollmentForHousehold(db: Database, enrollmentId: string, householdId: string) {
+  const [row] = await db
+    .select({ id: schoolEnrollments.id, classId: schoolEnrollments.classId })
+    .from(schoolEnrollments)
+    .innerJoin(schoolClasses, eq(schoolEnrollments.classId, schoolClasses.id))
+    .where(
+      and(eq(schoolEnrollments.id, enrollmentId), eq(schoolClasses.householdId, householdId)),
+    )
+    .limit(1);
+  return row ?? null;
+}
+
+async function memberEnrollmentsForHousehold(
+  db: Database,
+  householdId: string,
+  memberId: string,
+): Promise<MemberEnrollmentRow[]> {
+  const rows = await db
+    .select({
+      classId: schoolEnrollments.classId,
+      role: schoolEnrollments.role,
+      activeFrom: schoolEnrollments.activeFrom,
+      activeTo: schoolEnrollments.activeTo,
+    })
+    .from(schoolEnrollments)
+    .innerJoin(schoolClasses, eq(schoolEnrollments.classId, schoolClasses.id))
+    .where(
+      and(eq(schoolClasses.householdId, householdId), eq(schoolEnrollments.memberId, memberId)),
+    );
+  return rows;
+}
+
+async function schoolContextForAuth(db: Database, auth: { householdId: string; userId: string }) {
+  const hm = await memberForUser(db, auth.householdId, auth.userId);
+  if (!hm) return null;
+  const enrollments = await memberEnrollmentsForHousehold(db, auth.householdId, hm.id);
+  const taught = await db
+    .select({ id: schoolClasses.id })
+    .from(schoolClasses)
+    .where(
+      and(
+        eq(schoolClasses.householdId, auth.householdId),
+        eq(schoolClasses.teacherMemberId, hm.id),
+      ),
+    );
+  return resolveSchoolContext({
+    memberId: hm.id,
+    householdRole: hm.role,
+    enrollments,
+    taughtClassIds: taught.map((t) => t.id),
+  });
+}
+
+type GradebookCellStatus = "missing" | "overdue" | "submitted" | "graded" | "not_assigned";
+
+function gradebookCell(params: {
+  visibility: string;
+  dueAt: Date | null;
+  pointsPossible: number;
+  submissionStatus: string | null;
+  score: number | null;
+  now: Date;
+}): {
+  status: GradebookCellStatus;
+  score: number | null;
+  percent: number | null;
+  missing: boolean;
+  overdue: boolean;
+} {
+  const { visibility, dueAt, pointsPossible, submissionStatus, score, now } = params;
+  if (visibility === "draft") {
+    return {
+      status: "not_assigned",
+      score: null,
+      percent: null,
+      missing: false,
+      overdue: false,
+    };
+  }
+
+  const submitted =
+    submissionStatus === "submitted" || submissionStatus === "graded" || submissionStatus === "returned";
+  const graded = submissionStatus === "graded" || score != null;
+  const overdue = Boolean(dueAt && dueAt < now && !submitted && !graded);
+  const missing = !submitted && !graded;
+
+  let status: GradebookCellStatus;
+  if (graded) status = "graded";
+  else if (submitted) status = "submitted";
+  else if (overdue) status = "overdue";
+  else if (missing) status = "missing";
+  else status = "not_assigned";
+
+  const percent =
+    score != null && pointsPossible > 0 ? Math.round((score / pointsPossible) * 1000) / 10 : null;
+
+  return { status, score, percent, missing, overdue };
 }
 
 export function schoolRoutes(db: Database, env: Env) {
@@ -60,16 +176,56 @@ export function schoolRoutes(db: Database, env: Env) {
     });
   });
 
+  app.get("/context", async (c) => {
+    if (!isModuleEnabled(env, "school")) {
+      return c.json({ error: "school_disabled" }, 403);
+    }
+    const auth = c.get("auth")!;
+    const context = await schoolContextForAuth(db, auth);
+    if (!context) return c.json({ error: "not_a_member" }, 403);
+    return c.json({ context });
+  });
+
   app.get("/glance", async (c) => {
     if (!isModuleEnabled(env, "school")) {
       return c.json({ enabled: false });
     }
     const auth = c.get("auth")!;
-    const classRows = await db
-      .select({ id: schoolClasses.id })
+    const context = await schoolContextForAuth(db, auth);
+    if (!context) {
+      return c.json({
+        enabled: true,
+        classCount: 0,
+        dueSoon: 0,
+        overdue: 0,
+        summary: { headline: "Set up", tone: "default" as const },
+        items: [],
+        overflow: 0,
+        context: null,
+      });
+    }
+
+    const allClassRows = await db
+      .select({
+        id: schoolClasses.id,
+        teacherMemberId: schoolClasses.teacherMemberId,
+        archived: schoolClasses.archived,
+      })
       .from(schoolClasses)
       .where(eq(schoolClasses.householdId, auth.householdId));
-    const classCount = classRows.length;
+
+    const enrollments = await memberEnrollmentsForHousehold(db, auth.householdId, context.memberId);
+    const visibleIds = visibleClassIdsForMember({
+      memberId: context.memberId,
+      householdRole: context.householdRole,
+      classes: allClassRows.map((r) => ({
+        id: r.id,
+        teacherMemberId: r.teacherMemberId,
+        archived: r.archived ?? false,
+      })),
+      enrollments,
+    });
+    const classCount = visibleIds.length;
     if (classCount === 0) {
       return c.json({
         enabled: true,
@@ -79,12 +235,23 @@ export function schoolRoutes(db: Database, env: Env) {
         summary: { headline: "Set up", tone: "default" as const },
         items: [],
         overflow: 0,
+        context,
       });
     }
 
     const now = new Date();
     const weekAhead = new Date(now);
     weekAhead.setDate(weekAhead.getDate() + 7);
+
+    const assignmentWhere =
+      visibleIds.length > 0
+        ? and(
+            eq(schoolClasses.householdId, auth.householdId),
+            inArray(schoolClasses.id, visibleIds),
+            isNotNull(schoolAssignments.dueAt),
+            eq(schoolAssignments.visibility, "assigned"),
+          )
+        : and(eq(schoolClasses.householdId, auth.householdId), eq(schoolClasses.id, "00000000-0000-0000-0000-000000000000"));
 
     const assignments = await db
       .select({
@@ -95,13 +262,7 @@ export function schoolRoutes(db: Database, env: Env) {
       })
       .from(schoolAssignments)
       .innerJoin(schoolClasses, eq(schoolAssignments.classId, schoolClasses.id))
-      .where(
-        and(
-          eq(schoolClasses.householdId, auth.householdId),
-          isNotNull(schoolAssignments.dueAt),
-          eq(schoolAssignments.visibility, "assigned"),
-        ),
-      );
+      .where(assignmentWhere);
 
     type Ranked = {
       id: string;
@@ -162,6 +323,7 @@ export function schoolRoutes(db: Database, env: Env) {
       summary: { headline, tone },
       items,
       overflow,
+      context,
     });
   });
 
@@ -170,15 +332,50 @@ export function schoolRoutes(db: Database, env: Env) {
       return c.json({ error: "school_disabled" }, 403);
     }
     const auth = c.get("auth")!;
-    const classes = await db
+    const context = await schoolContextForAuth(db, auth);
+    if (!context) return c.json({ error: "not_a_member" }, 403);
+
+    const includeArchived = c.req.query("includeArchived") === "true";
+    const allClasses = await db
       .select()
       .from(schoolClasses)
       .where(eq(schoolClasses.householdId, auth.householdId));
-    return c.json({ classes });
+
+    const enrollments = await memberEnrollmentsForHousehold(db, auth.householdId, context.memberId);
+    const visibleIds = new Set(
+      visibleClassIdsForMember({
+        memberId: context.memberId,
+        householdRole: context.householdRole,
+        classes: allClasses.map((cls) => ({
+          id: cls.id,
+          teacherMemberId: cls.teacherMemberId,
+          archived: cls.archived ?? false,
+        })),
+        enrollments,
+        includeArchived,
+      }),
+    );
+
+    const enrollmentByClass = new Map(
+      enrollments.map((e) => [e.classId, e.role] as const),
+    );
+
+    const classes = allClasses
+      .filter((cls) => visibleIds.has(cls.id))
+      .map((cls) => ({
+        ...cls,
+        myEnrollmentRole: enrollmentByClass.get(cls.id) ?? null,
+        isClassTeacher: cls.teacherMemberId === context.memberId,
+      }));
+
+    return c.json({ classes, context });
   });
 
   app.post("/classes", async (c) => {
     const auth = c.get("auth")!;
+    const context = await schoolContextForAuth(db, auth);
+    if (!context) return c.json({ error: "not_a_member" }, 403);
+    if (!context.canCreateClass) return c.json({ error: "forbidden" }, 403);
     const body = await c.req.json<{ name: string; subject?: string; term?: string }>();
     const hm = await memberForUser(db, auth.householdId, auth.userId);
     if (!hm) return c.json({ error: "not_a_member" }, 403);
@@ -198,26 +395,99 @@ export function schoolRoutes(db: Database, env: Env) {
   app.get("/classes/:classId", async (c) => {
     const auth = c.get("auth")!;
     const classId = c.req.param("classId");
+    const context = await schoolContextForAuth(db, auth);
+    if (!context) return c.json({ error: "not_a_member" }, 403);
+
     const [row] = await db
       .select()
       .from(schoolClasses)
       .where(and(eq(schoolClasses.id, classId), eq(schoolClasses.householdId, auth.householdId)))
       .limit(1);
     if (!row) return c.json({ error: "not_found" }, 404);
+
+    const memberEnrollments = await memberEnrollmentsForHousehold(
+      db,
+      auth.householdId,
+      context.memberId,
+    );
+    const visibleIds = visibleClassIdsForMember({
+      memberId: context.memberId,
+      householdRole: context.householdRole,
+      classes: [
+        {
+          id: row.id,
+          teacherMemberId: row.teacherMemberId,
+          archived: row.archived ?? false,
+        },
+      ],
+      enrollments: memberEnrollments,
+      includeArchived: true,
+    });
+    if (!visibleIds.includes(classId)) return c.json({ error: "not_found" }, 404);
+
     const enrollments = await db
       .select()
       .from(schoolEnrollments)
       .where(eq(schoolEnrollments.classId, classId));
-    return c.json({ class: row, enrollments });
+
+    const myEnrollment =
+      enrollments.find((e) => e.memberId === context.memberId) ?? null;
+    const access = resolveClassAccess({
+      memberId: context.memberId,
+      householdRole: context.householdRole,
+      teacherMemberId: row.teacherMemberId,
+      enrollment: myEnrollment,
+    });
+
+    return c.json({ class: row, enrollments, access, context });
   });
 
   app.patch("/classes/:classId", async (c) => {
     const auth = c.get("auth")!;
     const classId = c.req.param("classId");
-    const body = await c.req.json<{ name?: string; subject?: string; term?: string; archived?: boolean }>();
+    const context = await schoolContextForAuth(db, auth);
+    if (!context) return c.json({ error: "not_a_member" }, 403);
+    const [existing] = await db
+      .select()
+      .from(schoolClasses)
+      .where(and(eq(schoolClasses.id, classId), eq(schoolClasses.householdId, auth.householdId)))
+      .limit(1);
+    if (!existing) return c.json({ error: "not_found" }, 404);
+    const myEnrollmentRows = await db
+      .select()
+      .from(schoolEnrollments)
+      .where(
+        and(
+          eq(schoolEnrollments.classId, classId),
+          eq(schoolEnrollments.memberId, context.memberId),
+        ),
+      )
+      .limit(1);
+    const access = resolveClassAccess({
+      memberId: context.memberId,
+      householdRole: context.householdRole,
+      teacherMemberId: existing.teacherMemberId,
+      enrollment: myEnrollmentRows[0] ?? null,
+    });
+    if (!access.canEditClassMeta) return c.json({ error: "forbidden" }, 403);
+    const body = await c.req.json<{
+      name?: string;
+      subject?: string | null;
+      term?: string | null;
+      teacherMemberId?: string;
+      scheduleJson?: string;
+      archived?: boolean;
+    }>();
+    const patch: Record<string, unknown> = { updatedAt: new Date() };
+    if (body.name !== undefined) patch.name = body.name;
+    if (body.subject !== undefined) patch.subject = body.subject;
+    if (body.term !== undefined) patch.term = body.term;
+    if (body.teacherMemberId !== undefined) patch.teacherMemberId = body.teacherMemberId;
+    if (body.scheduleJson !== undefined) patch.scheduleJson = body.scheduleJson;
+    if (body.archived !== undefined) patch.archived = body.archived;
     const [row] = await db
       .update(schoolClasses)
-      .set({ ...body, updatedAt: new Date() })
+      .set(patch)
       .where(and(eq(schoolClasses.id, classId), eq(schoolClasses.householdId, auth.householdId)))
       .returning();
     if (!row) return c.json({ error: "not_found" }, 404);
@@ -234,7 +504,11 @@ export function schoolRoutes(db: Database, env: Env) {
   });
 
   app.get("/classes/:classId/enrollments", async (c) => {
+    const auth = c.get("auth")!;
     const classId = c.req.param("classId");
+    if (!(await classForHousehold(db, classId, auth.householdId))) {
+      return c.json({ error: "not_found" }, 404);
+    }
     const rows = await db
       .select()
       .from(schoolEnrollments)
@@ -243,43 +517,458 @@ export function schoolRoutes(db: Database, env: Env) {
   });
 
   app.post("/classes/:classId/enrollments", async (c) => {
+    const auth = c.get("auth")!;
     const classId = c.req.param("classId");
-    const body = await c.req.json<{ memberId: string; role?: string }>();
+    const context = await schoolContextForAuth(db, auth);
+    if (!context) return c.json({ error: "not_a_member" }, 403);
+    const [cls] = await db
+      .select()
+      .from(schoolClasses)
+      .where(and(eq(schoolClasses.id, classId), eq(schoolClasses.householdId, auth.householdId)))
+      .limit(1);
+    if (!cls) return c.json({ error: "not_found" }, 404);
+    const [myEnrollment] = await db
+      .select()
+      .from(schoolEnrollments)
+      .where(
+        and(
+          eq(schoolEnrollments.classId, classId),
+          eq(schoolEnrollments.memberId, context.memberId),
+        ),
+      )
+      .limit(1);
+    const access = resolveClassAccess({
+      memberId: context.memberId,
+      householdRole: context.householdRole,
+      teacherMemberId: cls.teacherMemberId,
+      enrollment: myEnrollment ?? null,
+    });
+    if (!access.canEnroll) return c.json({ error: "forbidden" }, 403);
+    const body = await c.req.json<{
+      memberId: string;
+      role?: string;
+      activeFrom?: string | null;
+      activeTo?: string | null;
+    }>();
     const [row] = await db
       .insert(schoolEnrollments)
       .values({
         classId,
         memberId: body.memberId,
         role: body.role ?? "student",
+        activeFrom: body.activeFrom ?? null,
+        activeTo: body.activeTo ?? null,
       })
       .returning();
     return c.json({ enrollment: row }, 201);
   });
 
   app.delete("/enrollments/:enrollmentId", async (c) => {
+    const auth = c.get("auth")!;
     const enrollmentId = c.req.param("enrollmentId");
+    const context = await schoolContextForAuth(db, auth);
+    if (!context) return c.json({ error: "not_a_member" }, 403);
+    const enrollment = await enrollmentForHousehold(db, enrollmentId, auth.householdId);
+    if (!enrollment) return c.json({ error: "not_found" }, 404);
+    const [cls] = await db
+      .select()
+      .from(schoolClasses)
+      .where(eq(schoolClasses.id, enrollment.classId))
+      .limit(1);
+    if (!cls) return c.json({ error: "not_found" }, 404);
+    const [myEnrollment] = await db
+      .select()
+      .from(schoolEnrollments)
+      .where(
+        and(
+          eq(schoolEnrollments.classId, enrollment.classId),
+          eq(schoolEnrollments.memberId, context.memberId),
+        ),
+      )
+      .limit(1);
+    const access = resolveClassAccess({
+      memberId: context.memberId,
+      householdRole: context.householdRole,
+      teacherMemberId: cls.teacherMemberId,
+      enrollment: myEnrollment ?? null,
+    });
+    if (!access.canEnroll) return c.json({ error: "forbidden" }, 403);
     await db.delete(schoolEnrollments).where(eq(schoolEnrollments.id, enrollmentId));
     return c.json({ ok: true });
   });
 
   app.get("/classes/:classId/assignments", async (c) => {
+    const auth = c.get("auth")!;
     const classId = c.req.param("classId");
+    const context = await schoolContextForAuth(db, auth);
+    if (!context) return c.json({ error: "not_a_member" }, 403);
+    const [cls] = await db
+      .select()
+      .from(schoolClasses)
+      .where(and(eq(schoolClasses.id, classId), eq(schoolClasses.householdId, auth.householdId)))
+      .limit(1);
+    if (!cls) return c.json({ error: "not_found" }, 404);
+    const [myEnrollment] = await db
+      .select()
+      .from(schoolEnrollments)
+      .where(
+        and(
+          eq(schoolEnrollments.classId, classId),
+          eq(schoolEnrollments.memberId, context.memberId),
+        ),
+      )
+      .limit(1);
+    const access = resolveClassAccess({
+      memberId: context.memberId,
+      householdRole: context.householdRole,
+      teacherMemberId: cls.teacherMemberId,
+      enrollment: myEnrollment ?? null,
+    });
     const rows = await db
       .select()
       .from(schoolAssignments)
       .where(eq(schoolAssignments.classId, classId));
-    return c.json({ assignments: rows });
+    const assignments =
+      access.canEditAssignments
+        ? rows
+        : rows.filter((a) => a.visibility !== "draft");
+    return c.json({ assignments, access });
+  });
+
+  app.get("/classes/:classId/gradebook", async (c) => {
+    if (!isModuleEnabled(env, "school")) {
+      return c.json({ error: "school_disabled" }, 403);
+    }
+    const auth = c.get("auth")!;
+    const classId = c.req.param("classId");
+    if (!(await classForHousehold(db, classId, auth.householdId))) {
+      return c.json({ error: "not_found" }, 404);
+    }
+
+    const now = new Date();
+
+    const enrollmentRows = await db
+      .select()
+      .from(schoolEnrollments)
+      .where(eq(schoolEnrollments.classId, classId));
+
+    const studentEnrollments = enrollmentRows.filter(
+      (e) => e.role === "student" && isEnrollmentActiveNow(e.activeFrom, e.activeTo),
+    );
+
+    const assignmentRows = await db
+      .select()
+      .from(schoolAssignments)
+      .where(
+        and(
+          eq(schoolAssignments.classId, classId),
+          inArray(schoolAssignments.visibility, ["assigned", "closed", "draft"]),
+        ),
+      );
+
+    const visibleAssignments = assignmentRows.filter((a) => a.visibility !== "draft");
+    const assignmentIds = assignmentRows.map((a) => a.id);
+
+    let submissionRows: (typeof schoolSubmissions.$inferSelect)[] = [];
+    if (assignmentIds.length > 0) {
+      submissionRows = await db
+        .select()
+        .from(schoolSubmissions)
+        .where(inArray(schoolSubmissions.assignmentId, assignmentIds));
+    }
+
+    const submissionIds = submissionRows.map((s) => s.id);
+    let gradeRows: (typeof schoolGrades.$inferSelect)[] = [];
+    if (submissionIds.length > 0) {
+      gradeRows = await db
+        .select()
+        .from(schoolGrades)
+        .where(inArray(schoolGrades.submissionId, submissionIds));
+    }
+
+    const gradeBySubmission = new Map(gradeRows.map((g) => [g.submissionId, g]));
+    const submissionByKey = new Map(
+      submissionRows.map((s) => [`${s.assignmentId}:${s.studentMemberId}`, s]),
+    );
+
+    const assignments = assignmentRows.map((a) => ({
+      id: a.id,
+      title: a.title,
+      dueAt: a.dueAt?.toISOString() ?? null,
+      pointsPossible: a.pointsPossible,
+      visibility: a.visibility,
+    }));
+
+    let missingTotal = 0;
+    let overdueTotal = 0;
+    let gradedTotal = 0;
+    const studentAverages: number[] = [];
+
+    const students = studentEnrollments.map((enrollment) => {
+      let gradedCount = 0;
+      let missingCount = 0;
+      let overdueCount = 0;
+      let pointsEarned = 0;
+      let pointsGraded = 0;
+
+      const cells = assignmentRows.map((assignment) => {
+        const submission = submissionByKey.get(`${assignment.id}:${enrollment.memberId}`) ?? null;
+        const grade = submission ? (gradeBySubmission.get(submission.id) ?? null) : null;
+        const cell = gradebookCell({
+          visibility: assignment.visibility,
+          dueAt: assignment.dueAt,
+          pointsPossible: assignment.pointsPossible,
+          submissionStatus: submission?.status ?? null,
+          score: grade?.score ?? null,
+          now,
+        });
+
+        if (assignment.visibility !== "draft") {
+          if (cell.missing) missingCount += 1;
+          if (cell.overdue) overdueCount += 1;
+          if (cell.status === "graded" && cell.score != null) {
+            gradedCount += 1;
+            pointsEarned += cell.score;
+            pointsGraded += assignment.pointsPossible;
+          }
+        }
+
+        return {
+          assignmentId: assignment.id,
+          status: cell.status,
+          score: cell.score,
+          percent: cell.percent,
+          missing: cell.missing,
+          overdue: cell.overdue,
+        };
+      });
+
+      missingTotal += missingCount;
+      overdueTotal += overdueCount;
+      gradedTotal += gradedCount;
+
+      const averagePercent =
+        pointsGraded > 0 ? Math.round((pointsEarned / pointsGraded) * 1000) / 10 : null;
+      if (averagePercent != null) studentAverages.push(averagePercent);
+
+      return {
+        memberId: enrollment.memberId,
+        enrollmentId: enrollment.id,
+        cells,
+        gradedCount,
+        missingCount,
+        overdueCount,
+        averagePercent,
+      };
+    });
+
+    const classAveragePercent =
+      studentAverages.length > 0
+        ? Math.round(
+            (studentAverages.reduce((sum, v) => sum + v, 0) / studentAverages.length) * 10,
+          ) / 10
+        : null;
+
+    return c.json({
+      summary: {
+        assignmentCount: visibleAssignments.length,
+        studentCount: studentEnrollments.length,
+        missingTotal,
+        overdueTotal,
+        gradedTotal,
+        classAveragePercent,
+      },
+      assignments,
+      students,
+    });
+  });
+
+  app.get("/classes/:classId/categories", async (c) => {
+    const auth = c.get("auth")!;
+    const classId = c.req.param("classId");
+    if (!(await classForHousehold(db, classId, auth.householdId))) {
+      return c.json({ error: "not_found" }, 404);
+    }
+    const rows = await db
+      .select()
+      .from(schoolAssignmentCategories)
+      .where(eq(schoolAssignmentCategories.classId, classId));
+    return c.json({ categories: rows });
+  });
+
+  app.post("/classes/:classId/categories", async (c) => {
+    const auth = c.get("auth")!;
+    const classId = c.req.param("classId");
+    const context = await schoolContextForAuth(db, auth);
+    if (!context) return c.json({ error: "not_a_member" }, 403);
+    const [cls] = await db
+      .select()
+      .from(schoolClasses)
+      .where(and(eq(schoolClasses.id, classId), eq(schoolClasses.householdId, auth.householdId)))
+      .limit(1);
+    if (!cls) return c.json({ error: "not_found" }, 404);
+    const [myEnrollment] = await db
+      .select()
+      .from(schoolEnrollments)
+      .where(
+        and(
+          eq(schoolEnrollments.classId, classId),
+          eq(schoolEnrollments.memberId, context.memberId),
+        ),
+      )
+      .limit(1);
+    const access = resolveClassAccess({
+      memberId: context.memberId,
+      householdRole: context.householdRole,
+      teacherMemberId: cls.teacherMemberId,
+      enrollment: myEnrollment ?? null,
+    });
+    if (!access.canEditCategories) return c.json({ error: "forbidden" }, 403);
+    const body = await c.req.json<{
+      name: string;
+      weightPercent?: number;
+      gradingPolicy?: string;
+    }>();
+    const [row] = await db
+      .insert(schoolAssignmentCategories)
+      .values({
+        classId,
+        name: body.name.trim(),
+        weightPercent: body.weightPercent ?? 0,
+        gradingPolicy: body.gradingPolicy ?? "points",
+      })
+      .returning();
+    return c.json({ category: row }, 201);
+  });
+
+  app.patch("/categories/:categoryId", async (c) => {
+    const auth = c.get("auth")!;
+    const categoryId = c.req.param("categoryId");
+    const context = await schoolContextForAuth(db, auth);
+    if (!context) return c.json({ error: "not_a_member" }, 403);
+    const [existing] = await db
+      .select({ id: schoolAssignmentCategories.id, classId: schoolAssignmentCategories.classId })
+      .from(schoolAssignmentCategories)
+      .where(eq(schoolAssignmentCategories.id, categoryId))
+      .limit(1);
+    if (!existing?.classId || !(await classForHousehold(db, existing.classId, auth.householdId))) {
+      return c.json({ error: "not_found" }, 404);
+    }
+    const [cls] = await db
+      .select()
+      .from(schoolClasses)
+      .where(eq(schoolClasses.id, existing.classId))
+      .limit(1);
+    if (!cls) return c.json({ error: "not_found" }, 404);
+    const [myEnrollment] = await db
+      .select()
+      .from(schoolEnrollments)
+      .where(
+        and(
+          eq(schoolEnrollments.classId, existing.classId),
+          eq(schoolEnrollments.memberId, context.memberId),
+        ),
+      )
+      .limit(1);
+    const access = resolveClassAccess({
+      memberId: context.memberId,
+      householdRole: context.householdRole,
+      teacherMemberId: cls.teacherMemberId,
+      enrollment: myEnrollment ?? null,
+    });
+    if (!access.canEditCategories) return c.json({ error: "forbidden" }, 403);
+    const body = await c.req.json<{
+      name?: string;
+      weightPercent?: number;
+      gradingPolicy?: string;
+    }>();
+    const patch: Record<string, unknown> = {};
+    if (body.name !== undefined) patch.name = body.name.trim();
+    if (body.weightPercent !== undefined) patch.weightPercent = body.weightPercent;
+    if (body.gradingPolicy !== undefined) patch.gradingPolicy = body.gradingPolicy;
+    const [row] = await db
+      .update(schoolAssignmentCategories)
+      .set(patch)
+      .where(eq(schoolAssignmentCategories.id, categoryId))
+      .returning();
+    return c.json({ category: row });
+  });
+
+  app.delete("/categories/:categoryId", async (c) => {
+    const auth = c.get("auth")!;
+    const categoryId = c.req.param("categoryId");
+    const context = await schoolContextForAuth(db, auth);
+    if (!context) return c.json({ error: "not_a_member" }, 403);
+    const [existing] = await db
+      .select({ id: schoolAssignmentCategories.id, classId: schoolAssignmentCategories.classId })
+      .from(schoolAssignmentCategories)
+      .where(eq(schoolAssignmentCategories.id, categoryId))
+      .limit(1);
+    if (!existing?.classId || !(await classForHousehold(db, existing.classId, auth.householdId))) {
+      return c.json({ error: "not_found" }, 404);
+    }
+    const [cls] = await db
+      .select()
+      .from(schoolClasses)
+      .where(eq(schoolClasses.id, existing.classId))
+      .limit(1);
+    if (!cls) return c.json({ error: "not_found" }, 404);
+    const [myEnrollment] = await db
+      .select()
+      .from(schoolEnrollments)
+      .where(
+        and(
+          eq(schoolEnrollments.classId, existing.classId),
+          eq(schoolEnrollments.memberId, context.memberId),
+        ),
+      )
+      .limit(1);
+    const access = resolveClassAccess({
+      memberId: context.memberId,
+      householdRole: context.householdRole,
+      teacherMemberId: cls.teacherMemberId,
+      enrollment: myEnrollment ?? null,
+    });
+    if (!access.canEditCategories) return c.json({ error: "forbidden" }, 403);
+    await db.delete(schoolAssignmentCategories).where(eq(schoolAssignmentCategories.id, categoryId));
+    return c.json({ ok: true });
   });
 
   app.post("/classes/:classId/assignments", async (c) => {
     const auth = c.get("auth")!;
     const classId = c.req.param("classId");
+    const context = await schoolContextForAuth(db, auth);
+    if (!context) return c.json({ error: "not_a_member" }, 403);
+    const [cls] = await db
+      .select()
+      .from(schoolClasses)
+      .where(and(eq(schoolClasses.id, classId), eq(schoolClasses.householdId, auth.householdId)))
+      .limit(1);
+    if (!cls) return c.json({ error: "not_found" }, 404);
+    const [myEnrollment] = await db
+      .select()
+      .from(schoolEnrollments)
+      .where(
+        and(
+          eq(schoolEnrollments.classId, classId),
+          eq(schoolEnrollments.memberId, context.memberId),
+        ),
+      )
+      .limit(1);
+    const access = resolveClassAccess({
+      memberId: context.memberId,
+      householdRole: context.householdRole,
+      teacherMemberId: cls.teacherMemberId,
+      enrollment: myEnrollment ?? null,
+    });
+    if (!access.canEditAssignments) return c.json({ error: "forbidden" }, 403);
     const body = await c.req.json<{
       title: string;
       instructionsHtml?: string;
       dueAt?: string;
       pointsPossible?: number;
       visibility?: "draft" | "assigned" | "closed";
+      categoryId?: string | null;
     }>();
     const [row] = await db
       .insert(schoolAssignments)
@@ -290,6 +979,7 @@ export function schoolRoutes(db: Database, env: Env) {
         dueAt: body.dueAt ? new Date(body.dueAt) : null,
         pointsPossible: body.pointsPossible ?? 100,
         visibility: body.visibility ?? "assigned",
+        categoryId: body.categoryId ?? null,
         createdByUserId: auth.userId,
       })
       .returning();
@@ -311,17 +1001,92 @@ export function schoolRoutes(db: Database, env: Env) {
       .where(and(eq(schoolClasses.id, row.classId), eq(schoolClasses.householdId, auth.householdId)))
       .limit(1);
     if (!cls) return c.json({ error: "not_found" }, 404);
-    return c.json({ assignment: row, class: cls });
+
+    const context = await schoolContextForAuth(db, auth);
+    if (!context) return c.json({ error: "not_a_member" }, 403);
+    const memberEnrollments = await memberEnrollmentsForHousehold(
+      db,
+      auth.householdId,
+      context.memberId,
+    );
+    const visibleIds = visibleClassIdsForMember({
+      memberId: context.memberId,
+      householdRole: context.householdRole,
+      classes: [
+        {
+          id: cls.id,
+          teacherMemberId: cls.teacherMemberId,
+          archived: cls.archived ?? false,
+        },
+      ],
+      enrollments: memberEnrollments,
+      includeArchived: true,
+    });
+    if (!visibleIds.includes(cls.id)) return c.json({ error: "not_found" }, 404);
+
+    const [myEnrollment] = await db
+      .select()
+      .from(schoolEnrollments)
+      .where(
+        and(
+          eq(schoolEnrollments.classId, cls.id),
+          eq(schoolEnrollments.memberId, context.memberId),
+        ),
+      )
+      .limit(1);
+    const access = resolveClassAccess({
+      memberId: context.memberId,
+      householdRole: context.householdRole,
+      teacherMemberId: cls.teacherMemberId,
+      enrollment: myEnrollment ?? null,
+    });
+
+    return c.json({ assignment: row, class: cls, access, context });
   });
 
   app.patch("/assignments/:id", async (c) => {
+    const auth = c.get("auth")!;
     const id = c.req.param("id");
+    const [assignmentRow] = await db
+      .select()
+      .from(schoolAssignments)
+      .where(eq(schoolAssignments.id, id))
+      .limit(1);
+    if (!assignmentRow) return c.json({ error: "not_found" }, 404);
+    const [cls] = await db
+      .select()
+      .from(schoolClasses)
+      .where(
+        and(eq(schoolClasses.id, assignmentRow.classId), eq(schoolClasses.householdId, auth.householdId)),
+      )
+      .limit(1);
+    if (!cls) return c.json({ error: "not_found" }, 404);
+    const context = await schoolContextForAuth(db, auth);
+    if (!context) return c.json({ error: "not_a_member" }, 403);
+    const [myEnrollment] = await db
+      .select()
+      .from(schoolEnrollments)
+      .where(
+        and(
+          eq(schoolEnrollments.classId, cls.id),
+          eq(schoolEnrollments.memberId, context.memberId),
+        ),
+      )
+      .limit(1);
+    const access = resolveClassAccess({
+      memberId: context.memberId,
+      householdRole: context.householdRole,
+      teacherMemberId: cls.teacherMemberId,
+      enrollment: myEnrollment ?? null,
+    });
+    if (!access.canEditAssignments) return c.json({ error: "forbidden" }, 403);
     const body = await c.req.json<{
       title?: string;
       instructionsHtml?: string;
       dueAt?: string | null;
       pointsPossible?: number;
       visibility?: "draft" | "assigned" | "closed";
+      categoryId?: string | null;
     }>();
     const patch: Record<string, unknown> = { updatedAt: new Date() };
     if (body.title !== undefined) patch.title = body.title;
@@ -329,6 +1094,7 @@ export function schoolRoutes(db: Database, env: Env) {
     if (body.dueAt !== undefined) patch.dueAt = body.dueAt ? new Date(body.dueAt) : null;
     if (body.pointsPossible !== undefined) patch.pointsPossible = body.pointsPossible;
     if (body.visibility !== undefined) patch.visibility = body.visibility;
+    if (body.categoryId !== undefined) patch.categoryId = body.categoryId;
     const [row] = await db
       .update(schoolAssignments)
       .set(patch)
@@ -339,17 +1105,89 @@ export function schoolRoutes(db: Database, env: Env) {
   });
 
   app.delete("/assignments/:id", async (c) => {
+    const auth = c.get("auth")!;
     const id = c.req.param("id");
+    const [assignmentRow] = await db
+      .select()
+      .from(schoolAssignments)
+      .where(eq(schoolAssignments.id, id))
+      .limit(1);
+    if (!assignmentRow) return c.json({ error: "not_found" }, 404);
+    const [cls] = await db
+      .select()
+      .from(schoolClasses)
+      .where(
+        and(eq(schoolClasses.id, assignmentRow.classId), eq(schoolClasses.householdId, auth.householdId)),
+      )
+      .limit(1);
+    if (!cls) return c.json({ error: "not_found" }, 404);
+    const context = await schoolContextForAuth(db, auth);
+    if (!context) return c.json({ error: "not_a_member" }, 403);
+    const [myEnrollment] = await db
+      .select()
+      .from(schoolEnrollments)
+      .where(
+        and(
+          eq(schoolEnrollments.classId, cls.id),
+          eq(schoolEnrollments.memberId, context.memberId),
+        ),
+      )
+      .limit(1);
+    const access = resolveClassAccess({
+      memberId: context.memberId,
+      householdRole: context.householdRole,
+      teacherMemberId: cls.teacherMemberId,
+      enrollment: myEnrollment ?? null,
+    });
+    if (!access.canEditAssignments) return c.json({ error: "forbidden" }, 403);
     await db.delete(schoolAssignments).where(eq(schoolAssignments.id, id));
     return c.json({ ok: true });
   });
 
   app.get("/assignments/:id/submissions", async (c) => {
+    const auth = c.get("auth")!;
     const id = c.req.param("id");
-    const subs = await db
+    const context = await schoolContextForAuth(db, auth);
+    if (!context) return c.json({ error: "not_a_member" }, 403);
+    const [assignmentRow] = await db
+      .select()
+      .from(schoolAssignments)
+      .where(eq(schoolAssignments.id, id))
+      .limit(1);
+    if (!assignmentRow) return c.json({ error: "not_found" }, 404);
+    const [cls] = await db
+      .select()
+      .from(schoolClasses)
+      .where(
+        and(eq(schoolClasses.id, assignmentRow.classId), eq(schoolClasses.householdId, auth.householdId)),
+      )
+      .limit(1);
+    if (!cls) return c.json({ error: "not_found" }, 404);
+    const [myEnrollment] = await db
+      .select()
+      .from(schoolEnrollments)
+      .where(
+        and(
+          eq(schoolEnrollments.classId, cls.id),
+          eq(schoolEnrollments.memberId, context.memberId),
+        ),
+      )
+      .limit(1);
+    const access = resolveClassAccess({
+      memberId: context.memberId,
+      householdRole: context.householdRole,
+      teacherMemberId: cls.teacherMemberId,
+      enrollment: myEnrollment ?? null,
+    });
+
+    let subs = await db
       .select()
       .from(schoolSubmissions)
       .where(eq(schoolSubmissions.assignmentId, id));
+
+    if (access.viewMode === "student") {
+      subs = subs.filter((s) => s.studentMemberId === context.memberId);
+    }
     const withGrades = await Promise.all(
       subs.map(async (s) => {
         const [grade] = await db
@@ -364,16 +1202,47 @@ export function schoolRoutes(db: Database, env: Env) {
         return { ...s, grade: grade ?? null, artifacts };
       }),
     );
-    return c.json({ submissions: withGrades });
+    return c.json({ submissions: withGrades, access });
   });
 
   app.post("/assignments/:id/submit", async (c) => {
     const auth = c.get("auth")!;
     const assignmentId = c.req.param("id");
     const body = await c.req.json<{ studentMemberId?: string; studentNote?: string }>();
-    const hm = await memberForUser(db, auth.householdId, auth.userId);
-    if (!hm) return c.json({ error: "not_a_member" }, 403);
-    const studentMemberId = body.studentMemberId ?? hm.id;
+    const context = await schoolContextForAuth(db, auth);
+    if (!context) return c.json({ error: "not_a_member" }, 403);
+    const [assignmentRow] = await db
+      .select()
+      .from(schoolAssignments)
+      .where(eq(schoolAssignments.id, assignmentId))
+      .limit(1);
+    if (!assignmentRow) return c.json({ error: "not_found" }, 404);
+    const [cls] = await db
+      .select()
+      .from(schoolClasses)
+      .where(
+        and(eq(schoolClasses.id, assignmentRow.classId), eq(schoolClasses.householdId, auth.householdId)),
+      )
+      .limit(1);
+    if (!cls) return c.json({ error: "not_found" }, 404);
+    const [myEnrollment] = await db
+      .select()
+      .from(schoolEnrollments)
+      .where(
+        and(
+          eq(schoolEnrollments.classId, cls.id),
+          eq(schoolEnrollments.memberId, context.memberId),
+        ),
+      )
+      .limit(1);
+    const access = resolveClassAccess({
+      memberId: context.memberId,
+      householdRole: context.householdRole,
+      teacherMemberId: cls.teacherMemberId,
+      enrollment: myEnrollment ?? null,
+    });
+    if (!access.canSubmit) return c.json({ error: "forbidden" }, 403);
+    const studentMemberId = body.studentMemberId ?? context.memberId;
 
     const [existing] = await db
       .select()
@@ -444,6 +1313,45 @@ export function schoolRoutes(db: Database, env: Env) {
   app.post("/submissions/:id/grade", async (c) => {
     const auth = c.get("auth")!;
     const submissionId = c.req.param("id");
+    const context = await schoolContextForAuth(db, auth);
+    if (!context) return c.json({ error: "not_a_member" }, 403);
+    const [submission] = await db
+      .select()
+      .from(schoolSubmissions)
+      .where(eq(schoolSubmissions.id, submissionId))
+      .limit(1);
+    if (!submission) return c.json({ error: "not_found" }, 404);
+    const [assignmentRow] = await db
+      .select()
+      .from(schoolAssignments)
+      .where(eq(schoolAssignments.id, submission.assignmentId))
+      .limit(1);
+    if (!assignmentRow) return c.json({ error: "not_found" }, 404);
+    const [cls] = await db
+      .select()
+      .from(schoolClasses)
+      .where(
+        and(eq(schoolClasses.id, assignmentRow.classId), eq(schoolClasses.householdId, auth.householdId)),
+      )
+      .limit(1);
+    if (!cls) return c.json({ error: "not_found" }, 404);
+    const [myEnrollment] = await db
+      .select()
+      .from(schoolEnrollments)
+      .where(
+        and(
+          eq(schoolEnrollments.classId, cls.id),
+          eq(schoolEnrollments.memberId, context.memberId),
+        ),
+      )
+      .limit(1);
+    const access = resolveClassAccess({
+      memberId: context.memberId,
+      householdRole: context.householdRole,
+      teacherMemberId: cls.teacherMemberId,
+      enrollment: myEnrollment ?? null,
+    });
+    if (!access.canGrade) return c.json({ error: "forbidden" }, 403);
     const body = await c.req.json<{
       score?: number | null;
       feedbackHtml?: string;
