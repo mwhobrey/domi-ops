@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   BookOpen,
   Calendar,
@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "../lib/cn";
+import { authClient } from "../lib/auth-client";
 import { Avatar } from "./ui/Avatar";
 import { Drawer } from "./ui/Drawer";
 import { IconButton } from "./ui/IconButton";
@@ -34,7 +35,6 @@ export type ShellUser = {
   email: string | null;
   username?: string | null;
   name: string | null;
-  nickname: string | null;
   shownLabel: string | null;
   memberId: string;
   avatarUrl: string | null;
@@ -79,13 +79,33 @@ export function AppChrome({
   user: ShellUser | null;
   children: React.ReactNode;
 }) {
+  const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
+  const [signOutPending, setSignOutPending] = useState(false);
   const userRef = useRef<HTMLDivElement>(null);
   const userTriggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const closeUserMenu = useCallback(() => setUserOpen(false), []);
+
+  async function onSignOut() {
+    if (signOutPending) return;
+    setUserOpen(false);
+    setMenuOpen(false);
+    setSignOutPending(true);
+    try {
+      const res = await authClient.signOut();
+      if (res.error) {
+        console.error("[whome] sign out failed:", res.error.message);
+        return;
+      }
+      router.push("/login");
+      router.refresh();
+    } finally {
+      setSignOutPending(false);
+    }
+  }
 
   useEffect(() => {
     function onDoc(e: MouseEvent) {
@@ -177,15 +197,15 @@ export function AppChrome({
                 >
                   Profile
                 </Link>
-                <form action="/auth/sign-out" method="post">
-                  <button
-                    type="submit"
-                    role="menuitem"
-                    className="w-full px-3 py-2 text-left text-sm hover:bg-[var(--color-border)]/40"
-                  >
-                    Sign out
-                  </button>
-                </form>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={signOutPending}
+                  className="w-full px-3 py-2 text-left text-sm hover:bg-[var(--color-border)]/40 disabled:opacity-60"
+                  onClick={() => void onSignOut()}
+                >
+                  Sign out
+                </button>
               </div>
             )}
           </div>
@@ -215,14 +235,14 @@ export function AppChrome({
               >
                 Profile
               </Link>
-              <form action="/auth/sign-out" method="post">
-                <button
-                  type="submit"
-                  className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-[var(--color-border)]/40"
-                >
-                  Sign out
-                </button>
-              </form>
+              <button
+                type="button"
+                disabled={signOutPending}
+                className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-[var(--color-border)]/40 disabled:opacity-60"
+                onClick={() => void onSignOut()}
+              >
+                Sign out
+              </button>
             </div>
           ) : null
         }

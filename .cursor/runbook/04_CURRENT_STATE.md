@@ -7,7 +7,7 @@
 ### Platform
 
 - Monorepo builds via Turbo (`npm run build`).
-- Drizzle schema + SQL migrations (`packages/db/drizzle/`), including `school_submission_artifacts` (`0002`).
+- Drizzle schema + SQL migrations (`packages/db/drizzle/`), including `school_submission_artifacts` (`0002`); `0017` drops `household_members.nickname` / `public_label`.
 - `npm run db:migrate` and API Docker entrypoint apply migrations. New SQL must be registered in `packages/db/drizzle/meta/_journal.json` (see `03_RULES_AND_STANDARDS.md` → Database migrations).
 - Zod env validation with production guards (`@whome/config`).
 - Docker Compose dev stack: postgres, redis, minio, api, worker, web.
@@ -22,11 +22,11 @@
 
 ### Auth
 
-- **Better Auth** (`packages/auth/src/better-auth.ts`): email/password + **username plugin** + optional Google OAuth; Drizzle `ba_*` tables (`0015`); `users.username` / nullable `users.email` (`0016`).
-- Login UI: `/login` — email or username sign-in; owner email sign-up; optional Google; logout `POST /auth/sign-out`.
+- **Better Auth** (`packages/auth/src/better-auth.ts`): email/password + **username plugin** + optional Google OAuth; Drizzle `ba_*` tables (`0015`); `users.username` / nullable `users.email` (`0016`). Drizzle adapter `schema` keys must match `modelName` (`users`, `ba_sessions`, …); `user.fields` maps BA `name`/`image` → Drizzle props `displayName`/`imageUrl` (not SQL column names).
+- Login UI: `/login` — email or username sign-in; owner email sign-up; optional Google; logout via `authClient.signOut()` (Better Auth requires JSON — HTML form POST 415).
 - **Household provisioning:** `POST /api/core/household/members/provision` (owner/admin) creates username-only members (`provision-member.ts`, no synthetic email).
 - **Email verification:** Better Auth `emailVerification` + optional SMTP (`SMTP_*`, `EMAIL_VERIFICATION_REQUIRED`); dev logs link when SMTP unset (`packages/auth/src/mail.ts`).
-- **Post-import join:** session hook auto-joins imported household; stub members claimed via `HOUSEHOLD_MEMBER_EMAIL_MAP` / display name (`claim-imported-stub.ts` → `join-imported.ts`).
+- **Post-import join:** session hook auto-joins imported household; stub members claimed via `HOUSEHOLD_MEMBER_EMAIL_MAP` / display name (`claim-imported-stub.ts` → `join-imported.ts`); bootstrap copies `users.displayName` → owner `household_members.name`.
 - Whome session DTO: `GET /auth/session` (household member context for API/UI).
 - Calendar OAuth remains separate (`/auth/google/calendar/*`); state in Redis.
 
@@ -36,7 +36,7 @@
 - **Shell:** Icon nav with accent active bar, user menu (ARIA), mobile Drawer with account footer; header gradient; breadcrumbs on school detail routes.
 - **Calendar:** `/calendar` — Month, Week, Day, Agenda; shared scrollable 0–24h time grid (`CalendarTimeGrid`, `fillViewport` + `--calendar-chrome-height` for week/day); multi-day all-day span (`calendar-event-span.ts`, continued chip styling); desktop week/day — click slot to create, drag + resize editable timed events, **all-day drag** across columns; GET/PATCH/POST events — full DTO (`description`, `endDate`, `categoryKey`, `timeZone`, `reminderOffsets`, `repeatRule` daily/weekly/monthly); `POST .../duplicate`; GET span overlap query; **event sheet** — description, dates/times, calendar, **per-calendar category** (color from category when set), TZ, repeat builder, reminders, series delete scope; **event categories** scoped by `calendar_id` (migration `0014`) + `GET/POST/PATCH/DELETE /api/calendar/event-categories` (GET backfills default **General** per calendar); manager in Calendar settings; **category filter pills** (`whome:calendar-hidden-categories`); category color fallback on grid/agenda; **compact filter chrome** — single sticky toolbar row (`CalendarFilterBar`: inline write-to + Filters sheet for calendars/categories with search; `sessionStorage` hidden calendars, `localStorage` default write calendar); search + new event + view nav in same sticky region (`CalendarPageClient`); **calendar manager** in Google sheet; **recurring** — HomeHub `recurring_reminder` import, extended RRULE materialize (timed + MONTHLY subset), drag/delete `recurringScope`; **calendar reminder push** — `calendar_event_reminders`, worker `calendar.reminder.scan` (5m), profile `pushCalendarRemindersEnabled`; parity matrix `docs/CALENDAR_EVENT_PARITY.md`; Google sheet sync mode + bidirectional push; mobile Month + Agenda; **import wizard** (`CalendarImportWizard`, auto-open `?connected` / `?import`); **setup banner** (`CalendarSetupBanner`, dismiss `whome:calendar-setup-dismissed`); **Connect Google** uses `AnchorButton` / full-page nav to `/auth/google/calendar/start` (not Next `Link` — OAuth redirects require document navigation); login OAuth preserves `?next=` for calendar connect; sync progress polls `GET /api/calendar/sync/status`.
 - **Dashboard:** **Today at a glance** (`GlanceTile`) — chore/school preview lines + counts via `/api/core/chores/glance` and `/api/school/glance`; weather widget (`useWeatherForecast`, Redis stale cache, structured errors); month calendar day sheet shows hourly weather per timed event when location saved; household presence + message; notice board auto-save.
-- **Profile:** `/profile` — name/nickname/label, presence + message, temperature unit, notice push opt-out + per-browser enable, **calendar reminder push** toggle (`pushCalendarRemindersEnabled`), avatar upload (JPEG/PNG/WebP → 256² WebP on S3, `GET /api/core/avatars/:memberId`).
+- **Profile:** `/profile` — display name, presence + message, temperature unit, notice push opt-out + per-browser enable, **calendar reminder push** toggle (`pushCalendarRemindersEnabled`), avatar upload (JPEG/PNG/WebP → 256² WebP on S3, `GET /api/core/avatars/:memberId`).
 - **Core lists:** Shopping/chores/notes/expenses use ListItem, Checkbox, SectionHeader, EmptyState icons; expenses month StatTile.
 - **Tests:** `apps/web/src/lib/color-contrast.test.ts` in Vitest.
 - **Docs:** `docs/UI.md`

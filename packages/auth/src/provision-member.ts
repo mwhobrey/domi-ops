@@ -13,7 +13,6 @@ export type ProvisionUsernameMemberInput = {
   displayName: string;
   password: string;
   role: ProvisionMemberRole;
-  nickname?: string | null;
 };
 
 export type ProvisionUsernameMemberResult = {
@@ -75,14 +74,10 @@ export async function provisionUsernameMember(
       userId: createdUser.id,
       role: input.role,
       name: displayName,
-      nickname: input.nickname?.trim().slice(0, 64) ?? null,
-      publicLabel: "name",
     })
     .returning({
       id: householdMembers.id,
       name: householdMembers.name,
-      nickname: householdMembers.nickname,
-      publicLabel: householdMembers.publicLabel,
     });
 
   await db.insert(homeStatus).values({
@@ -129,7 +124,6 @@ export async function listHouseholdMembersWithAuth(
     memberId: string;
     role: string;
     name: string | null;
-    nickname: string | null;
     username: string | null;
     email: string | null;
   }>
@@ -139,7 +133,6 @@ export async function listHouseholdMembersWithAuth(
       memberId: householdMembers.id,
       role: householdMembers.role,
       name: householdMembers.name,
-      nickname: householdMembers.nickname,
       username: users.username,
       email: users.email,
     })

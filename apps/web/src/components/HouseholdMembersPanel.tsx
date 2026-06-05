@@ -20,7 +20,6 @@ type MemberRow = {
   memberId: string;
   role: string;
   name: string | null;
-  nickname: string | null;
   username: string | null;
   email: string | null;
 };
@@ -116,7 +115,7 @@ export function HouseholdMembersPanel({ canManage }: { canManage: boolean }) {
         <ul className="divide-y divide-[var(--color-border)] rounded-[var(--radius-lg)] border border-[var(--color-border)]">
           {members.map((m) => (
             <li key={m.memberId} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
-              <span className="font-medium">{m.name ?? m.nickname ?? "Member"}</span>
+              <span className="font-medium">{m.name ?? "Member"}</span>
               <span className="text-[var(--color-text-muted)]">
                 {m.username ? `@${m.username}` : m.email ?? "—"} · {m.role}
               </span>

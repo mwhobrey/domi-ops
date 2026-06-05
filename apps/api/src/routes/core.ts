@@ -6,7 +6,6 @@ import {
   memberShownLabel,
   ProvisionMemberError,
   provisionUsernameMember,
-  type MemberPublicLabel,
 } from "@whome/auth";
 import type { Env } from "@whome/config";
 import { isModuleEnabled } from "@whome/config";
@@ -54,13 +53,7 @@ import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 
 function posterLabel(auth: AuthContext): string {
-  return (
-    memberShownLabel({
-      name: auth.name,
-      nickname: auth.nickname,
-      publicLabel: auth.publicLabel as MemberPublicLabel,
-    }) || auth.email || auth.username || "Member"
-  );
+  return memberShownLabel({ name: auth.name }) || auth.email || auth.username || "Member";
 }
 
 type NoticeRow = typeof notices.$inferSelect;
@@ -610,8 +603,6 @@ export function coreRoutes(db: Database, env: Env) {
       email: auth.email,
       username: auth.username,
       name: auth.name,
-      nickname: auth.nickname,
-      publicLabel: auth.publicLabel,
       shownLabel: shown,
       role: auth.role,
       memberId: auth.memberId,
@@ -631,8 +622,6 @@ export function coreRoutes(db: Database, env: Env) {
     const auth = c.get("auth")!;
     const body = await c.req.json<{
       name?: string;
-      nickname?: string;
-      publicLabel?: MemberPublicLabel;
       temperatureUnit?: TemperatureUnit;
       pushNoticesEnabled?: boolean;
       pushCalendarRemindersEnabled?: boolean;
@@ -640,8 +629,6 @@ export function coreRoutes(db: Database, env: Env) {
 
     const patch: {
       name?: string | null;
-      nickname?: string | null;
-      publicLabel?: MemberPublicLabel;
     } = {};
     const userPatch: {
       temperatureUnit?: TemperatureUnit;
@@ -649,10 +636,6 @@ export function coreRoutes(db: Database, env: Env) {
       pushCalendarRemindersEnabled?: boolean;
     } = {};
     if (body.name !== undefined) patch.name = body.name.trim().slice(0, 128) || null;
-    if (body.nickname !== undefined) patch.nickname = body.nickname.trim().slice(0, 64) || null;
-    if (body.publicLabel === "name" || body.publicLabel === "nickname") {
-      patch.publicLabel = body.publicLabel;
-    }
     if (body.temperatureUnit === "fahrenheit" || body.temperatureUnit === "celsius") {
       userPatch.temperatureUnit = body.temperatureUnit;
     }
@@ -680,8 +663,6 @@ export function coreRoutes(db: Database, env: Env) {
     const [member] = await db
       .select({
         name: householdMembers.name,
-        nickname: householdMembers.nickname,
-        publicLabel: householdMembers.publicLabel,
       })
       .from(householdMembers)
       .where(eq(householdMembers.id, auth.memberId))
@@ -833,7 +814,6 @@ export function coreRoutes(db: Database, env: Env) {
       displayName?: string;
       password?: string;
       role?: "child" | "member" | "guest";
-      nickname?: string;
     }>();
     if (!body.username?.trim() || !body.password || !body.displayName?.trim()) {
       return c.json({ error: "username_display_name_and_password_required" }, 400);
@@ -849,7 +829,6 @@ export function coreRoutes(db: Database, env: Env) {
         displayName: body.displayName,
         password: body.password,
         role,
-        nickname: body.nickname,
       });
       return c.json(created, 201);
     } catch (e) {

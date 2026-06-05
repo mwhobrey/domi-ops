@@ -104,7 +104,6 @@ export async function importHomeStatusMembers(ctx: ImportContext): Promise<Mappe
         name: legacyName.slice(0, 128),
         legacyDisplayName: legacyName.slice(0, 64),
         legacyExternalId: sourceId,
-        publicLabel: "name",
       })
       .returning({ id: householdMembers.id });
 

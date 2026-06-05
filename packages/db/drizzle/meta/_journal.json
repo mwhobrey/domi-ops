@@ -120,6 +120,13 @@
       "when": 1780494990000,
       "tag": "0016_user_username",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1780494991000,
+      "tag": "0017_drop_member_nickname",
+      "breakpoints": true
     }
   ]
 }

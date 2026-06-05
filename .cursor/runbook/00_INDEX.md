@@ -18,6 +18,7 @@
 | Shipping or deploying | [03_RULES_AND_STANDARDS.md](./03_RULES_AND_STANDARDS.md) + `docker-compose.prod.yml`, `deploy/Caddyfile.example` |
 | Prioritizing work | [04_CURRENT_STATE.md](./04_CURRENT_STATE.md) |
 | Manual School QA / import check | [05_SCHOOL_QA.md](./05_SCHOOL_QA.md) |
+| Dogfood test phases (session tracker) | [06_DOGFOOD_TEST_PHASES.md](./06_DOGFOOD_TEST_PHASES.md) |
 
 ## Table of contents
 
@@ -28,6 +29,7 @@
 | [03_RULES_AND_STANDARDS.md](./03_RULES_AND_STANDARDS.md) | Conventions, errors, testing, deployment, gotchas |
 | [04_CURRENT_STATE.md](./04_CURRENT_STATE.md) | Working vs broken, next steps |
 | [05_SCHOOL_QA.md](./05_SCHOOL_QA.md) | School module manual QA + post-import verification |
+| [06_DOGFOOD_TEST_PHASES.md](./06_DOGFOOD_TEST_PHASES.md) | Phased dogfood checklist + session handoff |
 
 ## Supplementary docs (outside runbook)
 

@@ -58,8 +58,6 @@ async function claimStubByLegacyName(
       stubUserId: users.id,
       stubEmail: users.email,
       name: householdMembers.name,
-      nickname: householdMembers.nickname,
-      publicLabel: householdMembers.publicLabel,
       role: householdMembers.role,
     })
     .from(householdMembers)

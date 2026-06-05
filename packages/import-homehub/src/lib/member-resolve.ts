@@ -20,7 +20,6 @@ export async function resolveMemberId(
     .select({
       id: householdMembers.id,
       name: householdMembers.name,
-      nickname: householdMembers.nickname,
       legacyDisplayName: householdMembers.legacyDisplayName,
     })
     .from(householdMembers)
@@ -29,7 +28,6 @@ export async function resolveMemberId(
   for (const m of members) {
     const keys = [
       m.name?.trim().toLowerCase(),
-      m.nickname?.trim().toLowerCase(),
       m.legacyDisplayName?.trim().toLowerCase(),
     ].filter(Boolean) as string[];
     if (keys.includes(key)) {

@@ -43,7 +43,7 @@ async function ensureHomeStatusRow(
   });
 }
 
-/** Attach Google user to the imported household (no HomeHub nickname map). */
+/** Attach Google user to the imported household. */
 export async function joinImportedHousehold(
   db: Database,
   env: Env,
@@ -68,8 +68,6 @@ export async function joinImportedHousehold(
       .select({
         id: householdMembers.id,
         name: householdMembers.name,
-        nickname: householdMembers.nickname,
-        publicLabel: householdMembers.publicLabel,
       })
       .from(householdMembers)
       .where(eq(householdMembers.id, claimed.memberId))
@@ -89,8 +87,6 @@ export async function joinImportedHousehold(
     .select({
       id: householdMembers.id,
       name: householdMembers.name,
-      nickname: householdMembers.nickname,
-      publicLabel: householdMembers.publicLabel,
     })
     .from(householdMembers)
     .where(
@@ -146,13 +142,10 @@ export async function joinImportedHousehold(
       userId: user.id,
       role: anyMember ? "member" : "owner",
       name,
-      publicLabel: "name",
     })
     .returning({
       id: householdMembers.id,
       name: householdMembers.name,
-      nickname: householdMembers.nickname,
-      publicLabel: householdMembers.publicLabel,
     });
 
   await ensureHomeStatusRow(db, householdId, member.id, memberShownLabel(member));

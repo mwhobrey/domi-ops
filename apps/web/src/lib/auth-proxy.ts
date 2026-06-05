@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const API_ORIGIN = (process.env.API_URL ?? "http://localhost:4000").replace(/\/$/, "");
+function apiOrigin(): string {
+  return (process.env.API_URL ?? "http://localhost:4000").replace(/\/$/, "");
+}
 
 /** Proxy /auth/* to the API so Set-Cookie is issued for the browser origin (e.g. :3001). */
 export async function proxyAuthToApi(
@@ -8,12 +10,13 @@ export async function proxyAuthToApi(
   pathSegments: string[],
 ): Promise<NextResponse> {
   const path = pathSegments.length ? `/${pathSegments.join("/")}` : "";
-  const target = `${API_ORIGIN}/auth${path}${request.nextUrl.search}`;
+  const target = `${apiOrigin()}/auth${path}${request.nextUrl.search}`;
 
   const headers = new Headers();
-  for (const [key, value] of request.headers) {
-    if (key.toLowerCase() === "host" || key.toLowerCase() === "connection") continue;
-    headers.set(key, value);
+  const forward = ["content-type", "cookie", "origin", "authorization", "accept", "accept-language"];
+  for (const name of forward) {
+    const value = request.headers.get(name);
+    if (value) headers.set(name, value);
   }
 
   const init: RequestInit = {
@@ -23,19 +26,36 @@ export async function proxyAuthToApi(
   };
 
   if (request.method !== "GET" && request.method !== "HEAD") {
-    init.body = await request.arrayBuffer();
+    const body = await request.text();
+    if (body) init.body = body;
   }
 
-  const upstream = await fetch(target, init);
-  const outHeaders = new Headers();
+  let upstream: Response;
+  try {
+    upstream = await fetch(target, init);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Auth proxy fetch failed";
+    console.error(`[whome auth-proxy] ${request.method} ${target}:`, message);
+    return NextResponse.json({ error: "auth_proxy_fetch_failed", message }, { status: 502 });
+  }
 
+  const responseBody = await upstream.text();
+
+  if (process.env.NODE_ENV === "development" && upstream.status >= 500) {
+    console.error(
+      `[whome auth-proxy] ${request.method} ${target} → ${upstream.status}`,
+      responseBody.slice(0, 500) || "(empty body)",
+    );
+  }
+
+  const outHeaders = new Headers();
   upstream.headers.forEach((value, key) => {
     const lower = key.toLowerCase();
-    if (lower === "transfer-encoding" || lower === "connection") return;
+    if (lower === "transfer-encoding" || lower === "connection" || lower === "content-length") return;
     outHeaders.append(key, value);
   });
 
-  return new NextResponse(upstream.body, {
+  return new NextResponse(responseBody, {
     status: upstream.status,
     statusText: upstream.statusText,
     headers: outHeaders,

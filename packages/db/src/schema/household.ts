@@ -17,8 +17,6 @@ export const memberRoleEnum = pgEnum("member_role", [
   "guest",
 ]);
 
-export const memberPublicLabelEnum = pgEnum("member_public_label", ["name", "nickname"]);
-
 export const temperatureUnitEnum = pgEnum("temperature_unit", ["fahrenheit", "celsius"]);
 
 export const deploymentTierEnum = pgEnum("deployment_tier", [
@@ -78,11 +76,8 @@ export const householdMembers = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     role: memberRoleEnum("role").notNull().default("member"),
-    /** Primary name; user-editable in profile */
+    /** Household display name — user-editable in profile */
     name: varchar("name", { length: 128 }),
-    nickname: varchar("nickname", { length: 64 }),
-    /** Which field appears on who's home, school roster, etc. */
-    publicLabel: memberPublicLabelEnum("public_label").notNull().default("name"),
     /** Deprecated: HomeHub status-board label only */
     legacyDisplayName: varchar("legacy_display_name", { length: 64 }),
     legacyExternalId: varchar("legacy_external_id", { length: 128 }),

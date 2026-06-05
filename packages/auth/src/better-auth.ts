@@ -38,23 +38,20 @@ export function createBetterAuth(db: Database, env: Env): WhomeBetterAuth {
     trustedOrigins: [env.PUBLIC_APP_URL],
     database: drizzleAdapter(db, {
       provider: "pg",
+      // Keys must match modelName below (not Better Auth defaults like "user"/"session").
       schema: {
-        user: users,
-        session: baSessions,
-        account: baAccounts,
-        verification: baVerifications,
+        users,
+        ba_sessions: baSessions,
+        ba_accounts: baAccounts,
+        ba_verifications: baVerifications,
       },
     }),
     user: {
       modelName: "users",
+      // Drizzle property names — SQL columns stay snake_case in @whome/db schema.
       fields: {
-        name: "display_name",
-        image: "image_url",
-        emailVerified: "email_verified",
-        username: "username",
-        displayUsername: "display_username",
-        createdAt: "created_at",
-        updatedAt: "updated_at",
+        name: "displayName",
+        image: "imageUrl",
       },
       additionalFields: {
         temperatureUnit: {
@@ -79,37 +76,12 @@ export function createBetterAuth(db: Database, env: Env): WhomeBetterAuth {
     },
     session: {
       modelName: "ba_sessions",
-      fields: {
-        userId: "user_id",
-        expiresAt: "expires_at",
-        ipAddress: "ip_address",
-        userAgent: "user_agent",
-        createdAt: "created_at",
-        updatedAt: "updated_at",
-      },
     },
     account: {
       modelName: "ba_accounts",
-      fields: {
-        userId: "user_id",
-        accountId: "account_id",
-        providerId: "provider_id",
-        accessToken: "access_token",
-        refreshToken: "refresh_token",
-        idToken: "id_token",
-        accessTokenExpiresAt: "access_token_expires_at",
-        refreshTokenExpiresAt: "refresh_token_expires_at",
-        createdAt: "created_at",
-        updatedAt: "updated_at",
-      },
     },
     verification: {
       modelName: "ba_verifications",
-      fields: {
-        expiresAt: "expires_at",
-        createdAt: "created_at",
-        updatedAt: "updated_at",
-      },
     },
     emailAndPassword: {
       enabled: true,

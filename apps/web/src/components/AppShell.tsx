@@ -27,8 +27,6 @@ export async function AppShell({
         username?: string | null;
         memberId: string;
         name: string | null;
-        nickname: string | null;
-        publicLabel: "name" | "nickname";
         avatarUrl: string | null;
       };
     }>("/auth/session");
@@ -39,12 +37,7 @@ export async function AppShell({
         username: u.username ?? null,
         memberId: u.memberId,
         name: u.name,
-        nickname: u.nickname,
-        shownLabel: memberShownLabel({
-          name: u.name,
-          nickname: u.nickname,
-          publicLabel: u.publicLabel,
-        }),
+        shownLabel: memberShownLabel({ name: u.name }),
         avatarUrl: u.avatarUrl,
       };
     }

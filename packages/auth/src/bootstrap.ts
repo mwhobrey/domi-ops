@@ -15,8 +15,6 @@ export interface AuthContext {
   email: string | null;
   username: string | null;
   name: string | null;
-  nickname: string | null;
-  publicLabel: "name" | "nickname";
   role: "owner" | "admin" | "member" | "child" | "guest";
 }
 
@@ -41,6 +39,15 @@ export async function bootstrapHouseholdOnLogin(
     throw new Error("User has no household; contact admin (non-single deployment)");
   }
 
+  const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  if (!user) {
+    throw new Error("User not found for household bootstrap");
+  }
+
+  const memberName =
+    user.displayName?.trim() ||
+    (user.email?.split("@")[0] ?? "Owner").slice(0, 128);
+
   const [household] = await db
     .insert(households)
     .values({
@@ -55,6 +62,7 @@ export async function bootstrapHouseholdOnLogin(
     householdId: household.id,
     userId,
     role: "owner",
+    name: memberName,
   });
 
   return household.id;
@@ -80,9 +88,7 @@ export async function resolveAuthContext(
     memberId: member.id,
     email: user.email,
     username: user.username,
-    name: member.name,
-    nickname: member.nickname,
-    publicLabel: member.publicLabel,
+    name: member.name ?? user.displayName,
     role: member.role,
   };
 }

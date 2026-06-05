@@ -36,8 +36,6 @@ export function whomeSessionRoutes(db: Database, auth: WhomeBetterAuth) {
         householdId: authCtx.householdId,
         memberId: authCtx.memberId,
         name: authCtx.name,
-        nickname: authCtx.nickname,
-        publicLabel: authCtx.publicLabel,
         role: authCtx.role,
         avatarUrl: memberAvatarUrl(authCtx.memberId, memberRow?.avatarKey),
       },

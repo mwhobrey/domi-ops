@@ -71,8 +71,9 @@ export function LoginForm({ nextPath, googleEnabled }: { nextPath: string; googl
       }
       router.push(nextPath);
       router.refresh();
-    } catch {
-      setError("Something went wrong. Try again.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : null;
+      setError(msg?.trim() ? msg : "Something went wrong. Try again.");
     } finally {
       setPending(false);
     }

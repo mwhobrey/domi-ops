@@ -160,8 +160,6 @@ export function schoolRoutes(db: Database, env: Env) {
         id: householdMembers.id,
         role: householdMembers.role,
         name: householdMembers.name,
-        nickname: householdMembers.nickname,
-        publicLabel: householdMembers.publicLabel,
         legacyDisplayName: householdMembers.legacyDisplayName,
         email: users.email,
       })

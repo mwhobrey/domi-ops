@@ -1,6 +1,6 @@
 # School module — manual QA runbook
 
-Operator checklist for Mike. Pair with `docs/SCHOOL_PARITY.md` (field matrix) and Linear School project [WHO-41](https://linear.app/mikewhob-whome/issue/WHO-41)–[WHO-48](https://linear.app/mikewhob-whome/issue/WHO-48).
+Operator checklist for Mike. **Phased session tracker:** [06_DOGFOOD_TEST_PHASES.md](./06_DOGFOOD_TEST_PHASES.md). Pair with `docs/SCHOOL_PARITY.md` (field matrix) and Linear School project [WHO-41](https://linear.app/mikewhob-whome/issue/WHO-41)–[WHO-48](https://linear.app/mikewhob-whome/issue/WHO-48).
 
 ## Prerequisites
 

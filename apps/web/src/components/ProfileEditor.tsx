@@ -7,7 +7,6 @@ import { CalendarReminderPushSettings } from "./CalendarReminderPushSettings";
 import { NoticePushSettings } from "./NoticePushSettings";
 import { Alert, Avatar, Button, Card, CardBody, Input, RadioGroup } from "./ui";
 
-type PublicLabel = "name" | "nickname";
 type TemperatureUnit = "fahrenheit" | "celsius";
 
 function avatarErrorMessage(body: string | undefined): string {
@@ -33,8 +32,6 @@ export function ProfileEditor({
     username?: string | null;
     memberId: string;
     name: string | null;
-    nickname: string | null;
-    publicLabel: PublicLabel;
     shownLabel: string;
     homeStatusId: string | null;
     presence: HomePresence;
@@ -48,8 +45,6 @@ export function ProfileEditor({
   };
 }) {
   const [name, setName] = useState(initial.name ?? "");
-  const [nickname, setNickname] = useState(initial.nickname ?? "");
-  const [publicLabel, setPublicLabel] = useState<PublicLabel>(initial.publicLabel);
   const [presence, setPresence] = useState<HomePresence>(initial.presence);
   const [statusMessage, setStatusMessage] = useState(initial.statusMessage ?? "");
   const [temperatureUnit, setTemperatureUnit] = useState<TemperatureUnit>(initial.temperatureUnit);
@@ -77,9 +72,7 @@ export function ProfileEditor({
   }, [avatarUrl]);
 
   function previewShown(): string {
-    if (publicLabel === "nickname" && nickname.trim()) return nickname.trim();
     if (name.trim()) return name.trim();
-    if (nickname.trim()) return nickname.trim();
     return "Member";
   }
 
@@ -204,32 +197,9 @@ export function ProfileEditor({
         </section>
 
         <label className="block space-y-1">
-          <span className="text-sm font-medium">Name</span>
+          <span className="text-sm font-medium">Display name</span>
           <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={128} />
         </label>
-        <label className="block space-y-1">
-          <span className="text-sm font-medium">Nickname</span>
-          <Input
-            value={nickname}
-            onChange={(e) => setNickname(e.target.value)}
-            maxLength={64}
-            placeholder="Optional"
-          />
-        </label>
-        <RadioGroup
-          legend="Show on household board & school"
-          name="publicLabel"
-          value={publicLabel}
-          onChange={(v) => setPublicLabel(v as PublicLabel)}
-          options={[
-            { value: "name", label: `Name${name.trim() ? ` (${name.trim()})` : ""}` },
-            {
-              value: "nickname",
-              label: `Nickname${nickname.trim() ? ` (${nickname.trim()})` : ""}`,
-              disabled: !nickname.trim(),
-            },
-          ]}
-        />
         <RadioGroup
           legend="Temperature"
           name="temperatureUnit"
@@ -302,8 +272,6 @@ export function ProfileEditor({
             try {
               await apiClient.patch("/api/core/profile", {
                 name: name || null,
-                nickname: nickname || null,
-                publicLabel,
                 temperatureUnit,
               });
               if (initial.homeStatusId) {

@@ -13,8 +13,6 @@ export default async function ProfilePage() {
     username: null as string | null,
     role: "member" as HouseholdRole,
     name: null as string | null,
-    nickname: null as string | null,
-    publicLabel: "name" as const,
     shownLabel: "Member",
     memberId: "",
     homeStatusId: null as string | null,
