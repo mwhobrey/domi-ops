@@ -26,7 +26,7 @@
 - Login UI: `/login` — email or username sign-in; owner email sign-up; optional Google; logout via `authClient.signOut()` (Better Auth requires JSON — HTML form POST 415).
 - **Household provisioning:** `POST /api/core/household/members/provision` (owner/admin) creates username-only members (`provision-member.ts`, no synthetic email).
 - **Email verification:** Better Auth `emailVerification` + optional SMTP (`SMTP_*`, `EMAIL_VERIFICATION_REQUIRED`); dev logs link when SMTP unset (`packages/auth/src/mail.ts`).
-- **Post-import join:** session hook auto-joins imported household; stub members claimed via `HOUSEHOLD_MEMBER_EMAIL_MAP` / display name (`claim-imported-stub.ts` → `join-imported.ts`); bootstrap copies `users.displayName` → owner `household_members.name`.
+- **Post-import join:** session hook auto-joins imported household; stub members claimed via `HOUSEHOLD_MEMBER_EMAIL_MAP` / display name. **Single-tenant (`DEPLOYMENT_MODE=single`):** only one household per DB — first login bootstraps owner; later email/Google logins join as `member` (repair merges orphan shadow households on session create).
 - Whome session DTO: `GET /auth/session` (household member context for API/UI).
 - Calendar OAuth remains separate (`/auth/google/calendar/*`); state in Redis.
 
@@ -51,7 +51,7 @@
 
 - API: classes CRUD (PATCH term/teacher/schedule/archived), enrollments, assignments CRUD (incl. `categoryId`), **`GET /classes/:id/gradebook`**, categories CRUD, submit, grade, artifacts (`school.ts`); **`GET /api/school/context`** + role-scoped **`GET /classes`** / **`GET /glance`** (archived excluded by default); per-route **`access`** object from `apps/api/src/lib/school-access.ts` (household role + enrollment role).
 - UI: **role-aware** (WHO-47) — view banner on `/school`; admin/staff see create class + full roster/gradebook; **student** sees enrolled classes only, own progress, submit workflow, no teacher actions; **observer** read-only. Assignment sheet includes category picker when categories exist.
-- Routes: `/school`, `/school/class/[id]`, `/school/class/[id]/gradebook`, `/school/assignment/[id]` — conditional sections per `SchoolClassAccess`.
+- Routes: `/school`, `/school/class/[id]`, `/school/class/[id]/gradebook`, `/school/assignment/[id]` — conditional sections per `SchoolClassAccess`; assignment detail uses kid-friendly student turn-in flow (unified work card, plain-language status, upload-first with artifact preservation on save); teachers get **Student work** card with file list, image previews, and `GET /api/school/artifacts/:id/file` for authenticated download/view.
 - Parity matrix: `docs/SCHOOL_PARITY.md` (WHO-41).
 - Manual QA runbook: `.cursor/runbook/05_SCHOOL_QA.md` (smoke routes, WHO-41–48 matrix, import SQL checks).
 - Import: `school_submission_artifact` → `school_submission_artifacts` + S3 keys from file mapper; re-import hydrates `idMap` from `import_records` (school + files mappers).
@@ -81,6 +81,8 @@
 - **Staging compose override** (`docker-compose.staging.yml`) — separate Postgres volume, port 5433 / web 3002.
 - **`scripts/smoke-cutover.sh`** — health, optional import dry-run, OAuth reachability.
 - Expanded **`deploy/CUTOVER.md`** — staging rehearsal, prod import, claim smoke, Caddy swap.
+- **Dev MinIO:** `scripts/ensure-minio.mjs` creates S3 bucket after `dev:reset`; API boot calls `ensureS3Bucket` (`apps/api/src/lib/s3.ts`).
+- **Single-tenant auth:** `packages/auth/src/single-tenant.ts` — second login joins canonical household; repairs orphan shadow households.
 
 ## Broken, stubbed, or incomplete
 

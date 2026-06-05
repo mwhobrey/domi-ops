@@ -7,6 +7,10 @@ import {
 } from "@whome/db";
 import { eq } from "drizzle-orm";
 import { hasImportRecords } from "./import-records.js";
+import {
+  getCanonicalHouseholdId,
+  joinExistingHousehold,
+} from "./single-tenant.js";
 
 export interface AuthContext {
   userId: string;
@@ -47,6 +51,11 @@ export async function bootstrapHouseholdOnLogin(
   const memberName =
     user.displayName?.trim() ||
     (user.email?.split("@")[0] ?? "Owner").slice(0, 128);
+
+  const canonicalHouseholdId = await getCanonicalHouseholdId(db);
+  if (canonicalHouseholdId) {
+    return joinExistingHousehold(db, canonicalHouseholdId, userId, memberName);
+  }
 
   const [household] = await db
     .insert(households)

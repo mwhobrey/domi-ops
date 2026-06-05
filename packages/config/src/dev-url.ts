@@ -32,6 +32,24 @@ export function oauthRedirectUris(publicAppUrl: string): {
   };
 }
 
+/** Dev-only browser origins (localhost vs 127.0.0.1) for Better Auth trustedOrigins. */
+export function devLoopbackOrigins(publicAppUrl: string): string[] {
+  try {
+    const u = new URL(publicAppUrl);
+    const portSuffix = u.port ? `:${u.port}` : "";
+    return [
+      ...new Set([
+        u.origin,
+        `${u.protocol}//localhost${portSuffix}`,
+        `${u.protocol}//127.0.0.1${portSuffix}`,
+        `${u.protocol}//[::1]${portSuffix}`,
+      ]),
+    ];
+  } catch {
+    return [publicAppUrl.replace(/\/$/, "")];
+  }
+}
+
 /**
  * Development-only checks for PUBLIC_APP_URL / OAuth alignment.
  * Returns human-readable warnings (empty when OK).

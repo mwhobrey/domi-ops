@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { bootstrapHouseholdOnLogin, resolveAuthContext } from "./bootstrap.js";
 import { hasImportRecords } from "./import-records.js";
 import { joinImportedHousehold } from "./join-imported.js";
+import { repairSingleTenantMembership } from "./single-tenant.js";
 
 /** Idempotent: attach session user to imported or new household. */
 export async function ensureHouseholdMembership(
@@ -12,6 +13,8 @@ export async function ensureHouseholdMembership(
   env: Env,
   userId: string,
 ): Promise<void> {
+  if (await repairSingleTenantMembership(db, env, userId)) return;
+
   const existing = await resolveAuthContext(db, userId);
   if (existing) return;
 

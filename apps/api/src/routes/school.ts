@@ -22,6 +22,7 @@ import {
   visibleClassIdsForMember,
   type MemberEnrollmentRow,
 } from "../lib/school-access.js";
+import { contentTypeFromKey, getObjectBuffer } from "../lib/s3.js";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 
@@ -1300,6 +1301,79 @@ export function schoolRoutes(db: Database, env: Env) {
       })
       .returning();
     return c.json({ artifact: art }, 201);
+  });
+
+  app.get("/artifacts/:id/file", async (c) => {
+    const auth = c.get("auth")!;
+    const id = c.req.param("id");
+    const context = await schoolContextForAuth(db, auth);
+    if (!context) return c.json({ error: "not_a_member" }, 403);
+
+    const [artifact] = await db
+      .select()
+      .from(schoolSubmissionArtifacts)
+      .where(eq(schoolSubmissionArtifacts.id, id))
+      .limit(1);
+    if (!artifact) return c.json({ error: "not_found" }, 404);
+    if (artifact.url && !artifact.s3Key) {
+      return c.redirect(artifact.url);
+    }
+    if (!artifact.s3Key) return c.json({ error: "not_found" }, 404);
+
+    const [submission] = await db
+      .select()
+      .from(schoolSubmissions)
+      .where(eq(schoolSubmissions.id, artifact.submissionId))
+      .limit(1);
+    if (!submission) return c.json({ error: "not_found" }, 404);
+
+    const [assignmentRow] = await db
+      .select()
+      .from(schoolAssignments)
+      .where(eq(schoolAssignments.id, submission.assignmentId))
+      .limit(1);
+    if (!assignmentRow) return c.json({ error: "not_found" }, 404);
+
+    const [cls] = await db
+      .select()
+      .from(schoolClasses)
+      .where(
+        and(eq(schoolClasses.id, assignmentRow.classId), eq(schoolClasses.householdId, auth.householdId)),
+      )
+      .limit(1);
+    if (!cls) return c.json({ error: "not_found" }, 404);
+
+    const [myEnrollment] = await db
+      .select()
+      .from(schoolEnrollments)
+      .where(
+        and(
+          eq(schoolEnrollments.classId, cls.id),
+          eq(schoolEnrollments.memberId, context.memberId),
+        ),
+      )
+      .limit(1);
+    const access = resolveClassAccess({
+      memberId: context.memberId,
+      householdRole: context.householdRole,
+      teacherMemberId: cls.teacherMemberId,
+      enrollment: myEnrollment ?? null,
+    });
+    const canView =
+      access.canGrade ||
+      access.canViewFullGradebook ||
+      (access.canSubmit && submission.studentMemberId === context.memberId);
+    if (!canView) return c.json({ error: "forbidden" }, 403);
+
+    const buf = await getObjectBuffer(env, artifact.s3Key);
+    if (!buf) return c.json({ error: "storage_unavailable" }, 503);
+
+    const filename = artifact.s3Key.split("/").pop()?.replace(/^\d+-/, "") ?? "download";
+    return c.body(new Uint8Array(buf), 200, {
+      "Content-Type": contentTypeFromKey(artifact.s3Key),
+      "Content-Disposition": `inline; filename="${filename.replace(/"/g, "")}"`,
+      "Cache-Control": "private, max-age=300",
+    });
   });
 
   app.delete("/artifacts/:id", async (c) => {

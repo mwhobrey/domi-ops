@@ -73,6 +73,12 @@ export function LoginForm({ nextPath, googleEnabled }: { nextPath: string; googl
       router.refresh();
     } catch (err) {
       const msg = err instanceof Error ? err.message : null;
+      if (msg?.includes("NetworkError") || msg?.includes("Failed to fetch")) {
+        setError(
+          "Could not reach the sign-in service. Use the same host as your browser tab (e.g. http://localhost:3000, not 127.0.0.1) and confirm the API is running.",
+        );
+        return;
+      }
       setError(msg?.trim() ? msg : "Something went wrong. Try again.");
     } finally {
       setPending(false);

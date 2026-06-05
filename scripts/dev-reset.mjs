@@ -44,6 +44,7 @@ run("docker", ["compose", "down", "-v"]);
 run("docker", ["compose", "up", "-d", "postgres", "redis", "minio", "--wait"]);
 run("docker", ["compose", "exec", "-T", "redis", "redis-cli", "FLUSHALL"], { allowFail: true });
 run("npm", ["run", "db:migrate"]);
+run("node", ["scripts/ensure-minio.mjs"], { allowFail: true });
 
 console.log("\nDone. Data is empty — log in again or run import:homehub.");
 console.log("Start app: npm run dev  (infra already up: postgres, redis, minio)\n");

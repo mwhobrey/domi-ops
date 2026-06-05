@@ -3,6 +3,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { username } from "better-auth/plugins";
 import type { Env } from "@whome/config";
+import { devLoopbackOrigins } from "@whome/config";
 import type { Database } from "@whome/db";
 import { baAccounts, baSessions, baVerifications, users } from "@whome/db";
 import { ensureHouseholdMembership } from "./household-membership.js";
@@ -35,7 +36,10 @@ export function createBetterAuth(db: Database, env: Env): WhomeBetterAuth {
     secret,
     baseURL: env.PUBLIC_APP_URL,
     basePath: "/auth",
-    trustedOrigins: [env.PUBLIC_APP_URL],
+    trustedOrigins:
+      env.NODE_ENV === "development"
+        ? devLoopbackOrigins(env.PUBLIC_APP_URL)
+        : [env.PUBLIC_APP_URL],
     database: drizzleAdapter(db, {
       provider: "pg",
       // Keys must match modelName below (not Better Auth defaults like "user"/"session").

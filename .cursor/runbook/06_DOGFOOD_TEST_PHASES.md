@@ -113,11 +113,11 @@ npm run dev         # web :3000, API :4000
 | 2.12 | Parent grades → kid reloads assignment   | Kid sees grade; still no grade form               |
 
 
-**Phase 2 status:** ☐ not started · ☐ in progress · ☐ **pass** · ☐ blocked
+**Phase 2 status:** ☐ not started · ☐ in progress · x **pass** · ☐ blocked
 
-**Kid username:** ____________________
+**Kid username:** riley
 
-**Notes:**
+**Notes:** Username sign-in required `authClient` browser `baseURL` fix (localhost vs 127.0.0.1). Assignment turn-in UX refactor + artifact upload; MinIO bucket ensured on dev-reset/API boot. Single-tenant join prevents duplicate owner on Google login.
 
 ---
 
@@ -253,13 +253,13 @@ Phases **1–3** prove auth + school without import. Phase **4** proves cutover.
 ```text
 Dogfood QA — whome
 Runbook: .cursor/runbook/06_DOGFOOD_TEST_PHASES.md
-Last completed phase: 1 (pass)
+Last completed phase: 2 (pass)
 Blocked on: —
 Owner email: me@mikewhob.com
-Kid username: _(Phase 2)_
+Kid username: riley
 Import run: no
-Failures / bugs: none open for Phase 1
-Next step: Phase 2 item 2.1 — provision kid username
+Failures / bugs: Phase 2 fixes committed (username login, MinIO bucket, assignment UX)
+Next step: Phase 3 item 3.1 — edit class metadata
 ```
 
 ---
@@ -271,9 +271,13 @@ Next step: Phase 2 item 2.1 — provision kid username
 | ---- | ----- | ------- | -------- | ------------ |
 | 2026-06-05 | 1 | Create owner account → generic error, API 500 empty body | blocker | [WHO-91](https://linear.app/mikewhob-whome/issue/WHO-91) — fixed `packages/auth/src/better-auth.ts` |
 | 2026-06-05 | 1 | Profile name empty after owner sign-up | minor | `bootstrapHouseholdOnLogin` copies `users.display_name` → `household_members.name` |
+| 2026-06-05 | 1 | Google login created second owner + shadow household | blocker | `single-tenant.ts` — join canonical household as `member`; repair on login |
 | 2026-06-05 | 1 | Sign out → HTTP 415 | minor | HTML form POST; fixed `authClient.signOut()` in `AppChrome` |
 | 2026-06-05 | 1 | `db:migrate` JSON parse error on journal | blocker | Restored missing `0016` entry + `0017` in `_journal.json` |
 | 2026-06-05 | — | Removed `nickname` + `public_label` — single display name on Profile | cleanup | Migration `0017`; import ignores nickname |
+| 2026-06-05 | 2 | Kid username sign-in → NetworkError | blocker | `auth-client.ts` — `window.location.origin`; `devLoopbackOrigins` in Better Auth |
+| 2026-06-05 | 2 | School artifact upload → presign OK, PUT fails | blocker | Missing MinIO bucket after `dev:reset`; `ensureS3Bucket` + `scripts/ensure-minio.mjs` |
+| 2026-06-05 | 2 | Assignment turn-in UX / artifact merge on save | enhancement | `SchoolAssignmentDetail.tsx`, `SchoolSubmissionArtifacts.tsx`, artifact file route |
 
 
 ---

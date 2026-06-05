@@ -5,6 +5,7 @@ import { loadRootDotenv, resetRootDotenvFlag } from "./load-dotenv.js";
 export {
   DEV_WEB_PORT_DOCKER,
   DEV_WEB_PORT_NATIVE,
+  devLoopbackOrigins,
   inferDevWebProfile,
   oauthRedirectUris,
   validateDevPublicAppUrl,
