@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { cn } from "../../lib/cn";
 import type { CalendarViewMode } from "../../lib/calendar-utils";
 import { Button } from "../ui";
 
@@ -21,6 +22,7 @@ export function CalendarToolbar({
   showWeekDay = true,
   loading,
   trailing,
+  className,
 }: {
   viewMode: CalendarViewMode;
   onViewChange: (v: CalendarViewMode) => void;
@@ -32,13 +34,14 @@ export function CalendarToolbar({
   showWeekDay?: boolean;
   loading?: boolean;
   trailing?: ReactNode;
+  className?: string;
 }) {
   const visibleViews = showWeekDay
     ? VIEW_LABELS
     : VIEW_LABELS.filter((v) => v.id === "month" || v.id === "agenda");
 
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-3">
+    <div className={cn("flex flex-wrap items-center gap-2 sm:gap-3", className)}>
       <div
         className="flex rounded-[var(--radius-lg)] border border-[var(--color-border)] p-0.5"
         role="tablist"

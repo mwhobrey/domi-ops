@@ -64,6 +64,7 @@ import { CalendarMonthView } from "./calendar/CalendarMonthView";
 import { CalendarToolbar } from "./calendar/CalendarToolbar";
 import { CalendarWeek } from "./CalendarWeek";
 import { Calendar } from "lucide-react";
+import { cn } from "../lib/cn";
 import { Alert, Button, IconButton, Input } from "./ui";
 
 export function CalendarPageClient({
@@ -492,8 +493,12 @@ export function CalendarPageClient({
 
   if (!viewReady) return null;
 
+  const showFilterBar = allLaneGroups.length > 0 && !debouncedQ;
+  const gridFillsViewport =
+    isDesktop && !debouncedQ && (effectiveView === "week" || effectiveView === "day");
+
   return (
-    <div>
+    <div className="flex min-h-[calc(100dvh-var(--header-height)-10rem)] flex-col">
       {errorBanner && (
         <Alert variant="error" className="mb-4">
           <p>Calendar connection failed ({errorBanner}).</p>
@@ -533,62 +538,70 @@ export function CalendarPageClient({
         </div>
       )}
 
-      {allLaneGroups.length > 0 && !debouncedQ && (
-        <CalendarFilterBar
-          laneGroups={filterLaneGroups}
-          writeLaneGroups={allLaneGroups}
-          hiddenIds={hiddenLaneIds}
-          categoryGroups={categoryFilterGroups}
-          hiddenCategoryKeys={hiddenCategoryKeys}
-          defaultCalendarId={defaultCalendarId}
-          onToggleLaneGroup={(group) => setHiddenLaneIds(toggleLaneGroup(group, hiddenLaneIds))}
-          onToggleCategory={(key) =>
-            setHiddenCategoryKeys(toggleHiddenCategory(key))
-          }
-          onDefaultCalendarChange={(id) => {
-            setDefaultCalendarId(id);
-            writeDefaultCalendarId(id);
-          }}
-        />
-      )}
+      <div
+        className="sticky top-[var(--header-height)] z-30 -mx-4 shrink-0 border-b border-[var(--color-border)] bg-[var(--color-surface-inset)]/95 px-4 py-2 backdrop-blur-sm"
+        role="region"
+        aria-label="Calendar controls"
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          {showFilterBar ? (
+            <CalendarFilterBar
+              laneGroups={filterLaneGroups}
+              writeLaneGroups={allLaneGroups}
+              hiddenIds={hiddenLaneIds}
+              categoryGroups={categoryFilterGroups}
+              hiddenCategoryKeys={hiddenCategoryKeys}
+              defaultCalendarId={defaultCalendarId}
+              onToggleLaneGroup={(group) =>
+                setHiddenLaneIds(toggleLaneGroup(group, hiddenLaneIds))
+              }
+              onToggleCategory={(key) => setHiddenCategoryKeys(toggleHiddenCategory(key))}
+              onDefaultCalendarChange={(id) => {
+                setDefaultCalendarId(id);
+                writeDefaultCalendarId(id);
+              }}
+              onShowAllFilters={() => {
+                setHiddenLaneIds(new Set());
+                setHiddenCategoryKeys(new Set());
+              }}
+            />
+          ) : null}
+          <Input
+            className="min-w-[10rem] flex-1 sm:max-w-xs"
+            placeholder="Search events…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="Search events"
+          />
+          <Button
+            size="sm"
+            className="shrink-0"
+            onClick={() => {
+              setSelected(null);
+              setCreateDraft(null);
+              setSheetOpen(true);
+            }}
+          >
+            New event
+          </Button>
+        </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <Input
-          className="max-w-xs"
-          placeholder="Search events…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        <Button
-          size="sm"
-          onClick={() => {
-            setSelected(null);
-            setCreateDraft(null);
-            setSheetOpen(true);
-          }}
-        >
-          New event
-        </Button>
-      </div>
-
-      {!debouncedQ && (
-        <CalendarToolbar
-          viewMode={
-            !isDesktop && viewMode !== "month" ? "agenda" : viewMode
-          }
-          onViewChange={(v) => {
-            persistView(v);
-            if (v === "month") setFocusDate((d) => startOfMonth(d));
-            if (v === "week") setFocusDate((d) => startOfWeek(d));
-          }}
-          periodLabel={periodLabel}
-          onPrev={handlePrev}
-          onToday={handleToday}
-          onNext={handleNext}
-          showWeekDay={isDesktop}
-          loading={loading}
-          trailing={
-            <>
+        {!debouncedQ && (
+          <CalendarToolbar
+            className="mt-2"
+            viewMode={!isDesktop && viewMode !== "month" ? "agenda" : viewMode}
+            onViewChange={(v) => {
+              persistView(v);
+              if (v === "month") setFocusDate((d) => startOfMonth(d));
+              if (v === "week") setFocusDate((d) => startOfWeek(d));
+            }}
+            periodLabel={periodLabel}
+            onPrev={handlePrev}
+            onToday={handleToday}
+            onNext={handleNext}
+            showWeekDay={isDesktop}
+            loading={loading}
+            trailing={
               <IconButton
                 label={
                   syncActive
@@ -603,11 +616,12 @@ export function CalendarPageClient({
                   }`}
                 />
               </IconButton>
-            </>
-          }
-        />
-      )}
+            }
+          />
+        )}
+      </div>
 
+      <div className={cn("min-h-0 flex-1", gridFillsViewport && "flex flex-col")}>
       {!isDesktop && effectiveView !== "month" && (
         <p className="sr-only">Week and day grid views are available on larger screens.</p>
       )}
@@ -631,6 +645,8 @@ export function CalendarPageClient({
           loading={loading}
           categoryColorByKey={categoryColorByKey}
           interactionEnabled={gridInteraction && !loading}
+          fillViewport
+          className={gridFillsViewport ? "min-h-0 flex-1" : undefined}
           onSlotClick={openCreateDraft}
           onEventReschedule={requestReschedule}
           onAllDayReschedule={requestReschedule}
@@ -649,6 +665,8 @@ export function CalendarPageClient({
           loading={loading}
           categoryColorByKey={categoryColorByKey}
           interactionEnabled={gridInteraction && !loading}
+          fillViewport
+          className={gridFillsViewport ? "min-h-0 flex-1" : undefined}
           onSlotClick={openCreateDraft}
           onEventReschedule={requestReschedule}
           onAllDayReschedule={requestReschedule}
@@ -683,6 +701,7 @@ export function CalendarPageClient({
           }}
         />
       )}
+      </div>
 
       <CalendarDaySheet
         open={daySheetOpen}

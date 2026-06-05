@@ -218,6 +218,10 @@ export function CalendarTimeGrid({
 
   categoryColorByKey,
 
+  fillViewport = false,
+
+  className,
+
 }: {
 
   dates: Date[];
@@ -237,6 +241,12 @@ export function CalendarTimeGrid({
   onSlotClick?: (date: string, hour: number) => void;
 
   onEventReschedule?: (ev: CalendarEventView, patch: ReschedulePatch) => void;
+
+  /** Stretch grid to fill remaining calendar viewport height. */
+
+  fillViewport?: boolean;
+
+  className?: string;
 
   onAllDayReschedule?: (ev: CalendarEventView, patch: ReschedulePatch) => void;
 
@@ -666,7 +676,13 @@ export function CalendarTimeGrid({
 
       ref={scrollRef}
 
-      className="max-h-[min(70vh,calc(100dvh-var(--header-height)-12rem))] overflow-y-auto overflow-x-auto rounded-[var(--radius-xl)] border border-[var(--color-border)]"
+      className={cn(
+        "overflow-y-auto overflow-x-auto rounded-[var(--radius-xl)] border border-[var(--color-border)]",
+        fillViewport
+          ? "min-h-0 max-h-[calc(100dvh-var(--header-height)-var(--calendar-chrome-height))]"
+          : "max-h-[min(70vh,calc(100dvh-var(--header-height)-12rem))]",
+        className,
+      )}
 
       aria-label="Calendar time grid"
 

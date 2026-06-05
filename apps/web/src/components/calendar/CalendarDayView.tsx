@@ -16,6 +16,8 @@ export function CalendarDayView({
   onEventReschedule,
   onAllDayReschedule,
   categoryColorByKey,
+  fillViewport,
+  className,
 }: {
   focusDate: Date;
   events: CalendarEventView[];
@@ -26,6 +28,8 @@ export function CalendarDayView({
   onSlotClick?: (date: string, hour: number) => void;
   onEventReschedule?: (ev: CalendarEventView, patch: ReschedulePatch) => void;
   onAllDayReschedule?: (ev: CalendarEventView, patch: ReschedulePatch) => void;
+  fillViewport?: boolean;
+  className?: string;
 }) {
   const dateKey = formatDateLocal(focusDate);
   const dayEvents = eventsForDate(events, dateKey);
@@ -39,6 +43,8 @@ export function CalendarDayView({
       onEventClick={onEventClick}
       scrollToNow={dateKey === formatDateLocal(new Date())}
       interactionEnabled={interactionEnabled}
+      fillViewport={fillViewport}
+      className={className}
       onSlotClick={onSlotClick}
       onEventReschedule={onEventReschedule}
       onAllDayReschedule={onAllDayReschedule}

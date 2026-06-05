@@ -25,6 +25,8 @@ export function CalendarWeek({
   onEventReschedule,
   onAllDayReschedule,
   categoryColorByKey,
+  fillViewport,
+  className,
 }: {
   events: CalendarEventView[];
   categoryColorByKey?: Map<string, string | null>;
@@ -35,6 +37,8 @@ export function CalendarWeek({
   onSlotClick?: (date: string, hour: number) => void;
   onEventReschedule?: (ev: CalendarEventView, patch: ReschedulePatch) => void;
   onAllDayReschedule?: (ev: CalendarEventView, patch: ReschedulePatch) => void;
+  fillViewport?: boolean;
+  className?: string;
 }) {
   const dates = weekDates(weekStart);
   const weekKeys = dates.map((d) => formatDateLocal(d));
@@ -48,6 +52,8 @@ export function CalendarWeek({
       onEventClick={onEventClick}
       scrollToNow={weekKeys.includes(todayKey)}
       interactionEnabled={interactionEnabled}
+      fillViewport={fillViewport}
+      className={className}
       onSlotClick={onSlotClick}
       onEventReschedule={onEventReschedule}
       onAllDayReschedule={onAllDayReschedule}
