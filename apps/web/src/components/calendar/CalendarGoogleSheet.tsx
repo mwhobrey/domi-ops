@@ -9,7 +9,7 @@ import { useCalendarSyncStatus } from "../../lib/use-calendar-sync-status";
 import { CalendarCategoriesPanel } from "./CalendarCategoriesPanel";
 import { CalendarLanesPanel } from "./CalendarLanesPanel";
 import { CalendarSyncProgress } from "./CalendarSyncProgress";
-import { Alert, Button, LinkButton, Select, Sheet } from "../ui";
+import { Alert, AnchorButton, Button, Select, Sheet } from "../ui";
 
 export type CalendarConnectionSummary = {
   id: string;
@@ -275,9 +275,13 @@ export function CalendarGoogleSheet({
 
           <div className="flex flex-col gap-2 sm:flex-row">
             {oauthConfigured && !connected && (
-              <LinkButton href={googleCalendarConnectUrl()} variant="primary" className="sm:flex-1">
+              <AnchorButton
+                href={googleCalendarConnectUrl()}
+                variant="primary"
+                className="sm:flex-1"
+              >
                 Connect Google
-              </LinkButton>
+              </AnchorButton>
             )}
             {connected && (
               <>
@@ -317,9 +321,9 @@ export function CalendarGoogleSheet({
                     </Button>
                   </>
                 )}
-                <LinkButton href={googleCalendarConnectUrl()} variant="ghost">
+                <AnchorButton href={googleCalendarConnectUrl()} variant="ghost">
                   {connected ? "Reconnect Google account" : "Connect Google"}
-                </LinkButton>
+                </AnchorButton>
               </div>
             </details>
           )}

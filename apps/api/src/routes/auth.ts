@@ -69,7 +69,12 @@ export function authRoutes(db: Database, env: Env) {
       return c.json({ error: "google_oauth_not_configured" }, 503);
     }
     const state = randomOAuthState();
-    await setOAuthState(redisUrl(env), LOGIN_OAUTH_PREFIX, state, { kind: "login" as const });
+    const next = c.req.query("next");
+    const returnTo = next?.startsWith("/") ? next : undefined;
+    await setOAuthState(redisUrl(env), LOGIN_OAUTH_PREFIX, state, {
+      kind: "login" as const,
+      returnTo,
+    });
     const redirectUri = googleOAuthRedirectUri(env, "/auth/google/login/callback");
     const url = googleAuthUrl(env, {
       redirectUri,
@@ -87,7 +92,11 @@ export function authRoutes(db: Database, env: Env) {
     const code = c.req.query("code");
     const state = c.req.query("state");
     const pending = state
-      ? await consumeOAuthState<{ kind: "login" }>(redisUrl(env), LOGIN_OAUTH_PREFIX, state)
+      ? await consumeOAuthState<{ kind: "login"; returnTo?: string }>(
+          redisUrl(env),
+          LOGIN_OAUTH_PREFIX,
+          state,
+        )
       : null;
     if (!code || !pending) {
       return c.redirect(`${env.PUBLIC_APP_URL}/login?error=oauth`);
@@ -105,7 +114,7 @@ export function authRoutes(db: Database, env: Env) {
       });
       const { cookie } = await createSession(db, userId, secret);
       setCookie(c, SESSION_COOKIE, cookie, sessionCookieOptions(env));
-      return c.redirect(`${env.PUBLIC_APP_URL}/dashboard`);
+      return c.redirect(`${env.PUBLIC_APP_URL}${pending.returnTo ?? "/dashboard"}`);
     } catch (e) {
       console.error("login callback failed", e);
       return c.redirect(`${env.PUBLIC_APP_URL}/login?error=oauth`);

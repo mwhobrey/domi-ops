@@ -32,6 +32,7 @@ import {
   type CalendarConnectionSummary,
 } from "./calendar/CalendarGoogleSheet";
 import { CalendarImportWizard } from "./calendar/CalendarImportWizard";
+import { CalendarSetupBanner } from "./calendar/CalendarSetupBanner";
 import { eventOverlapsDate } from "../lib/calendar-event-span";
 import { categoryCompositeKey } from "../lib/calendar-event-colors";
 import {
@@ -115,6 +116,7 @@ export function CalendarPageClient({
   } | null>(null);
   const [googleSheetOpen, setGoogleSheetOpen] = useState(false);
   const [importWizardOpen, setImportWizardOpen] = useState(false);
+  const [needsImportSetup, setNeedsImportSetup] = useState(false);
   const autoOpenedImportRef = useRef(false);
   const connected = initialConnections.length > 0;
   const { status: syncStatus, refresh: refreshSyncStatus, isActive: syncActive } =
@@ -272,6 +274,26 @@ export function CalendarPageClient({
   useEffect(() => {
     void loadLanes();
   }, [loadLanes]);
+
+  const refreshImportSetup = useCallback(async () => {
+    if (!connected || !oauthConfigured) {
+      setNeedsImportSetup(false);
+      return;
+    }
+    try {
+      const data = await apiClient.get<{
+        linkedCalendars: { syncEnabled: boolean }[];
+      }>("/api/calendar/import/options");
+      const anyEnabled = data.linkedCalendars.some((c) => c.syncEnabled);
+      setNeedsImportSetup(data.linkedCalendars.length > 0 && !anyEnabled);
+    } catch {
+      setNeedsImportSetup(false);
+    }
+  }, [connected, oauthConfigured]);
+
+  useEffect(() => {
+    void refreshImportSetup();
+  }, [refreshImportSetup, importWizardOpen]);
 
   useEffect(() => {
     void loadCategories();
@@ -497,6 +519,14 @@ export function CalendarPageClient({
         </Alert>
       )}
 
+      <CalendarSetupBanner
+        oauthConfigured={oauthConfigured}
+        connected={connected}
+        needsImport={needsImportSetup}
+        hasCalendars={lanes.length > 0}
+        onImport={() => setImportWizardOpen(true)}
+      />
+
       {(syncActive || syncStatus?.run?.status === "failed") && (
         <div className="mb-4 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-muted)]/30 p-4">
           <CalendarSyncProgress status={syncStatus} />
@@ -701,6 +731,8 @@ export function CalendarPageClient({
         onClose={() => setImportWizardOpen(false)}
         onCommitted={async () => {
           clearImportDeepLink();
+          await refreshImportSetup();
+          await loadLanes();
           await refreshSyncStatus();
           await loadEvents();
         }}

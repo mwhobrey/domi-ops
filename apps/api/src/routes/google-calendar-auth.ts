@@ -15,7 +15,6 @@ import { listGoogleCalendars } from "@whome/calendar-sync";
 import { ensureAccessToken } from "@whome/calendar-sync";
 import { and, eq } from "drizzle-orm";
 import type { AppVariables } from "../middleware/auth.js";
-import { requireAuth } from "../middleware/auth.js";
 import { consumeOAuthState, setOAuthState } from "../lib/oauth-state.js";
 
 const CALENDAR_OAUTH_PREFIX = "oauth:calendar";
@@ -27,14 +26,15 @@ function redisUrl(env: Env): string {
 export function googleCalendarAuthRoutes(db: Database, env: Env) {
   const app = new Hono<{ Variables: AppVariables }>();
 
-  app.use("*", requireAuth(env));
-
   app.get("/start", async (c) => {
     if (!isModuleEnabled(env, "calendar_sync")) {
       return c.json({ error: "calendar_sync_disabled" }, 403);
     }
     const auth = c.get("auth");
-    if (!auth) return c.json({ error: "unauthorized" }, 401);
+    if (!auth) {
+      const next = encodeURIComponent("/auth/google/calendar/start");
+      return c.redirect(`${env.PUBLIC_APP_URL}/login?next=${next}`);
+    }
     if (!env.GOOGLE_OAUTH_CLIENT_ID) {
       return c.json({ error: "google_oauth_not_configured" }, 503);
     }

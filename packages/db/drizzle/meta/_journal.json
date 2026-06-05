@@ -94,6 +94,13 @@
       "breakpoints": true
     },
     {
+      "idx": 13,
+      "version": "7",
+      "when": 1780494987000,
+      "tag": "0013_event_categories_reminders",
+      "breakpoints": true
+    },
+    {
       "idx": 14,
       "version": "7",
       "when": 1780494988000,

@@ -48,7 +48,14 @@ export default async function LoginPage({
           Use your household Google account. Each family member signs in once, then sets name and
           nickname on Profile.
         </p>
-        <AnchorButton href="/auth/google/login" className="flex w-full">
+        <AnchorButton
+          href={
+            params.next?.startsWith("/")
+              ? `/auth/google/login?next=${encodeURIComponent(params.next)}`
+              : "/auth/google/login"
+          }
+          className="flex w-full"
+        >
           Continue with Google
         </AnchorButton>
         <p className="text-center text-xs text-[var(--color-text-muted)]">
