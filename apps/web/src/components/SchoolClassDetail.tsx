@@ -283,6 +283,8 @@ export function SchoolClassDetail({
 
   const [assignments, setAssignments] = useState(initialAssignments);
 
+  const [categories, setCategories] = useState(initialCategories);
+
   const [enrollments, setEnrollments] = useState(initialEnrollments);
 
   const [assignmentSheetOpen, setAssignmentSheetOpen] = useState(false);
@@ -949,7 +951,7 @@ export function SchoolClassDetail({
 
 
 
-      {(canEditCategories || initialCategories.length > 0) && (
+      {(canEditCategories || categories.length > 0) && (
       <Card>
 
         <CardHeader>
@@ -962,7 +964,8 @@ export function SchoolClassDetail({
 
           <SchoolCategoryList
             classId={classId}
-            initialCategories={initialCategories}
+            categories={categories}
+            onCategoriesChange={setCategories}
             readOnly={!canEditCategories}
           />
 
@@ -1359,7 +1362,7 @@ export function SchoolClassDetail({
 
         assignment={editingAssignment}
 
-        categories={initialCategories}
+        categories={categories}
 
         onSaved={(saved) => {
 

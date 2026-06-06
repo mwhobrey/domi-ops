@@ -99,11 +99,25 @@ Files: `apps/web/src/app/school/class/[id]/page.tsx`, `SchoolClassDetail.tsx`
 
 Files: `apps/web/src/app/school/class/[id]/gradebook/page.tsx`, `SchoolClassGradebook.tsx`
 
-- [ ] Matrix: students × assignments; sticky student column
+- [ ] Matrix: **assignments × students** (assignments down left sticky, students across top); per-row class avg column
 - [ ] Cell states: missing, overdue, submitted, graded, not_assigned (draft)
 - [ ] Summary stats: assignment count, missing, overdue, class average
 - [ ] ARIA: table `caption`, readable headers
 - [ ] **Regression:** gradebook is server-rendered on navigation — grading on assignment page does not auto-refresh this page until reload/navigate away and back
+
+### `/school/reports`
+
+Files: `apps/web/src/app/school/reports/page.tsx`, `SchoolReports.tsx`, `GET /api/school/reports`
+
+- [ ] **By class:** all visible classes — points + weighted averages, missing/overdue totals
+- [ ] **By student:** expandable per-student breakdown with per-class averages
+- [ ] **Weighted:** category breakdown per student/class (uses category weights when set)
+- [ ] **Open work:** missing, overdue, and ungraded submitted assignments
+- [ ] **Progress:** cumulative average chart after each graded assignment
+- [ ] **Transcript:** per-student assignment list + CSV export (Download all for parents)
+- [ ] **Term filter:** `?term=Fall%202026` scopes classes; dropdown on page
+- [ ] **Student view:** scoped to own enrollments only
+- [ ] Link from `/school` stat row (**Grade reports**)
 
 ### `/school/assignment/[id]`
 

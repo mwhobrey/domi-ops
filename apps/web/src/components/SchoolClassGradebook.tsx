@@ -21,6 +21,17 @@ function memberLabel(member: Member | undefined, memberId: string): string {
   return member?.shownLabel ?? member?.email ?? memberId.slice(0, 8);
 }
 
+function assignmentRowAverage(
+  assignmentId: string,
+  students: GradebookData["students"],
+): number | null {
+  const percents = students
+    .map((student) => student.cells.find((c) => c.assignmentId === assignmentId)?.percent)
+    .filter((value): value is number => value != null);
+  if (percents.length === 0) return null;
+  return Math.round((percents.reduce((sum, value) => sum + value, 0) / percents.length) * 10) / 10;
+}
+
 function SummaryStat({
   label,
   value,
@@ -138,67 +149,75 @@ export function SchoolClassGradebook({
       ) : null}
 
       {showMatrix && (
-        <div className="overflow-x-auto rounded-[var(--radius-lg)] border border-[var(--color-border)]">
+        <div className="max-h-[min(70vh,48rem)] overflow-auto rounded-[var(--radius-lg)] border border-[var(--color-border)]">
           <table className="w-full min-w-[640px] border-collapse text-sm" aria-label="Class gradebook">
             <caption className="sr-only">
-              Assignment completion and grades for each enrolled student
+              Assignments down the left, students across the top — completion and grades per cell
             </caption>
-            <thead>
-              <tr className="border-b border-[var(--color-border)] bg-[var(--color-surface-subtle)]">
+            <thead className="sticky top-0 z-20 bg-[var(--color-surface-subtle)]">
+              <tr className="border-b border-[var(--color-border)]">
                 <th
                   scope="col"
-                  className="sticky left-0 z-10 bg-[var(--color-surface-subtle)] px-3 py-2 text-left text-label text-[var(--color-text-muted)]"
+                  className="sticky left-0 z-30 min-w-[12rem] bg-[var(--color-surface-subtle)] px-3 py-2 text-left text-label text-[var(--color-text-muted)]"
                 >
-                  Student
+                  Assignment
                 </th>
-                <th
-                  scope="col"
-                  className="px-3 py-2 text-left text-label text-[var(--color-text-muted)]"
-                >
-                  Average
-                </th>
-                {visibleAssignments.map((assignment) => (
-                  <th
-                    key={assignment.id}
-                    scope="col"
-                    className="max-w-[8rem] px-2 py-2 text-left text-label text-[var(--color-text-muted)]"
-                  >
-                    <Link
-                      href={`/school/assignment/${assignment.id}`}
-                      className="line-clamp-2 font-medium text-[var(--color-accent)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]"
+                {students.map((student) => {
+                  const label = memberLabel(
+                    members.find((m) => m.id === student.memberId),
+                    student.memberId,
+                  );
+                  return (
+                    <th
+                      key={student.enrollmentId}
+                      scope="col"
+                      className="min-w-[7rem] px-2 py-2 text-left text-label text-[var(--color-text-muted)]"
                     >
-                      {assignment.title}
-                    </Link>
-                  </th>
-                ))}
+                      <span className="line-clamp-2 font-medium text-[var(--color-text)]">{label}</span>
+                      <span className="mt-0.5 block text-xs font-normal tabular-nums">
+                        {formatGradebookPercent(student.averagePercent)}
+                      </span>
+                    </th>
+                  );
+                })}
+                <th
+                  scope="col"
+                  className="min-w-[5rem] px-2 py-2 text-left text-label text-[var(--color-text-muted)]"
+                >
+                  Class avg
+                </th>
               </tr>
             </thead>
             <tbody>
-              {students.map((student) => {
-                const label = memberLabel(
-                  members.find((m) => m.id === student.memberId),
-                  student.memberId,
-                );
+              {visibleAssignments.map((assignment) => {
+                const rowAverage = assignmentRowAverage(assignment.id, students);
                 return (
                   <tr
-                    key={student.enrollmentId}
+                    key={assignment.id}
                     className="border-b border-[var(--color-border)]/60 last:border-0"
                   >
                     <th
                       scope="row"
-                      className="sticky left-0 z-10 bg-[var(--color-surface-elevated)] px-3 py-2 text-left font-medium"
+                      className="sticky left-0 z-10 min-w-[12rem] bg-[var(--color-surface-elevated)] px-3 py-2 text-left align-top font-medium"
                     >
-                      {label}
+                      <Link
+                        href={`/school/assignment/${assignment.id}`}
+                        className="line-clamp-3 text-[var(--color-accent)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]"
+                      >
+                        {assignment.title}
+                      </Link>
+                      {assignment.dueAt && (
+                        <span className="mt-1 block text-xs font-normal text-[var(--color-text-muted)]">
+                          Due {new Date(assignment.dueAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                        </span>
+                      )}
                     </th>
-                    <td className="px-3 py-2 tabular-nums">
-                      {formatGradebookPercent(student.averagePercent)}
-                    </td>
-                    {visibleAssignments.map((assignment) => {
+                    {students.map((student) => {
                       const cell = student.cells.find((c) => c.assignmentId === assignment.id);
                       const status = cell?.status ?? "missing";
                       const tone = gradebookCellTone(status);
                       return (
-                        <td key={assignment.id} className="px-2 py-2">
+                        <td key={student.enrollmentId} className="px-2 py-2 align-top">
                           <div className="flex flex-col gap-0.5">
                             <Badge tone={tone}>{gradebookCellLabel(status)}</Badge>
                             {cell?.score != null && (
@@ -210,6 +229,9 @@ export function SchoolClassGradebook({
                         </td>
                       );
                     })}
+                    <td className="px-2 py-2 align-top tabular-nums text-[var(--color-text-muted)]">
+                      {formatGradebookPercent(rowAverage)}
+                    </td>
                   </tr>
                 );
               })}

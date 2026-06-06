@@ -134,12 +134,13 @@ npm run dev         # web :3000, API :4000
 | 3.2 | Roster unenroll with confirm               | Member removed                                           |
 | 3.3 | Add assignment **category** + weight       | Listed on class page                                     |
 | 3.4 | New assignment via sheet + category picker | Saves with category                                      |
-| 3.5 | `/school/class/[id]/gradebook`             | Matrix renders (students × assignments)                  |
+| 3.5 | `/school/class/[id]/gradebook`             | Matrix renders (assignments × students)                  |
+| 3.5b | `/school/reports`                         | By-class and by-student rollups load                     |
 | 3.6 | Grade on assignment page → open gradebook  | Grade visible **after manual refresh** (known SSR quirk) |
 | 3.7 | *(Optional)* Upload on submission          | Works if MinIO/S3 configured                             |
 
 
-**Phase 3 status:** ☐ not started · ☐ in progress · ☐ **pass** · ☐ blocked
+**Phase 3 status:** ☐ not started · ☐ in progress · x **pass** · ☐ blocked
 
 **Notes:**
 
@@ -253,13 +254,13 @@ Phases **1–3** prove auth + school without import. Phase **4** proves cutover.
 ```text
 Dogfood QA — whome
 Runbook: .cursor/runbook/06_DOGFOOD_TEST_PHASES.md
-Last completed phase: 2 (pass)
+Last completed phase: 3 (pass)
 Blocked on: —
 Owner email: me@mikewhob.com
 Kid username: riley
 Import run: no
-Failures / bugs: Phase 2 fixes committed (username login, MinIO bucket, assignment UX)
-Next step: Phase 3 item 3.1 — edit class metadata
+Failures / bugs: none open for Phase 3
+Next step: Phase 4 item 4A — import dry-run (or Phase 5 regression if no app.db yet)
 ```
 
 ---

@@ -11,6 +11,7 @@ export interface GradebookAssignmentColumn {
   dueAt: string | null;
   pointsPossible: number;
   visibility: string;
+  categoryId?: string | null;
 }
 
 export interface GradebookStudentCell {
@@ -20,6 +21,7 @@ export interface GradebookStudentCell {
   percent: number | null;
   missing: boolean;
   overdue: boolean;
+  gradedAt?: string | null;
 }
 
 export interface GradebookStudentRow {

@@ -21,14 +21,15 @@ interface Category {
 
 export function SchoolCategoryList({
   classId,
-  initialCategories,
+  categories,
+  onCategoriesChange,
   readOnly = false,
 }: {
   classId: string;
-  initialCategories: Category[];
+  categories: Category[];
+  onCategoriesChange: (categories: Category[]) => void;
   readOnly?: boolean;
 }) {
-  const [categories, setCategories] = useState(initialCategories);
   const [name, setName] = useState("");
   const [weight, setWeight] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -59,7 +60,7 @@ export function SchoolCategoryList({
                 weightPercent: weight ? parseFloat(weight) : 0,
               },
             );
-            setCategories((prev) => [...prev, data.category]);
+            onCategoriesChange([...categories, data.category]);
             setName("");
             setWeight("");
           } catch (err) {
@@ -119,7 +120,7 @@ export function SchoolCategoryList({
                       setError(null);
                       try {
                         await apiClient.delete(`/api/school/categories/${cat.id}`);
-                        setCategories((prev) => prev.filter((c) => c.id !== cat.id));
+                        onCategoriesChange(categories.filter((c) => c.id !== cat.id));
                       } catch (err) {
                         setError(err instanceof ApiError ? err.message : "Failed to remove category");
                       }
@@ -144,15 +145,21 @@ export function SchoolCategoryList({
 
 export function SchoolCategoryCard({
   classId,
-  initialCategories,
+  categories,
+  onCategoriesChange,
 }: {
   classId: string;
-  initialCategories: Category[];
+  categories: Category[];
+  onCategoriesChange: (categories: Category[]) => void;
 }) {
   return (
     <>
       <SectionHeader title="Grade categories" />
-      <SchoolCategoryList classId={classId} initialCategories={initialCategories} />
+      <SchoolCategoryList
+        classId={classId}
+        categories={categories}
+        onCategoriesChange={onCategoriesChange}
+      />
     </>
   );
 }

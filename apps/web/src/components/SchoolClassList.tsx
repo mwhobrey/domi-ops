@@ -6,6 +6,7 @@ import { ApiError, apiClient } from "../lib/client-api";
 import type { SchoolContext } from "../lib/school-access";
 import { schoolViewBadgeTone } from "../lib/school-access";
 import { SchoolClassCard } from "./SchoolClassCard";
+import { SchoolReportsLink } from "./SchoolReports";
 import { ListPage } from "./lists/ListPage";
 import { Badge, Button, EmptyState, Input, SectionHeader, StatTile } from "./ui";
 
@@ -62,7 +63,8 @@ export function SchoolClassList({
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="grid flex-1 gap-3 sm:grid-cols-3">
         <StatTile label={statLabels.classes} value={classCount} href="/school" />
         <StatTile
           label={statLabels.due}
@@ -76,6 +78,8 @@ export function SchoolClassList({
           href="/school"
           tone={glance.overdue > 0 ? "warning" : "success"}
         />
+        </div>
+        {context && <SchoolReportsLink />}
       </div>
 
       <ListPage
