@@ -1,6 +1,6 @@
 # Current state
 
-*Updated after design system overhaul (tokens, overlays, dashboard stat tiles, list primitives). Dogfood/cutover still pending.*
+*Updated after local dogfood QA — phases 0–5 pass (`.cursor/runbook/06_DOGFOOD_TEST_PHASES.md`). Staging/prod cutover pending.*
 
 ## What is working (implemented paths)
 
@@ -26,9 +26,9 @@
 - Login UI: `/login` — email or username sign-in; owner email sign-up; optional Google; logout via `authClient.signOut()` (Better Auth requires JSON — HTML form POST 415).
 - **Household provisioning:** `POST /api/core/household/members/provision` (owner/admin) creates username-only members (`provision-member.ts`, no synthetic email).
 - **Email verification:** Better Auth `emailVerification` + optional SMTP (`SMTP_*`, `EMAIL_VERIFICATION_REQUIRED`); dev logs link when SMTP unset (`packages/auth/src/mail.ts`).
-- **Post-import join:** session hook auto-joins imported household; stub members claimed via `HOUSEHOLD_MEMBER_EMAIL_MAP` / display name. **Single-tenant (`DEPLOYMENT_MODE=single`):** only one household per DB — first login bootstraps owner; later email/Google logins join as `member` (repair merges orphan shadow households on session create).
+- **Post-import join:** session hook moves users onto the **import marker** household; stubs claimed via **`users.import_claim_email`** + `import_records` (`homehub_claim_email`) from HomeHub **`config.yml`**, then Google display name / username fallback. Optional deprecated env: `HOUSEHOLD_MEMBER_EMAIL_MAP`. **Single-tenant:** live import targets the **oldest** household when one already exists.
 - Whome session DTO: `GET /auth/session` (household member context for API/UI).
-- Calendar OAuth remains separate (`/auth/google/calendar/*`); state in Redis.
+- Calendar OAuth remains separate (`/auth/google/calendar/*`); state in Redis. **`createAuthMiddleware` must run before calendar routes** so `/start` sees session (WHO-84).
 
 ### Web UI (`apps/web`)
 
@@ -71,10 +71,12 @@
 
 ### Import tooling
 
-- CLI `npm run import:homehub` with `--dry-run`, `--strict`.
-- Mappers: **notices**, **todo_item** (+ chore), **personal_calendar**, **`home_status` stub members** (single-pass school resolution), school artifacts, files→S3, full school LMS rows.
+- CLI `npm run import:homehub` with `--dry-run`, `--strict`, optional `--config` (defaults to `config.yml` beside `--sqlite`).
+- **HomeHub `config.yml` required** for live import — member roster, claim emails (`auth.display_names`, `allowed_emails`), admin roles (`admin_emails`), school students; migration `0018` adds `users.import_claim_email`.
+- Mappers: **notices**, **todo_item** (+ chore), **personal_calendar**, **unified household members** (`home_status` + config-only stubs e.g. Riley), school artifacts, files→S3, full school LMS rows.
+- Bulk `import_records` index for fast re-import; progress on stderr; `closeDb()` on CLI exit.
 - `docs/IMPORT_REPORT.example.json` regression baseline (fixture dry-run).
-- Real droplet `app.db` gate: operator copies DB per `docs/HOMEHUB_IMPORT.md` (not automated in CI).
+- Real droplet `app.db` gate: operator copies DB + `config.yml` per `docs/HOMEHUB_IMPORT.md` (not automated in CI). **Local dogfood import verified** on `data/app.db`.
 
 ### Ops
 
@@ -94,13 +96,13 @@
 | Hosted multi-tenant | docs only | RLS not in code |
 | `/api/core/files` product routes | not implemented | Import blobs under `imports/` only |
 | **Production cutover on droplet** | operator checklist | Staging/prod import + Caddy flip not run in this repo session |
-| Real `app.db` import counts | validated on **extended fixture** only | Droplet gate requires manual `scp` + live import |
+| Real `app.db` import counts | validated on **extended fixture** + **local dogfood `data/app.db`** | Droplet staging/prod import still operator-run |
 
 ## Immediate next steps (operator)
 
-1. `scp` droplet `app.db` + `uploads/` → run live import + two-Google claim test locally or on staging volume.
-2. `docker compose -f docker-compose.prod.yml -f docker-compose.staging.yml up` → `./scripts/smoke-cutover.sh` → browser module smoke.
-3. Prod import + Caddy swap per `deploy/CUTOVER.md`; 48h soak before stopping HomeHub.
+1. Staging rehearsal: `docker compose -f docker-compose.prod.yml -f docker-compose.staging.yml up` → `./scripts/smoke-cutover.sh` → browser module smoke.
+2. Prod import + Caddy swap per `deploy/CUTOVER.md`; copy droplet `app.db` + **`config.yml`** + `uploads/`.
+3. 48h soak before stopping HomeHub.
 
 ## Module enablement (default)
 

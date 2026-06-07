@@ -4,18 +4,23 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
+import { buildMemberDirectory } from "./lib/member-directory.js";
+import { loadHomeHubConfig } from "./lib/homehub-config.js";
 import { importCalendar } from "./mappers/calendar.js";
-import { importHomeStatusMembers } from "./mappers/home-status-members.js";
+import { importHouseholdMembers } from "./mappers/household-members.js";
 import { importHousehold } from "./mappers/household.js";
 import { importNotices } from "./mappers/notices.js";
 import { importTasks } from "./mappers/tasks.js";
+import type { ImportContext } from "./mappers/types.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixturePath =
   process.env.WHOME_FIXTURE_DB ?? join(__dirname, "..", "fixtures", "minimal-homehub.db");
+const fixtureConfigPath = join(__dirname, "..", "fixtures", "config.yml");
 
 function ensureFixture() {
   if (!existsSync(fixturePath)) {
+    mkdirSync(dirname(fixturePath), { recursive: true });
     const db = new Database(fixturePath);
     db.exec(`
       CREATE TABLE home_status (id INTEGER PRIMARY KEY, name TEXT NOT NULL, status TEXT);
@@ -47,6 +52,23 @@ function ensureFixture() {
 }
 
 const testDb = createDb("postgresql://whome:whome@127.0.0.1:5432/whome_unused");
+const homeHubConfig = loadHomeHubConfig(fixtureConfigPath);
+
+function testContext(sqlite: Database.Database, overrides: Partial<ImportContext> = {}): ImportContext {
+  const memberDirectory = buildMemberDirectory(homeHubConfig, sqlite);
+  return {
+    sqlite,
+    dryRun: true,
+    householdId: "00000000-0000-0000-0000-000000000001",
+    databaseUrl: "postgresql://whome:whome@127.0.0.1:5432/whome_unused",
+    idMap: new Map(),
+    db: testDb,
+    homeHubConfig,
+    memberDirectory,
+    configPath: fixtureConfigPath,
+    ...overrides,
+  };
+}
 
 describe("import mappers dry-run", () => {
   beforeAll(() => {
@@ -57,14 +79,7 @@ describe("import mappers dry-run", () => {
     const sqlite = new Database(fixturePath, { readonly: true });
     try {
       const { result } = await importHousehold(
-        {
-          sqlite,
-          dryRun: true,
-          householdId: "",
-          databaseUrl: "postgresql://whome:whome@127.0.0.1:5432/whome_unused",
-          idMap: new Map(),
-          db: testDb,
-        },
+        testContext(sqlite, { householdId: "" }),
         "Test Household",
       );
       expect(result.imported).toBeGreaterThan(0);
@@ -72,15 +87,8 @@ describe("import mappers dry-run", () => {
       const homeStatusCount = (
         sqlite.prepare("SELECT COUNT(*) as c FROM home_status").get() as { c: number }
       ).c;
-      const members = await importHomeStatusMembers({
-        sqlite,
-        dryRun: true,
-        householdId: "00000000-0000-0000-0000-000000000001",
-        databaseUrl: "postgresql://whome:whome@127.0.0.1:5432/whome_unused",
-        idMap: new Map(),
-        db: testDb,
-      });
-      expect(members.imported).toBe(homeStatusCount);
+      const members = await importHouseholdMembers(testContext(sqlite));
+      expect(members.imported).toBeGreaterThanOrEqual(homeStatusCount);
       expect(homeStatusCount).toBeGreaterThan(0);
     } finally {
       sqlite.close();
@@ -90,14 +98,7 @@ describe("import mappers dry-run", () => {
   it("counts reminders without writing", async () => {
     const sqlite = new Database(fixturePath, { readonly: true });
     try {
-      const result = await importCalendar({
-        sqlite,
-        dryRun: true,
-        householdId: "00000000-0000-0000-0000-000000000001",
-        databaseUrl: "postgresql://whome:whome@127.0.0.1:5432/whome_unused",
-        idMap: new Map(),
-        db: testDb,
-      });
+      const result = await importCalendar(testContext(sqlite));
       expect(result.imported).toBeGreaterThan(0);
     } finally {
       sqlite.close();
@@ -107,14 +108,7 @@ describe("import mappers dry-run", () => {
   it("counts notices without writing", async () => {
     const sqlite = new Database(fixturePath, { readonly: true });
     try {
-      const result = await importNotices({
-        sqlite,
-        dryRun: true,
-        householdId: "00000000-0000-0000-0000-000000000001",
-        databaseUrl: "postgresql://whome:whome@127.0.0.1:5432/whome_unused",
-        idMap: new Map(),
-        db: testDb,
-      });
+      const result = await importNotices(testContext(sqlite));
       expect(result.imported).toBeGreaterThan(0);
     } finally {
       sqlite.close();
@@ -124,14 +118,7 @@ describe("import mappers dry-run", () => {
   it("counts chores and todo_item without writing", async () => {
     const sqlite = new Database(fixturePath, { readonly: true });
     try {
-      const result = await importTasks({
-        sqlite,
-        dryRun: true,
-        householdId: "00000000-0000-0000-0000-000000000001",
-        databaseUrl: "postgresql://whome:whome@127.0.0.1:5432/whome_unused",
-        idMap: new Map(),
-        db: testDb,
-      });
+      const result = await importTasks(testContext(sqlite));
       expect(result.imported).toBeGreaterThan(0);
     } finally {
       sqlite.close();

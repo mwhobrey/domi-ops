@@ -3,9 +3,26 @@ import type { Database } from "@whome/db";
 import { users } from "@whome/db";
 import { eq } from "drizzle-orm";
 import { bootstrapHouseholdOnLogin, resolveAuthContext } from "./bootstrap.js";
-import { hasImportRecords } from "./import-records.js";
+import { getImportedHouseholdId, hasImportRecords } from "./import-records.js";
 import { joinImportedHousehold } from "./join-imported.js";
+import { tryClaimImportedStubMember } from "./claim-imported-stub.js";
 import { repairSingleTenantMembership } from "./single-tenant.js";
+
+function profileFromUser(user: {
+  email: string | null;
+  displayName: string | null;
+  imageUrl: string | null;
+  emailVerified: boolean;
+  username: string | null;
+}) {
+  return {
+    email: user.email ?? undefined,
+    displayName: user.displayName ?? undefined,
+    imageUrl: user.imageUrl ?? undefined,
+    emailVerified: user.emailVerified,
+    username: user.username ?? undefined,
+  };
+}
 
 /** Idempotent: attach session user to imported or new household. */
 export async function ensureHouseholdMembership(
@@ -13,26 +30,36 @@ export async function ensureHouseholdMembership(
   env: Env,
   userId: string,
 ): Promise<void> {
-  if (await repairSingleTenantMembership(db, env, userId)) return;
-
-  const existing = await resolveAuthContext(db, userId);
-  if (existing) return;
-
   const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   if (!user) return;
 
   if (await hasImportRecords(db)) {
-    if (!user.email) {
-      throw new Error("Imported household join requires an email-based account");
+    const importedHouseholdId = await getImportedHouseholdId(db);
+    if (!importedHouseholdId) {
+      await bootstrapHouseholdOnLogin(db, env, userId);
+      return;
     }
-    await joinImportedHousehold(db, env, {
-      email: user.email,
-      displayName: user.displayName ?? undefined,
-      imageUrl: user.imageUrl ?? undefined,
-      emailVerified: user.emailVerified,
-    });
+
+    const existing = await resolveAuthContext(db, userId);
+    const profile = profileFromUser(user);
+
+    if (existing?.householdId === importedHouseholdId) {
+      await tryClaimImportedStubMember(db, env, importedHouseholdId, userId, profile);
+      return;
+    }
+
+    if (!user.email && !user.username) {
+      throw new Error("Imported household join requires an email or username account");
+    }
+
+    await joinImportedHousehold(db, env, { ...profile, userId });
     return;
   }
+
+  if (await repairSingleTenantMembership(db, env, userId)) return;
+
+  const existing = await resolveAuthContext(db, userId);
+  if (existing) return;
 
   await bootstrapHouseholdOnLogin(db, env, userId);
 }

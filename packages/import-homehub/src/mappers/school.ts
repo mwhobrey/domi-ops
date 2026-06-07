@@ -12,7 +12,7 @@ import {
 } from "@whome/db";
 import { and, eq } from "drizzle-orm";
 import { requireDb } from "../lib/require-db.js";
-import { defaultTeacherMemberId, resolveMemberId } from "../lib/member-resolve.js";
+import { defaultTeacherMemberId, resolveMemberId, resolveOrCreateSchoolStudent } from "../lib/member-resolve.js";
 import { sqliteTableExists } from "../lib/sqlite.js";
 import type { ImportContext, MapperResult } from "./types.js";
 
@@ -36,6 +36,26 @@ function mapAttendanceStatus(raw: unknown): "present" | "absent" | "late" | "exc
   const v = String(raw ?? "present").toLowerCase();
   if (ATTENDANCE_STATUS.has(v)) return v as "present" | "absent" | "late" | "excused";
   return "present";
+}
+
+async function resolveStudentMemberId(
+  db: Database,
+  ctx: ImportContext,
+  label: string,
+  cache: Map<string, string>,
+): Promise<string | null> {
+  let memberId = await resolveMemberId(db, ctx.householdId, label, cache);
+  if (memberId) return memberId;
+
+  const directory = ctx.memberDirectory.get(label.trim().toLowerCase());
+  const created = await resolveOrCreateSchoolStudent(
+    db,
+    ctx.householdId,
+    label,
+    cache,
+    directory,
+  );
+  return created?.memberId ?? null;
 }
 
 /** Returns prior import target id so re-import runs can resolve FKs via `ctx.idMap`. */
@@ -171,9 +191,9 @@ export async function importSchool(ctx: ImportContext): Promise<MapperResult> {
       result.warnings.push(`enrollment ${sourceId}: unknown class_id ${row.class_id}`);
       continue;
     }
-    const memberId = await resolveMemberId(
+    let memberId = await resolveStudentMemberId(
       db,
-      ctx.householdId,
+      ctx,
       String(row.student_id ?? ""),
       memberCache,
     );
@@ -329,9 +349,9 @@ export async function importSchool(ctx: ImportContext): Promise<MapperResult> {
       result.warnings.push(`submission ${sourceId}: unknown assignment_id ${row.assignment_id}`);
       continue;
     }
-    const studentMemberId = await resolveMemberId(
+    const studentMemberId = await resolveStudentMemberId(
       db,
-      ctx.householdId,
+      ctx,
       String(row.student_id ?? ""),
       memberCache,
     );
@@ -459,9 +479,9 @@ export async function importSchool(ctx: ImportContext): Promise<MapperResult> {
         continue;
       }
       const classId = ctx.idMap.get(`school_class:${row.class_id}`);
-      const studentMemberId = await resolveMemberId(
+      const studentMemberId = await resolveStudentMemberId(
         db,
-        ctx.householdId,
+        ctx,
         String(row.student_id ?? ""),
         memberCache,
       );

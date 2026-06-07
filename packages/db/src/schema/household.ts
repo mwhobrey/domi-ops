@@ -59,6 +59,8 @@ export const users = pgTable(
   pushCalendarRemindersEnabled: boolean("push_calendar_reminders_enabled")
     .notNull()
     .default(true),
+  /** HomeHub import: real login email that should claim this stub user */
+  importClaimEmail: varchar("import_claim_email", { length: 320 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

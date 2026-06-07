@@ -1,11 +1,18 @@
 #!/usr/bin/env node
+import { loadRootDotenv } from "@whome/config";
 import { Command } from "commander";
 import { runImport } from "./importer.js";
+
+loadRootDotenv();
 
 const program = new Command()
   .name("whome-import")
   .description("Migrate data from HomeHub (SQLite) into whome (PostgreSQL)")
   .requiredOption("--sqlite <path>", "Path to HomeHub data/app.db")
+  .option(
+    "--config <path>",
+    "Path to HomeHub config.yml (default: config.yml beside app.db or ../config.yml)",
+  )
   .option("--uploads <path>", "Path to HomeHub uploads directory")
   .option("--dry-run", "Validate and report without writing", false)
   .option("--strict", "Exit 1 on import warnings", false)
@@ -20,6 +27,7 @@ const program = new Command()
     }
     const report = await runImport({
       sqlitePath: opts.sqlite,
+      configPath: opts.config,
       uploadsPath: opts.uploads,
       dryRun: opts.dryRun,
       householdName: opts.householdName,

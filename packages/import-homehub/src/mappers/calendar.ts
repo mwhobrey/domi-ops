@@ -1,7 +1,8 @@
 import { calendars, calendarEvents, importRecords, recurringRules } from "@whome/db";
 import { eq, and } from "drizzle-orm";
-import { sqliteTableExists } from "../lib/sqlite.js";
+import { sqliteTableExists, sqliteSelectExisting } from "../lib/sqlite.js";
 import { requireDb } from "../lib/require-db.js";
+import { lookupImportedTarget, rememberImportedTarget } from "../lib/import-record-index.js";
 import type { ImportContext, MapperResult } from "./types.js";
 
 export async function importCalendar(ctx: ImportContext): Promise<MapperResult> {
@@ -10,13 +11,26 @@ export async function importCalendar(ctx: ImportContext): Promise<MapperResult> 
     result.warnings.push("reminder table not found — skipped");
     return result;
   }
-  const reminders = ctx.sqlite
-    .prepare(
-      `SELECT id, date, time, title, description, category, color, all_day, end_date, end_time,
-              source, google_event_id, personal_calendar_id
-       FROM reminder LIMIT 5000`,
-    )
-    .all() as Record<string, unknown>[];
+  const reminders = sqliteSelectExisting(
+    ctx.sqlite,
+    "reminder",
+    [
+      "id",
+      "date",
+      "time",
+      "title",
+      "description",
+      "category",
+      "color",
+      "all_day",
+      "end_date",
+      "end_time",
+      "source",
+      "google_event_id",
+      "personal_calendar_id",
+    ],
+    " LIMIT 5000",
+  );
 
   if (ctx.dryRun) {
     result.imported = reminders.length;
@@ -37,19 +51,15 @@ export async function importCalendar(ctx: ImportContext): Promise<MapperResult> 
   const householdBucketSourceId = "imported_homehub";
   let calendarId = ctx.idMap.get(`household_calendar:${householdBucketSourceId}`);
   if (!calendarId) {
-    const [existingRecord] = await db
-      .select()
-      .from(importRecords)
-      .where(
-        and(
-          eq(importRecords.householdId, ctx.householdId),
-          eq(importRecords.sourceTable, "household_calendar"),
-          eq(importRecords.sourceId, householdBucketSourceId),
-        ),
-      )
-      .limit(1);
-    if (existingRecord) {
-      calendarId = existingRecord.targetId;
+    const existingTarget = await lookupImportedTarget(
+      db,
+      ctx.importRecordIndex,
+      ctx.householdId,
+      "household_calendar",
+      householdBucketSourceId,
+    );
+    if (existingTarget) {
+      calendarId = existingTarget;
     } else {
       const [cal] = await db
         .insert(calendars)
@@ -68,6 +78,12 @@ export async function importCalendar(ctx: ImportContext): Promise<MapperResult> 
         targetTable: "calendars",
         targetId: cal.id,
       });
+      rememberImportedTarget(
+        ctx.importRecordIndex,
+        "household_calendar",
+        householdBucketSourceId,
+        cal.id,
+      );
     }
     ctx.idMap.set(`household_calendar:${householdBucketSourceId}`, calendarId);
   }
@@ -79,19 +95,15 @@ export async function importCalendar(ctx: ImportContext): Promise<MapperResult> 
     for (const pc of pcs) {
       const sourceId = String(pc.id);
       if (ctx.idMap.has(`personal_calendar:${sourceId}`)) continue;
-      const [existing] = await db
-        .select()
-        .from(importRecords)
-        .where(
-          and(
-            eq(importRecords.householdId, ctx.householdId),
-            eq(importRecords.sourceTable, "personal_calendar"),
-            eq(importRecords.sourceId, sourceId),
-          ),
-        )
-        .limit(1);
-      if (existing) {
-        ctx.idMap.set(`personal_calendar:${sourceId}`, existing.targetId);
+      const existingTarget = await lookupImportedTarget(
+        db,
+        ctx.importRecordIndex,
+        ctx.householdId,
+        "personal_calendar",
+        sourceId,
+      );
+      if (existingTarget) {
+        ctx.idMap.set(`personal_calendar:${sourceId}`, existingTarget);
         continue;
       }
       const [cal] = await db
@@ -111,6 +123,7 @@ export async function importCalendar(ctx: ImportContext): Promise<MapperResult> 
         targetTable: "calendars",
         targetId: cal.id,
       });
+      rememberImportedTarget(ctx.importRecordIndex, "personal_calendar", sourceId, cal.id);
       result.imported++;
     }
   }
@@ -125,29 +138,33 @@ export async function importCalendar(ctx: ImportContext): Promise<MapperResult> 
   }
 
   if (sqliteTableExists(ctx.sqlite, "recurring_reminder")) {
-    const recurring = ctx.sqlite
-      .prepare(
-        `SELECT id, title, description, category, color, frequency, interval, start_date, end_date,
-                time, end_time, all_day, personal_calendar_id
-         FROM recurring_reminder`,
-      )
-      .all() as Record<string, unknown>[];
+    const recurring = sqliteSelectExisting(ctx.sqlite, "recurring_reminder", [
+      "id",
+      "title",
+      "description",
+      "category",
+      "color",
+      "frequency",
+      "interval",
+      "start_date",
+      "end_date",
+      "time",
+      "end_time",
+      "all_day",
+      "personal_calendar_id",
+    ]);
     for (const row of recurring) {
       const sourceId = String(row.id);
       if (ctx.idMap.has(`recurring_reminder:${sourceId}`)) continue;
-      const [existing] = await db
-        .select()
-        .from(importRecords)
-        .where(
-          and(
-            eq(importRecords.householdId, ctx.householdId),
-            eq(importRecords.sourceTable, "recurring_reminder"),
-            eq(importRecords.sourceId, sourceId),
-          ),
-        )
-        .limit(1);
-      if (existing) {
-        ctx.idMap.set(`recurring_reminder:${sourceId}`, existing.targetId);
+      const existingTarget = await lookupImportedTarget(
+        db,
+        ctx.importRecordIndex,
+        ctx.householdId,
+        "recurring_reminder",
+        sourceId,
+      );
+      if (existingTarget) {
+        ctx.idMap.set(`recurring_reminder:${sourceId}`, existingTarget);
         continue;
       }
       const startDate = String(row.start_date ?? "").slice(0, 10);
@@ -197,6 +214,7 @@ export async function importCalendar(ctx: ImportContext): Promise<MapperResult> 
         targetTable: "recurring_rules",
         targetId: rule!.id,
       });
+      rememberImportedTarget(ctx.importRecordIndex, "recurring_reminder", sourceId, rule!.id);
       ctx.idMap.set(`recurring_reminder:${sourceId}`, rule!.id);
       result.imported += 1;
     }
@@ -204,20 +222,41 @@ export async function importCalendar(ctx: ImportContext): Promise<MapperResult> 
 
   for (const r of reminders) {
     const sourceId = String(r.id);
-    const [existing] = await db
-      .select()
-      .from(importRecords)
-      .where(
-        and(
-          eq(importRecords.householdId, ctx.householdId),
-          eq(importRecords.sourceTable, "reminder"),
-          eq(importRecords.sourceId, sourceId),
-        ),
-      )
-      .limit(1);
-    if (existing) {
+    const existingTarget = await lookupImportedTarget(
+      db,
+      ctx.importRecordIndex,
+      ctx.householdId,
+      "reminder",
+      sourceId,
+    );
+    if (existingTarget) {
       result.skipped++;
       continue;
+    }
+    const googleEventId = r.google_event_id ? String(r.google_event_id) : null;
+    if (googleEventId) {
+      const [dup] = await db
+        .select({ id: calendarEvents.id })
+        .from(calendarEvents)
+        .where(
+          and(
+            eq(calendarEvents.householdId, ctx.householdId),
+            eq(calendarEvents.googleEventId, googleEventId),
+          ),
+        )
+        .limit(1);
+      if (dup) {
+        await db.insert(importRecords).values({
+          householdId: ctx.householdId,
+          sourceTable: "reminder",
+          sourceId,
+          targetTable: "calendar_events",
+          targetId: dup.id,
+        });
+        rememberImportedTarget(ctx.importRecordIndex, "reminder", sourceId, dup.id);
+        result.skipped++;
+        continue;
+      }
     }
     const startDate = String(r.date).slice(0, 10);
     const pcId = r.personal_calendar_id
@@ -239,7 +278,7 @@ export async function importCalendar(ctx: ImportContext): Promise<MapperResult> 
         categoryKey: r.category ? String(r.category) : null,
         color: r.color ? String(r.color) : null,
         source: r.source === "google" ? "google" : "local",
-        googleEventId: r.google_event_id ? String(r.google_event_id) : null,
+        googleEventId,
       })
       .returning();
     await db.insert(importRecords).values({
@@ -249,6 +288,7 @@ export async function importCalendar(ctx: ImportContext): Promise<MapperResult> 
       targetTable: "calendar_events",
       targetId: ev.id,
     });
+    rememberImportedTarget(ctx.importRecordIndex, "reminder", sourceId, ev.id);
     result.imported++;
   }
   return result;

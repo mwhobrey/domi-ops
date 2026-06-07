@@ -1,5 +1,6 @@
 export interface ImportOptions {
   sqlitePath: string;
+  configPath?: string;
   uploadsPath?: string;
   dryRun: boolean;
   householdName: string;

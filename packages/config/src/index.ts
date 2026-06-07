@@ -2,6 +2,8 @@ import { z } from "zod";
 import { validateDevPublicAppUrl, oauthRedirectUris, inferDevWebProfile } from "./dev-url.js";
 import { loadRootDotenv, resetRootDotenvFlag } from "./load-dotenv.js";
 
+export { loadRootDotenv, resetRootDotenvFlag } from "./load-dotenv.js";
+
 export {
   DEV_WEB_PORT_DOCKER,
   DEV_WEB_PORT_NATIVE,
@@ -164,6 +166,10 @@ export {
   slugLegacyName,
 } from "./imported-stub.js";
 export { parseHouseholdMemberEmailMap } from "./household-member-map.js";
+export {
+  collectLegacyNameCandidates,
+  legacyDisplayNameMatches,
+} from "./legacy-name-match.js";
 
 export function isSmtpConfigured(env: Env): boolean {
   return Boolean(env.SMTP_HOST && env.SMTP_FROM);

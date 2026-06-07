@@ -1,0 +1,18 @@
+instance_name: "Fixture HomeHub"
+auth:
+  allowed_emails:
+    - mom@gmail.com
+    - kid@gmail.com
+  admin_emails:
+    - mom@gmail.com
+  display_names:
+    mom@gmail.com: "Mom"
+    kid@gmail.com: "Kid"
+family_members:
+  - Mom
+  - Kid
+school:
+  teachers:
+    - Mom
+  students:
+    - Kid

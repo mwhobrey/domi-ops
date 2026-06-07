@@ -121,7 +121,12 @@ export function createBetterAuth(db: Database, env: Env): WhomeBetterAuth {
       session: {
         create: {
           after: async (session) => {
-            await ensureHouseholdMembership(db, env, session.userId);
+            try {
+              await ensureHouseholdMembership(db, env, session.userId);
+            } catch (err) {
+              console.error("[whome auth] ensureHouseholdMembership failed:", err);
+              throw err;
+            }
           },
         },
       },

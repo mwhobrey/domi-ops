@@ -8,7 +8,8 @@ Implement one file per domain. Each mapper:
 
 ## Order
 
-1. `household.ts` — family_members, firebase users, config.yml
+1. `household.ts` — household marker + single-tenant target
+2. `household-members.ts` — `config.yml` roster + SQLite `home_status` stubs + claim emails
 2. `calendar.ts` — personal_calendar, reminder, recurring_reminder, google tables
 3. `tasks.ts` — chore, todo_list, todo_item
 4. `shopping.ts`, `notes.ts`, `expenses.ts`

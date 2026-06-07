@@ -28,12 +28,13 @@ app.use(
   }),
 );
 
+// Session → auth context must run before calendar OAuth (reads c.get("auth") on /start).
+app.use("*", createAuthMiddleware(db, env, betterAuth));
+
 app.route("/auth/google/calendar", googleCalendarAuthRoutes(db, env));
 app.route("/auth", whomeSessionRoutes(db, betterAuth));
 
 app.on(["POST", "GET"], "/auth/*", (c) => betterAuth.handler(c.req.raw));
-
-app.use("*", createAuthMiddleware(db, env, betterAuth));
 
 app.route("/", healthRoutes(db));
 app.route("/api/calendar", calendarRoutes(db, env));

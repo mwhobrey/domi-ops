@@ -30,7 +30,7 @@ npm run dev         # web :3000, API :4000
 | `GOOGLE_OAUTH_CLIENT_ID` / `SECRET`      | Google login or calendar connect        |
 | GCP redirect URI                         | `{PUBLIC_APP_URL}/auth/callback/google` |
 | `S3_*` + MinIO                           | File upload, import artifacts           |
-| `HOUSEHOLD_MEMBER_EMAIL_MAP`             | Claim import stubs after live import    |
+| HomeHub `config.yml`                       | Required for import — member roster + claim emails |
 | `EMAIL_VERIFICATION_REQUIRED` + `SMTP_*` | Email verify flow (skip in default dev) |
 
 
@@ -193,25 +193,26 @@ SELECT COUNT(*) FROM school_classes;
 
 ### 4C — Stub claim (optional, realistic cutover)
 
-In `.env`:
-
-```env
-HOUSEHOLD_MEMBER_EMAIL_MAP=Mom:you@gmail.com,Kid:kid@gmail.com
-```
-
+Place `config.yml` beside `app.db` (or pass `--config`). Import writes claim emails from `auth.display_names` / `allowed_emails`.
 
 | #    | Step                           | Pass if                                         |
 | ---- | ------------------------------ | ----------------------------------------------- |
-| 4C.1 | Sign in as mapped Google/email | Joins imported household                        |
-| 4C.2 | Check members                  | Stub claimed — no duplicate Mom/Kid rows        |
+| 4C.1 | Sign in as mapped Google/email | Joins imported household; stub claimed          |
+| 4C.2 | Check members                  | No duplicate Mike/Ally/Riley rows               |
 | 4C.3 | `/school` as parent vs kid     | Role matrix still holds on **imported** classes |
 
+Username-only kids (`@riley`) still work when provisioned after import — email claim covers Riley if listed in HomeHub `allowed_emails`.
 
-**Phase 4 status:** ☐ not started · ☐ skipped (no app.db yet) · ☐ in progress · ☐ **pass** · ☐ blocked
 
-**SQLite path used:** ____________________
+**Phase 4 status:** ☐ not started · ☐ skipped (no app.db yet) · ☐ in progress · x **pass** · ☐ blocked
+
+**SQLite path used:** `.\data\app.db` + `.\data\config.yml` + `.\data\uploads`
 
 **Notes:**
+
+- Re-import after dogfood greenfield (not clean reset-first) — two-household edge case resolved via import-first household reconcile + orphan membership cleanup on claim.
+- `config.yml` required: roster from `auth.display_names` / `allowed_emails`; `admin_emails` → owner/admin; `school.students` → child; Riley from config-only member + `home_status` row.
+- Live import ~1m43s on real DB (3625 calendar rows); progress on stderr; `closeDb()` fixes CLI hang after JSON.
 
 Detail: [05_SCHOOL_QA.md § Import verification](./05_SCHOOL_QA.md#import-verification-homehub--whome)
 
@@ -231,9 +232,12 @@ Detail: [05_SCHOOL_QA.md § Import verification](./05_SCHOOL_QA.md#import-verifi
 | 5.4 | Email verification           | Only if `EMAIL_VERIFICATION_REQUIRED=true` — sign-up shows verify message                      |
 
 
-**Phase 5 status:** ☐ not started · ☐ in progress · ☐ **pass** · ☐ skipped
+**Phase 5 status:** ☐ not started · ☐ in progress · x **pass** · ☐ skipped
 
 **Notes:**
+
+- **5.2 (WHO-84):** Connect Google bounced to login loop — `createAuthMiddleware` was registered after `googleCalendarAuthRoutes`; fixed in `apps/api/src/index.ts`. Retest: `/calendar` → Connect Google → Google OAuth consent.
+- **5.4:** skipped (default dev — `EMAIL_VERIFICATION_REQUIRED` unset).
 
 ---
 
@@ -254,13 +258,13 @@ Phases **1–3** prove auth + school without import. Phase **4** proves cutover.
 ```text
 Dogfood QA — whome
 Runbook: .cursor/runbook/06_DOGFOOD_TEST_PHASES.md
-Last completed phase: 3 (pass)
+Last completed phase: 5 (pass) — phases 0–5 complete
 Blocked on: —
 Owner email: me@mikewhob.com
 Kid username: riley
-Import run: no
-Failures / bugs: none open for Phase 3
-Next step: Phase 4 item 4A — import dry-run (or Phase 5 regression if no app.db yet)
+Import run: yes — .\data\app.db + .\data\config.yml + .\data\uploads
+Failures / bugs: none open
+Next step: staging cutover / prod import per deploy/CUTOVER.md
 ```
 
 ---
@@ -279,6 +283,10 @@ Next step: Phase 4 item 4A — import dry-run (or Phase 5 regression if no app.d
 | 2026-06-05 | 2 | Kid username sign-in → NetworkError | blocker | `auth-client.ts` — `window.location.origin`; `devLoopbackOrigins` in Better Auth |
 | 2026-06-05 | 2 | School artifact upload → presign OK, PUT fails | blocker | Missing MinIO bucket after `dev:reset`; `ensureS3Bucket` + `scripts/ensure-minio.mjs` |
 | 2026-06-05 | 2 | Assignment turn-in UX / artifact merge on save | enhancement | `SchoolAssignmentDetail.tsx`, `SchoolSubmissionArtifacts.tsx`, artifact file route |
+| 2026-06-05 | 4 | Dogfood-then-import → two households / wrong HH for calendar+school | blocker | import-first reconcile in `household-membership.ts`; orphan cleanup on claim |
+| 2026-06-05 | 4 | Riley missing from Who's Home after import | blocker | config-only stub + `ensureMemberHomeStatus` in import |
+| 2026-06-05 | 4 | Re-import appeared hung after JSON | minor | `closeDb()` in `@whome/db`; bulk `import_records` index |
+| 2026-06-05 | 5 | Connect Google → login redirect loop | blocker | [WHO-84](https://linear.app/mikewhob-whome/issue/WHO-84) — auth middleware before calendar routes |
 
 
 ---
@@ -291,6 +299,7 @@ Next step: Phase 4 item 4A — import dry-run (or Phase 5 regression if no app.d
 | [WHO-88](https://linear.app/mikewhob-whome/issue/WHO-88) | Better Auth + username   |
 | [WHO-89](https://linear.app/mikewhob-whome/issue/WHO-89) | Email verification       |
 | [WHO-90](https://linear.app/mikewhob-whome/issue/WHO-90) | Single-pass import stubs |
+| [WHO-84](https://linear.app/mikewhob-whome/issue/WHO-84) | Calendar connect OAuth |
 | [WHO-47](https://linear.app/mikewhob-whome/issue/WHO-47) | Role-aware school views  |
 | [WHO-87](https://linear.app/mikewhob-whome/issue/WHO-87) | School QA runbook (05)   |
 

@@ -5,11 +5,12 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixture = join(__dirname, "..", "fixtures", "minimal-homehub.db");
+const config = join(__dirname, "..", "fixtures", "config.yml");
 const cli = join(__dirname, "..", "dist", "cli.js");
 
 const result = spawnSync(
   process.execPath,
-  [cli, "--sqlite", fixture, "--dry-run"],
+  [cli, "--sqlite", fixture, "--config", config, "--dry-run"],
   { env: process.env, encoding: "utf8" },
 );
 
@@ -31,6 +32,7 @@ try {
 
 const allowedWarning = (w) =>
   w.includes("dry-run") ||
+  w.includes("using HomeHub config") ||
   w.includes("table not found") ||
   w.includes("skipped") ||
   w.includes("not found in SQLite");
