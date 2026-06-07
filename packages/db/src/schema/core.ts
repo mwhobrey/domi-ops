@@ -1,6 +1,7 @@
 import {
   boolean,
   date,
+  integer,
   pgTable,
   real,
   text,
@@ -11,6 +12,61 @@ import {
 } from "drizzle-orm/pg-core";
 import { households, householdMembers, users } from "./household.js";
 
+export const shoppingRecurring = pgTable("shopping_recurring", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  householdId: uuid("household_id")
+    .notNull()
+    .references(() => households.id, { onDelete: "cascade" }),
+  item: varchar("item", { length: 256 }).notNull(),
+  tagsJson: text("tags_json").default("[]"),
+  quantity: real("quantity"),
+  unit: varchar("unit", { length: 32 }),
+  notes: text("notes"),
+  interval: varchar("interval", { length: 16 }).notNull().default("weekly"),
+  nextAt: date("next_at").notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const expenses = pgTable("expenses", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  householdId: uuid("household_id")
+    .notNull()
+    .references(() => households.id, { onDelete: "cascade" }),
+  title: varchar("title", { length: 256 }).notNull(),
+  amount: real("amount").notNull().default(0),
+  category: varchar("category", { length: 64 }),
+  expenseDate: date("expense_date").notNull(),
+  createdByDisplayName: varchar("created_by_display_name", { length: 64 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const shoppingTrips = pgTable("shopping_trips", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  householdId: uuid("household_id")
+    .notNull()
+    .references(() => households.id, { onDelete: "cascade" }),
+  clearedAt: timestamp("cleared_at", { withTimezone: true }).notNull().defaultNow(),
+  tripTotal: real("trip_total"),
+  receiptS3Key: text("receipt_s3_key"),
+  expenseId: uuid("expense_id").references(() => expenses.id, { onDelete: "set null" }),
+  itemCount: integer("item_count").notNull().default(0),
+  createdByDisplayName: varchar("created_by_display_name", { length: 64 }),
+});
+
+export const shoppingTripItems = pgTable("shopping_trip_items", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tripId: uuid("trip_id")
+    .notNull()
+    .references(() => shoppingTrips.id, { onDelete: "cascade" }),
+  item: varchar("item", { length: 256 }).notNull(),
+  tagsJson: text("tags_json").default("[]"),
+  quantity: real("quantity"),
+  unit: varchar("unit", { length: 32 }),
+  notes: text("notes"),
+  cost: real("cost"),
+});
+
 export const shoppingItems = pgTable("shopping_items", {
   id: uuid("id").primaryKey().defaultRandom(),
   householdId: uuid("household_id")
@@ -18,6 +74,11 @@ export const shoppingItems = pgTable("shopping_items", {
     .references(() => households.id, { onDelete: "cascade" }),
   item: varchar("item", { length: 256 }).notNull(),
   checked: boolean("checked").notNull().default(false),
+  quantity: real("quantity"),
+  unit: varchar("unit", { length: 32 }),
+  notes: text("notes"),
+  cost: real("cost"),
+  recurringId: uuid("recurring_id").references(() => shoppingRecurring.id, { onDelete: "set null" }),
   tagsJson: text("tags_json").default("[]"),
   createdByDisplayName: varchar("created_by_display_name", { length: 64 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -42,19 +103,6 @@ export const notes = pgTable("notes", {
     .notNull()
     .references(() => households.id, { onDelete: "cascade" }),
   content: text("content").notNull(),
-  createdByDisplayName: varchar("created_by_display_name", { length: 64 }),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
-export const expenses = pgTable("expenses", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  householdId: uuid("household_id")
-    .notNull()
-    .references(() => households.id, { onDelete: "cascade" }),
-  title: varchar("title", { length: 256 }).notNull(),
-  amount: real("amount").notNull().default(0),
-  category: varchar("category", { length: 64 }),
-  expenseDate: date("expense_date").notNull(),
   createdByDisplayName: varchar("created_by_display_name", { length: 64 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

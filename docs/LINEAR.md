@@ -114,6 +114,7 @@ Workspace-level **Bug** / **Feature** may exist; attach in Linear UI if needed. 
 | M1 — Smart add | [WHO-49](https://linear.app/mikewhob-whome/issue/WHO-49) |
 | M2 — List quality | [WHO-50](https://linear.app/mikewhob-whome/issue/WHO-50)–[WHO-52](https://linear.app/mikewhob-whome/issue/WHO-52) |
 | M3 — UX polish | [WHO-51](https://linear.app/mikewhob-whome/issue/WHO-51) |
+| M4 — Expansion | [WHO-92](https://linear.app/mikewhob-whome/issue/WHO-92) (recurring), [WHO-93](https://linear.app/mikewhob-whome/issue/WHO-93) (aisle combobox), [WHO-94](https://linear.app/mikewhob-whome/issue/WHO-94) (edit), [WHO-95](https://linear.app/mikewhob-whome/issue/WHO-95) (reports), [WHO-96](https://linear.app/mikewhob-whome/issue/WHO-96) (receipt), [WHO-97](https://linear.app/mikewhob-whome/issue/WHO-97) (cost/expense) |
 
 ### [Chores](https://linear.app/mikewhob-whome/project/chores-7d0e44ca44bc)
 

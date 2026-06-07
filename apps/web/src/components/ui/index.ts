@@ -6,6 +6,7 @@ export { Breadcrumb, type BreadcrumbItem } from "./Breadcrumb";
 export { Button } from "./Button";
 export { Card, CardBody, CardFooter, CardHeader } from "./Card";
 export { Checkbox } from "./Checkbox";
+export { Combobox } from "./Combobox";
 export { ColorField } from "./ColorField";
 export { ConfirmDialog } from "./ConfirmDialog";
 export { Drawer } from "./Drawer";

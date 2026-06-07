@@ -134,6 +134,20 @@
       "when": 1780494992000,
       "tag": "0018_user_import_claim_email",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1780494993000,
+      "tag": "0019_shopping_quantity",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1780494994000,
+      "tag": "0020_shopping_expansion",
+      "breakpoints": true
     }
   ]
 }
