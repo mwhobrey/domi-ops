@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
-import { Alert, Button, Input, Select, Sheet } from "./ui";
+import { Alert, Button, Combobox, Input, Select, Sheet } from "./ui";
 import type {
   Chore,
   ChorePriority,
@@ -28,7 +28,9 @@ export function ChoreEditSheet({
   chore,
   members,
   tagSuggestions,
+  listSuggestions,
   onTagQuery,
+  onListQuery,
   onClose,
   onSaved,
   onMadeRecurring,
@@ -36,13 +38,16 @@ export function ChoreEditSheet({
   chore: Chore | null;
   members: HouseholdMemberOption[];
   tagSuggestions: string[];
+  listSuggestions: string[];
   onTagQuery: (query: string) => void;
+  onListQuery: (query: string) => void;
   onClose: () => void;
   onSaved: (chore: Chore) => void;
   onMadeRecurring?: (chore: Chore, recurring: ChoreRecurring) => void;
 }) {
   const [description, setDescription] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [listName, setListName] = useState("");
   const [tagsInput, setTagsInput] = useState("");
   const [priority, setPriority] = useState<ChorePriority>(0);
   const [assigneeMemberId, setAssigneeMemberId] = useState("");
@@ -56,6 +61,7 @@ export function ChoreEditSheet({
     if (!chore) return;
     setDescription(chore.description);
     setDueDate(chore.dueDate ?? "");
+    setListName(chore.list ?? "");
     setTagsInput(chore.tags.join(", "));
     setPriority(chore.priority);
     setAssigneeMemberId(chore.assigneeMemberId ?? "");
@@ -82,6 +88,7 @@ export function ChoreEditSheet({
         {
           description: description.trim(),
           dueDate: dueDate || null,
+          list: listName.trim() || null,
           tags: currentTags(),
           priority,
           assigneeMemberId: assigneeMemberId || null,
@@ -128,6 +135,7 @@ export function ChoreEditSheet({
       const data = await apiClient.patch<{ chore?: Chore }>(`/api/core/chores/${chore.id}`, {
         description: description.trim(),
         dueDate: dueDate || null,
+        list: listName.trim() || null,
         tags,
         priority,
         assigneeMemberId: assigneeMemberId || null,
@@ -146,7 +154,7 @@ export function ChoreEditSheet({
       open={chore !== null}
       onClose={onClose}
       title="Edit chore"
-      description="Update title, due date, tags, priority, or assignee."
+      description="Update title, list, due date, tags, priority, or assignee."
     >
       <form className="space-y-4 px-6 pb-6" onSubmit={(e) => void save(e)}>
         {error ? <Alert variant="error">{error}</Alert> : null}
@@ -162,6 +170,14 @@ export function ChoreEditSheet({
           value={dueDate}
           onChange={(e) => setDueDate(e.target.value)}
           aria-label="Due date"
+        />
+        <Combobox
+          placeholder="List (optional)"
+          value={listName}
+          onChange={setListName}
+          onQueryChange={onListQuery}
+          suggestions={listSuggestions}
+          aria-label="List"
         />
         <Input
           list="chore-edit-tag-suggestions"

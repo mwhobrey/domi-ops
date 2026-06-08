@@ -17,37 +17,56 @@ export type ChorePriority = 0 | 1 | 2 | 3;
 
 export const CHORE_PRIORITIES: ChorePriority[] = [0, 1, 2, 3];
 
+const LIST_PREFIX = "list:";
+
 export function normalizeChorePriority(raw: unknown): ChorePriority | null {
   const n = typeof raw === "number" ? raw : typeof raw === "string" ? parseInt(raw, 10) : NaN;
   if (n === 0 || n === 1 || n === 2 || n === 3) return n;
   return null;
 }
 
-export function parseChoreTagsJson(raw: string | null | undefined): string[] {
-  if (!raw) return [];
+export function parseChoreTagsJson(raw: string | null | undefined): {
+  list: string | null;
+  tags: string[];
+} {
+  if (!raw) return { list: null, tags: [] };
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (Array.isArray(parsed)) {
-      return parsed.filter((t): t is string => typeof t === "string" && t.trim().length > 0);
+      const strings = parsed.filter((t): t is string => typeof t === "string");
+      const listEntry = strings.find((t) => t.startsWith(LIST_PREFIX));
+      const list = listEntry ? listEntry.slice(LIST_PREFIX.length) : null;
+      const tags = strings.filter((t) => !t.startsWith(LIST_PREFIX) && t.trim().length > 0);
+      return { list, tags };
     }
   } catch {
     // ignore invalid JSON
   }
-  return [];
+  return { list: null, tags: [] };
 }
 
-export function serializeChoreTagsJson(tags: string[] = []): string {
-  const parts = tags.map((t) => t.trim()).filter(Boolean);
+export function serializeChoreTagsJson(
+  list: string | null | undefined,
+  tags: string[] = [],
+): string {
+  const parts: string[] = [];
+  if (list?.trim()) parts.push(`${LIST_PREFIX}${list.trim()}`);
+  for (const t of tags) {
+    const trimmed = t.trim();
+    if (trimmed && !trimmed.startsWith(LIST_PREFIX)) parts.push(trimmed);
+  }
   return JSON.stringify(parts);
 }
 
 export function serializeChore(row: typeof choresTable.$inferSelect) {
+  const { list, tags } = parseChoreTagsJson(row.tagsJson);
   return {
     id: row.id,
     description: row.description,
     done: row.done,
     dueDate: row.dueDate ?? null,
-    tags: parseChoreTagsJson(row.tagsJson),
+    list,
+    tags,
     priority: (row.priority ?? 0) as ChorePriority,
     assigneeMemberId: row.assigneeMemberId ?? null,
     recurringId: row.recurringId ?? null,
@@ -57,10 +76,12 @@ export function serializeChore(row: typeof choresTable.$inferSelect) {
 }
 
 export function serializeChoreRecurring(row: typeof choresRecurringTable.$inferSelect) {
+  const { list, tags } = parseChoreTagsJson(row.tagsJson);
   return {
     id: row.id,
     description: row.description,
-    tags: parseChoreTagsJson(row.tagsJson),
+    list,
+    tags,
     priority: (row.priority ?? 0) as ChorePriority,
     assigneeMemberId: row.assigneeMemberId ?? null,
     interval: row.interval as RecurringInterval,
@@ -68,6 +89,40 @@ export function serializeChoreRecurring(row: typeof choresRecurringTable.$inferS
     enabled: row.enabled,
     createdAt: row.createdAt,
   };
+}
+
+export async function collectChoreListSuggestions(
+  db: Database,
+  householdId: string,
+  q: string,
+): Promise<string[]> {
+  const rows = await db
+    .select({ tagsJson: chores.tagsJson })
+    .from(chores)
+    .where(eq(chores.householdId, householdId));
+
+  const recurringRows = await db
+    .select({ tagsJson: choresRecurring.tagsJson })
+    .from(choresRecurring)
+    .where(eq(choresRecurring.householdId, householdId));
+
+  const seen = new Set<string>();
+  const suggestions: string[] = [];
+  const needle = q.trim().toLowerCase();
+
+  for (const row of [...rows, ...recurringRows]) {
+    const { list } = parseChoreTagsJson(row.tagsJson);
+    if (!list?.trim()) continue;
+    const name = list.trim();
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    if (needle && !key.includes(needle)) continue;
+    seen.add(key);
+    suggestions.push(name);
+  }
+
+  suggestions.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+  return suggestions.slice(0, 25);
 }
 
 export async function collectChoreTagSuggestions(
@@ -90,7 +145,7 @@ export async function collectChoreTagSuggestions(
   const needle = q.trim().toLowerCase();
 
   for (const row of [...rows, ...recurringRows]) {
-    for (const tag of parseChoreTagsJson(row.tagsJson)) {
+    for (const tag of parseChoreTagsJson(row.tagsJson).tags) {
       const key = tag.toLowerCase();
       if (seen.has(key)) continue;
       if (needle && !key.includes(needle)) continue;
@@ -122,6 +177,7 @@ export function resolveRecurringAnchorDate(dueDate: string | null | undefined, t
 export type PromoteChoreToRecurringInput = {
   interval: RecurringInterval;
   description?: string;
+  list?: string | null;
   tags?: string[];
   priority?: ChorePriority;
   assigneeMemberId?: string | null;
@@ -156,10 +212,14 @@ export async function promoteChoreToRecurring(
   if (blockReason) return { ok: false, error: blockReason };
 
   const description = input.description?.trim() || existing.description;
-  const tagsJson =
-    input.tags !== undefined
-      ? serializeChoreTagsJson(input.tags)
-      : existing.tagsJson ?? serializeChoreTagsJson([]);
+  let tagsJson = existing.tagsJson ?? serializeChoreTagsJson(null, []);
+  if (input.list !== undefined || input.tags !== undefined) {
+    const current = parseChoreTagsJson(existing.tagsJson);
+    tagsJson = serializeChoreTagsJson(
+      input.list !== undefined ? input.list : current.list,
+      input.tags ?? current.tags,
+    );
+  }
   const priority = input.priority !== undefined ? input.priority : (existing.priority ?? 0);
   const assigneeMemberId =
     input.assigneeMemberId !== undefined ? input.assigneeMemberId : existing.assigneeMemberId;

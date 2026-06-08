@@ -17,6 +17,7 @@ import {
   homeStatus,
   householdMembers,
   noticeReads,
+  noteShares,
   notes,
   notices,
   shoppingItems,
@@ -26,7 +27,7 @@ import {
   pushSubscriptions,
   users,
 } from "@whome/db";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, exists, ilike, inArray, or, sql } from "drizzle-orm";
 import {
   buildShoppingReports,
   collectAisleSuggestions,
@@ -58,10 +59,12 @@ import {
 import { avatarObjectKey, processAvatarUpload } from "../lib/avatar-image.js";
 import { buildChoresGlance } from "../lib/chores-glance.js";
 import {
+  collectChoreListSuggestions,
   collectChoreTagSuggestions,
   materializeDueChoreRecurring,
   normalizeChorePriority,
   normalizeRecurringInterval as normalizeChoreRecurringInterval,
+  parseChoreTagsJson,
   promoteChoreToRecurring,
   serializeChore,
   serializeChoreRecurring,
@@ -72,6 +75,12 @@ import {
   loadHouseholdKarma,
   recordChoreCompletion,
 } from "../lib/chores-karma.js";
+import {
+  collectNoteTagSuggestions,
+  normalizeNoteTitle,
+  parseNoteTagsJson,
+  serializeNoteTagsJson,
+} from "../lib/notes.js";
 import { memberAvatarUrl } from "../lib/avatar-url.js";
 import {
   claimEndpointForUser,
@@ -95,6 +104,137 @@ import { requireAuth } from "../middleware/auth.js";
 
 function posterLabel(auth: AuthContext): string {
   return memberShownLabel({ name: auth.name }) || auth.email || auth.username || "Member";
+}
+
+type NoteRow = typeof notes.$inferSelect;
+type NoteVisibility = "private" | "household";
+
+function normalizeNoteVisibility(value: unknown): NoteVisibility {
+  return value === "private" ? "private" : "household";
+}
+
+function noteVisibleWhere(db: Database, auth: AuthContext) {
+  return and(
+    eq(notes.householdId, auth.householdId),
+    or(
+      eq(notes.visibility, "household"),
+      and(eq(notes.visibility, "private"), eq(notes.createdByUserId, auth.userId)),
+      and(
+        eq(notes.visibility, "private"),
+        exists(
+          db
+            .select({ noteId: noteShares.noteId })
+            .from(noteShares)
+            .where(
+              and(eq(noteShares.noteId, notes.id), eq(noteShares.memberId, auth.memberId)),
+            ),
+        ),
+      ),
+    ),
+  );
+}
+
+function noteMutableWhere(id: string, auth: AuthContext) {
+  return and(
+    eq(notes.id, id),
+    eq(notes.householdId, auth.householdId),
+    or(eq(notes.visibility, "household"), eq(notes.createdByUserId, auth.userId)),
+  );
+}
+
+async function loadNoteShareMap(db: Database, noteIds: string[]) {
+  const map = new Map<string, string[]>();
+  if (noteIds.length === 0) return map;
+  const rows = await db
+    .select({ noteId: noteShares.noteId, memberId: noteShares.memberId })
+    .from(noteShares)
+    .where(inArray(noteShares.noteId, noteIds));
+  for (const row of rows) {
+    const list = map.get(row.noteId) ?? [];
+    list.push(row.memberId);
+    map.set(row.noteId, list);
+  }
+  return map;
+}
+
+async function validateShareMemberIds(
+  db: Database,
+  householdId: string,
+  memberIds: string[],
+  excludeMemberId?: string,
+) {
+  const unique = [...new Set(memberIds.filter((id) => id && id !== excludeMemberId))];
+  if (unique.length === 0) return [];
+  const rows = await db
+    .select({ id: householdMembers.id })
+    .from(householdMembers)
+    .where(
+      and(eq(householdMembers.householdId, householdId), inArray(householdMembers.id, unique)),
+    );
+  const valid = new Set(rows.map((r) => r.id));
+  return unique.filter((id) => valid.has(id));
+}
+
+async function replaceNoteShares(
+  db: Database,
+  noteId: string,
+  memberIds: string[],
+) {
+  await db.delete(noteShares).where(eq(noteShares.noteId, noteId));
+  if (memberIds.length === 0) return;
+  await db.insert(noteShares).values(
+    memberIds.map((memberId) => ({
+      noteId,
+      memberId,
+    })),
+  );
+}
+
+function noteListWhere(db: Database, auth: AuthContext, q?: string, tag?: string) {
+  const conditions = [noteVisibleWhere(db, auth)];
+  const trimmedQ = q?.trim();
+  if (trimmedQ) {
+    conditions.push(
+      or(ilike(notes.title, `%${trimmedQ}%`), ilike(notes.content, `%${trimmedQ}%`)),
+    );
+  }
+  const trimmedTag = tag?.trim();
+  if (trimmedTag) {
+    conditions.push(
+      sql`exists (
+        select 1 from jsonb_array_elements_text(coalesce(${notes.tagsJson}::jsonb, '[]'::jsonb)) as note_tag
+        where lower(note_tag) = lower(${trimmedTag})
+      )`,
+    );
+  }
+  return and(...conditions);
+}
+
+function serializeNote(
+  row: NoteRow,
+  auth: AuthContext,
+  shareMap: Map<string, string[]>,
+) {
+  const sharedMemberIds = shareMap.get(row.id) ?? [];
+  const isOwnedByMe = row.createdByUserId === auth.userId;
+  const sharedWithMe =
+    row.visibility === "private" &&
+    !isOwnedByMe &&
+    sharedMemberIds.includes(auth.memberId);
+  return {
+    id: row.id,
+    title: row.title,
+    content: row.content,
+    pinned: row.pinned,
+    tags: parseNoteTagsJson(row.tagsJson),
+    visibility: row.visibility,
+    createdByUserId: row.createdByUserId,
+    createdByDisplayName: row.createdByDisplayName,
+    createdAt: row.createdAt,
+    isOwnedByMe,
+    sharedWithMe,
+    sharedMemberIds: isOwnedByMe ? sharedMemberIds : undefined,
+  };
 }
 
 type NoticeRow = typeof notices.$inferSelect;
@@ -824,6 +964,13 @@ export function coreRoutes(db: Database, env: Env) {
     return c.json({ suggestions });
   });
 
+  app.get("/chores/list-suggestions", async (c) => {
+    const auth = c.get("auth")!;
+    const q = c.req.query("q")?.trim() ?? "";
+    const suggestions = await collectChoreListSuggestions(db, auth.householdId, q);
+    return c.json({ suggestions });
+  });
+
   app.get("/chores/recurring", async (c) => {
     const auth = c.get("auth")!;
     const rows = await db
@@ -838,6 +985,7 @@ export function coreRoutes(db: Database, env: Env) {
     const auth = c.get("auth")!;
     const body = await c.req.json<{
       description: string;
+      list?: string | null;
       tags?: string[];
       priority?: number;
       assigneeMemberId?: string | null;
@@ -857,7 +1005,7 @@ export function coreRoutes(db: Database, env: Env) {
       .values({
         householdId: auth.householdId,
         description,
-        tagsJson: serializeChoreTagsJson(body.tags ?? []),
+        tagsJson: serializeChoreTagsJson(body.list, body.tags ?? []),
         priority: priority ?? 0,
         assigneeMemberId: body.assigneeMemberId ?? null,
         interval,
@@ -872,6 +1020,7 @@ export function coreRoutes(db: Database, env: Env) {
     const id = c.req.param("id");
     const body = await c.req.json<{
       description?: string;
+      list?: string | null;
       tags?: string[];
       priority?: number;
       assigneeMemberId?: string | null;
@@ -902,8 +1051,12 @@ export function coreRoutes(db: Database, env: Env) {
       if (priority === null) return c.json({ error: "invalid_priority" }, 400);
       patch.priority = priority;
     }
-    if (body.tags !== undefined) {
-      patch.tagsJson = serializeChoreTagsJson(body.tags);
+    if (body.list !== undefined || body.tags !== undefined) {
+      const current = parseChoreTagsJson(existing.tagsJson);
+      patch.tagsJson = serializeChoreTagsJson(
+        body.list !== undefined ? body.list : current.list,
+        body.tags ?? current.tags,
+      );
     }
 
     const [row] = await db
@@ -938,6 +1091,7 @@ export function coreRoutes(db: Database, env: Env) {
     const body = await c.req.json<{
       description: string;
       dueDate?: string | null;
+      list?: string | null;
       tags?: string[];
       priority?: number;
       assigneeMemberId?: string | null;
@@ -954,7 +1108,7 @@ export function coreRoutes(db: Database, env: Env) {
         householdId: auth.householdId,
         description,
         dueDate: body.dueDate?.trim() || null,
-        tagsJson: serializeChoreTagsJson(body.tags ?? []),
+        tagsJson: serializeChoreTagsJson(body.list, body.tags ?? []),
         priority: priority ?? 0,
         assigneeMemberId: body.assigneeMemberId ?? null,
         createdByDisplayName: posterLabel(auth),
@@ -969,6 +1123,7 @@ export function coreRoutes(db: Database, env: Env) {
     const body = await c.req.json<{
       interval?: string;
       description?: string;
+      list?: string | null;
       tags?: string[];
       priority?: number;
       assigneeMemberId?: string | null;
@@ -990,6 +1145,7 @@ export function coreRoutes(db: Database, env: Env) {
     const result = await promoteChoreToRecurring(db, auth.householdId, id, {
       interval,
       description: body.description,
+      list: body.list,
       tags: body.tags,
       priority: priority ?? undefined,
       assigneeMemberId: body.assigneeMemberId,
@@ -1023,6 +1179,7 @@ export function coreRoutes(db: Database, env: Env) {
       done?: boolean;
       description?: string;
       dueDate?: string | null;
+      list?: string | null;
       tags?: string[];
       priority?: number;
       assigneeMemberId?: string | null;
@@ -1048,8 +1205,12 @@ export function coreRoutes(db: Database, env: Env) {
       if (priority === null) return c.json({ error: "invalid_priority" }, 400);
       patch.priority = priority;
     }
-    if (body.tags !== undefined) {
-      patch.tagsJson = serializeChoreTagsJson(body.tags);
+    if (body.list !== undefined || body.tags !== undefined) {
+      const current = parseChoreTagsJson(existing.tagsJson);
+      patch.tagsJson = serializeChoreTagsJson(
+        body.list !== undefined ? body.list : current.list,
+        body.tags ?? current.tags,
+      );
     }
     if (body.done === true) {
       patch.dueReminderSentAt = null;
@@ -1093,47 +1254,147 @@ export function coreRoutes(db: Database, env: Env) {
     return c.json({ ok: true });
   });
 
+  app.get("/notes/tag-suggestions", async (c) => {
+    const auth = c.get("auth")!;
+    const q = c.req.query("q")?.trim() ?? "";
+    const suggestions = await collectNoteTagSuggestions(db, auth.householdId, q);
+    return c.json({ suggestions });
+  });
+
   app.get("/notes", async (c) => {
     const auth = c.get("auth")!;
+    const q = c.req.query("q")?.trim();
+    const tag = c.req.query("tag")?.trim();
     const rows = await db
       .select()
       .from(notes)
-      .where(eq(notes.householdId, auth.householdId))
+      .where(noteListWhere(db, auth, q, tag))
+      .orderBy(desc(notes.pinned), desc(notes.createdAt))
       .limit(50);
-    return c.json({ notes: rows });
+    const shareMap = await loadNoteShareMap(
+      db,
+      rows.filter((r) => r.visibility === "private").map((r) => r.id),
+    );
+    return c.json({ notes: rows.map((row) => serializeNote(row, auth, shareMap)) });
   });
 
   app.post("/notes", async (c) => {
     const auth = c.get("auth")!;
-    const body = await c.req.json<{ content: string }>();
+    const body = await c.req.json<{
+      title: string;
+      content: string;
+      pinned?: boolean;
+      tags?: string[];
+      visibility?: NoteVisibility;
+      sharedMemberIds?: string[];
+    }>();
+    const title = normalizeNoteTitle(body.title);
+    if (!title) return c.json({ error: "title_required" }, 400);
+    const content = body.content?.trim();
+    if (!content) return c.json({ error: "content_required" }, 400);
+    const visibility = normalizeNoteVisibility(body.visibility);
     const [row] = await db
       .insert(notes)
       .values({
         householdId: auth.householdId,
-        content: body.content,
+        title,
+        content,
+        pinned: Boolean(body.pinned),
+        tagsJson: serializeNoteTagsJson(body.tags ?? []),
+        visibility,
+        createdByUserId: auth.userId,
         createdByDisplayName: posterLabel(auth),
       })
       .returning();
-    return c.json({ note: row }, 201);
+    let sharedMemberIds: string[] = [];
+    if (visibility === "private" && Array.isArray(body.sharedMemberIds)) {
+      sharedMemberIds = await validateShareMemberIds(
+        db,
+        auth.householdId,
+        body.sharedMemberIds,
+        auth.memberId,
+      );
+      await replaceNoteShares(db, row.id, sharedMemberIds);
+    }
+    const shareMap = new Map<string, string[]>([[row.id, sharedMemberIds]]);
+    return c.json({ note: serializeNote(row, auth, shareMap) }, 201);
   });
 
   app.patch("/notes/:id", async (c) => {
     const auth = c.get("auth")!;
     const id = c.req.param("id");
-    const body = await c.req.json<{ content: string }>();
-    await db
-      .update(notes)
-      .set({ content: body.content })
-      .where(and(eq(notes.id, id), eq(notes.householdId, auth.householdId)));
-    return c.json({ ok: true });
+    const body = await c.req.json<{
+      title?: string;
+      content?: string;
+      pinned?: boolean;
+      tags?: string[];
+      visibility?: NoteVisibility;
+      sharedMemberIds?: string[];
+    }>();
+    const patch: Partial<typeof notes.$inferInsert> = {};
+    if (body.title !== undefined) {
+      const title = normalizeNoteTitle(body.title);
+      if (!title) return c.json({ error: "title_required" }, 400);
+      patch.title = title;
+    }
+    if (body.content !== undefined) {
+      const content = body.content.trim();
+      if (!content) return c.json({ error: "content_required" }, 400);
+      patch.content = content;
+    }
+    if (body.pinned !== undefined) {
+      patch.pinned = Boolean(body.pinned);
+    }
+    if (body.tags !== undefined) {
+      patch.tagsJson = serializeNoteTagsJson(body.tags);
+    }
+    if (body.visibility !== undefined) {
+      const visibility = normalizeNoteVisibility(body.visibility);
+      patch.visibility = visibility;
+      if (visibility === "private") {
+        patch.createdByUserId = auth.userId;
+      }
+    }
+    const hasShareUpdate = body.sharedMemberIds !== undefined;
+    if (Object.keys(patch).length === 0 && !hasShareUpdate) {
+      return c.json({ error: "no_changes" }, 400);
+    }
+    const [row] =
+      Object.keys(patch).length > 0
+        ? await db
+            .update(notes)
+            .set(patch)
+            .where(noteMutableWhere(id, auth))
+            .returning()
+        : await db
+            .select()
+            .from(notes)
+            .where(noteMutableWhere(id, auth))
+            .limit(1);
+    if (!row) return c.json({ error: "not_found" }, 404);
+    if (row.visibility === "household") {
+      await replaceNoteShares(db, row.id, []);
+    } else if (hasShareUpdate) {
+      const sharedMemberIds = await validateShareMemberIds(
+        db,
+        auth.householdId,
+        body.sharedMemberIds ?? [],
+        auth.memberId,
+      );
+      await replaceNoteShares(db, row.id, sharedMemberIds);
+    }
+    const shareMap = await loadNoteShareMap(db, row.visibility === "private" ? [row.id] : []);
+    return c.json({ note: serializeNote(row, auth, shareMap) });
   });
 
   app.delete("/notes/:id", async (c) => {
     const auth = c.get("auth")!;
     const id = c.req.param("id");
-    await db
+    const [row] = await db
       .delete(notes)
-      .where(and(eq(notes.id, id), eq(notes.householdId, auth.householdId)));
+      .where(noteMutableWhere(id, auth))
+      .returning({ id: notes.id });
+    if (!row) return c.json({ error: "not_found" }, 404);
     return c.json({ ok: true });
   });
 
@@ -1410,6 +1671,17 @@ export function coreRoutes(db: Database, env: Env) {
       .set(body)
       .where(and(eq(expenses.id, id), eq(expenses.householdId, auth.householdId)));
     return c.json({ ok: true });
+  });
+
+  app.get("/household/roster", async (c) => {
+    const auth = c.get("auth")!;
+    const rows = await listHouseholdMembersWithAuth(db, auth.householdId);
+    return c.json({
+      members: rows.map((m) => ({
+        memberId: m.memberId,
+        label: memberShownLabel({ name: m.name }) || m.username || m.email || "Member",
+      })),
+    });
   });
 
   app.get("/household/members", async (c) => {

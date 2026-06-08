@@ -10,6 +10,7 @@ import { importCalendar } from "./mappers/calendar.js";
 import { importHouseholdMembers } from "./mappers/household-members.js";
 import { importHousehold } from "./mappers/household.js";
 import { importNotices } from "./mappers/notices.js";
+import { importNotes } from "./mappers/notes.js";
 import { importTasks } from "./mappers/tasks.js";
 import type { ImportContext } from "./mappers/types.js";
 
@@ -39,6 +40,11 @@ function ensureFixture() {
         id INTEGER PRIMARY KEY, description TEXT, done INTEGER, due_date TEXT, creator TEXT, tags TEXT
       );
       INSERT INTO chore VALUES (1, 'Dishes', 0, NULL, 'Kid', '[]');
+      CREATE TABLE note (
+        id INTEGER PRIMARY KEY, content TEXT NOT NULL, creator TEXT, timestamp TEXT
+      );
+      INSERT INTO note (id, content, creator, timestamp)
+      VALUES (1, 'Fixture note', 'Mom', '2026-06-01 12:00:00');
       CREATE TABLE reminder (
         id INTEGER PRIMARY KEY, date TEXT, time TEXT, title TEXT, description TEXT,
         category TEXT, color TEXT, all_day INTEGER, end_date TEXT, end_time TEXT,
@@ -119,6 +125,16 @@ describe("import mappers dry-run", () => {
     const sqlite = new Database(fixturePath, { readonly: true });
     try {
       const result = await importTasks(testContext(sqlite));
+      expect(result.imported).toBeGreaterThan(0);
+    } finally {
+      sqlite.close();
+    }
+  });
+
+  it("counts notes without writing", async () => {
+    const sqlite = new Database(fixturePath, { readonly: true });
+    try {
+      const result = await importNotes(testContext(sqlite));
       expect(result.imported).toBeGreaterThan(0);
     } finally {
       sqlite.close();

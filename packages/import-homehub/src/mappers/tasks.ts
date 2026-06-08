@@ -4,6 +4,29 @@ import { and, eq } from "drizzle-orm";
 import { sqliteTableExists } from "../lib/sqlite.js";
 import type { ImportContext, MapperResult } from "./types.js";
 
+const LIST_PREFIX = "list:";
+
+function choreTagsWithList(existingTagsJson: string, listName: string | null): string {
+  let tags: string[] = [];
+  try {
+    const parsed = JSON.parse(existingTagsJson) as unknown;
+    if (Array.isArray(parsed)) {
+      tags = parsed.filter(
+        (t): t is string => typeof t === "string" && !t.startsWith(LIST_PREFIX),
+      );
+    }
+  } catch {
+    // ignore invalid JSON
+  }
+  const parts: string[] = [];
+  if (listName?.trim()) parts.push(`${LIST_PREFIX}${listName.trim()}`);
+  for (const t of tags) {
+    const trimmed = t.trim();
+    if (trimmed) parts.push(trimmed);
+  }
+  return JSON.stringify(parts);
+}
+
 async function importChoreRows(ctx: ImportContext, result: MapperResult): Promise<void> {
   if (!sqliteTableExists(ctx.sqlite, "chore")) return;
   const rows = ctx.sqlite
@@ -82,16 +105,16 @@ async function importTodoItems(ctx: ImportContext, result: MapperResult): Promis
       result.skipped++;
       continue;
     }
-    const listName = r.list_name ? String(r.list_name) : "Todos";
+    const listName = hasLists ? (r.list_name ? String(r.list_name) : "Todos") : null;
     const desc = String(r.description);
     const [row] = await db
       .insert(chores)
       .values({
         householdId: ctx.householdId,
-        description: `[${listName}] ${desc}`,
+        description: desc,
         done: Boolean(r.done),
         dueDate: r.due_date ? String(r.due_date).slice(0, 10) : null,
-        tagsJson: String(r.tags ?? "[]"),
+        tagsJson: choreTagsWithList(String(r.tags ?? "[]"), listName),
         createdByDisplayName: r.creator ? String(r.creator) : null,
       })
       .returning();

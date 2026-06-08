@@ -2,6 +2,7 @@ import {
   boolean,
   date,
   integer,
+  pgEnum,
   pgTable,
   primaryKey,
   real,
@@ -156,15 +157,36 @@ export const choreMemberKarma = pgTable(
   }),
 );
 
+export const noteVisibilityEnum = pgEnum("note_visibility", ["household", "private"]);
+
 export const notes = pgTable("notes", {
   id: uuid("id").primaryKey().defaultRandom(),
   householdId: uuid("household_id")
     .notNull()
     .references(() => households.id, { onDelete: "cascade" }),
+  title: varchar("title", { length: 256 }).notNull(),
   content: text("content").notNull(),
+  pinned: boolean("pinned").notNull().default(false),
+  tagsJson: text("tags_json").default("[]"),
+  visibility: noteVisibilityEnum("visibility").notNull().default("household"),
+  createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
   createdByDisplayName: varchar("created_by_display_name", { length: 64 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const noteShares = pgTable(
+  "note_shares",
+  {
+    noteId: uuid("note_id")
+      .notNull()
+      .references(() => notes.id, { onDelete: "cascade" }),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => householdMembers.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.noteId, t.memberId] })],
+);
 
 export const notices = pgTable("notices", {
   id: uuid("id").primaryKey().defaultRandom(),

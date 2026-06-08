@@ -10,6 +10,7 @@ import {
   Badge,
   Button,
   Checkbox,
+  Combobox,
   ConfirmDialog,
   EmptyState,
   Input,
@@ -27,6 +28,7 @@ export interface Chore {
   description: string;
   done: boolean;
   dueDate: string | null;
+  list: string | null;
   tags: string[];
   priority: ChorePriority;
   assigneeMemberId: string | null;
@@ -36,6 +38,7 @@ export interface Chore {
 export interface ChoreRecurring {
   id: string;
   description: string;
+  list: string | null;
   tags: string[];
   priority: ChorePriority;
   assigneeMemberId: string | null;
@@ -50,6 +53,9 @@ export interface HouseholdMemberOption {
 }
 
 type FilterMode = "all" | "open" | "overdue";
+
+const NO_LIST_LABEL = "No list";
+const ALL_LISTS = "";
 
 const PRIORITY_OPTIONS = [
   { value: "0", label: "No priority" },
@@ -98,6 +104,176 @@ function parseTagsInput(raw: string): string[] {
     .split(",")
     .map((t) => t.trim())
     .filter(Boolean);
+}
+
+function ChoreRow({
+  chore: c,
+  showList,
+  editingDueId,
+  setEditingDueId,
+  patchChore,
+  setEditChore,
+  setDeleteId,
+  memberLabel,
+}: {
+  chore: Chore;
+  showList: boolean;
+  editingDueId: string | null;
+  setEditingDueId: (id: string | null) => void;
+  patchChore: (id: string, patch: Partial<Chore>) => Promise<void>;
+  setEditChore: (chore: Chore) => void;
+  setDeleteId: (id: string) => void;
+  memberLabel: (id: string | null) => string | null;
+}) {
+  const overdue = isOverdue(c.dueDate, c.done);
+  const plabel = priorityLabel(c.priority);
+  const assignee = memberLabel(c.assigneeMemberId);
+
+  return (
+    <ListItem
+      as="li"
+      className={cn(overdue && "border-[var(--color-danger)]/50")}
+    >
+      <Checkbox
+        checked={c.done}
+        onChange={async () => {
+          const done = !c.done;
+          await patchChore(c.id, { done });
+        }}
+        aria-label={`Mark ${c.description} as ${c.done ? "incomplete" : "done"}`}
+      />
+      <div className="min-w-0 flex-1 space-y-1">
+        <span className={c.done ? "line-through text-[var(--color-text-muted)]" : ""}>
+          {c.description}
+        </span>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {showList && c.list ? <Badge tone="accent">{c.list}</Badge> : null}
+          {c.dueDate && editingDueId !== c.id && (
+            <button
+              type="button"
+              className={cn(
+                "text-xs underline-offset-2 hover:underline",
+                overdue ? "text-[var(--color-danger)]" : "text-[var(--color-text-muted)]",
+              )}
+              onClick={() => setEditingDueId(c.id)}
+              aria-label={`Edit due date for ${c.description}`}
+            >
+              Due {c.dueDate}
+            </button>
+          )}
+          {editingDueId === c.id && (
+            <Input
+              type="date"
+              className="h-8 w-auto text-xs"
+              defaultValue={c.dueDate ?? ""}
+              autoFocus
+              aria-label={`Due date for ${c.description}`}
+              onBlur={async (e) => {
+                setEditingDueId(null);
+                const next = e.target.value || null;
+                if (next !== c.dueDate) {
+                  await patchChore(c.id, { dueDate: next });
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                if (e.key === "Escape") setEditingDueId(null);
+              }}
+            />
+          )}
+          {!c.dueDate && editingDueId !== c.id && (
+            <button
+              type="button"
+              className="text-xs text-[var(--color-text-muted)] hover:underline"
+              onClick={() => setEditingDueId(c.id)}
+            >
+              Add due date
+            </button>
+          )}
+          {plabel && <Badge tone={priorityTone(c.priority)}>{plabel}</Badge>}
+          {assignee && <Badge tone="default">{assignee}</Badge>}
+          {overdue && <Badge tone="warning">Redemption quest</Badge>}
+          {c.recurringId && <Badge tone="accent">Recurring</Badge>}
+        </div>
+        {c.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1" role="list" aria-label="Tags">
+            {c.tags.map((tag) => (
+              <span key={tag} role="listitem">
+                <Badge tone="default">{tag}</Badge>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="flex shrink-0 items-center gap-0.5">
+        <Button variant="ghost" size="sm" onClick={() => setEditChore(c)}>
+          Edit
+        </Button>
+        <Button variant="ghost" size="sm" onClick={() => setDeleteId(c.id)}>
+          Remove
+        </Button>
+      </div>
+    </ListItem>
+  );
+}
+
+function groupByList(items: Chore[]): { list: string; items: Chore[] }[] {
+  const map = new Map<string, Chore[]>();
+  for (const item of items) {
+    const key = item.list?.trim() || NO_LIST_LABEL;
+    const bucket = map.get(key) ?? [];
+    bucket.push(item);
+    map.set(key, bucket);
+  }
+  return [...map.entries()]
+    .sort(([a], [b]) => {
+      if (a === NO_LIST_LABEL) return 1;
+      if (b === NO_LIST_LABEL) return -1;
+      return a.localeCompare(b, undefined, { sensitivity: "base" });
+    })
+    .map(([list, groupItems]) => ({ list, items: groupItems }));
+}
+
+function ListFilterBar({
+  lists,
+  value,
+  onChange,
+}: {
+  lists: string[];
+  value: string;
+  onChange: (list: string) => void;
+}) {
+  if (lists.length === 0) return null;
+
+  return (
+    <div
+      className="flex flex-wrap gap-2"
+      role="group"
+      aria-label="Filter by list"
+    >
+      <Button
+        type="button"
+        size="sm"
+        variant={value === ALL_LISTS ? "primary" : "secondary"}
+        aria-pressed={value === ALL_LISTS}
+        onClick={() => onChange(ALL_LISTS)}
+      >
+        All lists
+      </Button>
+      {lists.map((list) => (
+        <Button
+          key={list}
+          type="button"
+          size="sm"
+          variant={value === list ? "primary" : "secondary"}
+          aria-pressed={value === list}
+          onClick={() => onChange(list)}
+        >
+          {list}
+        </Button>
+      ))}
+    </div>
+  );
 }
 
 function FilterBar({
@@ -152,8 +328,11 @@ export function ChoresList({
   const [chores, setChores] = useState(initialChores);
   const [recurring, setRecurring] = useState(initialRecurring);
   const [filter, setFilter] = useState<FilterMode>("open");
+  const [listFilter, setListFilter] = useState(ALL_LISTS);
+  const [groupByListEnabled, setGroupByListEnabled] = useState(false);
   const [description, setDescription] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [listName, setListName] = useState("");
   const [tagsInput, setTagsInput] = useState("");
   const [priority, setPriority] = useState<ChorePriority>(0);
   const [assigneeMemberId, setAssigneeMemberId] = useState("");
@@ -171,6 +350,7 @@ export function ChoresList({
   const [recInterval, setRecInterval] = useState<ChoreRecurring["interval"]>("weekly");
   const [recLoading, setRecLoading] = useState(false);
   const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
+  const [listSuggestions, setListSuggestions] = useState<string[]>([]);
 
   const memberLabel = useMemo(() => {
     const map = new Map(members.map((m) => [m.memberId, m.label]));
@@ -189,9 +369,42 @@ export function ChoresList({
     }
   }, []);
 
+  const fetchListSuggestions = useCallback(async (query: string) => {
+    try {
+      const params = query.trim() ? `?q=${encodeURIComponent(query.trim())}` : "";
+      const data = await apiClient.get<{ suggestions: string[] }>(
+        `/api/core/chores/list-suggestions${params}`,
+      );
+      setListSuggestions(data.suggestions);
+    } catch {
+      setListSuggestions([]);
+    }
+  }, []);
+
   useEffect(() => {
     void fetchTagSuggestions("");
-  }, [fetchTagSuggestions]);
+    void fetchListSuggestions("");
+  }, [fetchTagSuggestions, fetchListSuggestions]);
+
+  const listFilterOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const names: string[] = [];
+    let hasUnlisted = false;
+    for (const c of chores) {
+      const name = c.list?.trim();
+      if (!name) {
+        hasUnlisted = true;
+        continue;
+      }
+      const key = name.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      names.push(name);
+    }
+    names.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+    if (hasUnlisted) names.push(NO_LIST_LABEL);
+    return names;
+  }, [chores]);
 
   const openCount = chores.filter((c) => !c.done).length;
   const overdueCount = chores.filter((c) => isOverdue(c.dueDate, c.done)).length;
@@ -200,6 +413,9 @@ export function ChoresList({
     let list = [...chores];
     if (filter === "open") list = list.filter((c) => !c.done);
     else if (filter === "overdue") list = list.filter((c) => isOverdue(c.dueDate, c.done));
+    if (listFilter) {
+      list = list.filter((c) => (c.list?.trim() || NO_LIST_LABEL) === listFilter);
+    }
     list.sort((a, b) => {
       if (a.done !== b.done) return a.done ? 1 : -1;
       const pr = b.priority - a.priority;
@@ -213,7 +429,7 @@ export function ChoresList({
       return a.dueDate.localeCompare(b.dueDate);
     });
     return list;
-  }, [chores, filter]);
+  }, [chores, filter, listFilter]);
 
   async function patchChore(id: string, patch: Partial<Chore>) {
     const prev = chores.find((x) => x.id === id);
@@ -255,6 +471,7 @@ export function ChoresList({
       const data = await apiClient.post<{ chore: Chore }>("/api/core/chores", {
         description: description.trim(),
         dueDate: dueDate || null,
+        list: listName.trim() || null,
         tags: parseTagsInput(tagsInput),
         priority,
         assigneeMemberId: assigneeMemberId || null,
@@ -262,6 +479,7 @@ export function ChoresList({
       setChores((prev) => [data.chore, ...prev]);
       setDescription("");
       setDueDate("");
+      setListName("");
       setTagsInput("");
       setPriority(0);
       setAssigneeMemberId("");
@@ -319,15 +537,31 @@ export function ChoresList({
       error={error}
       onDismissError={() => setError(null)}
       toolbar={
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <FilterBar
-            value={filter}
-            onChange={setFilter}
-            counts={{ all: chores.length, open: openCount, overdue: overdueCount }}
-          />
-          <LinkButton href="/chores/reports" variant="ghost" size="sm">
-            Reports
-          </LinkButton>
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <FilterBar
+              value={filter}
+              onChange={setFilter}
+              counts={{ all: chores.length, open: openCount, overdue: overdueCount }}
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              {listFilterOptions.length > 0 ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={groupByListEnabled ? "secondary" : "ghost"}
+                  aria-pressed={groupByListEnabled}
+                  onClick={() => setGroupByListEnabled((v) => !v)}
+                >
+                  {groupByListEnabled ? "Ungroup" : "Group by list"}
+                </Button>
+              ) : null}
+              <LinkButton href="/chores/reports" variant="ghost" size="sm">
+                Reports
+              </LinkButton>
+            </div>
+          </div>
+          <ListFilterBar lists={listFilterOptions} value={listFilter} onChange={setListFilter} />
         </div>
       }
       addForm={
@@ -372,6 +606,15 @@ export function ChoresList({
                 ))}
               </Select>
             )}
+            <Combobox
+              className="min-w-[120px]"
+              placeholder="List"
+              value={listName}
+              onChange={setListName}
+              onQueryChange={fetchListSuggestions}
+              suggestions={listSuggestions}
+              aria-label="List"
+            />
             <Button type="submit" loading={loading}>
               Add
             </Button>
@@ -432,103 +675,44 @@ export function ChoresList({
           description={filter === "all" ? "Add one above." : "Try another filter or add a chore."}
           icon={<ClipboardList className="h-10 w-10" />}
         />
+      ) : groupByListEnabled ? (
+        <div className="space-y-6">
+          {groupByList(visibleChores).map(({ list, items: groupItems }) => (
+            <section key={list}>
+              <SectionHeader title={list} className="mb-2" />
+              <ul className="space-y-2">
+                {groupItems.map((c) => (
+                  <ChoreRow
+                    key={c.id}
+                    chore={c}
+                    showList={false}
+                    editingDueId={editingDueId}
+                    setEditingDueId={setEditingDueId}
+                    patchChore={patchChore}
+                    setEditChore={setEditChore}
+                    setDeleteId={setDeleteId}
+                    memberLabel={memberLabel}
+                  />
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
       ) : (
         <ul className="space-y-2">
-          {visibleChores.map((c) => {
-            const overdue = isOverdue(c.dueDate, c.done);
-            const plabel = priorityLabel(c.priority);
-            const assignee = memberLabel(c.assigneeMemberId);
-            return (
-              <ListItem
-                key={c.id}
-                as="li"
-                className={cn(overdue && "border-[var(--color-danger)]/50")}
-              >
-                <Checkbox
-                  checked={c.done}
-                  onChange={async () => {
-                    const done = !c.done;
-                    await patchChore(c.id, { done });
-                  }}
-                  aria-label={`Mark ${c.description} as ${c.done ? "incomplete" : "done"}`}
-                />
-                <div className="min-w-0 flex-1 space-y-1">
-                  <span className={c.done ? "line-through text-[var(--color-text-muted)]" : ""}>
-                    {c.description}
-                  </span>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {c.dueDate && editingDueId !== c.id && (
-                      <button
-                        type="button"
-                        className={cn(
-                          "text-xs underline-offset-2 hover:underline",
-                          overdue
-                            ? "text-[var(--color-danger)]"
-                            : "text-[var(--color-text-muted)]",
-                        )}
-                        onClick={() => setEditingDueId(c.id)}
-                        aria-label={`Edit due date for ${c.description}`}
-                      >
-                        Due {c.dueDate}
-                      </button>
-                    )}
-                    {editingDueId === c.id && (
-                      <Input
-                        type="date"
-                        className="h-8 w-auto text-xs"
-                        defaultValue={c.dueDate ?? ""}
-                        autoFocus
-                        aria-label={`Due date for ${c.description}`}
-                        onBlur={async (e) => {
-                          setEditingDueId(null);
-                          const next = e.target.value || null;
-                          if (next !== c.dueDate) {
-                            await patchChore(c.id, { dueDate: next });
-                          }
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                          if (e.key === "Escape") setEditingDueId(null);
-                        }}
-                      />
-                    )}
-                    {!c.dueDate && editingDueId !== c.id && (
-                      <button
-                        type="button"
-                        className="text-xs text-[var(--color-text-muted)] hover:underline"
-                        onClick={() => setEditingDueId(c.id)}
-                      >
-                        Add due date
-                      </button>
-                    )}
-                    {plabel && (
-                      <Badge tone={priorityTone(c.priority)}>{plabel}</Badge>
-                    )}
-                    {assignee && <Badge tone="default">{assignee}</Badge>}
-                    {overdue && <Badge tone="warning">Redemption quest</Badge>}
-                    {c.recurringId && <Badge tone="accent">Recurring</Badge>}
-                  </div>
-                  {c.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-1" role="list" aria-label="Tags">
-                      {c.tags.map((tag) => (
-                        <span key={tag} role="listitem">
-                          <Badge tone="default">{tag}</Badge>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div className="flex shrink-0 items-center gap-0.5">
-                  <Button variant="ghost" size="sm" onClick={() => setEditChore(c)}>
-                    Edit
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => setDeleteId(c.id)}>
-                    Remove
-                  </Button>
-                </div>
-              </ListItem>
-            );
-          })}
+          {visibleChores.map((c) => (
+            <ChoreRow
+              key={c.id}
+              chore={c}
+              showList
+              editingDueId={editingDueId}
+              setEditingDueId={setEditingDueId}
+              patchChore={patchChore}
+              setEditChore={setEditChore}
+              setDeleteId={setDeleteId}
+              memberLabel={memberLabel}
+            />
+          ))}
         </ul>
       )}
 
@@ -612,7 +796,9 @@ export function ChoresList({
         chore={editChore}
         members={members}
         tagSuggestions={tagSuggestions}
+        listSuggestions={listSuggestions}
         onTagQuery={(q) => void fetchTagSuggestions(q)}
+        onListQuery={(q) => void fetchListSuggestions(q)}
         onClose={() => setEditChore(null)}
         onSaved={(updated) => {
           setChores((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));

@@ -14,6 +14,8 @@ export { EmptyState } from "./EmptyState";
 export { IconButton } from "./IconButton";
 export { Input } from "./Input";
 export { ListItem } from "./ListItem";
+export { MarkdownContent } from "./MarkdownContent";
+export { MarkdownEditor } from "./MarkdownEditor";
 export { Modal } from "./Modal";
 export { PageHeader } from "./PageHeader";
 export { RadioGroup } from "./RadioGroup";
