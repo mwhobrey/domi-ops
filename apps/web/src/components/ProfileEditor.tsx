@@ -7,7 +7,7 @@ import { CalendarReminderPushSettings } from "./CalendarReminderPushSettings";
 import { ChoreReminderPushSettings } from "./ChoreReminderPushSettings";
 import { ExpenseBudgetPushSettings } from "./ExpenseBudgetPushSettings";
 import { NoticePushSettings } from "./NoticePushSettings";
-import { Alert, Avatar, Button, Card, CardBody, Input, RadioGroup } from "./ui";
+import { Alert, Avatar, Button, Card, CardBody, Input, LinkButton, RadioGroup, SectionHeader } from "./ui";
 
 type TemperatureUnit = "fahrenheit" | "celsius";
 
@@ -26,8 +26,31 @@ function avatarErrorMessage(body: string | undefined): string {
   return "Upload failed";
 }
 
+function SettingsSection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="space-y-4" aria-label={title}>
+      <div className="space-y-1">
+        <SectionHeader title={title} />
+        {description ? (
+          <p className="text-sm text-[var(--color-text-muted)]">{description}</p>
+        ) : null}
+      </div>
+      {children}
+    </section>
+  );
+}
+
 export function ProfileEditor({
   initial,
+  canManageHousehold = false,
 }: {
   initial: {
     email: string | null;
@@ -47,6 +70,7 @@ export function ProfileEditor({
     pushAvailable: boolean;
     avatarUrl: string | null;
   };
+  canManageHousehold?: boolean;
 }) {
   const [name, setName] = useState(initial.name ?? "");
   const [presence, setPresence] = useState<HomePresence>(initial.presence);
@@ -133,107 +157,74 @@ export function ProfileEditor({
   }
 
   return (
-    <Card className="max-w-lg">
-      <CardBody className="space-y-6">
-        <p className="text-sm text-[var(--color-text-muted)]">
-          Signed in as{" "}
-          <span className="text-[var(--color-text)]">
-            {initial.username ? `@${initial.username}` : initial.email ?? "member"}
-          </span>
-        </p>
-        <p className="text-sm">
-          Shown to household as <span className="font-medium">{shownLabel}</span>
-        </p>
-
-        <section className="flex flex-wrap items-center gap-4" aria-labelledby="profile-photo-heading">
-          <h2 id="profile-photo-heading" className="sr-only">
-            Profile photo
-          </h2>
-          <Avatar
-            id={initial.memberId}
-            name={shownLabel}
-            src={displayAvatarSrc()}
-            size="lg"
-          />
-          <div className="flex min-w-[12rem] flex-1 flex-col gap-2">
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              className="sr-only"
-              id="avatar-file"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) void uploadAvatar(file);
-              }}
+    <Card>
+      <CardBody className="space-y-8">
+        <SettingsSection
+          title="Identity"
+          description={`Signed in as ${initial.username ? `@${initial.username}` : initial.email ?? "member"}. Shown to household as ${shownLabel}.`}
+        >
+          <div className="flex flex-wrap items-center gap-4">
+            <Avatar
+              id={initial.memberId}
+              name={shownLabel}
+              src={displayAvatarSrc()}
+              size="lg"
             />
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                loading={avatarBusy}
-                onClick={() => fileRef.current?.click()}
-              >
-                {avatarUrl || previewUrl ? "Replace photo" : "Upload photo"}
-              </Button>
-              {(avatarUrl || previewUrl) && (
+            <div className="flex min-w-[12rem] flex-1 flex-col gap-2">
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="sr-only"
+                id="avatar-file"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) void uploadAvatar(file);
+                }}
+              />
+              <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
                   size="sm"
-                  variant="ghost"
-                  disabled={avatarBusy}
-                  onClick={() => void removeAvatar()}
+                  variant="secondary"
+                  loading={avatarBusy}
+                  onClick={() => fileRef.current?.click()}
                 >
-                  Remove
+                  {avatarUrl || previewUrl ? "Replace photo" : "Upload photo"}
                 </Button>
+                {(avatarUrl || previewUrl) && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    disabled={avatarBusy}
+                    onClick={() => void removeAvatar()}
+                  >
+                    Remove
+                  </Button>
+                )}
+              </div>
+              <p className="text-xs text-[var(--color-text-muted)]">
+                JPEG, PNG, or WebP · max 2 MB · resized to 256×256
+              </p>
+              {avatarError && (
+                <Alert variant="error" className="text-sm">
+                  {avatarError}
+                </Alert>
               )}
             </div>
-            <p className="text-xs text-[var(--color-text-muted)]">
-              JPEG, PNG, or WebP · max 2 MB · resized to 256×256
-            </p>
-            {avatarError && (
-              <Alert variant="error" className="text-sm">
-                {avatarError}
-              </Alert>
-            )}
           </div>
-        </section>
+          <label className="block space-y-1">
+            <span className="text-sm font-medium">Display name</span>
+            <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={128} />
+          </label>
+        </SettingsSection>
 
-        <label className="block space-y-1">
-          <span className="text-sm font-medium">Display name</span>
-          <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={128} />
-        </label>
-        <RadioGroup
-          legend="Temperature"
-          name="temperatureUnit"
-          value={temperatureUnit}
-          onChange={(v) => setTemperatureUnit(v as TemperatureUnit)}
-          options={[
-            { value: "fahrenheit", label: "Fahrenheit (°F)" },
-            { value: "celsius", label: "Celsius (°C)" },
-          ]}
-        />
-        <NoticePushSettings
-          initialEnabled={initial.pushNoticesEnabled}
-          initialSubscribed={initial.pushSubscribed}
-          pushAvailable={initial.pushAvailable}
-        />
-        <CalendarReminderPushSettings
-          initialEnabled={initial.pushCalendarRemindersEnabled}
-          pushAvailable={initial.pushAvailable}
-        />
-        <ChoreReminderPushSettings
-          initialEnabled={initial.pushChoresRemindersEnabled}
-          pushAvailable={initial.pushAvailable}
-        />
-        <ExpenseBudgetPushSettings
-          initialEnabled={initial.pushExpenseBudgetAlertsEnabled}
-          pushAvailable={initial.pushAvailable}
-        />
         {initial.homeStatusId && (
-          <fieldset className="space-y-3">
-            <legend className="text-sm font-medium">Presence</legend>
+          <SettingsSection
+            title="Presence"
+            description="Let the household know if you are home and what you are up to."
+          >
             <RadioGroup
               legend="Home or away"
               name="presence"
@@ -273,8 +264,58 @@ export function ProfileEditor({
                 }}
               />
             </label>
-          </fieldset>
+          </SettingsSection>
         )}
+
+        <SettingsSection title="Preferences" description="Units and display defaults for your account.">
+          <RadioGroup
+            legend="Temperature"
+            name="temperatureUnit"
+            value={temperatureUnit}
+            onChange={(v) => setTemperatureUnit(v as TemperatureUnit)}
+            options={[
+              { value: "fahrenheit", label: "Fahrenheit (°F)" },
+              { value: "celsius", label: "Celsius (°C)" },
+            ]}
+          />
+        </SettingsSection>
+
+        <SettingsSection
+          title="Notifications"
+          description="Choose which Web Push alerts this browser and account receive."
+        >
+          <div className="space-y-4">
+            <NoticePushSettings
+              initialEnabled={initial.pushNoticesEnabled}
+              initialSubscribed={initial.pushSubscribed}
+              pushAvailable={initial.pushAvailable}
+            />
+            <CalendarReminderPushSettings
+              initialEnabled={initial.pushCalendarRemindersEnabled}
+              pushAvailable={initial.pushAvailable}
+            />
+            <ChoreReminderPushSettings
+              initialEnabled={initial.pushChoresRemindersEnabled}
+              pushAvailable={initial.pushAvailable}
+            />
+            <ExpenseBudgetPushSettings
+              initialEnabled={initial.pushExpenseBudgetAlertsEnabled}
+              pushAvailable={initial.pushAvailable}
+            />
+          </div>
+        </SettingsSection>
+
+        {canManageHousehold && (
+          <SettingsSection
+            title="Household admin"
+            description="Manage members, timezone, and household name."
+          >
+            <LinkButton href="/settings" variant="secondary" size="sm">
+              Open household settings
+            </LinkButton>
+          </SettingsSection>
+        )}
+
         <Button
           loading={loading}
           onClick={async () => {

@@ -48,5 +48,7 @@ export const config = {
     "/expenses/:path*",
     "/profile",
     "/profile/:path*",
+    "/settings",
+    "/settings/:path*",
   ],
 };

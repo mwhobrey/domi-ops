@@ -229,7 +229,7 @@ export function LoginForm({ nextPath, googleEnabled }: { nextPath: string; googl
 
       {mode === "sign-in" && signInMethod === "username" && (
         <p className="text-center text-xs text-[var(--color-text-muted)]">
-          Username accounts are created by a household parent on Profile → Household members.
+          Username accounts are created by a household parent under Household settings.
         </p>
       )}
 

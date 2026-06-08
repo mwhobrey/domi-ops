@@ -17,6 +17,7 @@ import {
   expenseBudgets,
   expenses,
   homeStatus,
+  households,
   householdMembers,
   noticeReads,
   noteShares,
@@ -1818,6 +1819,117 @@ export function coreRoutes(db: Database, env: Env) {
       .returning({ id: expenses.id });
     if (!row) return c.json({ error: "not_found" }, 404);
     return c.json({ ok: true });
+  });
+
+  function parseModulesEnabled(raw: string): string[] {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed)) {
+        return parsed.filter((m): m is string => typeof m === "string" && m.length > 0);
+      }
+    } catch {
+      /* */
+    }
+    return [];
+  }
+
+  function serializeHouseholdSettings(row: {
+    name: string;
+    slug: string | null;
+    timezone: string;
+    modulesEnabled: string;
+  }) {
+    return {
+      name: row.name,
+      slug: row.slug,
+      timezone: row.timezone,
+      modulesEnabled: parseModulesEnabled(row.modulesEnabled),
+    };
+  }
+
+  function normalizeHouseholdSlug(value: string | null | undefined): string | null {
+    if (value == null || !value.trim()) return null;
+    const slug = value.trim().toLowerCase();
+    if (!/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(slug)) {
+      return null;
+    }
+    return slug;
+  }
+
+  app.get("/household/settings", async (c) => {
+    const auth = c.get("auth")!;
+    if (!canProvisionMembers(auth.role)) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+    const [row] = await db
+      .select({
+        name: households.name,
+        slug: households.slug,
+        timezone: households.timezone,
+        modulesEnabled: households.modulesEnabled,
+      })
+      .from(households)
+      .where(eq(households.id, auth.householdId))
+      .limit(1);
+    if (!row) return c.json({ error: "not_found" }, 404);
+    return c.json(serializeHouseholdSettings(row));
+  });
+
+  app.patch("/household/settings", async (c) => {
+    const auth = c.get("auth")!;
+    if (!canProvisionMembers(auth.role)) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+    const body = await c.req.json<{
+      name?: string;
+      slug?: string | null;
+      timezone?: string;
+    }>();
+
+    const patch: {
+      name?: string;
+      slug?: string | null;
+      timezone?: string;
+      updatedAt?: Date;
+    } = {};
+
+    if (body.name !== undefined) {
+      const name = body.name.trim();
+      if (!name) return c.json({ error: "name_required" }, 400);
+      patch.name = name.slice(0, 128);
+    }
+    if (body.slug !== undefined) {
+      const slug = normalizeHouseholdSlug(body.slug);
+      if (body.slug && body.slug.trim() && !slug) {
+        return c.json({ error: "invalid_slug" }, 400);
+      }
+      patch.slug = slug;
+    }
+    if (body.timezone !== undefined) {
+      const timezone = body.timezone.trim();
+      if (!timezone || timezone.length > 64) {
+        return c.json({ error: "invalid_timezone" }, 400);
+      }
+      patch.timezone = timezone;
+    }
+
+    if (Object.keys(patch).length === 0) {
+      return c.json({ error: "no_changes" }, 400);
+    }
+
+    patch.updatedAt = new Date();
+    const [row] = await db
+      .update(households)
+      .set(patch)
+      .where(eq(households.id, auth.householdId))
+      .returning({
+        name: households.name,
+        slug: households.slug,
+        timezone: households.timezone,
+        modulesEnabled: households.modulesEnabled,
+      });
+    if (!row) return c.json({ error: "not_found" }, 404);
+    return c.json({ ok: true, household: serializeHouseholdSettings(row) });
   });
 
   app.get("/household/roster", async (c) => {

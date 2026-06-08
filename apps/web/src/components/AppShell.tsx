@@ -28,6 +28,7 @@ export async function AppShell({
         memberId: string;
         name: string | null;
         avatarUrl: string | null;
+        role?: string;
       };
     }>("/auth/session");
     if (session.authenticated && session.user) {
@@ -39,6 +40,7 @@ export async function AppShell({
         name: u.name,
         shownLabel: memberShownLabel({ name: u.name }),
         avatarUrl: u.avatarUrl,
+        role: u.role,
       };
     }
   } catch {

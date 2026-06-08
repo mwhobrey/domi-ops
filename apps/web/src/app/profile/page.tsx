@@ -1,11 +1,10 @@
+import { AccountSettingsNav } from "../../components/AccountSettingsNav";
 import { AppShell } from "../../components/AppShell";
-import { HouseholdMembersPanel } from "../../components/HouseholdMembersPanel";
 import { ProfileEditor } from "../../components/ProfileEditor";
 import { apiFetch } from "../../lib/api";
+import { canManageHousehold, type HouseholdRole } from "../../lib/household-roles";
 import { loadErrorMessage } from "../../lib/load-error";
 import { Alert } from "../../components/ui";
-
-type HouseholdRole = "owner" | "admin" | "member" | "child" | "guest";
 
 export default async function ProfilePage() {
   let profile = {
@@ -34,17 +33,21 @@ export default async function ProfilePage() {
     loadError = loadErrorMessage(e, "Could not load profile");
   }
 
+  const canManage = canManageHousehold(profile.role);
+
   return (
-    <AppShell title="Profile" description="Name, presence, and preferences">
+    <AppShell title="Profile" description="Your name, presence, and notification preferences">
       {loadError ? (
         <Alert variant="error">
           {loadError}. <a href="/profile">Retry</a>
         </Alert>
       ) : (
-        <div className="space-y-8">
-          <ProfileEditor initial={profile} />
-          <HouseholdMembersPanel canManage={profile.role === "owner" || profile.role === "admin"} />
-        </div>
+        <>
+          <AccountSettingsNav canManage={canManage} />
+          <div className="mx-auto max-w-2xl">
+            <ProfileEditor initial={profile} canManageHousehold={canManage} />
+          </div>
+        </>
       )}
     </AppShell>
   );

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
-import { Button } from "./ui";
+import { Button, Card, CardBody, Input, SectionHeader, Select } from "./ui";
 
 function provisionErrorMessage(err: unknown): string {
   if (err instanceof ApiError && err.body) {
@@ -95,94 +95,93 @@ export function HouseholdMembersPanel({ canManage }: { canManage: boolean }) {
   if (!canManage) return null;
 
   return (
-    <section className="space-y-4 rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-surface-elevated)] p-6 shadow-[var(--shadow-card)]">
-      <div className="space-y-1">
-        <h2 className="text-lg font-semibold">Household members</h2>
-        <p className="text-sm text-[var(--color-text-muted)]">
-          Create username accounts for kids or other members who should not need email or Google.
-        </p>
-      </div>
-
-      {error && (
-        <p className="text-sm text-[var(--color-danger)]" role="alert">
-          {error}
-        </p>
-      )}
-
-      {loading ? (
-        <p className="text-sm text-[var(--color-text-muted)]">Loading members…</p>
-      ) : members.length > 0 ? (
-        <ul className="divide-y divide-[var(--color-border)] rounded-[var(--radius-lg)] border border-[var(--color-border)]">
-          {members.map((m) => (
-            <li key={m.memberId} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
-              <span className="font-medium">{m.name ?? "Member"}</span>
-              <span className="text-[var(--color-text-muted)]">
-                {m.username ? `@${m.username}` : m.email ?? "—"} · {m.role}
-              </span>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-sm text-[var(--color-text-muted)]">No members yet.</p>
-      )}
-
-      <form className="grid gap-3 sm:grid-cols-2" onSubmit={onProvision}>
-        <label className="block space-y-1.5 sm:col-span-1">
-          <span className="text-label text-[var(--color-text-muted)]">Username</span>
-          <input
-            required
-            minLength={3}
-            maxLength={30}
-            pattern="[a-zA-Z0-9_.]+"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            className="w-full rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
-          />
-          {usernameOk === true && (
-            <span className="text-xs text-[var(--color-success)]">Available</span>
-          )}
-          {usernameOk === false && (
-            <span className="text-xs text-[var(--color-danger)]">Taken or invalid</span>
-          )}
-        </label>
-        <label className="block space-y-1.5 sm:col-span-1">
-          <span className="text-label text-[var(--color-text-muted)]">Display name</span>
-          <input
-            required
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            className="w-full rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
-          />
-        </label>
-        <label className="block space-y-1.5 sm:col-span-1">
-          <span className="text-label text-[var(--color-text-muted)]">Temporary password</span>
-          <input
-            type="password"
-            required
-            minLength={8}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
-          />
-        </label>
-        <label className="block space-y-1.5 sm:col-span-1">
-          <span className="text-label text-[var(--color-text-muted)]">Role</span>
-          <select
-            value={role}
-            onChange={(e) => setRole(e.target.value as typeof role)}
-            className="w-full rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
-          >
-            <option value="child">Child (student)</option>
-            <option value="member">Member</option>
-            <option value="guest">Guest</option>
-          </select>
-        </label>
-        <div className="sm:col-span-2">
-          <Button type="submit" disabled={pending || usernameOk === false}>
-            {pending ? "Creating…" : "Add username member"}
-          </Button>
+    <Card>
+      <CardBody className="space-y-6">
+        <div className="space-y-1">
+          <SectionHeader title="Members" />
+          <p className="text-sm text-[var(--color-text-muted)]">
+            Create username accounts for kids or other members who should not need email or Google.
+          </p>
         </div>
-      </form>
-    </section>
+
+        {error && (
+          <p className="text-sm text-[var(--color-danger)]" role="alert">
+            {error}
+          </p>
+        )}
+
+        {loading ? (
+          <p className="text-sm text-[var(--color-text-muted)]">Loading members…</p>
+        ) : members.length > 0 ? (
+          <ul className="divide-y divide-[var(--color-border)] rounded-[var(--radius-lg)] border border-[var(--color-border)]">
+            {members.map((m) => (
+              <li key={m.memberId} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 text-sm">
+                <span className="font-medium">{m.name ?? "Member"}</span>
+                <span className="text-[var(--color-text-muted)]">
+                  {m.username ? `@${m.username}` : m.email ?? "—"} · {m.role}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-[var(--color-text-muted)]">No members yet.</p>
+        )}
+
+        <form className="grid gap-3 sm:grid-cols-2" onSubmit={onProvision}>
+          <label className="block space-y-1.5 sm:col-span-1">
+            <span className="text-sm font-medium">Username</span>
+            <Input
+              required
+              minLength={3}
+              maxLength={30}
+              pattern="[a-zA-Z0-9_.]+"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              autoComplete="off"
+              spellCheck={false}
+            />
+            {usernameOk === true && (
+              <span className="text-xs text-[var(--color-success)]">Available</span>
+            )}
+            {usernameOk === false && (
+              <span className="text-xs text-[var(--color-danger)]">Taken or invalid</span>
+            )}
+          </label>
+          <label className="block space-y-1.5 sm:col-span-1">
+            <span className="text-sm font-medium">Display name</span>
+            <Input
+              required
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              autoComplete="name"
+            />
+          </label>
+          <label className="block space-y-1.5 sm:col-span-1">
+            <span className="text-sm font-medium">Temporary password</span>
+            <Input
+              type="password"
+              required
+              minLength={8}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="new-password"
+            />
+          </label>
+          <label className="block space-y-1.5 sm:col-span-1">
+            <span className="text-sm font-medium">Role</span>
+            <Select value={role} onChange={(e) => setRole(e.target.value as typeof role)}>
+              <option value="child">Child (student)</option>
+              <option value="member">Member</option>
+              <option value="guest">Guest</option>
+            </Select>
+          </label>
+          <div className="sm:col-span-2">
+            <Button type="submit" disabled={pending || usernameOk === false}>
+              {pending ? "Creating…" : "Add username member"}
+            </Button>
+          </div>
+        </form>
+      </CardBody>
+    </Card>
   );
 }

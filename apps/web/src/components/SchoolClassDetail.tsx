@@ -1193,7 +1193,7 @@ export function SchoolClassDetail({
 
             <p className="mb-4 text-sm text-[var(--color-text-muted)]">
 
-              No household members found. Add members via profile and import.
+              No household members found. Add members via Household settings or import.
 
             </p>
 

@@ -38,6 +38,7 @@ export type ShellUser = {
   shownLabel: string | null;
   memberId: string;
   avatarUrl: string | null;
+  role?: string;
 };
 
 function NavLink({
@@ -141,6 +142,7 @@ export function AppChrome({
 
   const label = user?.shownLabel ?? user?.name ?? user?.email?.split("@")[0] ?? "Account";
   const avatarId = user?.memberId ?? user?.email ?? "account";
+  const canManageHousehold = user?.role === "owner" || user?.role === "admin";
 
   return (
     <div className="min-h-dvh bg-[var(--color-surface-inset)]">
@@ -188,15 +190,27 @@ export function AppChrome({
                 role="menu"
                 className="absolute right-0 mt-2 w-48 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-elevated)] py-1 shadow-[var(--shadow-elevated)]"
               >
-                <p className="truncate px-3 py-2 text-xs text-[var(--color-text-muted)]">{user?.email}</p>
+                <p className="truncate px-3 py-2 text-xs text-[var(--color-text-muted)]">
+                  {user?.username ? `@${user.username}` : user?.email ?? "Signed in"}
+                </p>
                 <Link
                   href="/profile"
                   role="menuitem"
                   className="block px-3 py-2 text-sm hover:bg-[var(--color-border)]/40"
                   onClick={() => setUserOpen(false)}
                 >
-                  Profile
+                  Your profile
                 </Link>
+                {canManageHousehold && (
+                  <Link
+                    href="/settings"
+                    role="menuitem"
+                    className="block px-3 py-2 text-sm hover:bg-[var(--color-border)]/40"
+                    onClick={() => setUserOpen(false)}
+                  >
+                    Household settings
+                  </Link>
+                )}
                 <button
                   type="button"
                   role="menuitem"
@@ -233,8 +247,17 @@ export function AppChrome({
                 className="block rounded-lg px-3 py-2 text-sm hover:bg-[var(--color-border)]/40"
                 onClick={() => setMenuOpen(false)}
               >
-                Profile
+                Your profile
               </Link>
+              {canManageHousehold && (
+                <Link
+                  href="/settings"
+                  className="block rounded-lg px-3 py-2 text-sm hover:bg-[var(--color-border)]/40"
+                  onClick={() => setMenuOpen(false)}
+                >
+                  Household settings
+                </Link>
+              )}
               <button
                 type="button"
                 disabled={signOutPending}
