@@ -40,7 +40,11 @@ whome/
 | `src/app/chores/page.tsx`, `notes/page.tsx`, `expenses/page.tsx` | Core list modules |
 | `src/app/profile/page.tsx` | Profile editor (identity, presence, prefs, integrations, notifications) |
 | `src/components/ProfileCalendarConnect.tsx` | Slim Google Calendar connect status for profile |
-| `src/app/settings/page.tsx` | Household settings (owner/admin): name, timezone, slug, member provisioning |
+| `src/app/settings/page.tsx` | Household settings (owner/admin): name, timezone, slug, module toggles, members, integrations |
+| `src/components/HouseholdSettingsEditor.tsx` | Household name/slug/timezone + module toggle checkboxes |
+| `src/components/HouseholdMembersPanel.tsx` | Member list, role dropdown, username provisioning |
+| `src/components/HouseholdIntegrationsPanel.tsx` | Read-only integrations health (Google, VAPID, S3) |
+| `src/components/ScrollToTopFab.tsx` | Scroll-to-top FAB for long profile/settings pages |
 | `src/app/*/loading.tsx` | Route-level skeletons (dashboard, calendar, lists, school, profile) |
 | `src/app/auth/[[...path]]/route.ts` | Proxies `/auth/*` to API (cookies) |
 | `src/middleware.ts` | Session check for protected routes |
