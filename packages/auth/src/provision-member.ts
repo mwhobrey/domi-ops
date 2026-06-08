@@ -1,7 +1,7 @@
 import { hashPassword } from "better-auth/crypto";
 import type { Database } from "@whome/db";
 import { baAccounts, homeStatus, householdMembers, users } from "@whome/db";
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { memberShownLabel } from "./member-label.js";
 import { normalizeUsername, validateUsernameFormat } from "./username.js";
 
@@ -145,4 +145,100 @@ export async function listHouseholdMembersWithAuth(
 
 export function canProvisionMembers(role: string): boolean {
   return role === "owner" || role === "admin";
+}
+
+export type HouseholdMemberRole = "owner" | "admin" | "member" | "child" | "guest";
+
+const HOUSEHOLD_MEMBER_ROLES: HouseholdMemberRole[] = [
+  "owner",
+  "admin",
+  "member",
+  "child",
+  "guest",
+];
+
+export function isHouseholdMemberRole(value: string): value is HouseholdMemberRole {
+  return (HOUSEHOLD_MEMBER_ROLES as string[]).includes(value);
+}
+
+export class UpdateMemberRoleError extends Error {
+  code:
+    | "forbidden"
+    | "not_found"
+    | "invalid_role"
+    | "last_owner"
+    | "cannot_change_elevated";
+
+  constructor(message: string, code: UpdateMemberRoleError["code"]) {
+    super(message);
+    this.name = "UpdateMemberRoleError";
+    this.code = code;
+  }
+}
+
+/** Change a household member role. Caller must verify actor is owner/admin. */
+export async function updateHouseholdMemberRole(
+  db: Database,
+  input: {
+    householdId: string;
+    actorRole: string;
+    targetMemberId: string;
+    role: HouseholdMemberRole;
+  },
+): Promise<{ memberId: string; role: HouseholdMemberRole }> {
+  if (!isHouseholdMemberRole(input.role)) {
+    throw new UpdateMemberRoleError("Invalid role", "invalid_role");
+  }
+
+  const [target] = await db
+    .select({ id: householdMembers.id, role: householdMembers.role })
+    .from(householdMembers)
+    .where(
+      and(
+        eq(householdMembers.id, input.targetMemberId),
+        eq(householdMembers.householdId, input.householdId),
+      ),
+    )
+    .limit(1);
+  if (!target) {
+    throw new UpdateMemberRoleError("Member not found", "not_found");
+  }
+
+  if (target.role === input.role) {
+    return { memberId: target.id, role: input.role };
+  }
+
+  const elevated = (role: string) => role === "owner" || role === "admin";
+
+  if (input.actorRole === "admin") {
+    if (elevated(input.role) || elevated(target.role)) {
+      throw new UpdateMemberRoleError(
+        "Admins can only change member, child, or guest roles",
+        "cannot_change_elevated",
+      );
+    }
+  }
+
+  if (target.role === "owner" && input.role !== "owner") {
+    const [{ count }] = await db
+      .select({ count: sql<number>`cast(count(*) as int)` })
+      .from(householdMembers)
+      .where(
+        and(eq(householdMembers.householdId, input.householdId), eq(householdMembers.role, "owner")),
+      );
+    if (Number(count) <= 1) {
+      throw new UpdateMemberRoleError(
+        "Cannot demote the last household owner",
+        "last_owner",
+      );
+    }
+  }
+
+  const [updated] = await db
+    .update(householdMembers)
+    .set({ role: input.role })
+    .where(eq(householdMembers.id, target.id))
+    .returning({ id: householdMembers.id, role: householdMembers.role });
+
+  return { memberId: updated.id, role: updated.role as HouseholdMemberRole };
 }

@@ -6,6 +6,9 @@ import {
   memberShownLabel,
   ProvisionMemberError,
   provisionUsernameMember,
+  UpdateMemberRoleError,
+  updateHouseholdMemberRole,
+  isHouseholdMemberRole,
 } from "@whome/auth";
 import type { Env } from "@whome/config";
 import { isModuleEnabled } from "@whome/config";
@@ -14,6 +17,7 @@ import { checkHouseholdBudgetAlerts } from "@whome/calendar-sync";
 import {
   chores,
   choresRecurring,
+  calendarConnections,
   expenseBudgets,
   expenses,
   homeStatus,
@@ -1833,6 +1837,26 @@ export function coreRoutes(db: Database, env: Env) {
     return [];
   }
 
+  const KNOWN_HOUSEHOLD_MODULES = ["core", "school", "calendar_sync"] as const;
+
+  function normalizeModulesEnabledSelection(
+    requested: string[] | undefined,
+    envModules: string[],
+  ): string[] | null {
+    if (!requested) return null;
+    const ceiling = new Set(
+      envModules.filter((m) => (KNOWN_HOUSEHOLD_MODULES as readonly string[]).includes(m)),
+    );
+    ceiling.add("core");
+    const selected = new Set<string>(["core"]);
+    for (const module of requested) {
+      if (!(KNOWN_HOUSEHOLD_MODULES as readonly string[]).includes(module)) continue;
+      if (!ceiling.has(module)) return null;
+      selected.add(module);
+    }
+    return [...selected];
+  }
+
   function serializeHouseholdSettings(row: {
     name: string;
     slug: string | null;
@@ -1844,6 +1868,9 @@ export function coreRoutes(db: Database, env: Env) {
       slug: row.slug,
       timezone: row.timezone,
       modulesEnabled: parseModulesEnabled(row.modulesEnabled),
+      availableModules: env.MODULES_ENABLED.filter((m) =>
+        (KNOWN_HOUSEHOLD_MODULES as readonly string[]).includes(m),
+      ),
     };
   }
 
@@ -1884,12 +1911,14 @@ export function coreRoutes(db: Database, env: Env) {
       name?: string;
       slug?: string | null;
       timezone?: string;
+      modulesEnabled?: string[];
     }>();
 
     const patch: {
       name?: string;
       slug?: string | null;
       timezone?: string;
+      modulesEnabled?: string;
       updatedAt?: Date;
     } = {};
 
@@ -1912,6 +1941,13 @@ export function coreRoutes(db: Database, env: Env) {
       }
       patch.timezone = timezone;
     }
+    if (body.modulesEnabled !== undefined) {
+      const modulesEnabled = normalizeModulesEnabledSelection(body.modulesEnabled, env.MODULES_ENABLED);
+      if (!modulesEnabled) {
+        return c.json({ error: "invalid_modules" }, 400);
+      }
+      patch.modulesEnabled = JSON.stringify(modulesEnabled);
+    }
 
     if (Object.keys(patch).length === 0) {
       return c.json({ error: "no_changes" }, 400);
@@ -1930,6 +1966,61 @@ export function coreRoutes(db: Database, env: Env) {
       });
     if (!row) return c.json({ error: "not_found" }, 404);
     return c.json({ ok: true, household: serializeHouseholdSettings(row) });
+  });
+
+  app.get("/household/integrations", async (c) => {
+    const auth = c.get("auth")!;
+    if (!canProvisionMembers(auth.role)) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+
+    const googleOAuthConfigured = Boolean(
+      env.GOOGLE_OAUTH_CLIENT_ID && env.GOOGLE_OAUTH_CLIENT_SECRET,
+    );
+    const calendarModuleEnabled = isModuleEnabled(env, "calendar_sync");
+
+    let householdConnections = 0;
+    let activeSyncRuns = 0;
+    let lastSyncAt: string | null = null;
+
+    if (calendarModuleEnabled) {
+      const rows = await db
+        .select({
+          lastSyncAt: calendarConnections.lastSyncAt,
+          syncRunStatus: calendarConnections.syncRunStatus,
+        })
+        .from(calendarConnections)
+        .where(eq(calendarConnections.householdId, auth.householdId));
+      householdConnections = rows.length;
+      for (const row of rows) {
+        if (
+          row.lastSyncAt &&
+          (!lastSyncAt || row.lastSyncAt.getTime() > new Date(lastSyncAt).getTime())
+        ) {
+          lastSyncAt = row.lastSyncAt.toISOString();
+        }
+        if (row.syncRunStatus === "queued" || row.syncRunStatus === "syncing") {
+          activeSyncRuns += 1;
+        }
+      }
+    }
+
+    return c.json({
+      googleLogin: { configured: googleOAuthConfigured },
+      calendarSync: {
+        moduleEnabled: calendarModuleEnabled,
+        oauthConfigured: googleOAuthConfigured,
+        defaultSyncMode: env.GOOGLE_CALENDAR_DEFAULT_SYNC_MODE,
+        householdConnections,
+        activeSyncRuns,
+        lastSyncAt,
+      },
+      webPush: { configured: isWebPushConfigured(env) },
+      storage: {
+        configured: Boolean(createS3Client(env) && env.S3_BUCKET),
+        bucket: env.S3_BUCKET ?? null,
+      },
+    });
   });
 
   app.get("/household/roster", async (c) => {
@@ -1992,6 +2083,34 @@ export function coreRoutes(db: Database, env: Env) {
     } catch (e) {
       if (e instanceof ProvisionMemberError) {
         return c.json({ error: e.code, message: e.message }, 400);
+      }
+      throw e;
+    }
+  });
+
+  app.patch("/household/members/:memberId/role", async (c) => {
+    const auth = c.get("auth")!;
+    if (!canProvisionMembers(auth.role)) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+    const memberId = c.req.param("memberId");
+    const body = await c.req.json<{ role?: string }>();
+    if (!body.role || !isHouseholdMemberRole(body.role)) {
+      return c.json({ error: "invalid_role" }, 400);
+    }
+    try {
+      const updated = await updateHouseholdMemberRole(db, {
+        householdId: auth.householdId,
+        actorRole: auth.role,
+        targetMemberId: memberId,
+        role: body.role,
+      });
+      return c.json({ ok: true, member: updated });
+    } catch (e) {
+      if (e instanceof UpdateMemberRoleError) {
+        const status =
+          e.code === "not_found" ? 404 : e.code === "forbidden" ? 403 : 400;
+        return c.json({ error: e.code, message: e.message }, status);
       }
       throw e;
     }

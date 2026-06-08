@@ -1,6 +1,10 @@
 import { redirect } from "next/navigation";
 import { AccountSettingsNav } from "../../components/AccountSettingsNav";
 import { AppShell } from "../../components/AppShell";
+import {
+  HouseholdIntegrationsPanel,
+  type HouseholdIntegrationsStatus,
+} from "../../components/HouseholdIntegrationsPanel";
 import { ScrollToTopFab } from "../../components/ScrollToTopFab";
 import { HouseholdMembersPanel } from "../../components/HouseholdMembersPanel";
 import { HouseholdSettingsEditor } from "../../components/HouseholdSettingsEditor";
@@ -18,7 +22,9 @@ export default async function SettingsPage() {
     slug: null as string | null,
     timezone: "UTC",
     modulesEnabled: [] as string[],
+    availableModules: [] as string[],
   };
+  let integrations: HouseholdIntegrationsStatus | null = null;
   let loadError: string | null = null;
 
   try {
@@ -26,7 +32,10 @@ export default async function SettingsPage() {
     if (!canManageHousehold(profile.role)) {
       redirect("/profile");
     }
-    household = await apiFetch<typeof household>("/api/core/household/settings");
+    [household, integrations] = await Promise.all([
+      apiFetch<typeof household>("/api/core/household/settings"),
+      apiFetch<HouseholdIntegrationsStatus>("/api/core/household/integrations"),
+    ]);
   } catch (e) {
     loadError = loadErrorMessage(e, "Could not load household settings");
   }
@@ -45,7 +54,8 @@ export default async function SettingsPage() {
           <AccountSettingsNav canManage />
           <div className="mx-auto w-full max-w-2xl space-y-8 lg:max-w-4xl">
             <HouseholdSettingsEditor initial={household} />
-            <HouseholdMembersPanel canManage />
+            <HouseholdMembersPanel canManage actorRole={profile.role} />
+            {integrations ? <HouseholdIntegrationsPanel status={integrations} /> : null}
           </div>
           <ScrollToTopFab />
         </>
