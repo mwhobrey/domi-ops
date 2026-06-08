@@ -24,6 +24,7 @@ import {
 } from "../lib/school-access.js";
 import { buildClassGradebook } from "../lib/school-gradebook.js";
 import { buildSchoolReports, canViewSchoolReports } from "../lib/school-reports.js";
+import { canSubmitPastDue, isSubmissionLate } from "../lib/school-submission.js";
 import { contentTypeFromKey, getObjectBuffer } from "../lib/s3.js";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -836,6 +837,7 @@ export function schoolRoutes(db: Database, env: Env) {
       pointsPossible?: number;
       visibility?: "draft" | "assigned" | "closed";
       categoryId?: string | null;
+      allowLate?: boolean;
     }>();
     const [row] = await db
       .insert(schoolAssignments)
@@ -847,6 +849,7 @@ export function schoolRoutes(db: Database, env: Env) {
         pointsPossible: body.pointsPossible ?? 100,
         visibility: body.visibility ?? "assigned",
         categoryId: body.categoryId ?? null,
+        allowLate: body.allowLate ?? true,
         createdByUserId: auth.userId,
       })
       .returning();
@@ -954,6 +957,7 @@ export function schoolRoutes(db: Database, env: Env) {
       pointsPossible?: number;
       visibility?: "draft" | "assigned" | "closed";
       categoryId?: string | null;
+      allowLate?: boolean;
     }>();
     const patch: Record<string, unknown> = { updatedAt: new Date() };
     if (body.title !== undefined) patch.title = body.title;
@@ -962,6 +966,7 @@ export function schoolRoutes(db: Database, env: Env) {
     if (body.pointsPossible !== undefined) patch.pointsPossible = body.pointsPossible;
     if (body.visibility !== undefined) patch.visibility = body.visibility;
     if (body.categoryId !== undefined) patch.categoryId = body.categoryId;
+    if (body.allowLate !== undefined) patch.allowLate = body.allowLate;
     const [row] = await db
       .update(schoolAssignments)
       .set(patch)
@@ -1123,12 +1128,24 @@ export function schoolRoutes(db: Database, env: Env) {
       .limit(1);
 
     const now = new Date();
+    const pastDueCheck = canSubmitPastDue({
+      dueAt: assignmentRow.dueAt,
+      allowLate: assignmentRow.allowLate,
+      now,
+      existingStatus: existing?.status ?? null,
+    });
+    if (!pastDueCheck.allowed) {
+      return c.json({ error: pastDueCheck.error }, 403);
+    }
+
+    const isLate = isSubmissionLate(assignmentRow.dueAt, now);
     if (existing) {
       const [updated] = await db
         .update(schoolSubmissions)
         .set({
           status: "submitted",
           submittedAt: now,
+          isLate,
           studentNote: body.studentNote ?? existing.studentNote,
           updatedAt: now,
         })
@@ -1144,6 +1161,7 @@ export function schoolRoutes(db: Database, env: Env) {
         studentMemberId,
         status: "submitted",
         submittedAt: now,
+        isLate,
         studentNote: body.studentNote ?? "",
       })
       .returning();

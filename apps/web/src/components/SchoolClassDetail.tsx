@@ -101,6 +101,10 @@ interface Assignment {
 
   instructionsHtml?: string;
 
+  categoryId?: string | null;
+
+  allowLate?: boolean;
+
 }
 
 

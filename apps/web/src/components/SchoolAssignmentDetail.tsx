@@ -12,6 +12,7 @@ interface Submission {
   status: string;
   studentNote: string;
   submittedAt?: string | null;
+  isLate?: boolean;
   artifacts: { id: string; artifactType: string; s3Key: string | null; url: string | null }[];
   grade: { score: number | null; feedbackHtml: string } | null;
 }
@@ -118,6 +119,8 @@ export function SchoolAssignmentDetail({
     : { label: status.replace("_", " "), tone: STATUS_TONE[status] ?? "default" };
   const turnedIn = status === "submitted" || status === "graded" || status === "returned";
   const dueLabel = dueAt ? formatDueLabel(dueAt, isStudent) : null;
+  const isPastDue = Boolean(dueAt && new Date(dueAt) < new Date() && !turnedIn);
+  const turnedInLate = Boolean(submission?.isLate);
 
   async function ensureSubmissionRecord(): Promise<Submission> {
     if (submission) return submission;
@@ -148,7 +151,11 @@ export function SchoolAssignmentDetail({
         return [...rest, mergeSubmissionResponse(existing, data.submission)];
       });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not turn in assignment. Try again.");
+      if (err instanceof ApiError && err.body?.includes("late_not_allowed")) {
+        setError("This assignment is past due and no longer accepts new turn-ins.");
+      } else {
+        setError(err instanceof ApiError ? err.message : "Could not turn in assignment. Try again.");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -231,15 +238,23 @@ export function SchoolAssignmentDetail({
       <div className="flex flex-wrap items-center gap-2">
         {!isStudent && visibility && <Badge tone="default">{visibility}</Badge>}
         {dueLabel && (
-          <Badge tone={status === "not_started" ? "accent" : "default"}>
+          <Badge tone={isPastDue ? "warning" : status === "not_started" ? "accent" : "default"}>
             {isStudent ? `Due ${dueLabel}` : `Due ${dueLabel}`}
           </Badge>
         )}
+        {isPastDue && <Badge tone="warning">Overdue</Badge>}
+        {turnedInLate && <Badge tone="warning">Late</Badge>}
         {pointsPossible != null && (
           <Badge tone="default">{isStudent ? `${pointsPossible} points` : `${pointsPossible} pts`}</Badge>
         )}
         <Badge tone={statusMeta.tone}>{statusMeta.label}</Badge>
       </div>
+
+      {isStudent && canSubmit && isPastDue && status === "not_started" && (
+        <Alert variant="info">
+          This assignment is past due. You can still turn it in — your teacher will see it as late.
+        </Alert>
+      )}
 
       {isStudent && canSubmit && turnedIn && status !== "graded" && status !== "returned" && (
         <Alert variant="success">
@@ -253,6 +268,7 @@ export function SchoolAssignmentDetail({
                   day: "numeric",
                 })}`
               : ""}
+            {turnedInLate ? " (late)" : ""}
             . You can still add files or update your message below.
           </span>
         </Alert>
@@ -396,6 +412,12 @@ export function SchoolAssignmentDetail({
                   hour: "numeric",
                   minute: "2-digit",
                 })}
+                {submission.isLate ? (
+                  <>
+                    {" "}
+                    <Badge tone="warning">Late</Badge>
+                  </>
+                ) : null}
               </p>
             )}
             {submission.studentNote?.trim() ? (

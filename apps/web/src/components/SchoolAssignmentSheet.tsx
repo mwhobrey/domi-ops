@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
-import { Alert, Button, Input, Select, Sheet, Textarea } from "./ui";
+import { Alert, Button, Checkbox, Input, Select, Sheet, Textarea } from "./ui";
 
 export interface AssignmentFormValues {
   title: string;
@@ -11,6 +11,7 @@ export interface AssignmentFormValues {
   pointsPossible: string;
   visibility: "draft" | "assigned" | "closed";
   categoryId: string;
+  allowLate: boolean;
 }
 
 interface AssignmentRecord {
@@ -21,6 +22,7 @@ interface AssignmentRecord {
   instructionsHtml?: string;
   visibility: string;
   categoryId?: string | null;
+  allowLate?: boolean;
 }
 
 interface CategoryOption {
@@ -35,6 +37,7 @@ const defaultForm: AssignmentFormValues = {
   pointsPossible: "100",
   visibility: "assigned",
   categoryId: "",
+  allowLate: true,
 };
 
 function toDatetimeLocal(iso: string | null): string {
@@ -69,6 +72,7 @@ export function SchoolAssignmentSheet({
           pointsPossible: String(assignment.pointsPossible ?? 100),
           visibility: (assignment.visibility as AssignmentFormValues["visibility"]) ?? "assigned",
           categoryId: assignment.categoryId ?? "",
+          allowLate: assignment.allowLate ?? true,
         }
       : defaultForm,
   );
@@ -84,6 +88,7 @@ export function SchoolAssignmentSheet({
         pointsPossible: String(next.pointsPossible ?? 100),
         visibility: (next.visibility as AssignmentFormValues["visibility"]) ?? "assigned",
         categoryId: next.categoryId ?? "",
+        allowLate: next.allowLate ?? true,
       });
     } else {
       setForm(defaultForm);
@@ -103,6 +108,7 @@ export function SchoolAssignmentSheet({
       pointsPossible: parseFloat(form.pointsPossible) || 100,
       visibility: form.visibility,
       categoryId: form.categoryId || null,
+      allowLate: form.allowLate,
     };
     try {
       if (isEdit && assignment) {
@@ -202,6 +208,15 @@ export function SchoolAssignmentSheet({
             </Select>
           </div>
         </div>
+        <Checkbox
+          id="assignment-allow-late"
+          label="Allow late submissions"
+          checked={form.allowLate}
+          onChange={(e) => setForm((f) => ({ ...f, allowLate: e.target.checked }))}
+        />
+        <p className="-mt-2 text-xs text-[var(--color-text-muted)]">
+          When off, students cannot turn in work after the due date.
+        </p>
         {categories.length > 0 && (
           <div>
             <label htmlFor="assignment-category" className="text-label text-[var(--color-text-muted)]">
