@@ -22,6 +22,7 @@ export default async function ProfilePage() {
     pushNoticesEnabled: true,
     pushCalendarRemindersEnabled: true,
     pushChoresRemindersEnabled: true,
+    pushExpenseBudgetAlertsEnabled: true,
     pushSubscribed: false,
     pushAvailable: false,
     avatarUrl: null as string | null,

@@ -43,6 +43,42 @@ export const expenses = pgTable("expenses", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const expenseBudgets = pgTable(
+  "expense_budgets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    householdId: uuid("household_id")
+      .notNull()
+      .references(() => households.id, { onDelete: "cascade" }),
+    category: varchar("category", { length: 64 }).notNull(),
+    monthlyTarget: real("monthly_target").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("expense_budgets_household_category").on(t.householdId, t.category)],
+);
+
+export const expenseBudgetAlertSent = pgTable(
+  "expense_budget_alert_sent",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    householdId: uuid("household_id")
+      .notNull()
+      .references(() => households.id, { onDelete: "cascade" }),
+    category: varchar("category", { length: 64 }).notNull(),
+    monthKey: varchar("month_key", { length: 7 }).notNull(),
+    alertKind: varchar("alert_kind", { length: 16 }).notNull(),
+    sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("expense_budget_alert_sent_unique").on(
+      t.householdId,
+      t.category,
+      t.monthKey,
+      t.alertKind,
+    ),
+  ],
+);
+
 export const shoppingTrips = pgTable("shopping_trips", {
   id: uuid("id").primaryKey().defaultRandom(),
   householdId: uuid("household_id")

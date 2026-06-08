@@ -1,7 +1,7 @@
 import { AppShell } from "../../components/AppShell";
 import { ExpensesList } from "../../components/ExpensesList";
 import { apiFetch } from "../../lib/api";
-import { Alert } from "../../components/ui";
+import { Alert, LinkButton } from "../../components/ui";
 
 export default async function ExpensesPage() {
   let expenses: {
@@ -20,7 +20,15 @@ export default async function ExpensesPage() {
   }
 
   return (
-    <AppShell title="Expenses" description="Track household spending">
+    <AppShell
+      title="Expenses"
+      description="Track household spending"
+      actions={
+        <LinkButton href="/expenses/reports" variant="ghost" size="sm">
+          Reports
+        </LinkButton>
+      }
+    >
       {loadError ? (
         <Alert variant="error">
           {loadError}. <a href="/expenses">Retry</a>

@@ -12,7 +12,8 @@ export type SyncJobName =
   | "google.calendar.full_import"
   | "recurring.materialize"
   | "calendar.reminder.scan"
-  | "chore.reminder.scan";
+  | "chore.reminder.scan"
+  | "expense.budget.scan";
 
 export interface SyncJobPayload {
   householdId: string;
@@ -21,13 +22,21 @@ export interface SyncJobPayload {
   userId?: string;
 }
 
-export { SYNC_QUEUE, enqueueSyncJob, getSyncQueue, ensureCalendarReminderScheduler, ensureChoreReminderScheduler } from "./queue.js";
+export {
+  SYNC_QUEUE,
+  enqueueSyncJob,
+  getSyncQueue,
+  ensureCalendarReminderScheduler,
+  ensureChoreReminderScheduler,
+  ensureExpenseBudgetScheduler,
+} from "./queue.js";
 export { runCalendarSyncJob, syncConnection, pullLinkedCalendar } from "./sync.js";
 export { eventToFields, eventToGoogleBody, inferSourceCategory } from "./mapper.js";
 export { processOutboxForConnection, pushEventUpdate } from "./push.js";
 export { materializeRecurringForHousehold, parseRrule } from "./recurring.js";
 export { scanCalendarReminders } from "./reminder-scan.js";
 export { scanChoreReminders } from "./chore-reminder-scan.js";
+export { checkHouseholdBudgetAlerts, scanBudgetAlerts } from "./budget-alert-scan.js";
 export {
   inferGoogleCategories,
   inferSourceCategoryLabel,

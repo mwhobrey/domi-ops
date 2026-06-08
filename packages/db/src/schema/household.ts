@@ -63,6 +63,10 @@ export const users = pgTable(
   pushChoresRemindersEnabled: boolean("push_chores_reminders_enabled")
     .notNull()
     .default(true),
+  /** When false, expense budget threshold push is not sent to this user */
+  pushExpenseBudgetAlertsEnabled: boolean("push_expense_budget_alerts_enabled")
+    .notNull()
+    .default(true),
   /** HomeHub import: real login email that should claim this stub user */
   importClaimEmail: varchar("import_claim_email", { length: 320 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

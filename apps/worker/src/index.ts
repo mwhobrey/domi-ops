@@ -8,6 +8,7 @@ import {
   runCalendarSyncJob,
   ensureCalendarReminderScheduler,
   ensureChoreReminderScheduler,
+  ensureExpenseBudgetScheduler,
 } from "@whome/calendar-sync";
 
 const env = loadEnv();
@@ -36,6 +37,10 @@ void ensureCalendarReminderScheduler(redisUrl).catch((err) => {
 
 void ensureChoreReminderScheduler(redisUrl).catch((err) => {
   console.error("Failed to schedule chore reminder scan", err);
+});
+
+void ensureExpenseBudgetScheduler(redisUrl).catch((err) => {
+  console.error("Failed to schedule expense budget scan", err);
 });
 
 console.log(`whome worker listening on queue ${SYNC_QUEUE}`);

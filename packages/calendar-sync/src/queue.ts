@@ -51,3 +51,18 @@ export async function ensureChoreReminderScheduler(redisUrl: string): Promise<vo
     },
   );
 }
+
+/** Repeatable scan for expense budget threshold pushes (every 30 minutes). */
+export async function ensureExpenseBudgetScheduler(redisUrl: string): Promise<void> {
+  const q = getSyncQueue(redisUrl);
+  await q.add(
+    "expense.budget.scan",
+    { name: "expense.budget.scan", payload: { householdId: "scan" } },
+    {
+      repeat: { every: 30 * 60 * 1000 },
+      jobId: "expense-budget-scan",
+      removeOnComplete: 20,
+      removeOnFail: 20,
+    },
+  );
+}

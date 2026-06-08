@@ -10,9 +10,11 @@ import {
 import type { Env } from "@whome/config";
 import { isModuleEnabled } from "@whome/config";
 import type { Database } from "@whome/db";
+import { checkHouseholdBudgetAlerts } from "@whome/calendar-sync";
 import {
   chores,
   choresRecurring,
+  expenseBudgets,
   expenses,
   homeStatus,
   householdMembers,
@@ -75,6 +77,14 @@ import {
   loadHouseholdKarma,
   recordChoreCompletion,
 } from "../lib/chores-karma.js";
+import {
+  buildBudgetSummaries,
+  buildExpenseReports,
+  collectExpenseCategorySuggestions,
+  normalizeExpenseCategory,
+  normalizeMonthKey,
+  serializeExpense,
+} from "../lib/expenses.js";
 import {
   collectNoteTagSuggestions,
   normalizeNoteTitle,
@@ -1398,14 +1408,103 @@ export function coreRoutes(db: Database, env: Env) {
     return c.json({ ok: true });
   });
 
+  app.get("/expenses/category-suggestions", async (c) => {
+    const auth = c.get("auth")!;
+    const q = c.req.query("q")?.trim() ?? "";
+    const suggestions = await collectExpenseCategorySuggestions(db, auth.householdId, q);
+    return c.json({ suggestions });
+  });
+
+  app.get("/expenses/reports", async (c) => {
+    const auth = c.get("auth")!;
+    const monthQuery = c.req.query("month")?.trim();
+    if (monthQuery && !normalizeMonthKey(monthQuery)) {
+      return c.json({ error: "invalid_month" }, 400);
+    }
+    const report = await buildExpenseReports(db, auth.householdId, monthQuery);
+    return c.json(report);
+  });
+
+  app.get("/expenses/budgets", async (c) => {
+    const auth = c.get("auth")!;
+    const budgets = await buildBudgetSummaries(db, auth.householdId);
+    return c.json({ budgets });
+  });
+
+  app.post("/expenses/budgets", async (c) => {
+    const auth = c.get("auth")!;
+    const body = await c.req.json<{ category?: string; monthlyTarget?: number }>();
+    const category = normalizeExpenseCategory(body.category);
+    const monthlyTarget = Number(body.monthlyTarget);
+    if (!category || Number.isNaN(monthlyTarget) || monthlyTarget <= 0) {
+      return c.json({ error: "invalid_budget" }, 400);
+    }
+    try {
+      const [row] = await db
+        .insert(expenseBudgets)
+        .values({
+          householdId: auth.householdId,
+          category,
+          monthlyTarget,
+        })
+        .returning();
+      const match = (await buildBudgetSummaries(db, auth.householdId)).find((b) => b.id === row.id);
+      return c.json(
+        {
+          budget: match ?? {
+            id: row.id,
+            category,
+            monthlyTarget,
+            monthSpend: 0,
+            percentUsed: 0,
+            status: "under" as const,
+          },
+        },
+        201,
+      );
+    } catch {
+      return c.json({ error: "duplicate_category" }, 409);
+    }
+  });
+
+  app.patch("/expenses/budgets/:id", async (c) => {
+    const auth = c.get("auth")!;
+    const id = c.req.param("id");
+    const body = await c.req.json<{ monthlyTarget?: number }>();
+    const monthlyTarget = Number(body.monthlyTarget);
+    if (Number.isNaN(monthlyTarget) || monthlyTarget <= 0) {
+      return c.json({ error: "invalid_budget" }, 400);
+    }
+    const [row] = await db
+      .update(expenseBudgets)
+      .set({ monthlyTarget })
+      .where(and(eq(expenseBudgets.id, id), eq(expenseBudgets.householdId, auth.householdId)))
+      .returning();
+    if (!row) return c.json({ error: "not_found" }, 404);
+    const match = (await buildBudgetSummaries(db, auth.householdId)).find((b) => b.id === row.id);
+    return c.json({ budget: match });
+  });
+
+  app.delete("/expenses/budgets/:id", async (c) => {
+    const auth = c.get("auth")!;
+    const id = c.req.param("id");
+    const [row] = await db
+      .delete(expenseBudgets)
+      .where(and(eq(expenseBudgets.id, id), eq(expenseBudgets.householdId, auth.householdId)))
+      .returning({ id: expenseBudgets.id });
+    if (!row) return c.json({ error: "not_found" }, 404);
+    return c.json({ ok: true });
+  });
+
   app.get("/expenses", async (c) => {
     const auth = c.get("auth")!;
     const rows = await db
       .select()
       .from(expenses)
       .where(eq(expenses.householdId, auth.householdId))
-      .limit(100);
-    return c.json({ expenses: rows });
+      .orderBy(desc(expenses.expenseDate))
+      .limit(200);
+    return c.json({ expenses: rows.map(serializeExpense) });
   });
 
   app.post("/expenses", async (c) => {
@@ -1416,18 +1515,24 @@ export function coreRoutes(db: Database, env: Env) {
       category?: string;
       expenseDate: string;
     }>();
+    const title = body.title?.trim();
+    const amount = Number(body.amount);
+    if (!title || Number.isNaN(amount) || amount < 0) {
+      return c.json({ error: "invalid_expense" }, 400);
+    }
     const [row] = await db
       .insert(expenses)
       .values({
         householdId: auth.householdId,
-        title: body.title,
-        amount: body.amount,
-        category: body.category,
+        title,
+        amount,
+        category: normalizeExpenseCategory(body.category),
         expenseDate: body.expenseDate,
         createdByDisplayName: posterLabel(auth),
       })
       .returning();
-    return c.json({ expense: row }, 201);
+    void checkHouseholdBudgetAlerts(db, env, auth.householdId).catch(() => {});
+    return c.json({ expense: serializeExpense(row) }, 201);
   });
 
   app.get("/profile", async (c) => {
@@ -1459,6 +1564,7 @@ export function coreRoutes(db: Database, env: Env) {
         pushNoticesEnabled: users.pushNoticesEnabled,
         pushCalendarRemindersEnabled: users.pushCalendarRemindersEnabled,
         pushChoresRemindersEnabled: users.pushChoresRemindersEnabled,
+        pushExpenseBudgetAlertsEnabled: users.pushExpenseBudgetAlertsEnabled,
       })
       .from(users)
       .where(eq(users.id, auth.userId))
@@ -1495,6 +1601,7 @@ export function coreRoutes(db: Database, env: Env) {
       pushNoticesEnabled: userRow?.pushNoticesEnabled ?? true,
       pushCalendarRemindersEnabled: userRow?.pushCalendarRemindersEnabled ?? true,
       pushChoresRemindersEnabled: userRow?.pushChoresRemindersEnabled ?? true,
+      pushExpenseBudgetAlertsEnabled: userRow?.pushExpenseBudgetAlertsEnabled ?? true,
       pushSubscribed: Boolean(pushSub),
       pushAvailable: isWebPushConfigured(env),
       avatarUrl: memberAvatarUrl(auth.memberId, memberRow?.avatarKey),
@@ -1509,6 +1616,7 @@ export function coreRoutes(db: Database, env: Env) {
       pushNoticesEnabled?: boolean;
       pushCalendarRemindersEnabled?: boolean;
       pushChoresRemindersEnabled?: boolean;
+      pushExpenseBudgetAlertsEnabled?: boolean;
     }>();
 
     const patch: {
@@ -1519,6 +1627,7 @@ export function coreRoutes(db: Database, env: Env) {
       pushNoticesEnabled?: boolean;
       pushCalendarRemindersEnabled?: boolean;
       pushChoresRemindersEnabled?: boolean;
+      pushExpenseBudgetAlertsEnabled?: boolean;
     } = {};
     if (body.name !== undefined) patch.name = body.name.trim().slice(0, 128) || null;
     if (body.temperatureUnit === "fahrenheit" || body.temperatureUnit === "celsius") {
@@ -1535,6 +1644,9 @@ export function coreRoutes(db: Database, env: Env) {
     }
     if (typeof body.pushChoresRemindersEnabled === "boolean") {
       userPatch.pushChoresRemindersEnabled = body.pushChoresRemindersEnabled;
+    }
+    if (typeof body.pushExpenseBudgetAlertsEnabled === "boolean") {
+      userPatch.pushExpenseBudgetAlertsEnabled = body.pushExpenseBudgetAlertsEnabled;
     }
 
     if (Object.keys(userPatch).length > 0) {
@@ -1663,13 +1775,48 @@ export function coreRoutes(db: Database, env: Env) {
     const body = await c.req.json<{
       title?: string;
       amount?: number;
-      category?: string;
+      category?: string | null;
       expenseDate?: string;
     }>();
-    await db
+    const patch: {
+      title?: string;
+      amount?: number;
+      category?: string | null;
+      expenseDate?: string;
+    } = {};
+    if (body.title !== undefined) {
+      const title = body.title.trim();
+      if (!title) return c.json({ error: "invalid_expense" }, 400);
+      patch.title = title;
+    }
+    if (body.amount !== undefined) {
+      const amount = Number(body.amount);
+      if (Number.isNaN(amount) || amount < 0) return c.json({ error: "invalid_expense" }, 400);
+      patch.amount = amount;
+    }
+    if (body.category !== undefined) {
+      patch.category = normalizeExpenseCategory(body.category);
+    }
+    if (body.expenseDate !== undefined) patch.expenseDate = body.expenseDate;
+
+    const [row] = await db
       .update(expenses)
-      .set(body)
-      .where(and(eq(expenses.id, id), eq(expenses.householdId, auth.householdId)));
+      .set(patch)
+      .where(and(eq(expenses.id, id), eq(expenses.householdId, auth.householdId)))
+      .returning();
+    if (!row) return c.json({ error: "not_found" }, 404);
+    void checkHouseholdBudgetAlerts(db, env, auth.householdId).catch(() => {});
+    return c.json({ expense: serializeExpense(row) });
+  });
+
+  app.delete("/expenses/:id", async (c) => {
+    const auth = c.get("auth")!;
+    const id = c.req.param("id");
+    const [row] = await db
+      .delete(expenses)
+      .where(and(eq(expenses.id, id), eq(expenses.householdId, auth.householdId)))
+      .returning({ id: expenses.id });
+    if (!row) return c.json({ error: "not_found" }, 404);
     return c.json({ ok: true });
   });
 

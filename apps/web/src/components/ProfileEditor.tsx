@@ -5,6 +5,7 @@ import { ApiError, apiClient } from "../lib/client-api";
 import type { HomePresence } from "../lib/home-status";
 import { CalendarReminderPushSettings } from "./CalendarReminderPushSettings";
 import { ChoreReminderPushSettings } from "./ChoreReminderPushSettings";
+import { ExpenseBudgetPushSettings } from "./ExpenseBudgetPushSettings";
 import { NoticePushSettings } from "./NoticePushSettings";
 import { Alert, Avatar, Button, Card, CardBody, Input, RadioGroup } from "./ui";
 
@@ -41,6 +42,7 @@ export function ProfileEditor({
     pushNoticesEnabled: boolean;
     pushCalendarRemindersEnabled: boolean;
     pushChoresRemindersEnabled: boolean;
+    pushExpenseBudgetAlertsEnabled: boolean;
     pushSubscribed: boolean;
     pushAvailable: boolean;
     avatarUrl: string | null;
@@ -223,6 +225,10 @@ export function ProfileEditor({
         />
         <ChoreReminderPushSettings
           initialEnabled={initial.pushChoresRemindersEnabled}
+          pushAvailable={initial.pushAvailable}
+        />
+        <ExpenseBudgetPushSettings
+          initialEnabled={initial.pushExpenseBudgetAlertsEnabled}
           pushAvailable={initial.pushAvailable}
         />
         {initial.homeStatusId && (
