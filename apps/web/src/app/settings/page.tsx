@@ -42,7 +42,7 @@ export default async function SettingsPage() {
       ) : (
         <>
           <AccountSettingsNav canManage />
-          <div className="mx-auto max-w-2xl space-y-8">
+          <div className="mx-auto w-full max-w-2xl space-y-8 lg:max-w-4xl">
             <HouseholdSettingsEditor initial={household} />
             <HouseholdMembersPanel canManage />
           </div>

@@ -26,9 +26,30 @@ export default async function ProfilePage() {
     pushAvailable: false,
     avatarUrl: null as string | null,
   };
+  let calendarIntegration: {
+    oauthConfigured: boolean;
+    defaultSyncMode: string;
+    connections: { id: string; lastSyncAt: string | null }[];
+  } | null = null;
   let loadError: string | null = null;
   try {
     profile = await apiFetch("/api/core/profile");
+    try {
+      const status = await apiFetch<{
+        oauthConfigured: boolean;
+        defaultSyncMode: string;
+      }>("/api/calendar/status");
+      const connRes = await apiFetch<{
+        connections: { id: string; lastSyncAt: string | null }[];
+      }>("/api/calendar/connections");
+      calendarIntegration = {
+        oauthConfigured: status.oauthConfigured,
+        defaultSyncMode: status.defaultSyncMode,
+        connections: connRes.connections,
+      };
+    } catch {
+      /* calendar module optional */
+    }
   } catch (e) {
     loadError = loadErrorMessage(e, "Could not load profile");
   }
@@ -44,8 +65,12 @@ export default async function ProfilePage() {
       ) : (
         <>
           <AccountSettingsNav canManage={canManage} />
-          <div className="mx-auto max-w-2xl">
-            <ProfileEditor initial={profile} canManageHousehold={canManage} />
+          <div className="mx-auto w-full max-w-2xl lg:max-w-4xl">
+            <ProfileEditor
+              initial={profile}
+              canManageHousehold={canManage}
+              calendarIntegration={calendarIntegration ?? undefined}
+            />
           </div>
         </>
       )}

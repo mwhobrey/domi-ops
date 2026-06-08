@@ -38,7 +38,8 @@ whome/
 | `src/app/school/page.tsx` | School LMS UI |
 | `src/app/shopping/page.tsx` | Shopping list |
 | `src/app/chores/page.tsx`, `notes/page.tsx`, `expenses/page.tsx` | Core list modules |
-| `src/app/profile/page.tsx` | Profile editor (identity, presence, prefs, notifications) |
+| `src/app/profile/page.tsx` | Profile editor (identity, presence, prefs, integrations, notifications) |
+| `src/components/ProfileCalendarConnect.tsx` | Slim Google Calendar connect status for profile |
 | `src/app/settings/page.tsx` | Household settings (owner/admin): name, timezone, slug, member provisioning |
 | `src/app/*/loading.tsx` | Route-level skeletons (dashboard, calendar, lists, school, profile) |
 | `src/app/auth/[[...path]]/route.ts` | Proxies `/auth/*` to API (cookies) |

@@ -7,6 +7,7 @@ import { CalendarReminderPushSettings } from "./CalendarReminderPushSettings";
 import { ChoreReminderPushSettings } from "./ChoreReminderPushSettings";
 import { ExpenseBudgetPushSettings } from "./ExpenseBudgetPushSettings";
 import { NoticePushSettings } from "./NoticePushSettings";
+import { ProfileCalendarConnect } from "./ProfileCalendarConnect";
 import { Alert, Avatar, Button, Card, CardBody, Input, LinkButton, RadioGroup, SectionHeader } from "./ui";
 
 type TemperatureUnit = "fahrenheit" | "celsius";
@@ -26,31 +27,36 @@ function avatarErrorMessage(body: string | undefined): string {
   return "Upload failed";
 }
 
-function SettingsSection({
+function ProfileSection({
   title,
   description,
   children,
+  className,
 }: {
   title: string;
   description?: string;
   children: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <section className="space-y-4" aria-label={title}>
-      <div className="space-y-1">
-        <SectionHeader title={title} />
-        {description ? (
-          <p className="text-sm text-[var(--color-text-muted)]">{description}</p>
-        ) : null}
-      </div>
-      {children}
-    </section>
+    <Card className={className}>
+      <CardBody className="space-y-4">
+        <div className="space-y-1">
+          <SectionHeader title={title} />
+          {description ? (
+            <p className="text-sm leading-relaxed text-[var(--color-text-muted)]">{description}</p>
+          ) : null}
+        </div>
+        {children}
+      </CardBody>
+    </Card>
   );
 }
 
 export function ProfileEditor({
   initial,
   canManageHousehold = false,
+  calendarIntegration,
 }: {
   initial: {
     email: string | null;
@@ -71,6 +77,11 @@ export function ProfileEditor({
     avatarUrl: string | null;
   };
   canManageHousehold?: boolean;
+  calendarIntegration?: {
+    oauthConfigured: boolean;
+    defaultSyncMode: string;
+    connections: { id: string; lastSyncAt: string | null }[];
+  };
 }) {
   const [name, setName] = useState(initial.name ?? "");
   const [presence, setPresence] = useState<HomePresence>(initial.presence);
@@ -157,9 +168,9 @@ export function ProfileEditor({
   }
 
   return (
-    <Card>
-      <CardBody className="space-y-8">
-        <SettingsSection
+    <div className="space-y-6">
+      <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
+        <ProfileSection
           title="Identity"
           description={`Signed in as ${initial.username ? `@${initial.username}` : initial.email ?? "member"}. Shown to household as ${shownLabel}.`}
         >
@@ -218,10 +229,10 @@ export function ProfileEditor({
             <span className="text-sm font-medium">Display name</span>
             <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={128} />
           </label>
-        </SettingsSection>
+        </ProfileSection>
 
         {initial.homeStatusId && (
-          <SettingsSection
+          <ProfileSection
             title="Presence"
             description="Let the household know if you are home and what you are up to."
           >
@@ -264,10 +275,10 @@ export function ProfileEditor({
                 }}
               />
             </label>
-          </SettingsSection>
+          </ProfileSection>
         )}
 
-        <SettingsSection title="Preferences" description="Units and display defaults for your account.">
+        <ProfileSection title="Preferences" description="Units and display defaults for your account.">
           <RadioGroup
             legend="Temperature"
             name="temperatureUnit"
@@ -278,11 +289,25 @@ export function ProfileEditor({
               { value: "celsius", label: "Celsius (°C)" },
             ]}
           />
-        </SettingsSection>
+        </ProfileSection>
 
-        <SettingsSection
+        {calendarIntegration ? (
+          <ProfileSection
+            title="Integrations"
+            description="Connect external services used across the household."
+          >
+            <ProfileCalendarConnect
+              oauthConfigured={calendarIntegration.oauthConfigured}
+              defaultSyncMode={calendarIntegration.defaultSyncMode}
+              connections={calendarIntegration.connections}
+            />
+          </ProfileSection>
+        ) : null}
+
+        <ProfileSection
           title="Notifications"
           description="Choose which Web Push alerts this browser and account receive."
+          className="lg:col-span-2"
         >
           <div className="space-y-4">
             <NoticePushSettings
@@ -303,51 +328,56 @@ export function ProfileEditor({
               pushAvailable={initial.pushAvailable}
             />
           </div>
-        </SettingsSection>
+        </ProfileSection>
 
-        {canManageHousehold && (
-          <SettingsSection
+        {canManageHousehold ? (
+          <ProfileSection
             title="Household admin"
             description="Manage members, timezone, and household name."
+            className="lg:col-span-2"
           >
             <LinkButton href="/settings" variant="secondary" size="sm">
               Open household settings
             </LinkButton>
-          </SettingsSection>
-        )}
+          </ProfileSection>
+        ) : null}
+      </div>
 
-        <Button
-          loading={loading}
-          onClick={async () => {
-            setLoading(true);
-            setMsg(null);
-            setVariant(null);
-            try {
-              await apiClient.patch("/api/core/profile", {
-                name: name || null,
-                temperatureUnit,
-              });
-              if (initial.homeStatusId) {
-                await patchPresence({
-                  presence,
-                  statusMessage: statusMessage.trim() || null,
+      <Card className="sticky bottom-0 z-10 border-[var(--color-border)] bg-[var(--color-surface-elevated)]/95 backdrop-blur-sm lg:static lg:backdrop-blur-none">
+        <CardBody className="flex flex-wrap items-center gap-3 py-3 sm:py-4">
+          <Button
+            loading={loading}
+            onClick={async () => {
+              setLoading(true);
+              setMsg(null);
+              setVariant(null);
+              try {
+                await apiClient.patch("/api/core/profile", {
+                  name: name || null,
+                  temperatureUnit,
                 });
+                if (initial.homeStatusId) {
+                  await patchPresence({
+                    presence,
+                    statusMessage: statusMessage.trim() || null,
+                  });
+                }
+                setShownLabel(previewShown());
+                setMsg("Saved");
+                setVariant("success");
+              } catch (err) {
+                setMsg(err instanceof ApiError ? err.message : "Failed");
+                setVariant("error");
+              } finally {
+                setLoading(false);
               }
-              setShownLabel(previewShown());
-              setMsg("Saved");
-              setVariant("success");
-            } catch (err) {
-              setMsg(err instanceof ApiError ? err.message : "Failed");
-              setVariant("error");
-            } finally {
-              setLoading(false);
-            }
-          }}
-        >
-          Save profile
-        </Button>
-        {msg && variant && <Alert variant={variant}>{msg}</Alert>}
-      </CardBody>
-    </Card>
+            }}
+          >
+            Save profile
+          </Button>
+          {msg && variant ? <Alert variant={variant}>{msg}</Alert> : null}
+        </CardBody>
+      </Card>
+    </div>
   );
 }
