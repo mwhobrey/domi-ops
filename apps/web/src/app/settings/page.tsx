@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { AccountSettingsNav } from "../../components/AccountSettingsNav";
 import { AppShell } from "../../components/AppShell";
+import { ScrollToTopFab } from "../../components/ScrollToTopFab";
 import { HouseholdMembersPanel } from "../../components/HouseholdMembersPanel";
 import { HouseholdSettingsEditor } from "../../components/HouseholdSettingsEditor";
 import { apiFetch } from "../../lib/api";
@@ -46,6 +47,7 @@ export default async function SettingsPage() {
             <HouseholdSettingsEditor initial={household} />
             <HouseholdMembersPanel canManage />
           </div>
+          <ScrollToTopFab />
         </>
       )}
     </AppShell>

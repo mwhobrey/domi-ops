@@ -8,7 +8,7 @@ import { ChoreReminderPushSettings } from "./ChoreReminderPushSettings";
 import { ExpenseBudgetPushSettings } from "./ExpenseBudgetPushSettings";
 import { NoticePushSettings } from "./NoticePushSettings";
 import { ProfileCalendarConnect } from "./ProfileCalendarConnect";
-import { Alert, Avatar, Button, Card, CardBody, Input, LinkButton, RadioGroup, SectionHeader } from "./ui";
+import { Alert, Avatar, Button, Card, CardBody, Input, RadioGroup, SectionHeader } from "./ui";
 
 type TemperatureUnit = "fahrenheit" | "celsius";
 
@@ -55,7 +55,6 @@ function ProfileSection({
 
 export function ProfileEditor({
   initial,
-  canManageHousehold = false,
   calendarIntegration,
 }: {
   initial: {
@@ -76,7 +75,6 @@ export function ProfileEditor({
     pushAvailable: boolean;
     avatarUrl: string | null;
   };
-  canManageHousehold?: boolean;
   calendarIntegration?: {
     oauthConfigured: boolean;
     defaultSyncMode: string;
@@ -329,18 +327,6 @@ export function ProfileEditor({
             />
           </div>
         </ProfileSection>
-
-        {canManageHousehold ? (
-          <ProfileSection
-            title="Household admin"
-            description="Manage members, timezone, and household name."
-            className="lg:col-span-2"
-          >
-            <LinkButton href="/settings" variant="secondary" size="sm">
-              Open household settings
-            </LinkButton>
-          </ProfileSection>
-        ) : null}
       </div>
 
       <Card className="sticky bottom-0 z-10 border-[var(--color-border)] bg-[var(--color-surface-elevated)]/95 backdrop-blur-sm lg:static lg:backdrop-blur-none">

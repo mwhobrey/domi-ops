@@ -1,6 +1,7 @@
 import { AccountSettingsNav } from "../../components/AccountSettingsNav";
 import { AppShell } from "../../components/AppShell";
 import { ProfileEditor } from "../../components/ProfileEditor";
+import { ScrollToTopFab } from "../../components/ScrollToTopFab";
 import { apiFetch } from "../../lib/api";
 import { canManageHousehold, type HouseholdRole } from "../../lib/household-roles";
 import { loadErrorMessage } from "../../lib/load-error";
@@ -68,10 +69,10 @@ export default async function ProfilePage() {
           <div className="mx-auto w-full max-w-2xl lg:max-w-4xl">
             <ProfileEditor
               initial={profile}
-              canManageHousehold={canManage}
               calendarIntegration={calendarIntegration ?? undefined}
             />
           </div>
+          <ScrollToTopFab className="bottom-20 lg:bottom-6" />
         </>
       )}
     </AppShell>
