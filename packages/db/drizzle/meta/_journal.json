@@ -148,6 +148,20 @@
       "when": 1780494994000,
       "tag": "0020_shopping_expansion",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1780494995000,
+      "tag": "0021_chores_expansion",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1780494996000,
+      "tag": "0022_chores_karma",
+      "breakpoints": true
     }
   ]
 }

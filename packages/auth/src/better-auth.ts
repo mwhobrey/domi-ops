@@ -76,6 +76,12 @@ export function createBetterAuth(db: Database, env: Env): WhomeBetterAuth {
           defaultValue: true,
           input: false,
         },
+        pushChoresRemindersEnabled: {
+          type: "boolean",
+          required: false,
+          defaultValue: true,
+          input: false,
+        },
       },
     },
     session: {

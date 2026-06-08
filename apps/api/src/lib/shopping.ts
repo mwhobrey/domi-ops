@@ -12,9 +12,9 @@ import { and, eq, gte, inArray, lte } from "drizzle-orm";
 
 const AISLE_PREFIX = "aisle:";
 
-export type RecurringInterval = "weekly" | "biweekly" | "monthly";
+export type RecurringInterval = "daily" | "weekly" | "biweekly" | "monthly";
 
-export const RECURRING_INTERVALS: RecurringInterval[] = ["weekly", "biweekly", "monthly"];
+export const RECURRING_INTERVALS: RecurringInterval[] = ["daily", "weekly", "biweekly", "monthly"];
 
 export function parseShoppingTagsJson(raw: string | null | undefined): {
   aisle: string | null;
@@ -101,7 +101,9 @@ export function todayIsoDate(): string {
 
 export function advanceRecurringDate(interval: RecurringInterval, fromIso: string): string {
   const d = new Date(`${fromIso}T12:00:00.000Z`);
-  if (interval === "weekly") {
+  if (interval === "daily") {
+    d.setUTCDate(d.getUTCDate() + 1);
+  } else if (interval === "weekly") {
     d.setUTCDate(d.getUTCDate() + 7);
   } else if (interval === "biweekly") {
     d.setUTCDate(d.getUTCDate() + 14);
@@ -114,7 +116,7 @@ export function advanceRecurringDate(interval: RecurringInterval, fromIso: strin
 }
 
 export function normalizeRecurringInterval(raw: string | undefined): RecurringInterval | null {
-  if (raw === "weekly" || raw === "biweekly" || raw === "monthly") return raw;
+  if (raw === "daily" || raw === "weekly" || raw === "biweekly" || raw === "monthly") return raw;
   return null;
 }
 

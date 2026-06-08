@@ -3,6 +3,7 @@ import {
   date,
   integer,
   pgTable,
+  primaryKey,
   real,
   text,
   timestamp,
@@ -84,6 +85,23 @@ export const shoppingItems = pgTable("shopping_items", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const choresRecurring = pgTable("chores_recurring", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  householdId: uuid("household_id")
+    .notNull()
+    .references(() => households.id, { onDelete: "cascade" }),
+  description: text("description").notNull(),
+  tagsJson: text("tags_json").default("[]"),
+  priority: integer("priority").notNull().default(0),
+  assigneeMemberId: uuid("assignee_member_id").references(() => householdMembers.id, {
+    onDelete: "set null",
+  }),
+  interval: varchar("interval", { length: 16 }).notNull().default("weekly"),
+  nextAt: date("next_at").notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const chores = pgTable("chores", {
   id: uuid("id").primaryKey().defaultRandom(),
   householdId: uuid("household_id")
@@ -93,9 +111,50 @@ export const chores = pgTable("chores", {
   done: boolean("done").notNull().default(false),
   dueDate: date("due_date"),
   tagsJson: text("tags_json").default("[]"),
+  priority: integer("priority").notNull().default(0),
+  assigneeMemberId: uuid("assignee_member_id").references(() => householdMembers.id, {
+    onDelete: "set null",
+  }),
+  recurringId: uuid("recurring_id").references(() => choresRecurring.id, { onDelete: "set null" }),
+  dueReminderSentAt: timestamp("due_reminder_sent_at", { withTimezone: true }),
   createdByDisplayName: varchar("created_by_display_name", { length: 64 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const choreCompletions = pgTable("chore_completions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  householdId: uuid("household_id")
+    .notNull()
+    .references(() => households.id, { onDelete: "cascade" }),
+  choreId: uuid("chore_id").references(() => chores.id, { onDelete: "set null" }),
+  memberId: uuid("member_id").references(() => householdMembers.id, { onDelete: "set null" }),
+  description: text("description").notNull(),
+  dueDate: date("due_date"),
+  completedAt: timestamp("completed_at", { withTimezone: true }).notNull().defaultNow(),
+  karmaEarned: integer("karma_earned").notNull().default(0),
+  timing: varchar("timing", { length: 16 }).notNull(),
+  daysLate: integer("days_late"),
+});
+
+export const choreMemberKarma = pgTable(
+  "chore_member_karma",
+  {
+    householdId: uuid("household_id")
+      .notNull()
+      .references(() => households.id, { onDelete: "cascade" }),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => householdMembers.id, { onDelete: "cascade" }),
+    karmaPoints: integer("karma_points").notNull().default(0),
+    currentStreak: integer("current_streak").notNull().default(0),
+    bestStreak: integer("best_streak").notNull().default(0),
+    redemptionQuestsCompleted: integer("redemption_quests_completed").notNull().default(0),
+    lastCompletionDate: date("last_completion_date"),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.householdId, t.memberId] }),
+  }),
+);
 
 export const notes = pgTable("notes", {
   id: uuid("id").primaryKey().defaultRandom(),

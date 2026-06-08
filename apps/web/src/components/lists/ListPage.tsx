@@ -3,11 +3,13 @@ import { Alert, Card, CardBody, EmptyState } from "../ui";
 export function ListPage({
   error,
   onDismissError,
+  toolbar,
   addForm,
   children,
 }: {
   error?: string | null;
   onDismissError?: () => void;
+  toolbar?: React.ReactNode;
   addForm: React.ReactNode;
   children: React.ReactNode;
 }) {
@@ -23,6 +25,7 @@ export function ListPage({
           )}
         </Alert>
       )}
+      {toolbar}
       <Card>
         <CardBody>{addForm}</CardBody>
       </Card>

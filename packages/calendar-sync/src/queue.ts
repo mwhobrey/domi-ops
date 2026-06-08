@@ -36,3 +36,18 @@ export async function ensureCalendarReminderScheduler(redisUrl: string): Promise
     },
   );
 }
+
+/** Repeatable scan for due chore reminder pushes (every 5 minutes). */
+export async function ensureChoreReminderScheduler(redisUrl: string): Promise<void> {
+  const q = getSyncQueue(redisUrl);
+  await q.add(
+    "chore.reminder.scan",
+    { name: "chore.reminder.scan", payload: { householdId: "scan" } },
+    {
+      repeat: { every: 5 * 60 * 1000 },
+      jobId: "chore-reminder-scan",
+      removeOnComplete: 20,
+      removeOnFail: 20,
+    },
+  );
+}

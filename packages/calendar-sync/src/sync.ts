@@ -17,6 +17,7 @@ import { eventToFields, syncWindow } from "./mapper.js";
 import { processOutboxForConnection } from "./push.js";
 import { materializeRecurringForHousehold } from "./recurring.js";
 import { scanCalendarReminders } from "./reminder-scan.js";
+import { scanChoreReminders } from "./chore-reminder-scan.js";
 import { setSyncRun } from "./sync-run.js";
 import type { SyncJobPayload } from "./index.js";
 
@@ -351,6 +352,9 @@ export async function runCalendarSyncJob(
       break;
     case "calendar.reminder.scan":
       await scanCalendarReminders(db, env);
+      break;
+    case "chore.reminder.scan":
+      await scanChoreReminders(db, env);
       break;
     default:
       throw new Error(`Unknown sync job: ${name}`);

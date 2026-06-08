@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
 import type { HomePresence } from "../lib/home-status";
 import { CalendarReminderPushSettings } from "./CalendarReminderPushSettings";
+import { ChoreReminderPushSettings } from "./ChoreReminderPushSettings";
 import { NoticePushSettings } from "./NoticePushSettings";
 import { Alert, Avatar, Button, Card, CardBody, Input, RadioGroup } from "./ui";
 
@@ -39,6 +40,7 @@ export function ProfileEditor({
     temperatureUnit: TemperatureUnit;
     pushNoticesEnabled: boolean;
     pushCalendarRemindersEnabled: boolean;
+    pushChoresRemindersEnabled: boolean;
     pushSubscribed: boolean;
     pushAvailable: boolean;
     avatarUrl: string | null;
@@ -217,6 +219,10 @@ export function ProfileEditor({
         />
         <CalendarReminderPushSettings
           initialEnabled={initial.pushCalendarRemindersEnabled}
+          pushAvailable={initial.pushAvailable}
+        />
+        <ChoreReminderPushSettings
+          initialEnabled={initial.pushChoresRemindersEnabled}
           pushAvailable={initial.pushAvailable}
         />
         {initial.homeStatusId && (

@@ -21,6 +21,7 @@ export default async function ProfilePage() {
     temperatureUnit: "fahrenheit" as const,
     pushNoticesEnabled: true,
     pushCalendarRemindersEnabled: true,
+    pushChoresRemindersEnabled: true,
     pushSubscribed: false,
     pushAvailable: false,
     avatarUrl: null as string | null,
