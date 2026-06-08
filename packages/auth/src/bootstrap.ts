@@ -63,6 +63,7 @@ export async function bootstrapHouseholdOnLogin(
       name: householdName ?? "Our Household",
       tier: "self_host",
       modulesEnabled: JSON.stringify(env.MODULES_ENABLED),
+      storageQuotaBytes: env.DRIVE_DEFAULT_QUOTA_BYTES ?? null,
       timezone: "America/Chicago",
     })
     .returning();

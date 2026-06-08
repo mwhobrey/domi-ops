@@ -1,10 +1,13 @@
 "use client";
 
 import { CheckCircle2, Circle, Upload } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
+import type { DriveReference } from "../lib/drive-types";
 import { displayArtifactFileName } from "../lib/school-artifact-url";
 import type { SchoolClassAccess } from "../lib/school-access";
+import { DriveAttachmentChips } from "./DriveAttachmentChips";
+import { DriveObjectPicker } from "./DriveObjectPicker";
 import { SchoolSubmissionArtifacts } from "./SchoolSubmissionArtifacts";
 import { Alert, Badge, Button, Card, CardBody, CardHeader, Input, Textarea } from "./ui";
 interface Submission {
@@ -85,6 +88,7 @@ export function SchoolAssignmentDetail({
   visibility,
   initialSubmissions,
   access,
+  driveEnabled = false,
 }: {
   assignmentId: string;
   assignmentTitle: string;
@@ -95,6 +99,7 @@ export function SchoolAssignmentDetail({
   visibility?: string;
   initialSubmissions: Submission[];
   access: SchoolClassAccess;
+  driveEnabled?: boolean;
 }) {
   const canSubmit = access.canSubmit;
   const canGrade = access.canGrade;
@@ -111,8 +116,24 @@ export function SchoolAssignmentDetail({
   const [submitting, setSubmitting] = useState(false);
   const [grading, setGrading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [driveReferences, setDriveReferences] = useState<DriveReference[]>([]);
+  const [drivePickerOpen, setDrivePickerOpen] = useState(false);
+  const [driveUploading, setDriveUploading] = useState(false);
 
   const submission = submissions[0];
+
+  useEffect(() => {
+    if (!driveEnabled || !submission?.id) {
+      setDriveReferences([]);
+      return;
+    }
+    void apiClient
+      .get<{ references: DriveReference[] }>(
+        `/api/core/drive/references?entityType=school_submission&entityId=${submission.id}`,
+      )
+      .then((data) => setDriveReferences(data.references))
+      .catch(() => setDriveReferences([]));
+  }, [driveEnabled, submission?.id]);
   const status = submission?.status ?? "not_started";
   const statusMeta = isStudent
     ? (STUDENT_STATUS[status] ?? { label: status.replace("_", " "), tone: "default" as const })
@@ -205,6 +226,64 @@ export function SchoolAssignmentDetail({
       }
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function attachDriveObject(object: DriveReference["object"] & { id: string }) {
+    const activeSubmission = await ensureSubmissionRecord();
+    const data = await apiClient.post<{ reference: DriveReference }>("/api/core/drive/references", {
+      driveObjectId: object.id,
+      entityType: "school_submission",
+      entityId: activeSubmission.id,
+    });
+    setDriveReferences((prev) => [...prev, { ...data.reference, object }]);
+  }
+
+  async function uploadToDriveAndAttach(file: File) {
+    setDriveUploading(true);
+    setError(null);
+    try {
+      const activeSubmission = await ensureSubmissionRecord();
+      const { uploadUrl, key, objectId } = await apiClient.post<{
+        uploadUrl: string;
+        key: string;
+        objectId: string;
+      }>("/api/core/drive/presign", {
+        filename: file.name,
+        contentType: file.type || "application/octet-stream",
+        byteSize: file.size,
+      });
+      const put = await fetch(uploadUrl, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": file.type || "application/octet-stream" },
+      });
+      if (!put.ok) throw new Error("upload_failed");
+      const created = await apiClient.post<{ object: DriveReference["object"] }>(
+        "/api/core/drive/objects",
+        {
+          id: objectId,
+          kind: "file",
+          title: file.name,
+          s3Key: key,
+          contentType: file.type || "application/octet-stream",
+          byteSize: file.size,
+        },
+      );
+      const ref = await apiClient.post<{ reference: DriveReference }>("/api/core/drive/references", {
+        driveObjectId: objectId,
+        entityType: "school_submission",
+        entityId: activeSubmission.id,
+      });
+      setDriveReferences((prev) => [
+        ...prev,
+        { ...ref.reference, object: created.object },
+      ]);
+      setUploadStatus(`${file.name} uploaded to Drive`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Drive upload failed");
+    } finally {
+      setDriveUploading(false);
     }
   }
 
@@ -361,6 +440,42 @@ export function SchoolAssignmentDetail({
               {submission && submission.artifacts.length > 0 && (
                 <SchoolSubmissionArtifacts artifacts={submission.artifacts} />
               )}
+              {driveEnabled ? (
+                <div className="space-y-2 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-3">
+                  <h4 className="text-sm font-medium">Drive attachments</h4>
+                  <DriveAttachmentChips
+                    references={driveReferences}
+                    onRemove={async (referenceId) => {
+                      await apiClient.delete(`/api/core/drive/references/${referenceId}`);
+                      setDriveReferences((prev) => prev.filter((r) => r.id !== referenceId));
+                    }}
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setDrivePickerOpen(true)}
+                    >
+                      Link from Drive
+                    </Button>
+                    <label className="inline-flex cursor-pointer items-center rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-subtle)] px-3 py-1.5 text-sm font-medium transition hover:bg-[var(--color-surface-elevated)]">
+                      {driveUploading ? "Uploading…" : "Upload to Drive"}
+                      <input
+                        type="file"
+                        className="sr-only"
+                        disabled={driveUploading}
+                        accept="image/*,.pdf,.doc,.docx,.txt"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          e.target.value = "";
+                          if (f) void uploadToDriveAndAttach(f);
+                        }}
+                      />
+                    </label>
+                  </div>
+                </div>
+              ) : null}
               {uploadStatus && !uploadError && (
                 <p className="text-xs text-[var(--color-success)]">{uploadStatus}</p>
               )}
@@ -434,9 +549,29 @@ export function SchoolAssignmentDetail({
               <h3 className="text-sm font-medium">Submitted files</h3>
               <SchoolSubmissionArtifacts artifacts={submission.artifacts} showPreview />
             </div>
+            {driveEnabled && driveReferences.length > 0 ? (
+              <div className="space-y-2">
+                <h3 className="text-sm font-medium">Drive attachments</h3>
+                <DriveAttachmentChips references={driveReferences} />
+              </div>
+            ) : null}
           </CardBody>
         </Card>
       )}
+
+      {driveEnabled ? (
+        <DriveObjectPicker
+          open={drivePickerOpen}
+          onClose={() => setDrivePickerOpen(false)}
+          title="Link Drive file to submission"
+          excludeIds={driveReferences.map((r) => r.driveObjectId)}
+          onSelect={(object) => {
+            void attachDriveObject(object).catch((err) => {
+              setError(err instanceof ApiError ? err.message : "Could not link Drive file");
+            });
+          }}
+        />
+      ) : null}
 
       {isStudent && submission?.grade?.score != null && (
         <Card>

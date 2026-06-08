@@ -149,8 +149,21 @@ Workspace-level **Bug** / **Feature** may exist; attach in Linear UI if needed. 
 |-----------|--------|
 | M1 — Admin shell | [WHO-70](https://linear.app/mikewhob-whome/issue/WHO-70) |
 | M2 — Household settings | [WHO-71](https://linear.app/mikewhob-whome/issue/WHO-71), [WHO-73](https://linear.app/mikewhob-whome/issue/WHO-73) |
-| M3 — Modules | [WHO-72](https://linear.app/mikewhob-whome/issue/WHO-72) |
+| M3 — Modules | [WHO-72](https://linear.app/mikewhob-whome/issue/WHO-72), [WHO-113](https://linear.app/mikewhob-whome/issue/WHO-113) (runtime enforcement) |
 | M4 — Integrations | [WHO-74](https://linear.app/mikewhob-whome/issue/WHO-74) |
+
+### [Household Drive](https://linear.app/mikewhob-whome/project/household-drive-81a618305877)
+
+MinIO-backed household file/link storage — replaces HomeHub Shared Cloud. Spike: `docs/SHARED_RESOURCES_SPIKE.md`.
+
+| Milestone | Issues |
+|-----------|--------|
+| M1 — Schema & API foundation | [WHO-109](https://linear.app/mikewhob-whome/issue/WHO-109), [WHO-112](https://linear.app/mikewhob-whome/issue/WHO-112) |
+| M2 — Drive UI v1 | [WHO-110](https://linear.app/mikewhob-whome/issue/WHO-110), [WHO-111](https://linear.app/mikewhob-whome/issue/WHO-111) |
+| M3 — Cross-module linking | [WHO-116](https://linear.app/mikewhob-whome/issue/WHO-116)–[WHO-119](https://linear.app/mikewhob-whome/issue/WHO-119) |
+| M4 — Permissions & module gating | [WHO-113](https://linear.app/mikewhob-whome/issue/WHO-113)–[WHO-115](https://linear.app/mikewhob-whome/issue/WHO-115) |
+| M5 — HomeHub import | [WHO-120](https://linear.app/mikewhob-whome/issue/WHO-120) |
+| M6 — Phase 2 product-ready | [WHO-121](https://linear.app/mikewhob-whome/issue/WHO-121)–[WHO-125](https://linear.app/mikewhob-whome/issue/WHO-125) |
 
 ## Suggested work order
 

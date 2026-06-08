@@ -10,6 +10,10 @@ import {
 } from "../lib/web-push";
 import { ApiError, apiClient } from "../lib/client-api";
 import { cn } from "../lib/cn";
+import type { DriveAttachmentSummary } from "../lib/drive-types";
+import { driveAttachmentToReference } from "../lib/drive-types";
+import { DriveAttachmentChips } from "./DriveAttachmentChips";
+import { DriveObjectPicker } from "./DriveObjectPicker";
 import { Alert, Button, Sheet, Textarea } from "./ui";
 
 export type NoticeItem = {
@@ -20,6 +24,7 @@ export type NoticeItem = {
   createdAt: string;
   read: boolean;
   isOwn: boolean;
+  attachments?: DriveAttachmentSummary[];
 };
 
 function formatWhen(iso: string): string {
@@ -45,6 +50,9 @@ export function NoticeBoardActions({ className }: { className?: string }) {
   const [draft, setDraft] = useState("");
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [driveEnabled, setDriveEnabled] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pendingAttachments, setPendingAttachments] = useState<DriveAttachmentSummary[]>([]);
 
   const refreshCount = useCallback(async () => {
     try {
@@ -78,6 +86,13 @@ export function NoticeBoardActions({ className }: { className?: string }) {
   }, [refreshCount]);
 
   useEffect(() => {
+    void apiClient
+      .get<{ modulesEnabled?: string[] }>("/auth/session")
+      .then((s) => setDriveEnabled(s.modulesEnabled?.includes("drive") ?? false))
+      .catch(() => setDriveEnabled(false));
+  }, []);
+
+  useEffect(() => {
     if (open) loadNotices();
   }, [open, loadNotices]);
 
@@ -108,8 +123,12 @@ export function NoticeBoardActions({ className }: { className?: string }) {
     setPosting(true);
     setError(null);
     try {
-      await apiClient.post("/api/core/notices", { content });
+      await apiClient.post("/api/core/notices", {
+        content,
+        driveObjectIds: pendingAttachments.map((a) => a.driveObjectId),
+      });
       setDraft("");
+      setPendingAttachments([]);
       await loadNotices();
       await refreshCount();
     } catch (err) {
@@ -264,12 +283,54 @@ export function NoticeBoardActions({ className }: { className?: string }) {
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
             />
+            {driveEnabled ? (
+              <div className="mt-2 space-y-2">
+                {pendingAttachments.length > 0 ? (
+                  <DriveAttachmentChips
+                    references={pendingAttachments.map(driveAttachmentToReference)}
+                    onRemove={(id) =>
+                      setPendingAttachments((prev) => prev.filter((a) => a.id !== id))
+                    }
+                  />
+                ) : null}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setPickerOpen(true)}
+                >
+                  Attach from Drive
+                </Button>
+              </div>
+            ) : null}
             <Button className="mt-2" size="sm" loading={posting} onClick={postNotice}>
               Post notice
             </Button>
           </div>
         </div>
       </Sheet>
+
+      {driveEnabled ? (
+        <DriveObjectPicker
+          open={pickerOpen}
+          onClose={() => setPickerOpen(false)}
+          title="Attach Drive file to notice"
+          excludeIds={pendingAttachments.map((a) => a.driveObjectId)}
+          onSelect={(object) => {
+            setPendingAttachments((prev) => [
+              ...prev,
+              {
+                id: `pending-${object.id}`,
+                driveObjectId: object.id,
+                title: object.title,
+                kind: object.kind,
+                filename: object.filename,
+                url: object.url,
+              },
+            ]);
+          }}
+        />
+      ) : null}
     </>
   );
 }
@@ -294,6 +355,13 @@ function NoticeCard({
       )}
     >
       <p className="whitespace-pre-wrap">{notice.content}</p>
+      {(notice.attachments ?? []).length > 0 ? (
+        <div className="mt-2">
+          <DriveAttachmentChips
+            references={(notice.attachments ?? []).map(driveAttachmentToReference)}
+          />
+        </div>
+      ) : null}
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--color-text-muted)]">
         <span>
           {notice.postedByDisplayName ?? "Household"}

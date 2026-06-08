@@ -1,5 +1,5 @@
 import { requireDb } from "../lib/require-db.js";
-import { importRecords } from "@whome/db";
+import { driveFolders, driveObjects, importRecords } from "@whome/db";
 import { and, eq } from "drizzle-orm";
 import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
@@ -12,6 +12,41 @@ import {
   uploadFileToS3,
 } from "../lib/s3-upload.js";
 import type { ImportContext, MapperResult } from "./types.js";
+
+const IMPORTS_FOLDER_NAME = "Imports";
+
+async function ensureImportsFolder(
+  ctx: ImportContext,
+  db: ReturnType<typeof requireDb>,
+): Promise<string> {
+  const cached = ctx.idMap.get("drive_folder:imports");
+  if (cached) return cached;
+
+  const [existing] = await db
+    .select({ id: driveFolders.id })
+    .from(driveFolders)
+    .where(
+      and(
+        eq(driveFolders.householdId, ctx.householdId),
+        eq(driveFolders.name, IMPORTS_FOLDER_NAME),
+      ),
+    )
+    .limit(1);
+  if (existing) {
+    ctx.idMap.set("drive_folder:imports", existing.id);
+    return existing.id;
+  }
+
+  const folderId = randomUUID();
+  await db.insert(driveFolders).values({
+    id: folderId,
+    householdId: ctx.householdId,
+    parentId: null,
+    name: IMPORTS_FOLDER_NAME,
+  });
+  ctx.idMap.set("drive_folder:imports", folderId);
+  return folderId;
+}
 
 export async function importFiles(ctx: ImportContext): Promise<MapperResult> {
   const result: MapperResult = { imported: 0, skipped: 0, warnings: [] };
@@ -46,6 +81,8 @@ export async function importFiles(ctx: ImportContext): Promise<MapperResult> {
   const db = requireDb(ctx);
   const client = createImportS3Client(s3);
   await ensureBucket(client, s3.bucket);
+  const importsFolderId = await ensureImportsFolder(ctx, db);
+
   const rows = ctx.sqlite
     .prepare("SELECT id, filename, creator FROM file ORDER BY id")
     .all() as Record<string, unknown>[];
@@ -64,8 +101,9 @@ export async function importFiles(ctx: ImportContext): Promise<MapperResult> {
       )
       .limit(1);
     const filename = String(r.filename);
+    const s3Key = importFileKey(ctx.householdId, sourceId, filename);
     if (existing) {
-      ctx.idMap.set(`file:${sourceId}`, importFileKey(ctx.householdId, sourceId, filename));
+      ctx.idMap.set(`file:${sourceId}`, s3Key);
       result.skipped++;
       continue;
     }
@@ -76,9 +114,8 @@ export async function importFiles(ctx: ImportContext): Promise<MapperResult> {
       continue;
     }
 
-    const key = importFileKey(ctx.householdId, sourceId, filename);
     try {
-      await uploadFileToS3(client, s3, localPath, key);
+      await uploadFileToS3(client, s3, localPath, s3Key);
     } catch (e) {
       result.warnings.push(
         `file ${sourceId}: S3 upload failed: ${e instanceof Error ? e.message : String(e)}`,
@@ -86,14 +123,29 @@ export async function importFiles(ctx: ImportContext): Promise<MapperResult> {
       continue;
     }
 
+    const objectId = randomUUID();
+    const creator = r.creator != null ? String(r.creator).trim() : null;
+    await db.insert(driveObjects).values({
+      id: objectId,
+      householdId: ctx.householdId,
+      folderId: importsFolderId,
+      kind: "file",
+      title: filename,
+      s3Key,
+      contentType: "application/octet-stream",
+      byteSize: 0,
+      visibility: "household",
+      createdByDisplayName: creator || null,
+    });
+
     await db.insert(importRecords).values({
       householdId: ctx.householdId,
       sourceTable: "file",
       sourceId,
-      targetTable: "s3_object",
-      targetId: randomUUID(),
+      targetTable: "drive_objects",
+      targetId: objectId,
     });
-    ctx.idMap.set(`file:${sourceId}`, key);
+    ctx.idMap.set(`file:${sourceId}`, s3Key);
     result.imported++;
   }
 

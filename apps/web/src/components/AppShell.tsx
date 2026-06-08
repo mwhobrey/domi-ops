@@ -19,9 +19,11 @@ export async function AppShell({
   breadcrumb?: BreadcrumbItem[];
 }) {
   let user: ShellUser | null = null;
+  let modulesEnabled: string[] | undefined;
   try {
     const session = await apiFetch<{
       authenticated: boolean;
+      modulesEnabled?: string[];
       user?: {
         email: string | null;
         username?: string | null;
@@ -32,6 +34,7 @@ export async function AppShell({
       };
     }>("/auth/session");
     if (session.authenticated && session.user) {
+      modulesEnabled = session.modulesEnabled;
       const u = session.user;
       user = {
         email: u.email,
@@ -48,7 +51,7 @@ export async function AppShell({
   }
 
   return (
-    <AppChrome user={user}>
+    <AppChrome user={user} modulesEnabled={modulesEnabled}>
       {breadcrumb && breadcrumb.length > 0 && <Breadcrumb items={breadcrumb} />}
       <PageHeader
         title={title}

@@ -3,6 +3,12 @@ import type { NextRequest } from "next/server";
 
 const PUBLIC_PATHS = ["/", "/login"];
 
+const MODULE_ROUTE_PREFIXES: { prefix: string; module: string }[] = [
+  { prefix: "/school", module: "school" },
+  { prefix: "/calendar", module: "calendar_sync" },
+  { prefix: "/drive", module: "drive" },
+];
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   if (PUBLIC_PATHS.includes(pathname)) {
@@ -18,8 +24,21 @@ export async function middleware(request: NextRequest) {
       cache: "no-store",
     });
     if (res.ok) {
-      const data = (await res.json()) as { authenticated?: boolean };
-      if (data.authenticated) return NextResponse.next();
+      const data = (await res.json()) as {
+        authenticated?: boolean;
+        modulesEnabled?: string[];
+      };
+      if (data.authenticated) {
+        const modules = data.modulesEnabled ?? [];
+        for (const { prefix, module } of MODULE_ROUTE_PREFIXES) {
+          if (pathname === prefix || pathname.startsWith(`${prefix}/`)) {
+            if (!modules.includes(module)) {
+              return NextResponse.redirect(new URL("/dashboard", request.url));
+            }
+          }
+        }
+        return NextResponse.next();
+      }
     }
   } catch {
     if (process.env.NODE_ENV === "development") return NextResponse.next();
@@ -44,6 +63,8 @@ export const config = {
     "/chores/:path*",
     "/notes",
     "/notes/:path*",
+    "/drive",
+    "/drive/:path*",
     "/expenses",
     "/expenses/:path*",
     "/profile",

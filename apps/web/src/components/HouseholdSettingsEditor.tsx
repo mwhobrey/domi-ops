@@ -5,12 +5,24 @@ import { ApiError, apiClient } from "../lib/client-api";
 import { HOUSEHOLD_TIMEZONE_OPTIONS } from "../lib/timezones";
 import { Alert, Button, Card, CardBody, Checkbox, Input, SectionHeader, Select } from "./ui";
 
+type DrivePermissionLevel = "none" | "read" | "write";
+
+type DriveRolePermissions = Partial<Record<"member" | "child" | "guest", DrivePermissionLevel>>;
+
 type HouseholdSettings = {
   name: string;
   slug: string | null;
   timezone: string;
   modulesEnabled: string[];
   availableModules: string[];
+  drivePermissions?: DriveRolePermissions;
+  drivePermissionDefaults?: DriveRolePermissions;
+};
+
+const DRIVE_ROLE_LABELS: Record<"member" | "child" | "guest", string> = {
+  member: "Member",
+  child: "Child",
+  guest: "Guest",
 };
 
 const MODULE_META: Record<string, { label: string; description: string; locked?: boolean }> = {
@@ -27,6 +39,10 @@ const MODULE_META: Record<string, { label: string; description: string; locked?:
     label: "Calendar sync",
     description: "Google Calendar import and bidirectional sync",
   },
+  drive: {
+    label: "Drive",
+    description: "Household file and link storage (MinIO-backed)",
+  },
 };
 
 export function HouseholdSettingsEditor({ initial }: { initial: HouseholdSettings }) {
@@ -34,6 +50,9 @@ export function HouseholdSettingsEditor({ initial }: { initial: HouseholdSetting
   const [slug, setSlug] = useState(initial.slug ?? "");
   const [timezone, setTimezone] = useState(initial.timezone);
   const [modulesEnabled, setModulesEnabled] = useState<string[]>(initial.modulesEnabled);
+  const [drivePermissions, setDrivePermissions] = useState<DriveRolePermissions>(
+    initial.drivePermissions ?? initial.drivePermissionDefaults ?? {},
+  );
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [variant, setVariant] = useState<"success" | "error" | null>(null);
@@ -143,6 +162,39 @@ export function HouseholdSettingsEditor({ initial }: { initial: HouseholdSetting
           </ul>
         </div>
 
+        {initial.availableModules.includes("drive") ? (
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Drive permissions</p>
+              <p className="text-xs text-[var(--color-text-muted)]">
+                Per-role access when the Drive module is enabled. Owner and admin always have full
+                access.
+              </p>
+            </div>
+            <ul className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-3">
+              {(["member", "child", "guest"] as const).map((role) => (
+                <li key={role} className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-sm font-medium">{DRIVE_ROLE_LABELS[role]}</span>
+                  <Select
+                    aria-label={`Drive permission for ${DRIVE_ROLE_LABELS[role]}`}
+                    value={drivePermissions[role] ?? initial.drivePermissionDefaults?.[role] ?? "read"}
+                    onChange={(e) =>
+                      setDrivePermissions((prev) => ({
+                        ...prev,
+                        [role]: e.target.value as DrivePermissionLevel,
+                      }))
+                    }
+                  >
+                    <option value="none">No access</option>
+                    <option value="read">Read only</option>
+                    <option value="write">Read & write</option>
+                  </Select>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
         <Button
           loading={loading}
           onClick={async () => {
@@ -158,11 +210,15 @@ export function HouseholdSettingsEditor({ initial }: { initial: HouseholdSetting
                 slug: slug.trim() || null,
                 timezone: timezone.trim(),
                 modulesEnabled,
+                drivePermissions,
               });
               setName(res.household.name);
               setSlug(res.household.slug ?? "");
               setTimezone(res.household.timezone);
               setModulesEnabled(res.household.modulesEnabled);
+              if (res.household.drivePermissions) {
+                setDrivePermissions(res.household.drivePermissions);
+              }
               setMsg("Household settings saved");
               setVariant("success");
             } catch (err) {

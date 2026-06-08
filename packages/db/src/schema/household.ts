@@ -1,4 +1,5 @@
 import {
+  bigint,
   boolean,
   pgEnum,
   pgTable,
@@ -35,6 +36,11 @@ export const households = pgTable("households", {
   dedicatedDbRef: varchar("dedicated_db_ref", { length: 256 }),
   timezone: varchar("timezone", { length: 64 }).notNull().default("UTC"),
   modulesEnabled: text("modules_enabled").notNull().default('["core","school","calendar_sync"]'),
+  /** NULL = unlimited (self-host default); hosted tiers set explicitly in Phase 2 */
+  storageQuotaBytes: bigint("storage_quota_bytes", { mode: "number" }),
+  storageUsedBytes: bigint("storage_used_bytes", { mode: "number" }).notNull().default(0),
+  /** Per-role Drive access: member/child/guest → none|read|write (owner/admin always write) */
+  drivePermissionsJson: text("drive_permissions_json"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

@@ -6,6 +6,7 @@ import {
   BookOpen,
   Calendar,
   ClipboardList,
+  FolderOpen,
   Home,
   LayoutDashboard,
   Menu,
@@ -13,7 +14,7 @@ import {
   Receipt,
   ShoppingCart,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "../lib/cn";
 import { authClient } from "../lib/auth-client";
 import { Avatar } from "./ui/Avatar";
@@ -23,13 +24,22 @@ import { ProfileOnboardingBanner } from "./ProfileOnboardingBanner";
 
 const nav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/calendar", label: "Calendar", icon: Calendar },
-  { href: "/school", label: "School", icon: BookOpen },
+  { href: "/calendar", label: "Calendar", icon: Calendar, module: "calendar_sync" },
+  { href: "/school", label: "School", icon: BookOpen, module: "school" },
   { href: "/shopping", label: "Shopping", icon: ShoppingCart },
   { href: "/chores", label: "Chores", icon: ClipboardList },
   { href: "/notes", label: "Notes", icon: NotebookPen },
+  { href: "/drive", label: "Drive", icon: FolderOpen, module: "drive" },
   { href: "/expenses", label: "Expenses", icon: Receipt },
-];
+] as const;
+
+function isNavItemVisible(
+  item: (typeof nav)[number],
+  modulesEnabled: string[] | undefined,
+): boolean {
+  if (!("module" in item) || !item.module) return true;
+  return modulesEnabled?.includes(item.module) ?? false;
+}
 
 export type ShellUser = {
   email: string | null;
@@ -75,9 +85,11 @@ function NavLink({
 
 export function AppChrome({
   user,
+  modulesEnabled,
   children,
 }: {
   user: ShellUser | null;
+  modulesEnabled?: string[];
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -140,6 +152,11 @@ export function AppChrome({
     return () => document.removeEventListener("keydown", onKey);
   }, [userOpen, closeUserMenu]);
 
+  const visibleNav = useMemo(
+    () => nav.filter((item) => isNavItemVisible(item, modulesEnabled)),
+    [modulesEnabled],
+  );
+
   const label = user?.shownLabel ?? user?.name ?? user?.email?.split("@")[0] ?? "Account";
   const avatarId = user?.memberId ?? user?.email ?? "account";
   const canManageHousehold = user?.role === "owner" || user?.role === "admin";
@@ -167,7 +184,7 @@ export function AppChrome({
           </div>
 
           <nav className="hidden flex-wrap items-center gap-0.5 md:flex" aria-label="Main">
-            {nav.map((item) => (
+            {visibleNav.map((item) => (
               <NavLink key={item.href} {...item} />
             ))}
           </nav>
@@ -271,7 +288,7 @@ export function AppChrome({
         }
       >
         <nav className="flex flex-col gap-1" aria-label="Main">
-          {nav.map((item) => (
+          {visibleNav.map((item) => (
             <NavLink key={item.href} {...item} onClick={() => setMenuOpen(false)} />
           ))}
         </nav>

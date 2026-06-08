@@ -47,13 +47,31 @@ export const envSchema = z
     GOOGLE_CALENDAR_DEFAULT_SYNC_MODE: syncMode.default("import_only"),
     MODULES_ENABLED: z
       .string()
-      .default("core,school,calendar_sync")
+      .default("core,school,calendar_sync,drive")
       .transform((s) =>
         s
           .split(",")
           .map((m) => m.trim())
           .filter(Boolean),
       ),
+    /** Per-file upload cap for Drive presign (bytes). Default 10 MB. */
+    DRIVE_UPLOAD_MAX_BYTES: z.coerce.number().int().positive().default(10_485_760),
+    /** Phase 2: hard-block uploads at quota. Phase 1 tracks bytes only. */
+    DRIVE_QUOTA_ENFORCE: z
+      .string()
+      .optional()
+      .transform((v) => v === "true" || v === "1"),
+    /** Default household storage quota on bootstrap (bytes). Set null/0 for unlimited self-host. */
+    DRIVE_DEFAULT_QUOTA_BYTES: z
+      .string()
+      .default("10737418240")
+      .transform((v) => {
+        if (!v || v === "null" || v === "0") return null;
+        const n = Number(v);
+        return Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
+      }),
+    /** Warn threshold percent for future settings storage meter (Phase 2). */
+    DRIVE_QUOTA_WARN_PERCENT: z.coerce.number().int().min(1).max(100).default(90),
     /** Legacy display name → Google email, e.g. Mom:mom@gmail.com,Dad:dad@gmail.com */
     HOUSEHOLD_MEMBER_EMAIL_MAP: z.string().optional(),
     SMTP_HOST: z.string().optional(),
@@ -114,6 +132,24 @@ export const envSchema = z
 
 export type Env = z.infer<typeof envSchema>;
 
+export const KNOWN_HOUSEHOLD_MODULES = ["core", "school", "calendar_sync", "drive"] as const;
+
+/** Deploy catalog ∩ known modules — used for household settings `availableModules`. */
+export function deployAvailableModules(envModules: readonly string[]): string[] {
+  return KNOWN_HOUSEHOLD_MODULES.filter((m) => envModules.includes(m));
+}
+
+/** In development, include all known modules so stale `.env` catalogs still list new modules. */
+function ensureDevModuleCatalog(nodeEnv: string, modulesEnabled: string[]): string[] {
+  if (nodeEnv !== "development") return modulesEnabled;
+  const missing = KNOWN_HOUSEHOLD_MODULES.filter((m) => !modulesEnabled.includes(m));
+  if (missing.length === 0) return modulesEnabled;
+  console.warn(
+    `[whome config] MODULES_ENABLED missing known modules (${missing.join(", ")}); including them in development catalog`,
+  );
+  return [...new Set([...modulesEnabled, ...KNOWN_HOUSEHOLD_MODULES])];
+}
+
 let cached: Env | null = null;
 
 /** Clears cached env (tests only). */
@@ -133,7 +169,10 @@ export function loadEnv(raw?: NodeJS.ProcessEnv): Env {
     const msg = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("\n");
     throw new Error(`Invalid environment:\n${msg}`);
   }
-  cached = parsed.data;
+  cached = {
+    ...parsed.data,
+    MODULES_ENABLED: ensureDevModuleCatalog(parsed.data.NODE_ENV, parsed.data.MODULES_ENABLED),
+  };
 
   if (cached.NODE_ENV === "development") {
     const devWarnings = validateDevPublicAppUrl({
@@ -155,8 +194,31 @@ export function loadEnv(raw?: NodeJS.ProcessEnv): Env {
   return cached;
 }
 
+export function parseHouseholdModulesJson(raw: string): string[] {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (Array.isArray(parsed)) {
+      return parsed.filter((m): m is string => typeof m === "string" && m.length > 0);
+    }
+  } catch {
+    /* */
+  }
+  return ["core"];
+}
+
 export function isModuleEnabled(env: Env, module: string): boolean {
   return env.MODULES_ENABLED.includes(module);
+}
+
+/** Env cap intersected with household `modules_enabled` JSON. Core is always on. */
+export function isModuleEnabledForHousehold(
+  env: Env,
+  householdModules: string[],
+  module: string,
+): boolean {
+  if (module === "core") return true;
+  if (!isModuleEnabled(env, module)) return false;
+  return householdModules.includes(module);
 }
 
 export {

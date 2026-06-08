@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { encryptSensitive } from "@whome/crypto";
 import type { Env } from "@whome/config";
 import { isModuleEnabled } from "@whome/config";
+import { isHouseholdModuleEnabled } from "../lib/household-modules.js";
 import {
   exchangeGoogleCode,
   googleAuthUrl,
@@ -27,13 +28,13 @@ export function googleCalendarAuthRoutes(db: Database, env: Env) {
   const app = new Hono<{ Variables: AppVariables }>();
 
   app.get("/start", async (c) => {
-    if (!isModuleEnabled(env, "calendar_sync")) {
-      return c.json({ error: "calendar_sync_disabled" }, 403);
-    }
     const auth = c.get("auth");
     if (!auth) {
       const next = encodeURIComponent("/auth/google/calendar/start");
       return c.redirect(`${env.PUBLIC_APP_URL}/login?next=${next}`);
+    }
+    if (!(await isHouseholdModuleEnabled(db, env, auth.householdId, "calendar_sync"))) {
+      return c.json({ error: "calendar_sync_disabled" }, 403);
     }
     if (!env.GOOGLE_OAUTH_CLIENT_ID) {
       return c.json({ error: "google_oauth_not_configured" }, 503);

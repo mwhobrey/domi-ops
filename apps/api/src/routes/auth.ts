@@ -1,7 +1,8 @@
 import { Hono } from "hono";
 import { resolveAuthContext, type WhomeBetterAuth } from "@whome/auth";
+import { parseHouseholdModulesJson } from "@whome/config";
 import type { Database } from "@whome/db";
-import { householdMembers } from "@whome/db";
+import { householdMembers, households } from "@whome/db";
 import { eq } from "drizzle-orm";
 import { memberAvatarUrl } from "../lib/avatar-url.js";
 import type { AppVariables } from "../middleware/auth.js";
@@ -27,8 +28,15 @@ export function whomeSessionRoutes(db: Database, auth: WhomeBetterAuth) {
       .where(eq(householdMembers.id, authCtx.memberId))
       .limit(1);
 
+    const [householdRow] = await db
+      .select({ modulesEnabled: households.modulesEnabled })
+      .from(households)
+      .where(eq(households.id, authCtx.householdId))
+      .limit(1);
+
     return c.json({
       authenticated: true,
+      modulesEnabled: parseHouseholdModulesJson(householdRow?.modulesEnabled ?? "[]"),
       user: {
         id: authCtx.userId,
         email: authCtx.email,

@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Env } from "@whome/config";
 import { isModuleEnabled } from "@whome/config";
+import { isHouseholdModuleEnabled, requireHouseholdModule } from "../lib/household-modules.js";
 import type { Database } from "@whome/db";
 import {
   calendarCategoryImportMappings,
@@ -80,6 +81,17 @@ export function calendarRoutes(db: Database, env: Env) {
 
   app.use("/*", requireAuth(env));
 
+  app.get("/sync/status", async (c) => {
+    const auth = c.get("auth")!;
+    if (!(await isHouseholdModuleEnabled(db, env, auth.householdId, "calendar_sync"))) {
+      return c.json({ enabled: false });
+    }
+    const status = await buildCalendarSyncStatus(db, auth);
+    return c.json(status);
+  });
+
+  app.use("/*", requireHouseholdModule(db, env, "calendar_sync"));
+
   app.get("/connections", async (c) => {
     const auth = c.get("auth")!;
     const rows = await db
@@ -101,9 +113,6 @@ export function calendarRoutes(db: Database, env: Env) {
   });
 
   app.patch("/connections/:id", async (c) => {
-    if (!isModuleEnabled(env, "calendar_sync")) {
-      return c.json({ error: "calendar_sync_disabled" }, 403);
-    }
     const auth = c.get("auth")!;
     const id = c.req.param("id");
     const body = await c.req.json<{ syncMode?: string }>();
@@ -393,9 +402,6 @@ export function calendarRoutes(db: Database, env: Env) {
   });
 
   app.post("/sync", async (c) => {
-    if (!isModuleEnabled(env, "calendar_sync")) {
-      return c.json({ error: "calendar_sync_disabled" }, 403);
-    }
     const auth = c.get("auth")!;
     const [conn] = await db
       .select()
@@ -420,21 +426,9 @@ export function calendarRoutes(db: Database, env: Env) {
   });
 
   app.post("/dedupe", async (c) => {
-    if (!isModuleEnabled(env, "calendar_sync")) {
-      return c.json({ error: "calendar_sync_disabled" }, 403);
-    }
     const auth = c.get("auth")!;
     const removed = await dedupeHouseholdGoogleEvents(db, auth.householdId);
     return c.json({ ok: true, removed });
-  });
-
-  app.get("/sync/status", async (c) => {
-    if (!isModuleEnabled(env, "calendar_sync")) {
-      return c.json({ enabled: false });
-    }
-    const auth = c.get("auth")!;
-    const status = await buildCalendarSyncStatus(db, auth);
-    return c.json(status);
   });
 
   app.get("/linked", async (c) => {
@@ -467,9 +461,6 @@ export function calendarRoutes(db: Database, env: Env) {
   }
 
   app.post("/import/refresh-sources", async (c) => {
-    if (!isModuleEnabled(env, "calendar_sync")) {
-      return c.json({ error: "calendar_sync_disabled" }, 403);
-    }
     const auth = c.get("auth")!;
     const conn = await connectionForUser(auth);
     if (!conn) return c.json({ error: "not_connected" }, 400);
@@ -514,9 +505,6 @@ export function calendarRoutes(db: Database, env: Env) {
   });
 
   app.get("/import/options", async (c) => {
-    if (!isModuleEnabled(env, "calendar_sync")) {
-      return c.json({ error: "calendar_sync_disabled" }, 403);
-    }
     const auth = c.get("auth")!;
     const conn = await connectionForUser(auth);
     if (!conn) return c.json({ error: "not_connected" }, 400);
@@ -624,9 +612,6 @@ export function calendarRoutes(db: Database, env: Env) {
   });
 
   app.post("/import/commit", async (c) => {
-    if (!isModuleEnabled(env, "calendar_sync")) {
-      return c.json({ error: "calendar_sync_disabled" }, 403);
-    }
     const auth = c.get("auth")!;
     const conn = await connectionForUser(auth);
     if (!conn) return c.json({ error: "not_connected" }, 400);

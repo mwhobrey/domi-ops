@@ -5,4 +5,5 @@ export * from "./calendar.js";
 export * from "./school.js";
 export * from "./import.js";
 export * from "./core.js";
+export * from "./drive.js";
 export * from "./push.js";

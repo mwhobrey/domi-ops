@@ -41,6 +41,7 @@ export default async function NotesPage() {
   let members: NoteShareMember[] = [];
 
   let currentMemberId: string | undefined;
+  let driveEnabled = false;
 
   let loadError: string | null = null;
 
@@ -52,7 +53,7 @@ export default async function NotesPage() {
 
       apiFetch<{ members: NoteShareMember[] }>("/api/core/household/roster"),
 
-      apiFetch<{ memberId?: string }>("/auth/session"),
+      apiFetch<{ memberId?: string; modulesEnabled?: string[] }>("/auth/session"),
 
     ]);
 
@@ -61,6 +62,7 @@ export default async function NotesPage() {
     members = rosterRes.members;
 
     currentMemberId = sessionRes.memberId;
+    driveEnabled = sessionRes.modulesEnabled?.includes("drive") ?? false;
 
   } catch (e) {
 
@@ -84,7 +86,12 @@ export default async function NotesPage() {
 
       ) : (
 
-        <NotesList initialNotes={notes} members={members} currentMemberId={currentMemberId} />
+        <NotesList
+          initialNotes={notes}
+          members={members}
+          currentMemberId={currentMemberId}
+          driveEnabled={driveEnabled}
+        />
 
       )}
 

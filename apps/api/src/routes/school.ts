@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { memberShownLabel } from "@whome/auth";
 import type { Env } from "@whome/config";
-import { isModuleEnabled } from "@whome/config";
+import { isHouseholdModuleEnabled } from "../lib/household-modules.js";
 import type { Database } from "@whome/db";
 import {
   householdMembers,
@@ -109,10 +109,10 @@ export function schoolRoutes(db: Database, env: Env) {
   app.use("*", requireAuth(env));
 
   app.get("/members", async (c) => {
-    if (!isModuleEnabled(env, "school")) {
+    const auth = c.get("auth")!;
+    if (!(await isHouseholdModuleEnabled(db, env, auth.householdId, "school"))) {
       return c.json({ error: "school_disabled" }, 403);
     }
-    const auth = c.get("auth")!;
     const rows = await db
       .select({
         id: householdMembers.id,
@@ -133,20 +133,20 @@ export function schoolRoutes(db: Database, env: Env) {
   });
 
   app.get("/context", async (c) => {
-    if (!isModuleEnabled(env, "school")) {
+    const auth = c.get("auth")!;
+    if (!(await isHouseholdModuleEnabled(db, env, auth.householdId, "school"))) {
       return c.json({ error: "school_disabled" }, 403);
     }
-    const auth = c.get("auth")!;
     const context = await schoolContextForAuth(db, auth);
     if (!context) return c.json({ error: "not_a_member" }, 403);
     return c.json({ context });
   });
 
   app.get("/glance", async (c) => {
-    if (!isModuleEnabled(env, "school")) {
+    const auth = c.get("auth")!;
+    if (!(await isHouseholdModuleEnabled(db, env, auth.householdId, "school"))) {
       return c.json({ enabled: false });
     }
-    const auth = c.get("auth")!;
     const context = await schoolContextForAuth(db, auth);
     if (!context) {
       return c.json({
@@ -284,10 +284,10 @@ export function schoolRoutes(db: Database, env: Env) {
   });
 
   app.get("/classes", async (c) => {
-    if (!isModuleEnabled(env, "school")) {
+    const auth = c.get("auth")!;
+    if (!(await isHouseholdModuleEnabled(db, env, auth.householdId, "school"))) {
       return c.json({ error: "school_disabled" }, 403);
     }
-    const auth = c.get("auth")!;
     const context = await schoolContextForAuth(db, auth);
     if (!context) return c.json({ error: "not_a_member" }, 403);
 
@@ -592,10 +592,10 @@ export function schoolRoutes(db: Database, env: Env) {
   });
 
   app.get("/classes/:classId/gradebook", async (c) => {
-    if (!isModuleEnabled(env, "school")) {
+    const auth = c.get("auth")!;
+    if (!(await isHouseholdModuleEnabled(db, env, auth.householdId, "school"))) {
       return c.json({ error: "school_disabled" }, 403);
     }
-    const auth = c.get("auth")!;
     const classId = c.req.param("classId");
     if (!(await classForHousehold(db, classId, auth.householdId))) {
       return c.json({ error: "not_found" }, 404);
@@ -606,10 +606,10 @@ export function schoolRoutes(db: Database, env: Env) {
   });
 
   app.get("/reports", async (c) => {
-    if (!isModuleEnabled(env, "school")) {
+    const auth = c.get("auth")!;
+    if (!(await isHouseholdModuleEnabled(db, env, auth.householdId, "school"))) {
       return c.json({ error: "school_disabled" }, 403);
     }
-    const auth = c.get("auth")!;
     const context = await schoolContextForAuth(db, auth);
     if (!context) return c.json({ error: "not_a_member" }, 403);
     if (!canViewSchoolReports(context.viewMode, context.householdRole)) {

@@ -29,8 +29,12 @@ export default async function SchoolAssignmentPage({
   };
   let access: SchoolClassAccess | null = null;
   let loadError: string | null = null;
+  let driveEnabled = false;
 
   try {
+    const session = await apiFetch<{ modulesEnabled?: string[] }>("/auth/session");
+    driveEnabled = session.modulesEnabled?.includes("drive") ?? false;
+
     const detail = await apiFetch<{
       assignment: {
         title: string;
@@ -86,6 +90,7 @@ export default async function SchoolAssignmentPage({
           visibility={assignmentMeta.visibility}
           initialSubmissions={submissions}
           access={access}
+          driveEnabled={driveEnabled}
         />
       ) : (
         <Alert variant="error">Could not resolve school access for this assignment.</Alert>

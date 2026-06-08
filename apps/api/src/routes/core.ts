@@ -11,13 +11,19 @@ import {
   isHouseholdMemberRole,
 } from "@whome/auth";
 import type { Env } from "@whome/config";
-import { isModuleEnabled } from "@whome/config";
+import {
+  deployAvailableModules,
+  isModuleEnabled,
+  KNOWN_HOUSEHOLD_MODULES,
+} from "@whome/config";
 import type { Database } from "@whome/db";
 import { checkHouseholdBudgetAlerts } from "@whome/calendar-sync";
 import {
   chores,
   choresRecurring,
   calendarConnections,
+  driveObjects,
+  driveReferences,
   expenseBudgets,
   expenses,
   homeStatus,
@@ -96,6 +102,15 @@ import {
   parseNoteTagsJson,
   serializeNoteTagsJson,
 } from "../lib/notes.js";
+import {
+  DEFAULT_DRIVE_ROLE_PERMISSIONS,
+  normalizeDrivePermissionsPatch,
+  parseDrivePermissionsJson,
+  serializeDrivePermissionsJson,
+  type DriveRolePermissions,
+} from "../lib/drive-permissions.js";
+import { driveVisibleWhere, filenameFromDriveKey } from "../lib/drive.js";
+import { isHouseholdModuleEnabled } from "../lib/household-modules.js";
 import { memberAvatarUrl } from "../lib/avatar-url.js";
 import {
   claimEndpointForUser,
@@ -229,6 +244,7 @@ function serializeNote(
   row: NoteRow,
   auth: AuthContext,
   shareMap: Map<string, string[]>,
+  attachmentMap?: Map<string, DriveAttachmentDto[]>,
 ) {
   const sharedMemberIds = shareMap.get(row.id) ?? [];
   const isOwnedByMe = row.createdByUserId === auth.userId;
@@ -249,25 +265,89 @@ function serializeNote(
     isOwnedByMe,
     sharedWithMe,
     sharedMemberIds: isOwnedByMe ? sharedMemberIds : undefined,
+    driveAttachments: attachmentMap?.get(row.id) ?? [],
   };
 }
 
 type NoticeRow = typeof notices.$inferSelect;
 
+type DriveAttachmentDto = {
+  id: string;
+  driveObjectId: string;
+  title: string;
+  kind: string;
+  filename: string | null;
+  url: string | null;
+};
+
+async function loadEntityDriveAttachments(
+  db: Database,
+  auth: AuthContext,
+  entityType: string,
+  entityIds: string[],
+): Promise<Map<string, DriveAttachmentDto[]>> {
+  const map = new Map<string, DriveAttachmentDto[]>();
+  if (entityIds.length === 0) return map;
+
+  const rows = await db
+    .select({
+      id: driveReferences.id,
+      entityId: driveReferences.entityId,
+      driveObjectId: driveReferences.driveObjectId,
+      title: driveObjects.title,
+      kind: driveObjects.kind,
+      url: driveObjects.url,
+      s3Key: driveObjects.s3Key,
+    })
+    .from(driveReferences)
+    .innerJoin(driveObjects, eq(driveReferences.driveObjectId, driveObjects.id))
+    .where(
+      and(
+        eq(driveReferences.entityType, entityType),
+        inArray(driveReferences.entityId, entityIds),
+        driveVisibleWhere(db, auth),
+      ),
+    );
+
+  for (const row of rows) {
+    const list = map.get(row.entityId) ?? [];
+    list.push({
+      id: row.id,
+      driveObjectId: row.driveObjectId,
+      title: row.title,
+      kind: row.kind,
+      filename: row.s3Key ? filenameFromDriveKey(row.s3Key) : null,
+      url: row.url,
+    });
+    map.set(row.entityId, list);
+  }
+  return map;
+}
+
 async function mapNoticesForUser(
   db: Database,
-  userId: string,
+  auth: AuthContext,
   rows: NoticeRow[],
+  includeAttachments: boolean,
 ) {
   if (rows.length === 0) return [];
   const reads = await db
     .select({ noticeId: noticeReads.noticeId })
     .from(noticeReads)
-    .where(eq(noticeReads.userId, userId));
+    .where(eq(noticeReads.userId, auth.userId));
   const readSet = new Set(reads.map((r) => r.noticeId));
 
+  const attachmentMap = includeAttachments
+    ? await loadEntityDriveAttachments(
+        db,
+        auth,
+        "notice",
+        rows.map((n) => n.id),
+      )
+    : new Map<string, DriveAttachmentDto[]>();
+
   return rows.map((n) => {
-    const isOwn = n.postedByUserId === userId;
+    const isOwn = n.postedByUserId === auth.userId;
     const read = isOwn || readSet.has(n.id);
     return {
       id: n.id,
@@ -277,13 +357,14 @@ async function mapNoticesForUser(
       createdAt: (n.createdAt ?? n.updatedAt).toISOString(),
       read,
       isOwn,
+      attachments: attachmentMap.get(n.id) ?? [],
     };
   });
 }
 
 function countUnread(
   userId: string,
-  mapped: Awaited<ReturnType<typeof mapNoticesForUser>>,
+  mapped: { isOwn: boolean; read: boolean }[],
 ): number {
   return mapped.filter((n) => !n.isOwn && !n.read).length;
 }
@@ -397,13 +478,14 @@ export function coreRoutes(db: Database, env: Env) {
 
   app.get("/notices", async (c) => {
     const auth = c.get("auth")!;
+    const driveEnabled = await isHouseholdModuleEnabled(db, env, auth.householdId, "drive");
     const rows = await db
       .select()
       .from(notices)
       .where(eq(notices.householdId, auth.householdId))
       .orderBy(desc(notices.createdAt), desc(notices.updatedAt))
       .limit(50);
-    const mapped = await mapNoticesForUser(db, auth.userId, rows);
+    const mapped = await mapNoticesForUser(db, auth, rows, driveEnabled);
     const unreadCount = countUnread(auth.userId, mapped);
     const latest = mapped[0] ?? null;
     return c.json({ notices: mapped, unreadCount, latest });
@@ -417,13 +499,13 @@ export function coreRoutes(db: Database, env: Env) {
       .where(eq(notices.householdId, auth.householdId))
       .orderBy(desc(notices.createdAt), desc(notices.updatedAt))
       .limit(50);
-    const mapped = await mapNoticesForUser(db, auth.userId, rows);
+    const mapped = await mapNoticesForUser(db, auth, rows, false);
     return c.json({ unreadCount: countUnread(auth.userId, mapped) });
   });
 
   app.post("/notices", async (c) => {
     const auth = c.get("auth")!;
-    const body = await c.req.json<{ content: string }>();
+    const body = await c.req.json<{ content: string; driveObjectIds?: string[] }>();
     const content = (body.content ?? "").trim();
     if (!content) return c.json({ error: "content_required" }, 400);
     const now = new Date();
@@ -443,7 +525,31 @@ export function coreRoutes(db: Database, env: Env) {
       .insert(noticeReads)
       .values({ noticeId: row.id, userId: auth.userId })
       .onConflictDoNothing({ target: [noticeReads.noticeId, noticeReads.userId] });
-    const [mapped] = await mapNoticesForUser(db, auth.userId, [row]);
+
+    const driveEnabled = await isHouseholdModuleEnabled(db, env, auth.householdId, "drive");
+    if (driveEnabled && Array.isArray(body.driveObjectIds) && body.driveObjectIds.length > 0) {
+      const uniqueIds = [...new Set(body.driveObjectIds.map((id) => id.trim()).filter(Boolean))];
+      for (const objectId of uniqueIds) {
+        const [object] = await db
+          .select({ id: driveObjects.id })
+          .from(driveObjects)
+          .where(and(eq(driveObjects.id, objectId), driveVisibleWhere(db, auth)))
+          .limit(1);
+        if (!object) continue;
+        try {
+          await db.insert(driveReferences).values({
+            driveObjectId: objectId,
+            entityType: "notice",
+            entityId: row.id,
+            createdByUserId: auth.userId,
+          });
+        } catch {
+          /* duplicate reference — skip */
+        }
+      }
+    }
+
+    const [mapped] = await mapNoticesForUser(db, auth, [row], driveEnabled);
     void notifyHouseholdOfNotice(db, env, {
       householdId: auth.householdId,
       posterUserId: auth.userId,
@@ -1278,6 +1384,7 @@ export function coreRoutes(db: Database, env: Env) {
 
   app.get("/notes", async (c) => {
     const auth = c.get("auth")!;
+    const driveEnabled = await isHouseholdModuleEnabled(db, env, auth.householdId, "drive");
     const q = c.req.query("q")?.trim();
     const tag = c.req.query("tag")?.trim();
     const rows = await db
@@ -1290,7 +1397,17 @@ export function coreRoutes(db: Database, env: Env) {
       db,
       rows.filter((r) => r.visibility === "private").map((r) => r.id),
     );
-    return c.json({ notes: rows.map((row) => serializeNote(row, auth, shareMap)) });
+    const attachmentMap = driveEnabled
+      ? await loadEntityDriveAttachments(
+          db,
+          auth,
+          "note",
+          rows.map((r) => r.id),
+        )
+      : undefined;
+    return c.json({
+      notes: rows.map((row) => serializeNote(row, auth, shareMap, attachmentMap)),
+    });
   });
 
   app.post("/notes", async (c) => {
@@ -1837,8 +1954,6 @@ export function coreRoutes(db: Database, env: Env) {
     return [];
   }
 
-  const KNOWN_HOUSEHOLD_MODULES = ["core", "school", "calendar_sync"] as const;
-
   function normalizeModulesEnabledSelection(
     requested: string[] | undefined,
     envModules: string[],
@@ -1862,15 +1977,16 @@ export function coreRoutes(db: Database, env: Env) {
     slug: string | null;
     timezone: string;
     modulesEnabled: string;
+    drivePermissionsJson?: string | null;
   }) {
     return {
       name: row.name,
       slug: row.slug,
       timezone: row.timezone,
       modulesEnabled: parseModulesEnabled(row.modulesEnabled),
-      availableModules: env.MODULES_ENABLED.filter((m) =>
-        (KNOWN_HOUSEHOLD_MODULES as readonly string[]).includes(m),
-      ),
+      availableModules: deployAvailableModules(env.MODULES_ENABLED),
+      drivePermissions: parseDrivePermissionsJson(row.drivePermissionsJson),
+      drivePermissionDefaults: DEFAULT_DRIVE_ROLE_PERMISSIONS,
     };
   }
 
@@ -1894,6 +2010,7 @@ export function coreRoutes(db: Database, env: Env) {
         slug: households.slug,
         timezone: households.timezone,
         modulesEnabled: households.modulesEnabled,
+        drivePermissionsJson: households.drivePermissionsJson,
       })
       .from(households)
       .where(eq(households.id, auth.householdId))
@@ -1912,6 +2029,7 @@ export function coreRoutes(db: Database, env: Env) {
       slug?: string | null;
       timezone?: string;
       modulesEnabled?: string[];
+      drivePermissions?: DriveRolePermissions;
     }>();
 
     const patch: {
@@ -1919,6 +2037,7 @@ export function coreRoutes(db: Database, env: Env) {
       slug?: string | null;
       timezone?: string;
       modulesEnabled?: string;
+      drivePermissionsJson?: string;
       updatedAt?: Date;
     } = {};
 
@@ -1948,6 +2067,20 @@ export function coreRoutes(db: Database, env: Env) {
       }
       patch.modulesEnabled = JSON.stringify(modulesEnabled);
     }
+    if (body.drivePermissions !== undefined) {
+      const current = parseDrivePermissionsJson(
+        (
+          await db
+            .select({ drivePermissionsJson: households.drivePermissionsJson })
+            .from(households)
+            .where(eq(households.id, auth.householdId))
+            .limit(1)
+        )[0]?.drivePermissionsJson,
+      );
+      const delta = normalizeDrivePermissionsPatch(body.drivePermissions);
+      if (!delta) return c.json({ error: "invalid_drive_permissions" }, 400);
+      patch.drivePermissionsJson = serializeDrivePermissionsJson({ ...current, ...delta });
+    }
 
     if (Object.keys(patch).length === 0) {
       return c.json({ error: "no_changes" }, 400);
@@ -1963,6 +2096,7 @@ export function coreRoutes(db: Database, env: Env) {
         slug: households.slug,
         timezone: households.timezone,
         modulesEnabled: households.modulesEnabled,
+        drivePermissionsJson: households.drivePermissionsJson,
       });
     if (!row) return c.json({ error: "not_found" }, 404);
     return c.json({ ok: true, household: serializeHouseholdSettings(row) });

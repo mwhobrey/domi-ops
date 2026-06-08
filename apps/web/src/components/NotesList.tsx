@@ -5,6 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { markdownExcerpt } from "../lib/markdown";
 import { ApiError, apiClient } from "../lib/client-api";
 import type { NoteVisibility } from "../lib/note-visibility";
+import { driveAttachmentToReference } from "../lib/drive-types";
+import { DriveAttachmentChips } from "./DriveAttachmentChips";
 import { NoteEditSheet, type Note } from "./NoteEditSheet";
 import { NoteSharePicker, type NoteShareMember } from "./NoteSharePicker";
 import { NoteVisibilityBadge } from "./NoteVisibilityBadge";
@@ -87,10 +89,12 @@ export function NotesList({
   initialNotes,
   members = [],
   currentMemberId,
+  driveEnabled = false,
 }: {
   initialNotes: Note[];
   members?: NoteShareMember[];
   currentMemberId?: string;
+  driveEnabled?: boolean;
 }) {
   const [notes, setNotes] = useState(() => sortNotes(initialNotes));
   const [title, setTitle] = useState("");
@@ -317,6 +321,13 @@ export function NotesList({
                         ))}
                       </div>
                     ) : null}
+                    {driveEnabled && (n.driveAttachments ?? []).length > 0 ? (
+                      <div className="mt-3">
+                        <DriveAttachmentChips
+                          references={(n.driveAttachments ?? []).map(driveAttachmentToReference)}
+                        />
+                      </div>
+                    ) : null}
                     <footer className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--color-text-muted)]">
                       <NoteVisibilityBadge
                         visibility={n.visibility ?? "household"}
@@ -410,6 +421,7 @@ export function NotesList({
         note={editNote}
         members={members}
         currentMemberId={currentMemberId}
+        driveEnabled={driveEnabled}
         tagSuggestions={tagSuggestions}
         onTagQuery={(query) => void fetchTagSuggestions(query)}
         onClose={() => setEditNote(null)}

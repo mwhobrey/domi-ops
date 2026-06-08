@@ -3,6 +3,10 @@
 import { useEffect, useState } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
 import type { NoteVisibility } from "../lib/note-visibility";
+import type { DriveReference } from "../lib/drive-types";
+import { driveAttachmentToReference } from "../lib/drive-types";
+import { DriveAttachmentChips } from "./DriveAttachmentChips";
+import { DriveObjectPicker } from "./DriveObjectPicker";
 import { NoteSharePicker, type NoteShareMember } from "./NoteSharePicker";
 import { NoteVisibilityPicker } from "./NoteVisibilityPicker";
 import { Alert, Button, Input, MarkdownEditor, Sheet } from "./ui";
@@ -20,6 +24,14 @@ export interface Note {
   isOwnedByMe?: boolean;
   sharedWithMe?: boolean;
   sharedMemberIds?: string[];
+  driveAttachments?: {
+    id: string;
+    driveObjectId: string;
+    title: string;
+    kind: string;
+    filename: string | null;
+    url: string | null;
+  }[];
 }
 
 function parseTagsInput(raw: string): string[] {
@@ -37,6 +49,7 @@ export function NoteEditSheet({
   onTagQuery,
   onClose,
   onSaved,
+  driveEnabled = false,
 }: {
   note: Note | null;
   members: NoteShareMember[];
@@ -45,6 +58,7 @@ export function NoteEditSheet({
   onTagQuery: (query: string) => void;
   onClose: () => void;
   onSaved: (note: Note) => void;
+  driveEnabled?: boolean;
 }) {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -52,6 +66,9 @@ export function NoteEditSheet({
   const [tagsInput, setTagsInput] = useState("");
   const [visibility, setVisibility] = useState<NoteVisibility>("household");
   const [sharedMemberIds, setSharedMemberIds] = useState<string[]>([]);
+  const [attachments, setAttachments] = useState<DriveReference[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,8 +80,21 @@ export function NoteEditSheet({
     setTagsInput((note.tags ?? []).join(", "));
     setVisibility(note.visibility ?? "household");
     setSharedMemberIds(note.sharedMemberIds ?? []);
+    setAttachments((note.driveAttachments ?? []).map(driveAttachmentToReference));
     setError(null);
   }, [note]);
+
+  useEffect(() => {
+    if (!note || !driveEnabled) return;
+    void apiClient
+      .get<{ references: DriveReference[] }>(
+        `/api/core/drive/references?entityType=note&entityId=${note.id}`,
+      )
+      .then((data) => setAttachments(data.references))
+      .catch(() => {
+        /* keep list attachments from note prop */
+      });
+  }, [note, driveEnabled]);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -170,6 +200,35 @@ export function NoteEditSheet({
           aria-label="Note content"
           minRows={8}
         />
+        {driveEnabled && note && !note.sharedWithMe ? (
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Drive attachments</p>
+            <DriveAttachmentChips
+              references={attachments}
+              removingId={removingId}
+              onRemove={async (referenceId) => {
+                setRemovingId(referenceId);
+                try {
+                  await apiClient.delete(`/api/core/drive/references/${referenceId}`);
+                  setAttachments((prev) => prev.filter((r) => r.id !== referenceId));
+                } catch (err) {
+                  setError(err instanceof ApiError ? err.message : "Could not remove attachment");
+                } finally {
+                  setRemovingId(null);
+                }
+              }}
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={loading}
+              onClick={() => setPickerOpen(true)}
+            >
+              Attach from Drive
+            </Button>
+          </div>
+        ) : null}
         <div className="flex gap-2 pt-2">
           <Button type="submit" loading={loading} disabled={!title.trim() || !content.trim()}>
             Save changes
@@ -179,6 +238,39 @@ export function NoteEditSheet({
           </Button>
         </div>
       </form>
+      {driveEnabled ? (
+        <DriveObjectPicker
+          open={pickerOpen}
+          onClose={() => setPickerOpen(false)}
+          excludeIds={attachments.map((a) => a.driveObjectId)}
+          onSelect={async (object) => {
+            if (!note) return;
+            try {
+              const data = await apiClient.post<{ reference: { id: string } }>(
+                "/api/core/drive/references",
+                {
+                  driveObjectId: object.id,
+                  entityType: "note",
+                  entityId: note.id,
+                },
+              );
+              setAttachments((prev) => [
+                ...prev,
+                {
+                  id: data.reference.id,
+                  driveObjectId: object.id,
+                  entityType: "note",
+                  entityId: note.id,
+                  createdAt: new Date().toISOString(),
+                  object,
+                },
+              ]);
+            } catch (err) {
+              setError(err instanceof ApiError ? err.message : "Could not attach file");
+            }
+          }}
+        />
+      ) : null}
     </Sheet>
   );
 }
