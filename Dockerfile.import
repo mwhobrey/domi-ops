@@ -1,16 +1,19 @@
-FROM node:20-alpine AS build
+FROM node:22-alpine AS builder
 WORKDIR /app
 RUN corepack enable
-COPY package.json package-lock.json turbo.json ./
-COPY apps ./apps
-COPY packages ./packages
+COPY package.json package-lock.json* turbo.json ./
+COPY packages/config/package.json packages/config/
+COPY packages/crypto/package.json packages/crypto/
+COPY packages/db/package.json packages/db/
+COPY packages/import-homehub/package.json packages/import-homehub/
 RUN npm ci
-RUN npm run build -w @whome/import-homehub
+COPY . .
+RUN npx turbo run build --filter=@whome/import-homehub...
 
-FROM node:20-alpine
+FROM node:22-alpine
 WORKDIR /app
 ENV NODE_ENV=production
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/packages ./packages
-COPY package.json ./
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/packages ./packages
+COPY --from=builder /app/package.json ./
 ENTRYPOINT ["node", "packages/import-homehub/dist/cli.js"]
