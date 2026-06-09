@@ -1,16 +1,22 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { Hono } from "hono";
+import { hashPassword } from "better-auth/crypto";
 import type { AuthContext } from "@whome/auth";
 import type { Env } from "@whome/config";
 import type { Database } from "@whome/db";
 import {
+  driveFolders,
   driveObjects,
   driveReferences,
   driveShares,
+  driveShareTokens,
   households,
   householdMembers,
 } from "@whome/db";
-import { and, desc, eq, exists, ilike, inArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, exists, ilike, inArray, isNull, or, sql } from "drizzle-orm";
+import { loadDriveEmbedObjects } from "../lib/drive-embeds.js";
+import { normalizeFolderName } from "../lib/drive-folders.js";
+import { computeDriveStorageStats } from "../lib/drive-storage.js";
 import { canWriteDriveReferenceEntity } from "../lib/drive-reference-auth.js";
 import {
   canReadDrive,
@@ -67,12 +73,22 @@ function driveListWhere(
   q?: string,
   tag?: string,
   pinnedOnly?: boolean,
+  folderId?: string | null,
+  scopeAllFolders?: boolean,
 ) {
   const conditions = [driveVisibleWhere(db, auth)];
   if (pinnedOnly) {
     conditions.push(eq(driveObjects.pinned, true));
   }
   const trimmedQ = q?.trim();
+  const trimmedTag = tag?.trim();
+  if (!trimmedQ && !trimmedTag && !pinnedOnly && !scopeAllFolders) {
+    if (folderId) {
+      conditions.push(eq(driveObjects.folderId, folderId));
+    } else {
+      conditions.push(isNull(driveObjects.folderId));
+    }
+  }
   if (trimmedQ) {
     conditions.push(
       or(
@@ -82,7 +98,6 @@ function driveListWhere(
       ),
     );
   }
-  const trimmedTag = tag?.trim();
   if (trimmedTag) {
     conditions.push(
       sql`exists (
@@ -193,6 +208,37 @@ async function driveAccessForAuth(db: Database, auth: AuthContext) {
   };
 }
 
+async function folderBelongsToHousehold(db: Database, householdId: string, folderId: string) {
+  const [row] = await db
+    .select({ id: driveFolders.id })
+    .from(driveFolders)
+    .where(and(eq(driveFolders.id, folderId), eq(driveFolders.householdId, householdId)))
+    .limit(1);
+  return Boolean(row);
+}
+
+async function isFolderDescendant(
+  db: Database,
+  folderId: string,
+  candidateParentId: string,
+): Promise<boolean> {
+  let current: string | null = candidateParentId;
+  while (current) {
+    if (current === folderId) return true;
+    const [row] = await db
+      .select({ parentId: driveFolders.parentId })
+      .from(driveFolders)
+      .where(eq(driveFolders.id, current))
+      .limit(1);
+    current = row?.parentId ?? null;
+  }
+  return false;
+}
+
+function generateShareToken(): string {
+  return randomBytes(24).toString("base64url");
+}
+
 export function driveRoutes(db: Database, env: Env) {
   const app = new Hono<{ Variables: AppVariables }>();
   app.use("*", requireAuth(env));
@@ -247,6 +293,319 @@ export function driveRoutes(db: Database, env: Env) {
     return c.json({ uploadUrl, key, objectId });
   });
 
+  app.get("/storage", async (c) => {
+    const auth = c.get("auth")!;
+    const access = await driveAccessForAuth(db, auth);
+    if (!access.read) return c.json({ error: "forbidden_drive_read" }, 403);
+    const [row] = await db
+      .select({
+        storageQuotaBytes: households.storageQuotaBytes,
+        storageUsedBytes: households.storageUsedBytes,
+      })
+      .from(households)
+      .where(eq(households.id, auth.householdId))
+      .limit(1);
+    if (!row) return c.json({ error: "not_found" }, 404);
+    return c.json(
+      computeDriveStorageStats(row.storageUsedBytes, row.storageQuotaBytes, env),
+    );
+  });
+
+  app.get("/glance", async (c) => {
+    const auth = c.get("auth")!;
+    const access = await driveAccessForAuth(db, auth);
+    if (!access.read) return c.json({ error: "forbidden_drive_read" }, 403);
+
+    const pinnedRows = await db
+      .select()
+      .from(driveObjects)
+      .where(driveListWhere(db, auth, undefined, undefined, true, undefined, true))
+      .orderBy(desc(driveObjects.createdAt))
+      .limit(4);
+
+    let rows = pinnedRows;
+    if (rows.length < 3) {
+      const recentRows = await db
+        .select()
+        .from(driveObjects)
+        .where(driveListWhere(db, auth, undefined, undefined, false, undefined, true))
+        .orderBy(desc(driveObjects.createdAt))
+        .limit(6);
+      const seen = new Set(rows.map((r) => r.id));
+      for (const row of recentRows) {
+        if (seen.has(row.id)) continue;
+        rows.push(row);
+        seen.add(row.id);
+        if (rows.length >= 3) break;
+      }
+    }
+
+    const shareMap = await loadDriveShareMap(
+      db,
+      rows.filter((r) => r.visibility === "private").map((r) => r.id),
+    );
+    const items = rows.slice(0, 3).map((row) => serializeDriveObject(row, auth, shareMap));
+    const pinnedCount = pinnedRows.length;
+    const headline =
+      pinnedCount > 0 ? `${pinnedCount} pinned` : items.length > 0 ? "Recent files" : "Empty";
+    const tone = items.length > 0 ? "default" : ("success" as const);
+
+    return c.json({
+      enabled: true,
+      summary: { headline, tone },
+      items: items.map((item) => ({
+        id: item.id,
+        title: item.title,
+        kind: item.kind,
+        pinned: item.pinned,
+      })),
+      overflow: Math.max(0, rows.length - 3),
+    });
+  });
+
+  app.get("/folders", async (c) => {
+    const auth = c.get("auth")!;
+    const access = await driveAccessForAuth(db, auth);
+    if (!access.read) return c.json({ error: "forbidden_drive_read" }, 403);
+    const rows = await db
+      .select({
+        id: driveFolders.id,
+        name: driveFolders.name,
+        parentId: driveFolders.parentId,
+        createdAt: driveFolders.createdAt,
+      })
+      .from(driveFolders)
+      .where(eq(driveFolders.householdId, auth.householdId))
+      .orderBy(driveFolders.name);
+    return c.json({ folders: rows });
+  });
+
+  app.post("/folders", async (c) => {
+    const auth = c.get("auth")!;
+    const access = await driveAccessForAuth(db, auth);
+    if (!access.write) return c.json({ error: "forbidden_drive_write" }, 403);
+    const body = await c.req.json<{ name?: string; parentId?: string | null }>();
+    const name = normalizeFolderName(body.name);
+    if (!name) return c.json({ error: "name_required" }, 400);
+    if (body.parentId) {
+      const valid = await folderBelongsToHousehold(db, auth.householdId, body.parentId);
+      if (!valid) return c.json({ error: "invalid_parent" }, 400);
+    }
+    const [row] = await db
+      .insert(driveFolders)
+      .values({
+        householdId: auth.householdId,
+        parentId: body.parentId ?? null,
+        name,
+      })
+      .returning();
+    return c.json({ folder: row }, 201);
+  });
+
+  app.patch("/folders/:id", async (c) => {
+    const auth = c.get("auth")!;
+    const access = await driveAccessForAuth(db, auth);
+    if (!access.write) return c.json({ error: "forbidden_drive_write" }, 403);
+    const id = c.req.param("id");
+    const body = await c.req.json<{ name?: string; parentId?: string | null }>();
+
+    const [existing] = await db
+      .select()
+      .from(driveFolders)
+      .where(and(eq(driveFolders.id, id), eq(driveFolders.householdId, auth.householdId)))
+      .limit(1);
+    if (!existing) return c.json({ error: "not_found" }, 404);
+
+    const patch: Partial<typeof driveFolders.$inferInsert> = {};
+    if (body.name !== undefined) {
+      const name = normalizeFolderName(body.name);
+      if (!name) return c.json({ error: "name_required" }, 400);
+      patch.name = name;
+    }
+    if (body.parentId !== undefined) {
+      if (body.parentId === id) return c.json({ error: "invalid_parent" }, 400);
+      if (body.parentId) {
+        const valid = await folderBelongsToHousehold(db, auth.householdId, body.parentId);
+        if (!valid) return c.json({ error: "invalid_parent" }, 400);
+        if (await isFolderDescendant(db, id, body.parentId)) {
+          return c.json({ error: "invalid_parent" }, 400);
+        }
+      }
+      patch.parentId = body.parentId;
+    }
+    if (Object.keys(patch).length === 0) return c.json({ error: "no_changes" }, 400);
+
+    const [row] = await db
+      .update(driveFolders)
+      .set(patch)
+      .where(and(eq(driveFolders.id, id), eq(driveFolders.householdId, auth.householdId)))
+      .returning();
+    return c.json({ folder: row });
+  });
+
+  app.delete("/folders/:id", async (c) => {
+    const auth = c.get("auth")!;
+    const access = await driveAccessForAuth(db, auth);
+    if (!access.write) return c.json({ error: "forbidden_drive_write" }, 403);
+    const id = c.req.param("id");
+
+    const [existing] = await db
+      .select({ id: driveFolders.id })
+      .from(driveFolders)
+      .where(and(eq(driveFolders.id, id), eq(driveFolders.householdId, auth.householdId)))
+      .limit(1);
+    if (!existing) return c.json({ error: "not_found" }, 404);
+
+    const [childFolder] = await db
+      .select({ id: driveFolders.id })
+      .from(driveFolders)
+      .where(and(eq(driveFolders.parentId, id), eq(driveFolders.householdId, auth.householdId)))
+      .limit(1);
+    if (childFolder) return c.json({ error: "folder_not_empty" }, 409);
+
+    const [childObject] = await db
+      .select({ id: driveObjects.id })
+      .from(driveObjects)
+      .where(and(eq(driveObjects.folderId, id), eq(driveObjects.householdId, auth.householdId)))
+      .limit(1);
+    if (childObject) return c.json({ error: "folder_not_empty" }, 409);
+
+    await db
+      .delete(driveFolders)
+      .where(and(eq(driveFolders.id, id), eq(driveFolders.householdId, auth.householdId)));
+    return c.json({ ok: true });
+  });
+
+  app.get("/share-tokens", async (c) => {
+    const auth = c.get("auth")!;
+    const access = await driveAccessForAuth(db, auth);
+    if (!access.write) return c.json({ error: "forbidden_drive_write" }, 403);
+    if (!env.DRIVE_PUBLIC_SHARES_ENABLED) {
+      return c.json({ enabled: false, tokens: [] });
+    }
+
+    const rows = await db
+      .select({
+        id: driveShareTokens.id,
+        token: driveShareTokens.token,
+        expiresAt: driveShareTokens.expiresAt,
+        revokedAt: driveShareTokens.revokedAt,
+        createdAt: driveShareTokens.createdAt,
+        hasPassword: sql<boolean>`${driveShareTokens.passwordHash} is not null`,
+        objectId: driveObjects.id,
+        objectTitle: driveObjects.title,
+      })
+      .from(driveShareTokens)
+      .innerJoin(driveObjects, eq(driveShareTokens.driveObjectId, driveObjects.id))
+      .where(
+        and(
+          eq(driveObjects.householdId, auth.householdId),
+          isNull(driveShareTokens.revokedAt),
+          or(isNull(driveShareTokens.expiresAt), sql`${driveShareTokens.expiresAt} > now()`),
+        ),
+      )
+      .orderBy(desc(driveShareTokens.createdAt));
+
+    return c.json({
+      enabled: true,
+      tokens: rows.map((row) => ({
+        id: row.id,
+        token: row.token,
+        expiresAt: row.expiresAt,
+        createdAt: row.createdAt,
+        hasPassword: row.hasPassword,
+        objectId: row.objectId,
+        objectTitle: row.objectTitle,
+        shareUrl: `${env.PUBLIC_APP_URL.replace(/\/$/, "")}/s/${row.token}`,
+      })),
+    });
+  });
+
+  app.post("/objects/:id/share-tokens", async (c) => {
+    const auth = c.get("auth")!;
+    const access = await driveAccessForAuth(db, auth);
+    if (!access.write) return c.json({ error: "forbidden_drive_write" }, 403);
+    if (!env.DRIVE_PUBLIC_SHARES_ENABLED) {
+      return c.json({ error: "public_shares_disabled" }, 403);
+    }
+
+    const objectId = c.req.param("id");
+    const body = await c.req.json<{
+      expiresInDays?: number | null;
+      password?: string | null;
+    }>();
+
+    const [object] = await db
+      .select()
+      .from(driveObjects)
+      .where(and(eq(driveObjects.id, objectId), driveMutableWhere(objectId, auth)))
+      .limit(1);
+    if (!object || object.kind !== "file") {
+      return c.json({ error: "not_found" }, 404);
+    }
+
+    let expiresAt: Date | null = null;
+    if (body.expiresInDays != null && body.expiresInDays > 0) {
+      expiresAt = new Date(Date.now() + body.expiresInDays * 24 * 60 * 60 * 1000);
+    }
+
+    let passwordHash: string | null = null;
+    const password = body.password?.trim();
+    if (password) {
+      passwordHash = await hashPassword(password);
+    }
+
+    const [row] = await db
+      .insert(driveShareTokens)
+      .values({
+        driveObjectId: objectId,
+        token: generateShareToken(),
+        expiresAt,
+        passwordHash,
+      })
+      .returning();
+
+    return c.json(
+      {
+        token: {
+          id: row.id,
+          token: row.token,
+          expiresAt: row.expiresAt,
+          createdAt: row.createdAt,
+          hasPassword: Boolean(passwordHash),
+          shareUrl: `${env.PUBLIC_APP_URL.replace(/\/$/, "")}/s/${row.token}`,
+        },
+      },
+      201,
+    );
+  });
+
+  app.delete("/share-tokens/:id", async (c) => {
+    const auth = c.get("auth")!;
+    const access = await driveAccessForAuth(db, auth);
+    if (!access.write) return c.json({ error: "forbidden_drive_write" }, 403);
+    const id = c.req.param("id");
+
+    const [existing] = await db
+      .select({
+        tokenId: driveShareTokens.id,
+        householdId: driveObjects.householdId,
+      })
+      .from(driveShareTokens)
+      .innerJoin(driveObjects, eq(driveShareTokens.driveObjectId, driveObjects.id))
+      .where(eq(driveShareTokens.id, id))
+      .limit(1);
+    if (!existing || existing.householdId !== auth.householdId) {
+      return c.json({ error: "not_found" }, 404);
+    }
+
+    await db
+      .update(driveShareTokens)
+      .set({ revokedAt: new Date() })
+      .where(eq(driveShareTokens.id, id));
+    return c.json({ ok: true });
+  });
+
   app.get("/tags/suggestions", async (c) => {
     const auth = c.get("auth")!;
     const access = await driveAccessForAuth(db, auth);
@@ -263,10 +622,12 @@ export function driveRoutes(db: Database, env: Env) {
     const q = c.req.query("q")?.trim();
     const tag = c.req.query("tag")?.trim();
     const pinnedOnly = c.req.query("pinned") === "1" || c.req.query("pinned") === "true";
+    const folderId = c.req.query("folderId")?.trim() || null;
+    const scopeAll = c.req.query("all") === "1";
     const rows = await db
       .select()
       .from(driveObjects)
-      .where(driveListWhere(db, auth, q, tag, pinnedOnly))
+      .where(driveListWhere(db, auth, q, tag, pinnedOnly, folderId, scopeAll))
       .orderBy(desc(driveObjects.pinned), desc(driveObjects.createdAt))
       .limit(50);
     const shareMap = await loadDriveShareMap(
@@ -304,6 +665,11 @@ export function driveRoutes(db: Database, env: Env) {
 
     const fieldError = validateDriveObjectFields(kind, body);
     if (fieldError) return c.json({ error: fieldError }, 400);
+
+    if (body.folderId) {
+      const validFolder = await folderBelongsToHousehold(db, auth.householdId, body.folderId);
+      if (!validFolder) return c.json({ error: "invalid_folder" }, 400);
+    }
 
     if (kind === "file") {
       const s3Key = body.s3Key!.trim();
@@ -408,6 +774,10 @@ export function driveRoutes(db: Database, env: Env) {
       patch.tagsJson = serializeDriveTagsJson(body.tags);
     }
     if (body.folderId !== undefined) {
+      if (body.folderId) {
+        const validFolder = await folderBelongsToHousehold(db, auth.householdId, body.folderId);
+        if (!validFolder) return c.json({ error: "invalid_folder" }, 400);
+      }
       patch.folderId = body.folderId;
     }
     if (body.visibility !== undefined) {
@@ -490,6 +860,20 @@ export function driveRoutes(db: Database, env: Env) {
     }
 
     return c.json({ ok: true });
+  });
+
+  app.get("/objects/resolve", async (c) => {
+    const auth = c.get("auth")!;
+    const access = await driveAccessForAuth(db, auth);
+    if (!access.read) return c.json({ error: "forbidden_drive_read" }, 403);
+    const ids = (c.req.query("ids") ?? "")
+      .split(",")
+      .map((id) => id.trim())
+      .filter(Boolean);
+    if (ids.length === 0) return c.json({ objects: {} });
+    if (ids.length > 50) return c.json({ error: "too_many_ids" }, 400);
+    const resolved = await loadDriveEmbedObjects(db, auth, ids);
+    return c.json({ objects: Object.fromEntries(resolved) });
   });
 
   app.get("/objects/:id/file", async (c) => {

@@ -8,14 +8,16 @@ import { WeatherPanel } from "./WeatherPanel";
 export function DashboardBoard({
   whosHome,
   self,
+  driveModuleEnabled = false,
 }: {
   whosHome: StatusRow[];
   self: SelfStatus | null;
+  driveModuleEnabled?: boolean;
 }) {
   return (
     <div className="space-y-6">
       <div className="grid gap-6 lg:grid-cols-2 lg:items-stretch">
-        <TodayGlance />
+        <TodayGlance driveModuleEnabled={driveModuleEnabled} />
         <DashboardMonthCalendar compact />
       </div>
       <div className="grid gap-6 lg:grid-cols-2">

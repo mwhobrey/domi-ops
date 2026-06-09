@@ -13,6 +13,7 @@ import { healthRoutes } from "./routes/health.js";
 import { schoolRoutes } from "./routes/school.js";
 import { schoolUploadRoutes } from "./routes/school-upload.js";
 import { driveRoutes } from "./routes/drive.js";
+import { drivePublicRoutes } from "./routes/drive-public.js";
 import { ensureS3ReadyOnce } from "./lib/s3.js";
 
 const env = loadEnv();
@@ -41,6 +42,7 @@ app.route("/", healthRoutes(db));
 app.route("/api/calendar", calendarRoutes(db, env));
 app.route("/api/core", coreRoutes(db, env));
 app.route("/api/core/drive", driveRoutes(db, env));
+app.route("/s", drivePublicRoutes(db, env));
 app.route("/api/school", schoolRoutes(db, env));
 app.route("/api/school/upload", schoolUploadRoutes(db, env));
 

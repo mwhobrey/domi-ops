@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
 import type { NoteVisibility } from "../lib/note-visibility";
-import type { DriveReference } from "../lib/drive-types";
+import { insertDriveEmbed, parseDriveEmbedIds } from "../lib/drive-embeds";
+import type { DriveEmbedObject, DriveReference } from "../lib/drive-types";
 import { driveAttachmentToReference } from "../lib/drive-types";
 import { DriveAttachmentChips } from "./DriveAttachmentChips";
 import { DriveObjectPicker } from "./DriveObjectPicker";
@@ -32,6 +33,7 @@ export interface Note {
     filename: string | null;
     url: string | null;
   }[];
+  driveEmbeds?: Record<string, DriveEmbedObject>;
 }
 
 function parseTagsInput(raw: string): string[] {
@@ -68,6 +70,10 @@ export function NoteEditSheet({
   const [sharedMemberIds, setSharedMemberIds] = useState<string[]>([]);
   const [attachments, setAttachments] = useState<DriveReference[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [embedPickerOpen, setEmbedPickerOpen] = useState(false);
+  const [previewEmbeds, setPreviewEmbeds] = useState<Record<string, DriveEmbedObject> | null>(
+    null,
+  );
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -83,6 +89,37 @@ export function NoteEditSheet({
     setAttachments((note.driveAttachments ?? []).map(driveAttachmentToReference));
     setError(null);
   }, [note]);
+
+  const embedIds = useMemo(
+    () => (driveEnabled ? parseDriveEmbedIds(content) : []),
+    [content, driveEnabled],
+  );
+
+  const mergedPreviewEmbeds = useMemo(() => {
+    if (!driveEnabled) return undefined;
+    const fromNote = note?.driveEmbeds ?? {};
+    const fromResolve = previewEmbeds ?? {};
+    if (Object.keys(fromNote).length === 0 && Object.keys(fromResolve).length === 0) {
+      return undefined;
+    }
+    return { ...fromNote, ...fromResolve };
+  }, [driveEnabled, note?.driveEmbeds, previewEmbeds]);
+
+  useEffect(() => {
+    if (!driveEnabled || embedIds.length === 0) {
+      setPreviewEmbeds(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      void apiClient
+        .get<{ objects: Record<string, DriveEmbedObject> }>(
+          `/api/core/drive/objects/resolve?ids=${encodeURIComponent(embedIds.join(","))}`,
+        )
+        .then((data) => setPreviewEmbeds(data.objects))
+        .catch(() => setPreviewEmbeds({}));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [driveEnabled, embedIds]);
 
   useEffect(() => {
     if (!note || !driveEnabled) return;
@@ -194,18 +231,27 @@ export function NoteEditSheet({
           ))}
         </datalist>
         <MarkdownEditor
+          key={note?.id}
           value={content}
           onChange={setContent}
           disabled={loading}
           aria-label="Note content"
           minRows={8}
+          driveEmbeds={mergedPreviewEmbeds}
+          driveEmbedAutocomplete={driveEnabled && !note?.sharedWithMe}
         />
         {driveEnabled && note && !note.sharedWithMe ? (
           <div className="space-y-2">
+            <p className="text-xs text-[var(--color-text-muted)]">
+              Type <code className="font-mono">[[</code> in the editor to link a Drive file, drag a
+              chip above into the body for an inline embed, or use manual syntax{" "}
+              <code className="font-mono">[[drive:uuid|label]]</code>.
+            </p>
             <p className="text-sm font-medium">Drive attachments</p>
             <DriveAttachmentChips
               references={attachments}
               removingId={removingId}
+              draggable
               onRemove={async (referenceId) => {
                 setRemovingId(referenceId);
                 try {
@@ -218,15 +264,26 @@ export function NoteEditSheet({
                 }
               }}
             />
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              disabled={loading}
-              onClick={() => setPickerOpen(true)}
-            >
-              Attach from Drive
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={loading}
+                onClick={() => setPickerOpen(true)}
+              >
+                Attach from Drive
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={loading}
+                onClick={() => setEmbedPickerOpen(true)}
+              >
+                Insert embed
+              </Button>
+            </div>
           </div>
         ) : null}
         <div className="flex gap-2 pt-2">
@@ -239,6 +296,7 @@ export function NoteEditSheet({
         </div>
       </form>
       {driveEnabled ? (
+        <>
         <DriveObjectPicker
           open={pickerOpen}
           onClose={() => setPickerOpen(false)}
@@ -270,6 +328,17 @@ export function NoteEditSheet({
             }
           }}
         />
+        <DriveObjectPicker
+          open={embedPickerOpen}
+          onClose={() => setEmbedPickerOpen(false)}
+          onSelect={(object) => {
+            setContent((prev) =>
+              insertDriveEmbed(prev, object.id, object.filename ?? object.title),
+            );
+            setEmbedPickerOpen(false);
+          }}
+        />
+        </>
       ) : null}
     </Sheet>
   );

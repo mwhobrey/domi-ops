@@ -9,8 +9,10 @@ export default async function DashboardPage() {
   let self: SelfStatus | null = null;
   let loadError: string | null = null;
 
+  let driveModuleEnabled = false;
+
   try {
-    const [dashboard, profile] = await Promise.all([
+    const [dashboard, profile, session] = await Promise.all([
       apiFetch<{ whosHome: StatusRow[] }>("/api/core/dashboard"),
       apiFetch<{
         shownLabel: string;
@@ -19,8 +21,12 @@ export default async function DashboardPage() {
         statusMessage: string | null;
         avatarUrl: string | null;
       }>("/api/core/profile"),
+      apiFetch<{ modulesEnabled?: string[] }>("/auth/session").catch(() => ({
+        modulesEnabled: [] as string[],
+      })),
     ]);
     whosHome = dashboard.whosHome;
+    driveModuleEnabled = (session.modulesEnabled ?? []).includes("drive");
     if (profile.homeStatusId) {
       self = {
         homeStatusId: profile.homeStatusId,
@@ -41,7 +47,11 @@ export default async function DashboardPage() {
           {loadError}. <a href="/dashboard">Retry</a>
         </Alert>
       ) : (
-        <DashboardBoard whosHome={whosHome} self={self} />
+        <DashboardBoard
+          whosHome={whosHome}
+          self={self}
+          driveModuleEnabled={driveModuleEnabled}
+        />
       )}
     </AppShell>
   );

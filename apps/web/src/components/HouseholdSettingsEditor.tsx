@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
 import { HOUSEHOLD_TIMEZONE_OPTIONS } from "../lib/timezones";
+import { DriveStoragePanel } from "./DriveStoragePanel";
+import type { DriveStorageInfo } from "../lib/drive-types";
 import { Alert, Button, Card, CardBody, Checkbox, Input, SectionHeader, Select } from "./ui";
 
 type DrivePermissionLevel = "none" | "read" | "write";
@@ -17,6 +19,8 @@ type HouseholdSettings = {
   availableModules: string[];
   drivePermissions?: DriveRolePermissions;
   drivePermissionDefaults?: DriveRolePermissions;
+  driveStorage?: DriveStorageInfo | null;
+  drivePublicSharesEnabled?: boolean;
 };
 
 const DRIVE_ROLE_LABELS: Record<"member" | "child" | "guest", string> = {
@@ -161,6 +165,13 @@ export function HouseholdSettingsEditor({ initial }: { initial: HouseholdSetting
             ) : null}
           </ul>
         </div>
+
+        {initial.availableModules.includes("drive") && modulesEnabled.includes("drive") ? (
+          <DriveStoragePanel
+            initialStorage={initial.driveStorage ?? null}
+            publicSharesEnabled={initial.drivePublicSharesEnabled}
+          />
+        ) : null}
 
         {initial.availableModules.includes("drive") ? (
           <div className="space-y-3">

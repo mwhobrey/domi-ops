@@ -70,8 +70,13 @@ export const envSchema = z
         const n = Number(v);
         return Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
       }),
-    /** Warn threshold percent for future settings storage meter (Phase 2). */
+    /** Warn threshold percent for settings storage meter. */
     DRIVE_QUOTA_WARN_PERCENT: z.coerce.number().int().min(1).max(100).default(90),
+    /** Allow public share links (`GET /s/:token`). Self-host can disable. */
+    DRIVE_PUBLIC_SHARES_ENABLED: z
+      .string()
+      .optional()
+      .transform((v) => v !== "false" && v !== "0"),
     /** Legacy display name → Google email, e.g. Mom:mom@gmail.com,Dad:dad@gmail.com */
     HOUSEHOLD_MEMBER_EMAIL_MAP: z.string().optional(),
     SMTP_HOST: z.string().optional(),

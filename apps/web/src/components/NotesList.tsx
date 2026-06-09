@@ -263,6 +263,7 @@ export function NotesList({
             disabled={loading}
             aria-label="New note"
             placeholder="Note content…"
+            driveEmbedAutocomplete={driveEnabled}
           />
           <Button type="submit" loading={loading} disabled={!title.trim() || !content.trim()}>
             Add note
@@ -307,7 +308,10 @@ export function NotesList({
                     <h3 className="text-base font-semibold text-[var(--color-text)]">{n.title}</h3>
                     {open || !expandable ? (
                       <div className="mt-2">
-                        <MarkdownContent source={n.content} />
+                        <MarkdownContent
+                          source={n.content}
+                          driveEmbeds={n.driveEmbeds}
+                        />
                       </div>
                     ) : preview ? (
                       <p className="mt-1 text-sm text-[var(--color-text-muted)]">{preview}</p>

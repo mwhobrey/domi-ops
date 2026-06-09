@@ -109,6 +109,12 @@ import {
   serializeDrivePermissionsJson,
   type DriveRolePermissions,
 } from "../lib/drive-permissions.js";
+import {
+  driveEmbedsForContent,
+  loadDriveEmbedObjects,
+  parseDriveEmbedIds,
+  type DriveEmbedDto,
+} from "../lib/drive-embeds.js";
 import { driveVisibleWhere, filenameFromDriveKey } from "../lib/drive.js";
 import { isHouseholdModuleEnabled } from "../lib/household-modules.js";
 import { memberAvatarUrl } from "../lib/avatar-url.js";
@@ -245,6 +251,8 @@ function serializeNote(
   auth: AuthContext,
   shareMap: Map<string, string[]>,
   attachmentMap?: Map<string, DriveAttachmentDto[]>,
+  driveEmbedMap?: Map<string, DriveEmbedDto>,
+  driveEnabled = false,
 ) {
   const sharedMemberIds = shareMap.get(row.id) ?? [];
   const isOwnedByMe = row.createdByUserId === auth.userId;
@@ -252,6 +260,7 @@ function serializeNote(
     row.visibility === "private" &&
     !isOwnedByMe &&
     sharedMemberIds.includes(auth.memberId);
+  const embedIds = driveEnabled ? parseDriveEmbedIds(row.content) : [];
   return {
     id: row.id,
     title: row.title,
@@ -266,6 +275,10 @@ function serializeNote(
     sharedWithMe,
     sharedMemberIds: isOwnedByMe ? sharedMemberIds : undefined,
     driveAttachments: attachmentMap?.get(row.id) ?? [],
+    driveEmbeds:
+      driveEnabled && embedIds.length > 0 && driveEmbedMap
+        ? driveEmbedsForContent(row.content, driveEmbedMap)
+        : undefined,
   };
 }
 
@@ -1405,8 +1418,17 @@ export function coreRoutes(db: Database, env: Env) {
           rows.map((r) => r.id),
         )
       : undefined;
+    const embedIds = driveEnabled
+      ? [...new Set(rows.flatMap((row) => parseDriveEmbedIds(row.content)))]
+      : [];
+    const driveEmbedMap =
+      driveEnabled && embedIds.length > 0
+        ? await loadDriveEmbedObjects(db, auth, embedIds)
+        : undefined;
     return c.json({
-      notes: rows.map((row) => serializeNote(row, auth, shareMap, attachmentMap)),
+      notes: rows.map((row) =>
+        serializeNote(row, auth, shareMap, attachmentMap, driveEmbedMap, driveEnabled),
+      ),
     });
   });
 
@@ -1449,7 +1471,16 @@ export function coreRoutes(db: Database, env: Env) {
       await replaceNoteShares(db, row.id, sharedMemberIds);
     }
     const shareMap = new Map<string, string[]>([[row.id, sharedMemberIds]]);
-    return c.json({ note: serializeNote(row, auth, shareMap) }, 201);
+    const driveEnabled = await isHouseholdModuleEnabled(db, env, auth.householdId, "drive");
+    const embedIds = driveEnabled ? parseDriveEmbedIds(row.content) : [];
+    const driveEmbedMap =
+      driveEnabled && embedIds.length > 0
+        ? await loadDriveEmbedObjects(db, auth, embedIds)
+        : undefined;
+    return c.json(
+      { note: serializeNote(row, auth, shareMap, undefined, driveEmbedMap, driveEnabled) },
+      201,
+    );
   });
 
   app.patch("/notes/:id", async (c) => {
@@ -1516,7 +1547,15 @@ export function coreRoutes(db: Database, env: Env) {
       await replaceNoteShares(db, row.id, sharedMemberIds);
     }
     const shareMap = await loadNoteShareMap(db, row.visibility === "private" ? [row.id] : []);
-    return c.json({ note: serializeNote(row, auth, shareMap) });
+    const driveEnabled = await isHouseholdModuleEnabled(db, env, auth.householdId, "drive");
+    const embedIds = driveEnabled ? parseDriveEmbedIds(row.content) : [];
+    const driveEmbedMap =
+      driveEnabled && embedIds.length > 0
+        ? await loadDriveEmbedObjects(db, auth, embedIds)
+        : undefined;
+    return c.json({
+      note: serializeNote(row, auth, shareMap, undefined, driveEmbedMap, driveEnabled),
+    });
   });
 
   app.delete("/notes/:id", async (c) => {
@@ -1978,15 +2017,27 @@ export function coreRoutes(db: Database, env: Env) {
     timezone: string;
     modulesEnabled: string;
     drivePermissionsJson?: string | null;
+    storageQuotaBytes?: number | null;
+    storageUsedBytes?: number;
   }) {
+    const modulesEnabled = parseModulesEnabled(row.modulesEnabled);
+    const driveEnabled = modulesEnabled.includes("drive");
     return {
       name: row.name,
       slug: row.slug,
       timezone: row.timezone,
-      modulesEnabled: parseModulesEnabled(row.modulesEnabled),
+      modulesEnabled,
       availableModules: deployAvailableModules(env.MODULES_ENABLED),
       drivePermissions: parseDrivePermissionsJson(row.drivePermissionsJson),
       drivePermissionDefaults: DEFAULT_DRIVE_ROLE_PERMISSIONS,
+      driveStorage:
+        driveEnabled && row.storageUsedBytes != null
+          ? {
+              usedBytes: row.storageUsedBytes,
+              quotaBytes: row.storageQuotaBytes ?? null,
+            }
+          : null,
+      drivePublicSharesEnabled: env.DRIVE_PUBLIC_SHARES_ENABLED,
     };
   }
 
@@ -2011,6 +2062,8 @@ export function coreRoutes(db: Database, env: Env) {
         timezone: households.timezone,
         modulesEnabled: households.modulesEnabled,
         drivePermissionsJson: households.drivePermissionsJson,
+        storageQuotaBytes: households.storageQuotaBytes,
+        storageUsedBytes: households.storageUsedBytes,
       })
       .from(households)
       .where(eq(households.id, auth.householdId))
@@ -2097,6 +2150,8 @@ export function coreRoutes(db: Database, env: Env) {
         timezone: households.timezone,
         modulesEnabled: households.modulesEnabled,
         drivePermissionsJson: households.drivePermissionsJson,
+        storageQuotaBytes: households.storageQuotaBytes,
+        storageUsedBytes: households.storageUsedBytes,
       });
     if (!row) return c.json({ error: "not_found" }, 404);
     return c.json({ ok: true, household: serializeHouseholdSettings(row) });
