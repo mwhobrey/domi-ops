@@ -16,14 +16,15 @@
 - Notice board: `NoticeBoardActions` in page header on all `AppShell` pages; multi-notice feed + per-user read state (`notice_reads`); badge for unread from others; **Drive file attachments** when `drive` module on (`POST /notices` `driveObjectIds`; download chips on feed).
 - **Web Push (optional):** VAPID env (`VAPID_*`); migration `0010_push_notifications`; `push_subscriptions` + `users.push_notices_enabled`; notify household on `POST /notices` (excludes poster); profile opt-out + device subscribe; `sw.js` push/click â†’ `/dashboard?notices=1`.
 - Linear: WHO team; projects/milestones/issues in `docs/LINEAR.md` (module backlog WHO-14â€“WHO-75 in `docs/MODULE_AUDIT.md`); agent workflow `.cursor/rules/linear-workflow.mdc`.
-- **CI:** `.github/workflows/ci.yml` â€” typecheck, build, test on push/PR.
+- **CI:** `.github/workflows/ci.yml` — typecheck, build, test on push/PR; `.github/workflows/publish-images.yml` — private GHCR images on main/tags (WHO-133).
 - **Tests:** Vitest â€” config, crypto, import dry-run mappers (`npm run test`).
 - **Import validate:** `npm run import:validate` â€” fixture dry-run; no `DATABASE_URL` or Postgres required.
 
 ### Auth
 
 - **Better Auth** (`packages/auth/src/better-auth.ts`): email/password + **username plugin** + optional Google OAuth; Drizzle `ba_*` tables (`0015`); `users.username` / nullable `users.email` (`0016`). Drizzle adapter `schema` keys must match `modelName` (`users`, `ba_sessions`, â€¦); `user.fields` maps BA `name`/`image` â†’ Drizzle props `displayName`/`imageUrl` (not SQL column names).
-- Login UI: `/login` â€” email or username sign-in; owner email sign-up; optional Google; logout via `authClient.signOut()` (Better Auth requires JSON â€” HTML form POST 415).
+- Login UI: `/login` — email or username sign-in; optional Google; public owner sign-up gated by `ALLOW_PUBLIC_SIGNUP` (default **off** in production, API blocks `/auth/sign-up/*`); dev default on. Dogfood: import + Google claim + username provision in settings. Login card: brand lockup, 44px inputs/tabs, join callout when signup disabled.
+- **Landing (`/`):** redirects to `/login` (unauthenticated) or `/dashboard` (session) for dogfood; marketing page deferred (Linear backlog).
 - **Household provisioning:** `POST /api/core/household/members/provision` (owner/admin) creates username-only members (`provision-member.ts`, no synthetic email).
 - **Email verification:** Better Auth `emailVerification` + optional SMTP (`SMTP_*`, `EMAIL_VERIFICATION_REQUIRED`); dev logs link when SMTP unset (`packages/auth/src/mail.ts`).
 - **Post-import join:** session hook moves users onto the **import marker** household; stubs claimed via **`users.import_claim_email`** + `import_records` (`homehub_claim_email`) from HomeHub **`config.yml`**, then Google display name / username fallback. Optional deprecated env: `HOUSEHOLD_MEMBER_EMAIL_MAP`. **Single-tenant:** live import targets the **oldest** household when one already exists.

@@ -267,4 +267,75 @@ Manual SQL under `packages/db/drizzle/` must be registered in `drizzle/meta/_jou
 
 ---
 
+## Epic: Dogfood cutover & OSS packaging (2026-06)
+
+| ID | Title |
+|----|--------|
+| [WHO-133](https://linear.app/mikewhob-whome/issue/WHO-133) | Private GHCR publish workflow (pre-OSS) |
+| [WHO-135](https://linear.app/mikewhob-whome/issue/WHO-135) | Login / sign-up UX — remove public owner registration |
+| [WHO-134](https://linear.app/mikewhob-whome/issue/WHO-134) | Marketing landing page (post-dogfood / OSS) |
+
+### Issue: Private GHCR publish workflow (pre-OSS) — WHO-133
+
+**Type:** chore  
+**Priority:** Normal  
+**Labels:** `chore`, `dx`  
+**Project:** DevEx & platform
+
+**Goal**  
+Stop on-droplet `docker compose up --build` (~45+ min, high RAM). Private repo stays private.
+
+**Acceptance**
+
+- [x] GitHub Actions builds `web`, `api`, `worker`, `import` images on push/tag
+- [x] Push to private `ghcr.io/mwhobrey/whome-*` (no public repo required)
+- [x] Droplet pulls via PAT `read:packages`; document in `deploy/CUTOVER-WHOBBREY.md`
+- [x] Compose image refs + `WHO_IMAGE_TAG` for pull-only deploy
+- [x] Document free-tier limits + `docker save`/`load` off-box fallback
+
+---
+
+### Issue: Login / sign-up UX — remove public owner registration — WHO-135
+
+**Type:** enhancement  
+**Priority:** High  
+**Labels:** `enhancement`, `web`, `api`  
+**Project:** Profile & identity (Better Auth)
+
+**Problem**  
+Login exposed “Create owner account” for any visitor. Hosted provisioning should create owners; self-host should use import + Google claim or a deliberate bootstrap path—not an open sign-up form.
+
+**Shipped (dogfood)**
+
+- [x] `ALLOW_PUBLIC_SIGNUP` env (default off in production); API blocks `/auth/sign-up/*`
+- [x] Login UI hides owner sign-up when disabled (no DB read on login page)
+- [x] `/` redirects to `/login` for unauthenticated users
+- [x] Login visual polish (brand lockup, 44px targets, join callout when signup disabled)
+
+**Follow-up** (separate issues / post-dogfood)
+
+- [ ] Self-host greenfield bootstrap without public sign-up (CLI or one-time setup token)
+- [ ] Hosted owner provisioning flow design
+
+---
+
+### Issue: Marketing landing page (post-dogfood / OSS) — WHO-134
+
+**Type:** enhancement  
+**Priority:** Low  
+**Labels:** `enhancement`, `web`  
+**Project:** DevEx & platform (or new `Marketing` project)
+
+**Problem**  
+`/` redirects to `/login` for dogfood. Public OSS release needs a real landing (features, self-host CTA, GitHub link, privacy).
+
+**Acceptance**
+
+- [ ] Restore or replace `apps/web/src/app/page.tsx` marketing content
+- [ ] Authenticated users still route to `/dashboard`
+- [ ] Unauthenticated `/` shows marketing; app entry at `/login`
+- [ ] Optional: separate `apps/www` or static site on `whome.com` subdomain
+
+---
+
 *Refine priorities and avatar Option A vs B on WHO-8 before implementation.*

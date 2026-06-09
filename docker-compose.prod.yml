@@ -6,6 +6,12 @@
 #   cp .env.example .env   # set secrets + PUBLIC_APP_URL
 #   docker compose -f docker-compose.prod.yml up -d --build
 #
+# Pull pre-built GHCR images (WHO-133) instead of on-box build:
+#   echo "$GHCR_PAT" | docker login ghcr.io -u YOUR_GITHUB_USER --password-stdin
+#   export WHO_IMAGE_TAG=latest   # or git sha from Actions
+#   docker compose -f docker-compose.prod.yml pull api worker web
+#   docker compose -f docker-compose.prod.yml up -d --no-build
+#
 # Reverse proxy: join Caddy on a shared Docker network (see docker-compose.proxy-external.yml).
 # Staging rehearsal: add docker-compose.staging.yml (separate Postgres volume, :3002).
 services:
@@ -53,6 +59,7 @@ services:
       - whome_internal
 
   api:
+    image: ghcr.io/mwhobrey/whome-api:${WHO_IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: apps/api/Dockerfile
@@ -75,6 +82,7 @@ services:
       - proxy
 
   worker:
+    image: ghcr.io/mwhobrey/whome-worker:${WHO_IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: apps/worker/Dockerfile
@@ -97,6 +105,7 @@ services:
 
   web:
     container_name: whome-web
+    image: ghcr.io/mwhobrey/whome-web:${WHO_IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: apps/web/Dockerfile
@@ -114,6 +123,7 @@ services:
       - proxy
 
   import:
+    image: ghcr.io/mwhobrey/whome-import:${WHO_IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: Dockerfile.import

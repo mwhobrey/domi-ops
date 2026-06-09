@@ -102,6 +102,7 @@ PUBLIC_APP_URL=https://whome.whobrey.me
 API_URL=http://api:4000
 
 AUTH_REQUIRED=true
+ALLOW_PUBLIC_SIGNUP=false
 DEPLOYMENT_MODE=single
 
 POSTGRES_USER=whome
@@ -209,6 +210,45 @@ docker compose -f docker-compose.prod.yml -f docker-compose.staging.yml --profil
 ```bash
 docker compose -f docker-compose.prod.yml -f docker-compose.staging.yml down
 ```
+
+---
+
+## Phase 5b — GHCR pull deploy (optional, WHO-133)
+
+On-box `docker compose up --build` compiles three Node images (~45+ min, RAM-heavy). Prefer **private GHCR pulls** after the first CI publish.
+
+**One-time setup**
+
+1. GitHub → Settings → Actions → General → Workflow permissions → **Read and write packages** (for `GITHUB_TOKEN` on push to `main`).
+2. Packages stay **private** — droplet needs a PAT with `read:packages` (classic token or fine-grained on this repo).
+3. On droplet: `echo "$GHCR_PAT" | docker login ghcr.io -u YOUR_GITHUB_USER --password-stdin`
+
+**Publish** (automatic): `.github/workflows/publish-images.yml` pushes on every `main`/`master` push and on `v*` tags:
+
+| Image | Tag examples |
+|-------|----------------|
+| `ghcr.io/mwhobrey/whome-api` | `latest`, git sha |
+| `ghcr.io/mwhobrey/whome-worker` | same |
+| `ghcr.io/mwhobrey/whome-web` | same |
+| `ghcr.io/mwhobrey/whome-import` | same |
+
+**Deploy without building on droplet:**
+
+```bash
+cd ~/whome
+git pull
+set -a && source .env && set +a
+export WHO_IMAGE_TAG=latest   # or pin to a git sha from Actions
+
+docker compose -f docker-compose.prod.yml -f docker-compose.proxy-external.yml pull api worker web
+docker compose -f docker-compose.prod.yml -f docker-compose.proxy-external.yml up -d --no-build
+```
+
+Import profile (when needed): `pull import` then `--profile tools run --rm import …` (no `--build`).
+
+**Free-tier limits:** GHCR storage/bandwidth caps apply; pin `WHO_IMAGE_TAG` to a sha and prune old package versions in GitHub Packages if needed.
+
+**Off-box fallback** (no registry): build on a dev machine, `docker save ghcr.io/mwhobrey/whome-api:latest … | gzip`, `scp` to droplet, `docker load`.
 
 ---
 

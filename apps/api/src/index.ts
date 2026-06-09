@@ -36,7 +36,15 @@ app.use("*", createAuthMiddleware(db, env, betterAuth));
 app.route("/auth/google/calendar", googleCalendarAuthRoutes(db, env));
 app.route("/auth", whomeSessionRoutes(db, betterAuth));
 
-app.on(["POST", "GET"], "/auth/*", (c) => betterAuth.handler(c.req.raw));
+app.on(["POST", "GET"], "/auth/*", (c) => {
+  if (!env.ALLOW_PUBLIC_SIGNUP) {
+    const path = new URL(c.req.url).pathname;
+    if (path.includes("/sign-up")) {
+      return c.json({ message: "Public sign-up is disabled on this instance" }, 403);
+    }
+  }
+  return betterAuth.handler(c.req.raw);
+});
 
 app.route("/", healthRoutes(db));
 app.route("/api/calendar", calendarRoutes(db, env));

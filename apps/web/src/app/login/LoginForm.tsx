@@ -8,7 +8,15 @@ import { Button } from "../../components/ui";
 type Mode = "sign-in" | "sign-up";
 type SignInMethod = "email" | "username";
 
-export function LoginForm({ nextPath, googleEnabled }: { nextPath: string; googleEnabled: boolean }) {
+export function LoginForm({
+  nextPath,
+  googleEnabled,
+  allowPublicSignup = false,
+}: {
+  nextPath: string;
+  googleEnabled: boolean;
+  allowPublicSignup?: boolean;
+}) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("sign-in");
   const [signInMethod, setSignInMethod] = useState<SignInMethod>("email");
@@ -131,7 +139,7 @@ export function LoginForm({ nextPath, googleEnabled }: { nextPath: string; googl
               type="button"
               role="tab"
               aria-selected={signInMethod === method}
-              className={`flex-1 rounded-[var(--radius-md)] px-3 py-1.5 font-medium transition-colors ${
+              className={`min-h-11 flex-1 rounded-[var(--radius-md)] px-3 py-2 font-medium transition-colors ${
                 signInMethod === method
                   ? "bg-[var(--color-accent)] text-[var(--color-accent-fg)]"
                   : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
@@ -155,7 +163,7 @@ export function LoginForm({ nextPath, googleEnabled }: { nextPath: string; googl
                 autoComplete="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
+                className="min-h-11 w-full rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
               />
             </label>
             <label className="block space-y-1.5">
@@ -168,7 +176,7 @@ export function LoginForm({ nextPath, googleEnabled }: { nextPath: string; googl
                 autoComplete="username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
+                className="min-h-11 w-full rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
               />
             </label>
           </>
@@ -184,7 +192,7 @@ export function LoginForm({ nextPath, googleEnabled }: { nextPath: string; googl
               required
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
+              className="min-h-11 w-full rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
             />
           </label>
         ) : (
@@ -197,7 +205,7 @@ export function LoginForm({ nextPath, googleEnabled }: { nextPath: string; googl
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
+              className="min-h-11 w-full rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
             />
           </label>
         )}
@@ -212,7 +220,7 @@ export function LoginForm({ nextPath, googleEnabled }: { nextPath: string; googl
             minLength={8}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
+            className="min-h-11 w-full rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
           />
         </label>
 
@@ -233,31 +241,33 @@ export function LoginForm({ nextPath, googleEnabled }: { nextPath: string; googl
         </p>
       )}
 
-      <p className="text-center text-sm text-[var(--color-text-muted)]">
-        {mode === "sign-in" ? (
-          <>
-            First household on this server?{" "}
-            <button
-              type="button"
-              className="font-medium text-[var(--color-accent)] underline-offset-2 hover:underline"
-              onClick={() => setMode("sign-up")}
-            >
-              Create owner account
-            </button>
-          </>
-        ) : (
-          <>
-            Already have an account?{" "}
-            <button
-              type="button"
-              className="font-medium text-[var(--color-accent)] underline-offset-2 hover:underline"
-              onClick={() => setMode("sign-in")}
-            >
-              Sign in
-            </button>
-          </>
-        )}
-      </p>
+      {allowPublicSignup && (
+        <p className="text-center text-sm text-[var(--color-text-muted)]">
+          {mode === "sign-in" ? (
+            <>
+              First household on this server?{" "}
+              <button
+                type="button"
+                className="font-medium text-[var(--color-accent)] underline-offset-2 hover:underline"
+                onClick={() => setMode("sign-up")}
+              >
+                Create owner account
+              </button>
+            </>
+          ) : (
+            <>
+              Already have an account?{" "}
+              <button
+                type="button"
+                className="font-medium text-[var(--color-accent)] underline-offset-2 hover:underline"
+                onClick={() => setMode("sign-in")}
+              >
+                Sign in
+              </button>
+            </>
+          )}
+        </p>
+      )}
 
       {googleEnabled && (
         <>

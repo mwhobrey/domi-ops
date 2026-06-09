@@ -50,6 +50,29 @@ describe("loadEnv", () => {
     expect(deployAvailableModules(env.MODULES_ENABLED)).toEqual([...KNOWN_HOUSEHOLD_MODULES]);
   });
 
+  it("defaults ALLOW_PUBLIC_SIGNUP off in production, on in development", () => {
+    resetEnvCache();
+    const prod = loadEnv({
+      NODE_ENV: "production",
+      PUBLIC_APP_URL: "https://app.example.com",
+      API_URL: "https://api.example.com",
+      DATABASE_URL: "postgresql://u:p@localhost:5432/db",
+      SESSION_SECRET: "x".repeat(32),
+      ENCRYPTION_KEY: "y".repeat(32),
+      MODULES_ENABLED: "core",
+    });
+    expect(prod.ALLOW_PUBLIC_SIGNUP).toBe(false);
+
+    resetEnvCache();
+    const dev = loadEnv({
+      NODE_ENV: "development",
+      PUBLIC_APP_URL: "http://localhost:3000",
+      API_URL: "http://localhost:4000",
+      DATABASE_URL: "postgresql://whome:whome@localhost:5432/whome",
+    });
+    expect(dev.ALLOW_PUBLIC_SIGNUP).toBe(true);
+  });
+
   it("does not expand module catalog in production", () => {
     resetEnvCache();
     const env = loadEnv({

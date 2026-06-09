@@ -185,3 +185,11 @@ See `.cursor/rules/linear-workflow.mdc` and `.cursorrules` (Linear section).
 ## Backlog source
 
 Detailed acceptance criteria: `docs/LINEAR_BACKLOG.md` (keep in sync when adding large new specs).
+
+## Open backlog (2026-06)
+
+| ID | State | Title |
+|----|--------|--------|
+| [WHO-134](https://linear.app/mikewhob-whome/issue/WHO-134) | Backlog | Marketing landing page (post-OSS) |
+
+Recent: **WHO-133** (GHCR publish) and **WHO-135** (login / public sign-up gate) — Done.

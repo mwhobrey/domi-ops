@@ -26,6 +26,15 @@ export const envSchema = z
       .string()
       .optional()
       .transform((v) => v !== "false" && v !== "0"),
+    /** Public email/password owner sign-up. Unset: true in development, false in production. */
+    ALLOW_PUBLIC_SIGNUP: z
+      .string()
+      .optional()
+      .transform((v): boolean | undefined => {
+        if (v === "true" || v === "1") return true;
+        if (v === "false" || v === "0") return false;
+        return undefined;
+      }),
     SESSION_SECRET: z.string().min(32).optional(),
     ENCRYPTION_KEY: z.string().min(16).optional(),
     DATABASE_URL: z.string().url(),
@@ -176,6 +185,8 @@ export function loadEnv(raw?: NodeJS.ProcessEnv): Env {
   }
   cached = {
     ...parsed.data,
+    ALLOW_PUBLIC_SIGNUP:
+      parsed.data.ALLOW_PUBLIC_SIGNUP ?? parsed.data.NODE_ENV !== "production",
     MODULES_ENABLED: ensureDevModuleCatalog(parsed.data.NODE_ENV, parsed.data.MODULES_ENABLED),
   };
 

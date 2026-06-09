@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
+import { isPublicSignupAllowed } from "../../lib/allow-public-signup";
 import { LoginForm } from "./LoginForm";
 
 export default async function LoginPage({
@@ -36,31 +37,45 @@ export default async function LoginPage({
     process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET,
   );
 
+  const allowPublicSignup = isPublicSignupAllowed();
+
   return (
-    <main className="relative flex min-h-dvh flex-col items-center justify-center px-6">
+    <main className="relative flex min-h-dvh flex-col items-center justify-center px-4 py-8 pb-[max(2rem,env(safe-area-inset-bottom))] sm:px-6">
       <div className="bg-page-gradient pointer-events-none absolute inset-0 opacity-40" aria-hidden />
-      <div className="relative w-full max-w-md space-y-6 rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-surface-elevated)] p-8 shadow-[var(--shadow-card)]">
-        <div className="space-y-2 text-center">
-          <p className="text-label text-[var(--color-text-muted)]">Household operations</p>
-          <h1 className="text-2xl font-semibold">Sign in to whome</h1>
-        </div>
+      <div className="relative w-full max-w-[26rem] space-y-6 rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-surface-elevated)] p-6 shadow-[var(--shadow-card)] sm:p-8">
+        <header className="space-y-1 text-center">
+          <p className="font-display text-3xl font-semibold tracking-tight">whome</p>
+          <h1 className="text-base font-medium text-[var(--color-text-muted)]">Sign in</h1>
+        </header>
+
         {params.error === "oauth" && (
-          <p className="rounded-[var(--radius-lg)] border border-[var(--color-danger-muted)] bg-[var(--color-danger-muted)]/20 px-3 py-2 text-sm text-[var(--color-danger)]">
+          <p
+            className="rounded-[var(--radius-lg)] border border-[var(--color-danger-muted)] bg-[var(--color-danger-muted)]/20 px-3 py-2.5 text-sm text-[var(--color-danger)]"
+            role="alert"
+          >
             Sign-in failed. Check OAuth redirect URIs and API logs, then try again.
           </p>
         )}
-        <p className="text-center text-sm text-[var(--color-text-muted)]">
-          Owners sign up with email. Kids and other members get a username from Profile after you
-          sign in. Google is optional for Calendar sync.
-        </p>
-        <LoginForm nextPath={nextPath} googleEnabled={googleEnabled} />
+
+        {!allowPublicSignup && (
+          <p className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm leading-relaxed text-[var(--color-text-muted)]">
+            Members join after HomeHub import (Google claim) or via a username from Household
+            settings.
+          </p>
+        )}
+
+        <LoginForm
+          nextPath={nextPath}
+          googleEnabled={googleEnabled}
+          allowPublicSignup={allowPublicSignup}
+        />
+
         <p className="text-center text-xs text-[var(--color-text-muted)]">
-          <Link href="/" className="underline hover:text-[var(--color-text)]">
-            Back to home
-          </Link>
-          {" · "}
-          <Link href="/privacy" className="underline hover:text-[var(--color-text)]">
-            Privacy
+          <Link
+            href="/privacy"
+            className="underline underline-offset-2 hover:text-[var(--color-text)]"
+          >
+            Privacy policy
           </Link>
         </p>
       </div>
