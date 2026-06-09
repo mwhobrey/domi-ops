@@ -1,15 +1,15 @@
 FROM node:22-alpine AS builder
 WORKDIR /app
+RUN corepack enable
+
 ARG API_URL=http://api:4000
 ENV API_URL=$API_URL
-COPY package.json package-lock.json* ./
-COPY apps/web/package.json apps/web/
-RUN npm ci 2>/dev/null || npm install
-COPY apps/web ./apps/web
-COPY package.json turbo.json ./
-WORKDIR /app/apps/web
-RUN mkdir -p public
-RUN npm run build
+
+COPY package.json package-lock.json turbo.json ./
+COPY apps ./apps
+COPY packages ./packages
+RUN npm ci
+RUN npm run build -w @whome/web
 
 FROM node:22-alpine
 WORKDIR /app

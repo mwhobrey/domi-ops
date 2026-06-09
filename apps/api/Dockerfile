@@ -1,15 +1,18 @@
 FROM node:22-alpine AS builder
 WORKDIR /app
+RUN corepack enable
 COPY package.json package-lock.json* ./
 COPY packages/config/package.json packages/config/
 COPY packages/crypto/package.json packages/crypto/
 COPY packages/db/package.json packages/db/
 COPY packages/auth/package.json packages/auth/
 COPY packages/calendar-sync/package.json packages/calendar-sync/
+COPY packages/import-homehub/package.json packages/import-homehub/
 COPY apps/api/package.json apps/api/
-RUN npm ci 2>/dev/null || npm install
+COPY apps/web/package.json apps/web/
+COPY apps/worker/package.json apps/worker/
+RUN npm ci
 COPY . .
-RUN npm install
 RUN npx turbo run build --filter=@whome/api...
 
 FROM node:22-alpine
