@@ -1,5 +1,13 @@
-# Production on DigitalOcean (or any VPS).
-# Point Caddy at web:3000 — see deploy/Caddyfile.example
+# Production — full stack in one compose file (no external Postgres/Redis/MinIO).
+#
+# Services: postgres, redis, minio, api, worker, web (+ import profile "tools")
+# Migrations run on API container start. S3 bucket created on first API boot.
+#
+#   cp .env.example .env   # set secrets + PUBLIC_APP_URL
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Reverse proxy: join Caddy on a shared Docker network (see docker-compose.proxy-external.yml).
+# Staging rehearsal: add docker-compose.staging.yml (separate Postgres volume, :3002).
 services:
   postgres:
     image: postgres:16-alpine
@@ -24,16 +32,21 @@ services:
     command: redis-server --appendonly yes
     volumes:
       - whome_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
     networks:
       - whome_internal
 
   minio:
     image: minio/minio:latest
     restart: unless-stopped
-    command: server /data
+    command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${S3_ACCESS_KEY:?}
-      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:?}
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:?set S3_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:?set S3_SECRET_KEY}
     volumes:
       - whome_minio:/data
     networks:
@@ -53,6 +66,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
     networks:
       - whome_internal
       - proxy
@@ -67,15 +84,19 @@ services:
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER:-whome}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-whome}
       REDIS_URL: redis://redis:6379
+      S3_ENDPOINT: http://minio:9000
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      minio:
         condition: service_started
     networks:
       - whome_internal
 
   web:
+    container_name: whome-web
     build:
       context: .
       dockerfile: apps/web/Dockerfile
@@ -87,7 +108,8 @@ services:
       NODE_ENV: production
       API_URL: http://api:4000
     depends_on:
-      - api
+      api:
+        condition: service_started
     networks:
       - proxy
 
@@ -100,10 +122,13 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-whome}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-whome}
+      REDIS_URL: redis://redis:6379
       S3_ENDPOINT: http://minio:9000
     depends_on:
       postgres:
         condition: service_healthy
+      minio:
+        condition: service_started
     networks:
       - whome_internal
 
@@ -111,8 +136,8 @@ networks:
   whome_internal:
     driver: bridge
   proxy:
-    external: true
-    name: ${PROXY_NETWORK:-proxy}
+    name: whome_proxy
+    driver: bridge
 
 volumes:
   whome_pg:

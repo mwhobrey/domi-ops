@@ -54,18 +54,31 @@ See `.env.example` for Drive quotas, VAPID Web Push, SMTP email verification, an
 
 ## Production (Docker Compose)
 
+One compose file brings up the **full stack** — Postgres, Redis, MinIO, API, worker, and web. No external database or object store required.
+
 ```bash
 cp .env.example .env
 # Set POSTGRES_PASSWORD, SESSION_SECRET, ENCRYPTION_KEY, PUBLIC_APP_URL=https://your.domain
+# Set S3_ACCESS_KEY / S3_SECRET_KEY (MinIO credentials — compose runs MinIO for you)
 # Set GOOGLE_OAUTH_* if using Google sign-in or Calendar
 
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
 - **Migrations** run automatically when the API container starts (`packages/db/dist/migrate.js` in the API entrypoint).
-- Services: `postgres`, `redis`, `minio`, `api`, `worker`, `web`.
-- Postgres/Redis/MinIO are not exposed on host ports; attach Caddy on the `proxy` network.
-- Example Caddy upstream: `reverse_proxy web:3000` — see [deploy/Caddyfile.example](../deploy/Caddyfile.example).
+- **S3 bucket** is created on first API boot (`ensureS3Bucket` in `apps/api/src/lib/s3.ts`).
+- **Services:** `postgres`, `redis`, `minio`, `api`, `worker`, `web` (plus `import` under profile `tools`).
+- Postgres/Redis/MinIO are not exposed on host ports by default.
+- **Caddy / existing reverse proxy:** join a shared Docker network:
+
+```bash
+# Confirm network name: docker network ls
+PROXY_NETWORK=headscale_default docker compose \
+  -f docker-compose.prod.yml \
+  -f docker-compose.proxy-external.yml up -d --build
+```
+
+Caddy must be on the same network to `reverse_proxy web:3000` — see [deploy/Caddyfile.example](../deploy/Caddyfile.example).
 
 ### Staging rehearsal
 

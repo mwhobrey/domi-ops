@@ -117,9 +117,10 @@ npm run dev
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-- Requires `POSTGRES_PASSWORD` in env.
-- Services on `whome_internal` + external `proxy` network for Caddy.
-- No host ports on postgres/redis/minio in prod file.
+- Requires `POSTGRES_PASSWORD`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` in env (MinIO runs in-stack).
+- Full stack: `postgres`, `redis`, `minio`, `api`, `worker`, `web` — no external DB/S3 required.
+- Caddy on an existing Docker network: add `-f docker-compose.proxy-external.yml` and set `PROXY_NETWORK`.
+- No host ports on postgres/redis/minio in prod file (staging override exposes `:5433` / `:3002`).
 - Cutover: follow `deploy/CUTOVER.md` — staging volume (`docker-compose.staging.yml`), import service (`Dockerfile.import`), smoke script, then Caddy → `web:3000`.
 
 **Migrate:** Automatic on API container start (not separate `docker compose exec ... db:migrate` unless running CLI manually — `docs/ARCHITECTURE.md` step 2 is outdated vs Dockerfile entrypoint).

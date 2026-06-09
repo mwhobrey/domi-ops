@@ -38,7 +38,7 @@ Staging smoke (browser, not curl-only):
 One-shot import container (or host `npm run import:homehub` with prod `DATABASE_URL`):
 
 ```bash
-docker compose -f docker-compose.prod.yml run --rm \
+docker compose -f docker-compose.prod.yml -f docker-compose.proxy-external.yml --profile tools run --rm \
   -e DATABASE_URL=postgresql://whome:$POSTGRES_PASSWORD@postgres:5432/whome \
   -v /path/to/homehub/data:/import:ro \
   import --sqlite /import/app.db --uploads /import/uploads
@@ -75,7 +75,9 @@ Re-import is idempotent (`import_records` dedupe). Run dry-run first.
 
 ## whobrey.me droplet (Mike)
 
-Concrete cutover for **whome.whobrey.me** on the existing HomeHub DigitalOcean droplet.
+**→ Full step-by-step runbook:** [CUTOVER-WHOBBREY.md](./CUTOVER-WHOBBREY.md) (secrets, Google OAuth, `headscale_default`, Caddy at `~/headscale/Caddyfile`, staging `:3002`).
+
+Summary for the `services` droplet:
 
 > **Windows (local) vs droplet (Linux)**
 >
@@ -136,18 +138,24 @@ All sections below assume you are **already SSH'd into the droplet** unless labe
 | whome repo on droplet | e.g. `~/whome` (clone path is your choice) |
 | Staging web | host `:3002` → container `web:3000` |
 | Staging Postgres | host `:5433` → container `postgres:5432` (separate volume) |
-| Prod Postgres | Docker volume `whome_pg` (no pre-existing whome DB) |
+| Prod Postgres | Compose volume `whome_pg` — **included in stack**, no external DB |
+| Caddy container / Caddyfile | `caddy` / `~/headscale/Caddyfile` |
+| **Proxy network** | **`headscale_default`** (shared with `caddy` + `homehub`) |
+| whome Caddy upstream | `whome-web:3000` |
+| Prod Redis / MinIO | **Included in stack** — set `S3_ACCESS_KEY` / `S3_SECRET_KEY` in `.env` (MinIO root creds) |
 
 ### Decisions before you start
 
-1. **Proxy Docker network name** — whome `web` and `api` join an **external** network so Caddy can `reverse_proxy web:3000`. Compose reads `PROXY_NETWORK` (default `proxy`). HomeHub’s stack may use a different name (often `{project}_default`, e.g. `homehub_default`).
+1. **Proxy Docker network** — confirmed on this droplet: **`headscale_default`**. Verify:
 
    ```bash
-   docker network ls
-   # Pick the network your Caddy container shares with HomeHub (or create/join one).
+   docker inspect caddy --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}'
+   docker inspect homehub --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}'
    ```
 
-2. **Caddy location** — wherever HomeHub’s Caddyfile lives today (host file or mounted into a Caddy container). Add the `whome.whobrey.me` block there; see [Caddy snippet](#caddy-whomewhobreyme) below.
+   Staging on `:3002` does **not** need the proxy overlay — published port reaches `web` directly.
+
+2. **Caddy** — container `caddy`, config `~/headscale/Caddyfile`. Add `whome.whobrey.me` block; see [CUTOVER-WHOBBREY.md](./CUTOVER-WHOBBREY.md) Phase 8.
 
 3. **Compose project name** — default is the directory name (`whome`). Staging and prod **must not** both attach a service named `web` to the same proxy network. Use staging via **`:3002` only**, or run staging with `-p whome-staging` and point Caddy at `whome-staging-web-1:3000` if you need HTTPS on a staging subdomain.
 
@@ -182,8 +190,8 @@ GOOGLE_CALENDAR_DEFAULT_SYNC_MODE=import_only
 
 MODULES_ENABLED=core,school,calendar_sync,drive
 
-# Attach to HomeHub/Caddy docker network (confirm with docker network ls)
-PROXY_NETWORK=homehub_default
+# Only when using docker-compose.proxy-external.yml with Caddy (not needed for :3002 staging)
+# PROXY_NETWORK=headscale_default
 ```
 
 `DATABASE_URL` is overridden inside `docker-compose.prod.yml` for containers; host-side tools use staging URL below when rehearsing.
@@ -215,33 +223,28 @@ http://<DROPLET_IP>:3002/auth/google/calendar/callback
 
 …and temporarily set `PUBLIC_APP_URL=http://<DROPLET_IP>:3002` in `.env` for the staging stack only.
 
-### External docker network
+### External docker network (Caddy / HomeHub)
 
-`docker-compose.prod.yml` declares:
+Prod compose is **self-contained** (Postgres, Redis, MinIO, API, worker, web). For Caddy on an existing HomeHub network, add the proxy overlay:
 
 ```yaml
+# docker-compose.proxy-external.yml
 networks:
   proxy:
     external: true
-    name: ${PROXY_NETWORK:-proxy}
+    name: ${PROXY_NETWORK:?Set PROXY_NETWORK}
 ```
 
 `web` and `api` join `proxy`; Postgres/Redis/MinIO/worker stay on internal `whome_internal`. Caddy must be on the **same** `PROXY_NETWORK` as `web`.
 
 ```bash
-cd ~/whome   # your clone path
-export PROXY_NETWORK=homehub_default   # replace after docker network ls
-
-docker compose -f docker-compose.prod.yml config | grep -A2 'networks:'
+cd ~/whome
+PROXY_NETWORK=headscale_default docker compose \
+  -f docker-compose.prod.yml \
+  -f docker-compose.proxy-external.yml config | grep -A2 'networks:'
 ```
 
-> **PowerShell:** `export` is bash-only. Set `PROXY_NETWORK=homehub_default` in `~/whome/.env` on the droplet (or `export` after SSH), not in a local PowerShell window.
-
-If the network does not exist:
-
-```bash
-docker network create proxy   # only if you are not reusing HomeHub’s network
-```
+> **PowerShell:** set `PROXY_NETWORK` in the droplet `.env` or export after SSH — not in local PowerShell.
 
 ### Staging rehearsal (separate Postgres volume)
 
@@ -250,7 +253,6 @@ docker network create proxy   # only if you are not reusing HomeHub’s network
 ```bash
 cd ~/whome
 set -a && source .env && set +a
-export PROXY_NETWORK=homehub_default   # or omit if using :3002 only and not joining proxy yet
 
 docker compose -f docker-compose.prod.yml -f docker-compose.staging.yml up -d --build
 # Migrations run via API container entrypoint on first boot
@@ -266,7 +268,7 @@ Staging endpoints:
 **Import dry-run** (staging DB):
 
 ```bash
-docker compose -f docker-compose.prod.yml -f docker-compose.staging.yml run --rm \
+docker compose -f docker-compose.prod.yml -f docker-compose.staging.yml --profile tools run --rm \
   -v ~/homehub/data:/import/data:ro \
   -v ~/homehub/uploads:/import/uploads:ro \
   -v ~/homehub/config.yml:/import/config.yml:ro \
@@ -276,7 +278,7 @@ docker compose -f docker-compose.prod.yml -f docker-compose.staging.yml run --rm
 **Live staging import**:
 
 ```bash
-docker compose -f docker-compose.prod.yml -f docker-compose.staging.yml run --rm \
+docker compose -f docker-compose.prod.yml -f docker-compose.staging.yml --profile tools run --rm \
   -v ~/homehub/data:/import/data:ro \
   -v ~/homehub/uploads:/import/uploads:ro \
   -v ~/homehub/config.yml:/import/config.yml:ro \
@@ -286,7 +288,7 @@ docker compose -f docker-compose.prod.yml -f docker-compose.staging.yml run --rm
 Alternative single mount (config auto-discovered via `../config.yml` from `data/`):
 
 ```bash
-docker compose -f docker-compose.prod.yml -f docker-compose.staging.yml run --rm \
+docker compose -f docker-compose.prod.yml -f docker-compose.staging.yml --profile tools run --rm \
   -v ~/homehub:/import/homehub:ro \
   import --sqlite /import/homehub/data/app.db --uploads /import/homehub/uploads
 ```
@@ -315,14 +317,15 @@ docker compose -f docker-compose.prod.yml -f docker-compose.staging.yml down
 ```bash
 cd ~/whome
 set -a && source .env && set +a
-export PROXY_NETWORK=homehub_default
 
-docker compose -f docker-compose.prod.yml up -d --build
+PROXY_NETWORK=headscale_default docker compose \
+  -f docker-compose.prod.yml \
+  -f docker-compose.proxy-external.yml up -d --build
 ```
 
-> **PowerShell:** same as staging — SSH first; do not run `docker compose` against the droplet from Windows unless you have Docker pointed at a remote context (not documented here).
+> **PowerShell:** SSH first; do not run `docker compose` against the droplet from Windows unless using a remote Docker context.
 
-There is **no** existing whome Postgres — first `up` creates fresh volume `whome_whome_pg` (name may include compose project prefix).
+There is **no** external whome Postgres — compose creates volume `whome_whome_pg` (name may include project prefix) on first `up`.
 
 ### Postgres backup (before prod import or re-import)
 
@@ -349,7 +352,7 @@ Confirm volume name: `docker volume ls | grep whome_pg`.
 Dry-run first:
 
 ```bash
-docker compose -f docker-compose.prod.yml run --rm \
+docker compose -f docker-compose.prod.yml -f docker-compose.proxy-external.yml --profile tools run --rm \
   -v ~/homehub/data:/import/data:ro \
   -v ~/homehub/uploads:/import/uploads:ro \
   -v ~/homehub/config.yml:/import/config.yml:ro \
@@ -359,7 +362,7 @@ docker compose -f docker-compose.prod.yml run --rm \
 Live:
 
 ```bash
-docker compose -f docker-compose.prod.yml run --rm \
+docker compose -f docker-compose.prod.yml -f docker-compose.proxy-external.yml --profile tools run --rm \
   -v ~/homehub/data:/import/data:ro \
   -v ~/homehub/uploads:/import/uploads:ro \
   -v ~/homehub/config.yml:/import/config.yml:ro \
@@ -375,8 +378,11 @@ Add to your existing Caddy config (same file/network as HomeHub). See [Caddyfile
 ```caddy
 whome.whobrey.me {
     encode gzip zstd
-    reverse_proxy web:3000
+    reverse_proxy whome-web:3000
     header {
+        X-Forwarded-For {remote_host}
+        X-Forwarded-Proto {scheme}
+        X-Forwarded-Host {host}
         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
         X-Content-Type-Options nosniff
         X-Frame-Options DENY
@@ -388,8 +394,7 @@ whome.whobrey.me {
 Reload:
 
 ```bash
-caddy reload --config /path/to/Caddyfile
-# or: docker exec <caddy-container> caddy reload --config /etc/caddy/Caddyfile
+docker exec caddy caddy reload --config /etc/caddy/Caddyfile
 ```
 
 **Staging HTTPS (optional):** `staging.whome.whobrey.me { reverse_proxy whome-staging-web-1:3000 }` only if staging stack uses a distinct compose project and container name on `PROXY_NETWORK`. Simpler: use `http://<DROPLET_IP>:3002` during rehearsal.

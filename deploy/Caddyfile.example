@@ -1,13 +1,15 @@
 # Replace homehub upstream with whome web container.
-# Assumes docker compose joins external network PROXY_NETWORK (see compose.prod.yml).
+# Prod compose includes postgres, redis, minio, api, worker, web.
+# Join Caddy's Docker network via docker-compose.proxy-external.yml:
 #
-# whobrey.me droplet example:
-#   PROXY_NETWORK=homehub_default  (confirm: docker network ls)
-#   whome.whobrey.me { reverse_proxy web:3000 }
+#   PROXY_NETWORK=headscale_default docker compose \
+#     -f docker-compose.prod.yml -f docker-compose.proxy-external.yml up -d --build
+#
+# whobrey.me droplet: confirm network with `docker network ls`
 
 whome.whobrey.me {
     encode gzip zstd
-    reverse_proxy web:3000
+    reverse_proxy whome-web:3000
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
         X-Content-Type-Options nosniff

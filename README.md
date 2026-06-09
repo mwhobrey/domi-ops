@@ -46,16 +46,21 @@ Google Cloud Console needs **both** redirect URIs (see `.env.example`).
 
 ## Production (your droplet)
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [deploy/Caddyfile.example](deploy/Caddyfile.example).
+See [docs/SELF_HOST.md](docs/SELF_HOST.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and [deploy/Caddyfile.example](deploy/Caddyfile.example).
 
 ```bash
 cp .env.example .env
-# Set POSTGRES_PASSWORD, SESSION_SECRET, ENCRYPTION_KEY, Google OAuth
+# Set POSTGRES_PASSWORD, SESSION_SECRET, ENCRYPTION_KEY, S3_ACCESS_KEY, S3_SECRET_KEY, Google OAuth
 
+# Full stack: postgres + redis + minio + api + worker + web
 docker compose -f docker-compose.prod.yml up -d --build
+
+# With Caddy on an existing Docker network (e.g. HomeHub):
+# PROXY_NETWORK=headscale_default docker compose \
+#   -f docker-compose.prod.yml -f docker-compose.proxy-external.yml up -d --build
 ```
 
-Swap Caddy upstream from HomeHub to `web:3000`.
+Swap Caddy upstream to `web:3000` on the shared network.
 
 ## Tests
 

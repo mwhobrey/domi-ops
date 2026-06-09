@@ -86,7 +86,7 @@
 - Prod compose + **`import` service** (`Dockerfile.import`, profile `tools`).
 - **Staging compose override** (`docker-compose.staging.yml`) â€” separate Postgres volume, port 5433 / web 3002.
 - **`scripts/smoke-cutover.sh`** â€” health, optional import dry-run, OAuth reachability.
-- Expanded **`deploy/CUTOVER.md`** â€” staging rehearsal, prod import, claim smoke, Caddy swap; **whobrey.me droplet** section (`whome.whobrey.me`, `~/homehub/*` import mounts, `PROXY_NETWORK`, `:3002`/`:5433` staging); **Windows vs droplet** callout + PowerShell prep (`ssh`, `scp .env`, tunnel) — cutover commands remain bash on the droplet.
+- Prod compose + **`docker-compose.proxy-external.yml`** — full stack (Postgres, Redis, MinIO, api, worker, web); optional overlay joins Caddy/HomeHub network.
 - **Dev MinIO:** `scripts/ensure-minio.mjs` creates S3 bucket after `dev:reset`; API boot calls `ensureS3Bucket` (`apps/api/src/lib/s3.ts`).
 - **Single-tenant auth:** `packages/auth/src/single-tenant.ts` â€” second login joins canonical household; repairs orphan shadow households.
 
