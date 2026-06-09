@@ -338,7 +338,7 @@ export function CalendarEventSheet({
             </FormSection>
 
             <FormSection title="When">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <label className="block space-y-1.5 text-sm">
                   <span className="font-medium">Start date</span>
                   <Input
@@ -366,7 +366,7 @@ export function CalendarEventSheet({
                 disabled={readOnly}
               />
               {!allDay && (
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <label className="block space-y-1.5 text-sm">
                     <span className="font-medium">Start time</span>
                     <Input

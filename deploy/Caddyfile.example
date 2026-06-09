@@ -1,6 +1,22 @@
 # Replace homehub upstream with whome web container.
-# Assumes docker compose joins external network "proxy" (see compose.prod.yml).
+# Assumes docker compose joins external network PROXY_NETWORK (see compose.prod.yml).
+#
+# whobrey.me droplet example:
+#   PROXY_NETWORK=homehub_default  (confirm: docker network ls)
+#   whome.whobrey.me { reverse_proxy web:3000 }
 
+whome.whobrey.me {
+    encode gzip zstd
+    reverse_proxy web:3000
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
+    }
+}
+
+# Generic template (set WHOME_DOMAIN env when using caddy adapt):
 {$WHOME_DOMAIN} {
     encode gzip zstd
 

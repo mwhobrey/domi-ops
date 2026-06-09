@@ -16,11 +16,11 @@ export function DashboardBoard({
 }) {
   return (
     <div className="space-y-6">
-      <div className="grid gap-6 lg:grid-cols-2 lg:items-stretch">
+      <div className="grid gap-6 md:grid-cols-2 md:items-stretch">
         <TodayGlance driveModuleEnabled={driveModuleEnabled} />
         <DashboardMonthCalendar compact />
       </div>
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 md:grid-cols-2">
         <WeatherPanel />
         <HouseholdPanel initial={whosHome} self={self} />
       </div>

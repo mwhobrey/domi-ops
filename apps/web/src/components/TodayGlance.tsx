@@ -72,7 +72,7 @@ export function TodayGlance({ driveModuleEnabled = false }: { driveModuleEnabled
           </div>
         ) : (
           <div
-            className={`grid gap-3 ${columnCount > 1 ? "sm:grid-cols-2" : ""} ${columnCount > 2 ? "lg:grid-cols-3" : ""}`}
+            className={`grid gap-3 ${columnCount > 1 ? "sm:grid-cols-2" : ""} ${columnCount > 2 ? "md:grid-cols-3" : ""}`}
           >
             {chores && (
               <GlanceTile

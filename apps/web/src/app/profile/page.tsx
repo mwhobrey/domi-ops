@@ -72,7 +72,7 @@ export default async function ProfilePage() {
               calendarIntegration={calendarIntegration ?? undefined}
             />
           </div>
-          <ScrollToTopFab className="bottom-20 lg:bottom-6" />
+          <ScrollToTopFab className="bottom-[max(5rem,env(safe-area-inset-bottom))] lg:bottom-[max(1.5rem,env(safe-area-inset-bottom))]" />
         </>
       )}
     </AppShell>

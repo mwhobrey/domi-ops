@@ -56,11 +56,14 @@ function NavLink({
   label,
   icon: Icon,
   onClick,
+  showLabel = "compact",
 }: {
   href: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   onClick?: () => void;
+  /** compact = icon-only until lg (header); always = text + icon (mobile drawer) */
+  showLabel?: "compact" | "always";
 }) {
   const pathname = usePathname();
   const active = pathname === href || pathname.startsWith(`${href}/`);
@@ -69,7 +72,7 @@ function NavLink({
       href={href}
       onClick={onClick}
       aria-current={active ? "page" : undefined}
-      title={label}
+      title={showLabel === "compact" ? label : undefined}
       className={cn(
         "flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition",
         active
@@ -78,7 +81,7 @@ function NavLink({
       )}
     >
       <Icon className="h-4 w-4 shrink-0" aria-hidden />
-      <span className="hidden xl:inline">{label}</span>
+      <span className={showLabel === "always" ? "inline" : "hidden lg:inline"}>{label}</span>
     </Link>
   );
 }
@@ -163,12 +166,12 @@ export function AppChrome({
 
   return (
     <div className="min-h-dvh bg-[var(--color-surface-inset)]">
-      <header className="sticky top-0 z-40 border-b border-[var(--color-border)] bg-[var(--color-surface-elevated)]/95 backdrop-blur">
+      <header className="sticky top-0 z-40 border-b border-[var(--color-border)] bg-[var(--color-surface-elevated)]/95 pt-[env(safe-area-inset-top)] backdrop-blur">
         <div className="bg-page-gradient pointer-events-none absolute inset-0 opacity-30" aria-hidden />
         <div className="relative mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-3">
             <IconButton
-              className="md:hidden"
+              className="lg:hidden"
               label="Open menu"
               onClick={() => setMenuOpen(true)}
             >
@@ -183,7 +186,7 @@ export function AppChrome({
             </Link>
           </div>
 
-          <nav className="hidden flex-wrap items-center gap-0.5 md:flex" aria-label="Main">
+          <nav className="hidden flex-wrap items-center gap-0.5 lg:flex" aria-label="Main">
             {visibleNav.map((item) => (
               <NavLink key={item.href} {...item} />
             ))}
@@ -289,12 +292,12 @@ export function AppChrome({
       >
         <nav className="flex flex-col gap-1" aria-label="Main">
           {visibleNav.map((item) => (
-            <NavLink key={item.href} {...item} onClick={() => setMenuOpen(false)} />
+            <NavLink key={item.href} {...item} showLabel="always" onClick={() => setMenuOpen(false)} />
           ))}
         </nav>
       </Drawer>
 
-      <main className="mx-auto max-w-6xl px-4 py-8">
+      <main className="mx-auto max-w-6xl px-4 py-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
         {user && <ProfileOnboardingBanner name={user.name} />}
         {children}
       </main>

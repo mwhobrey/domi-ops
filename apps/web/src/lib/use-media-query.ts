@@ -18,7 +18,7 @@ export function useMediaQuery(query: string): boolean {
   return matches;
 }
 
-/** lg breakpoint — week grid vs agenda on calendar */
+/** Tablet landscape / small laptop — week+day grid vs month+agenda on calendar */
 export function useIsDesktop(): boolean {
-  return useMediaQuery("(min-width: 1024px)");
+  return useMediaQuery("(min-width: 900px)");
 }

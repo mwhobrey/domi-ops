@@ -347,7 +347,7 @@ export function ShoppingList({
           <form className="space-y-2" onSubmit={addItem}>
             <div className="flex flex-wrap gap-2">
               <Combobox
-                className="min-w-[200px] flex-1"
+                className="min-w-0 flex-1 basis-full sm:basis-auto"
                 placeholder="Add item…"
                 value={newItem}
                 onChange={setNewItem}
@@ -378,7 +378,7 @@ export function ShoppingList({
                 ))}
               </Select>
               <Combobox
-                className="min-w-[140px]"
+                className="min-w-0 flex-1 basis-full sm:basis-auto sm:max-w-[10rem]"
                 placeholder="Aisle"
                 value={newAisle}
                 onChange={setNewAisle}
@@ -407,7 +407,7 @@ export function ShoppingList({
                 <form className="space-y-2" onSubmit={addRecurring}>
                   <div className="flex flex-wrap gap-2">
                     <Combobox
-                      className="min-w-[160px] flex-1"
+                      className="min-w-0 flex-1 basis-full sm:basis-auto"
                       placeholder="Recurring item…"
                       value={recItem}
                       onChange={setRecItem}
@@ -415,7 +415,7 @@ export function ShoppingList({
                       aria-label="Recurring item name"
                     />
                     <Combobox
-                      className="min-w-[120px]"
+                      className="min-w-0 flex-1 basis-full sm:basis-auto sm:max-w-[8rem]"
                       placeholder="Aisle"
                       value={recAisle}
                       onChange={setRecAisle}
@@ -466,7 +466,7 @@ export function ShoppingList({
                       ))}
                     </Select>
                     <Textarea
-                      className="min-w-[200px] flex-1"
+                      className="min-w-0 flex-1 basis-full sm:basis-auto"
                       rows={1}
                       placeholder="Notes (optional)"
                       value={recNotes}

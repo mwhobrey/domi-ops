@@ -568,7 +568,7 @@ export function ChoresList({
         <form className="space-y-2" onSubmit={addChore}>
           <div className="flex flex-wrap gap-2">
             <Input
-              className="min-w-[200px] flex-1"
+              className="min-w-0 flex-1 basis-full sm:basis-auto"
               placeholder="New chore…"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -607,7 +607,7 @@ export function ChoresList({
               </Select>
             )}
             <Combobox
-              className="min-w-[120px]"
+              className="min-w-0 flex-1 basis-full sm:basis-auto sm:max-w-[8rem]"
               placeholder="List"
               value={listName}
               onChange={setListName}
@@ -734,7 +734,7 @@ export function ChoresList({
         <div className="space-y-4">
           <form className="flex flex-wrap gap-2" onSubmit={addRecurring}>
             <Input
-              className="min-w-[180px] flex-1"
+              className="min-w-0 flex-1 basis-full sm:basis-auto"
               placeholder="Recurring chore…"
               value={recDescription}
               onChange={(e) => setRecDescription(e.target.value)}

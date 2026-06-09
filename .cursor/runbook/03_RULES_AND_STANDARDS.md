@@ -51,7 +51,7 @@
 ### Worker
 
 - Unknown job name → `throw new Error(\`Unknown sync job: ...\`)` — BullMQ will retry/fail per queue config (check worker defaults when changing).
-- Push/recurring stubs: `console.warn` only — **silent no-op** from operator perspective.
+- Unknown or disabled job handlers log warnings; calendar push/recurring materialize jobs are implemented in worker when `calendar_sync` is enabled.
 
 ### Import CLI
 

@@ -58,6 +58,10 @@ export default async function LoginPage({
           <Link href="/" className="underline hover:text-[var(--color-text)]">
             Back to home
           </Link>
+          {" · "}
+          <Link href="/privacy" className="underline hover:text-[var(--color-text)]">
+            Privacy
+          </Link>
         </p>
       </div>
     </main>

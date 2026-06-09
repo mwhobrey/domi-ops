@@ -28,7 +28,9 @@ function FilterPill({
       type="button"
       className={cn(
         "inline-flex max-w-[10rem] items-center gap-1.5 rounded-full border font-medium transition-colors",
-        compact ? "px-2 py-0.5 text-[11px]" : "px-2.5 py-1 text-xs",
+        compact
+          ? "px-2 py-0.5 text-[11px]"
+          : "px-2.5 py-1 text-xs max-md:min-h-11 max-md:px-3 max-md:py-2",
         pressed
           ? "border-[var(--color-border)] bg-[var(--color-surface-elevated)]"
           : "border-[var(--color-border)] bg-transparent text-[var(--color-text-muted)] opacity-60",

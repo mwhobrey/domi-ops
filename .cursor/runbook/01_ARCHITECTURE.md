@@ -11,7 +11,7 @@
 | ORM / DB | Drizzle ORM + PostgreSQL 16 | `packages/db` |
 | Auth | Cookie sessions + Google OAuth | `packages/auth`, `packages/crypto` |
 | Config | Zod env validation | `packages/config` |
-| Object storage | S3-compatible (MinIO dev) | Env `S3_*`; presign stub in API |
+| Object storage | S3-compatible (MinIO dev) | Env `S3_*`; presigned uploads in API (Drive, school, shopping receipts) |
 | Import | better-sqlite3 → Postgres | `packages/import-homehub` |
 | Runtime | Node ESM (`"type": "module"` in API) | `apps/api`, built `dist/` packages |
 | Deploy | Docker Compose + Caddy (prod example) | `docker-compose.yml`, `docker-compose.prod.yml`, `deploy/` |
@@ -67,12 +67,12 @@ Prod adds external `proxy` network for Caddy (`docker-compose.prod.yml`).
 4. Worker runs `pullLinkedCalendar` / `syncConnection` (`packages/calendar-sync/src/sync.ts`).
 5. Default mode `import_only` from `GOOGLE_CALENDAR_DEFAULT_SYNC_MODE` (env + Zod in `@whome/config`).
 
-**Not implemented in v1:** `google.calendar.push` (outbox), `recurring.materialize` (stubs log warnings only).
+**Implemented:** `google.calendar.push` (bidirectional outbox), `recurring.materialize` (worker job + API enqueue). Advanced RRULE edge cases remain partial — see `docs/CALENDAR_EVENT_PARITY.md`.
 
 ### 4. School LMS
 
 - API routes under `/api/school` (`apps/api/src/routes/school.ts`): classes, assignments, submissions.
-- Upload path `/api/school/upload/presign` returns a constructed URL — **not real S3 presign yet** (`school-upload.ts`).
+- Upload path `POST /api/school/upload/presign` returns a real S3 presigned PutObject URL (`school-upload.ts` → `presignedPutUrl`).
 
 ### 5. HomeHub import (offline CLI)
 
@@ -80,10 +80,11 @@ Prod adds external `proxy` network for Caddy (`docker-compose.prod.yml`).
 - Reads HomeHub SQLite readonly → sequential mappers (household → calendar → tasks → …) → Postgres via `DATABASE_URL`.
 - `--dry-run` counts/warns without writes.
 
-### 6. Files (planned)
+### 6. Drive / files
 
-- Schema has no dedicated `files` API module in v1; `import-homehub` `files` mapper warns: S3 upload not implemented.
-- MinIO provisioned in Compose for future school/shared uploads.
+- `GET/POST /api/core/drive/*` — household file and link storage with presigned uploads, folders, sharing, and cross-module references (notes, notices, school).
+- HomeHub `file` mapper imports blobs into Drive `/Imports` with preserved S3 keys.
+- Legacy `/api/core/files` route superseded by Drive module.
 
 ## External dependencies
 

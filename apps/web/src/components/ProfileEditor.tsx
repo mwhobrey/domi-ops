@@ -167,7 +167,7 @@ export function ProfileEditor({
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
+      <div className="grid gap-6 md:grid-cols-2 md:items-start">
         <ProfileSection
           title="Identity"
           description={`Signed in as ${initial.username ? `@${initial.username}` : initial.email ?? "member"}. Shown to household as ${shownLabel}.`}
@@ -305,7 +305,7 @@ export function ProfileEditor({
         <ProfileSection
           title="Notifications"
           description="Choose which Web Push alerts this browser and account receive."
-          className="lg:col-span-2"
+          className="md:col-span-2"
         >
           <div className="space-y-4">
             <NoticePushSettings
@@ -329,7 +329,7 @@ export function ProfileEditor({
         </ProfileSection>
       </div>
 
-      <Card className="sticky bottom-0 z-10 border-[var(--color-border)] bg-[var(--color-surface-elevated)]/95 backdrop-blur-sm lg:static lg:backdrop-blur-none">
+      <Card className="sticky bottom-0 z-10 border-[var(--color-border)] bg-[var(--color-surface-elevated)]/95 pb-[max(0px,env(safe-area-inset-bottom))] backdrop-blur-sm lg:static lg:backdrop-blur-none">
         <CardBody className="flex flex-wrap items-center gap-3 py-3 sm:py-4">
           <Button
             loading={loading}

@@ -167,13 +167,14 @@ export function NoticeBoardActions({ className }: { className?: string }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
+        aria-label="Notice board"
         className={cn(
-          "relative inline-flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-subtle)] px-3 py-1.5 text-sm font-medium transition hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-surface-elevated)]",
+          "relative inline-flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-subtle)] px-3 py-1.5 text-sm font-medium transition hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-surface-elevated)] max-sm:px-2.5 max-sm:py-2",
           className,
         )}
       >
         <Megaphone className="h-4 w-4 text-[var(--color-accent)]" aria-hidden />
-        Notice board
+        <span className="max-sm:sr-only">Notice board</span>
         {unreadCount > 0 && (
           <span
             className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--color-accent)] px-1 text-[10px] font-semibold text-white"
