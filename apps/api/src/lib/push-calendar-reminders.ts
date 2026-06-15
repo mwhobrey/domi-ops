@@ -2,8 +2,8 @@ import type { Env } from "@whome/config";
 import type { Database } from "@whome/db";
 import { householdMembers, pushSubscriptions, users } from "@whome/db";
 import { and, eq, inArray } from "drizzle-orm";
-import { configureWebPush, isWebPushConfigured } from "./push-notices.js";
 import webpush from "web-push";
+import { configureWebPush, isWebPushConfigured } from "./push-notices.js";
 
 export async function notifyHouseholdOfCalendarReminder(
   db: Database,
@@ -53,18 +53,26 @@ export async function notifyHouseholdOfCalendarReminder(
   const payload = JSON.stringify({
     title: "Calendar reminder",
     body,
-    url: `/calendar?event=${input.eventId}`,
+    tag: `calendar-${input.eventId}`,
+    data: { url: `/calendar?event=${input.eventId}` },
   });
 
-  await Promise.allSettled(
-    subs.map((sub) =>
-      webpush.sendNotification(
-        {
-          endpoint: sub.endpoint,
-          keys: { p256dh: sub.p256dh, auth: sub.authKey },
-        },
-        payload,
-      ),
-    ),
+  await Promise.all(
+    subs.map(async (sub) => {
+      try {
+        await webpush.sendNotification(
+          {
+            endpoint: sub.endpoint,
+            keys: { p256dh: sub.p256dh, auth: sub.authKey },
+          },
+          payload,
+        );
+      } catch (err: unknown) {
+        const status = (err as { statusCode?: number }).statusCode;
+        if (status === 404 || status === 410) {
+          await db.delete(pushSubscriptions).where(eq(pushSubscriptions.id, sub.id));
+        }
+      }
+    }),
   );
 }

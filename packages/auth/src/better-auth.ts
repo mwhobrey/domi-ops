@@ -82,6 +82,18 @@ export function createBetterAuth(db: Database, env: Env): WhomeBetterAuth {
           defaultValue: true,
           input: false,
         },
+        pushExpenseBudgetAlertsEnabled: {
+          type: "boolean",
+          required: false,
+          defaultValue: true,
+          input: false,
+        },
+        pushSchoolRemindersEnabled: {
+          type: "boolean",
+          required: false,
+          defaultValue: true,
+          input: false,
+        },
       },
     },
     session: {

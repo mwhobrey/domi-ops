@@ -84,3 +84,16 @@ export async function syncPushSubscription(publicKey: string): Promise<boolean> 
   });
   return true;
 }
+
+/** Subscribe or re-sync when enabling a push type (permission already granted or prompt). */
+export async function ensurePushSubscribedWhenEnabling(): Promise<boolean> {
+  const config = await fetchPushConfig();
+  if (!config.enabled || !config.publicKey) return false;
+  if (Notification.permission === "granted") {
+    return syncPushSubscription(config.publicKey);
+  }
+  if (Notification.permission === "default") {
+    return subscribeBrowserPush(config.publicKey);
+  }
+  return false;
+}

@@ -19,6 +19,7 @@ import { materializeRecurringForHousehold } from "./recurring.js";
 import { scanCalendarReminders } from "./reminder-scan.js";
 import { scanBudgetAlerts } from "./budget-alert-scan.js";
 import { scanChoreReminders } from "./chore-reminder-scan.js";
+import { scanSchoolReminders } from "./school-reminder-scan.js";
 import { setSyncRun } from "./sync-run.js";
 import type { SyncJobPayload } from "./index.js";
 
@@ -359,6 +360,9 @@ export async function runCalendarSyncJob(
       break;
     case "expense.budget.scan":
       await scanBudgetAlerts(db, env);
+      break;
+    case "school.reminder.scan":
+      await scanSchoolReminders(db, env);
       break;
     default:
       throw new Error(`Unknown sync job: ${name}`);

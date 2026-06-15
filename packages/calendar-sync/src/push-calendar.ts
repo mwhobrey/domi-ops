@@ -3,6 +3,7 @@ import type { Database } from "@whome/db";
 import { householdMembers, pushSubscriptions, users } from "@whome/db";
 import { and, eq, inArray } from "drizzle-orm";
 import webpush from "web-push";
+import { deliverWebPush } from "./push-delivery.js";
 
 function configured(env: Env): boolean {
   return Boolean(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY && env.VAPID_SUBJECT);
@@ -56,18 +57,10 @@ export async function notifyHouseholdOfCalendarReminder(
         ? `${input.title} starts in ${Math.round(input.startsInMinutes / 60)} hour(s)`
         : `${input.title} starts in ${input.startsInMinutes} minutes`;
 
-  const payload = JSON.stringify({
+  await deliverWebPush(db, subs, {
     title: "Calendar reminder",
     body,
-    url: `/calendar?event=${input.eventId}`,
+    tag: `calendar-${input.eventId}`,
+    data: { url: `/calendar?event=${input.eventId}` },
   });
-
-  await Promise.allSettled(
-    subs.map((sub) =>
-      webpush.sendNotification(
-        { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.authKey } },
-        payload,
-      ),
-    ),
-  );
 }

@@ -7,6 +7,7 @@ import { CalendarReminderPushSettings } from "./CalendarReminderPushSettings";
 import { ChoreReminderPushSettings } from "./ChoreReminderPushSettings";
 import { ExpenseBudgetPushSettings } from "./ExpenseBudgetPushSettings";
 import { NoticePushSettings } from "./NoticePushSettings";
+import { SchoolReminderPushSettings } from "./SchoolReminderPushSettings";
 import { ProfileCalendarConnect } from "./ProfileCalendarConnect";
 import { Alert, Avatar, Button, Card, CardBody, Input, RadioGroup, SectionHeader } from "./ui";
 
@@ -71,6 +72,7 @@ export function ProfileEditor({
     pushCalendarRemindersEnabled: boolean;
     pushChoresRemindersEnabled: boolean;
     pushExpenseBudgetAlertsEnabled: boolean;
+    pushSchoolRemindersEnabled: boolean;
     pushSubscribed: boolean;
     pushAvailable: boolean;
     avatarUrl: string | null;
@@ -323,6 +325,10 @@ export function ProfileEditor({
             />
             <ExpenseBudgetPushSettings
               initialEnabled={initial.pushExpenseBudgetAlertsEnabled}
+              pushAvailable={initial.pushAvailable}
+            />
+            <SchoolReminderPushSettings
+              initialEnabled={initial.pushSchoolRemindersEnabled}
               pushAvailable={initial.pushAvailable}
             />
           </div>

@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { apiClient, ApiError } from "../lib/client-api";
+import { ensurePushSubscribedWhenEnabling } from "../lib/web-push";
 import { Alert, Checkbox } from "./ui";
 
 export function ChoreReminderPushSettings({
@@ -25,6 +26,7 @@ export function ChoreReminderPushSettings({
     setMsg(null);
     try {
       await persist(checked);
+      if (checked) await ensurePushSubscribedWhenEnabling();
       setMsg(checked ? "Chore reminder push enabled." : "Chore reminder push disabled.");
     } catch (err) {
       setMsg(err instanceof ApiError ? err.message : "Could not update preference");
@@ -47,7 +49,7 @@ export function ChoreReminderPushSettings({
       />
       <p className="text-xs text-[var(--color-text-muted)]">
         Assigned chores notify the assignee only; unassigned chores notify the household.
-        Requires notice push enabled and this browser subscribed.
+        Requires Web Push on this device.
       </p>
       {msg && (
         <Alert variant="success" className="text-sm">

@@ -73,6 +73,10 @@ export const users = pgTable(
   pushExpenseBudgetAlertsEnabled: boolean("push_expense_budget_alerts_enabled")
     .notNull()
     .default(true),
+  /** When false, school assignment due/overdue reminder push is not sent to this user */
+  pushSchoolRemindersEnabled: boolean("push_school_reminders_enabled")
+    .notNull()
+    .default(true),
   /** HomeHub import: real login email that should claim this stub user */
   importClaimEmail: varchar("import_claim_email", { length: 320 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

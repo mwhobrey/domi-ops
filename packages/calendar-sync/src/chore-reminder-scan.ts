@@ -3,7 +3,9 @@ import type { Database } from "@whome/db";
 import { chores, householdMembers, pushSubscriptions, users } from "@whome/db";
 import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import webpush from "web-push";
+import { deliverWebPush } from "./push-delivery.js";
 
+// TODO: use household timezone from DB for due-date boundaries (currently UTC date).
 function todayIsoDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -16,6 +18,7 @@ async function notifyChoreReminder(
   db: Database,
   env: Env,
   input: {
+    choreId: string;
     householdId: string;
     description: string;
     assigneeMemberId: string | null;
@@ -75,20 +78,12 @@ async function notifyChoreReminder(
       ? `"${input.description}" is ready for a redemption quest — you've got this!`
       : `"${input.description}" is due today`;
 
-  const payload = JSON.stringify({
+  await deliverWebPush(db, subs, {
     title: input.kind === "overdue" ? "Redemption quest" : "Chore due today",
     body,
-    url: "/chores",
+    tag: `chore-${input.choreId}`,
+    data: { url: "/chores" },
   });
-
-  await Promise.allSettled(
-    subs.map((sub) =>
-      webpush.sendNotification(
-        { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.authKey } },
-        payload,
-      ),
-    ),
-  );
 }
 
 export async function scanChoreReminders(db: Database, env: Env): Promise<number> {
@@ -119,6 +114,7 @@ export async function scanChoreReminders(db: Database, env: Env): Promise<number
     if (!kind) continue;
 
     await notifyChoreReminder(db, env, {
+      choreId: row.id,
       householdId: row.householdId,
       description: row.description,
       assigneeMemberId: row.assigneeMemberId,

@@ -10,6 +10,7 @@ import {
 } from "@whome/db";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import webpush from "web-push";
+import { deliverWebPush } from "./push-delivery.js";
 
 export const BUDGET_WARNING_RATIO = 0.8;
 
@@ -133,16 +134,13 @@ async function notifyBudgetAlert(
       ? `${input.category}: ${spend} spent (target ${target})`
       : `${input.category}: ${spend} of ${target} this month`;
 
-  const payload = JSON.stringify({ title, body, url: "/expenses" });
-
-  await Promise.allSettled(
-    subs.map((sub) =>
-      webpush.sendNotification(
-        { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.authKey } },
-        payload,
-      ),
-    ),
-  );
+  const monthKey = todayMonthKey();
+  await deliverWebPush(db, subs, {
+    title,
+    body,
+    tag: `budget-${input.householdId}-${input.category}-${monthKey}-${input.kind}`,
+    data: { url: "/expenses" },
+  });
 }
 
 export async function checkHouseholdBudgetAlerts(

@@ -1726,6 +1726,7 @@ export function coreRoutes(db: Database, env: Env) {
         pushCalendarRemindersEnabled: users.pushCalendarRemindersEnabled,
         pushChoresRemindersEnabled: users.pushChoresRemindersEnabled,
         pushExpenseBudgetAlertsEnabled: users.pushExpenseBudgetAlertsEnabled,
+        pushSchoolRemindersEnabled: users.pushSchoolRemindersEnabled,
       })
       .from(users)
       .where(eq(users.id, auth.userId))
@@ -1763,6 +1764,7 @@ export function coreRoutes(db: Database, env: Env) {
       pushCalendarRemindersEnabled: userRow?.pushCalendarRemindersEnabled ?? true,
       pushChoresRemindersEnabled: userRow?.pushChoresRemindersEnabled ?? true,
       pushExpenseBudgetAlertsEnabled: userRow?.pushExpenseBudgetAlertsEnabled ?? true,
+      pushSchoolRemindersEnabled: userRow?.pushSchoolRemindersEnabled ?? true,
       pushSubscribed: Boolean(pushSub),
       pushAvailable: isWebPushConfigured(env),
       avatarUrl: memberAvatarUrl(auth.memberId, memberRow?.avatarKey),
@@ -1778,6 +1780,7 @@ export function coreRoutes(db: Database, env: Env) {
       pushCalendarRemindersEnabled?: boolean;
       pushChoresRemindersEnabled?: boolean;
       pushExpenseBudgetAlertsEnabled?: boolean;
+      pushSchoolRemindersEnabled?: boolean;
     }>();
 
     const patch: {
@@ -1789,6 +1792,7 @@ export function coreRoutes(db: Database, env: Env) {
       pushCalendarRemindersEnabled?: boolean;
       pushChoresRemindersEnabled?: boolean;
       pushExpenseBudgetAlertsEnabled?: boolean;
+      pushSchoolRemindersEnabled?: boolean;
     } = {};
     if (body.name !== undefined) patch.name = body.name.trim().slice(0, 128) || null;
     if (body.temperatureUnit === "fahrenheit" || body.temperatureUnit === "celsius") {
@@ -1808,6 +1812,9 @@ export function coreRoutes(db: Database, env: Env) {
     }
     if (typeof body.pushExpenseBudgetAlertsEnabled === "boolean") {
       userPatch.pushExpenseBudgetAlertsEnabled = body.pushExpenseBudgetAlertsEnabled;
+    }
+    if (typeof body.pushSchoolRemindersEnabled === "boolean") {
+      userPatch.pushSchoolRemindersEnabled = body.pushSchoolRemindersEnabled;
     }
 
     if (Object.keys(userPatch).length > 0) {

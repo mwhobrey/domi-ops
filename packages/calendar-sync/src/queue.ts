@@ -66,3 +66,18 @@ export async function ensureExpenseBudgetScheduler(redisUrl: string): Promise<vo
     },
   );
 }
+
+/** Repeatable scan for school assignment due/overdue pushes (every 5 minutes). */
+export async function ensureSchoolReminderScheduler(redisUrl: string): Promise<void> {
+  const q = getSyncQueue(redisUrl);
+  await q.add(
+    "school.reminder.scan",
+    { name: "school.reminder.scan", payload: { householdId: "scan" } },
+    {
+      repeat: { every: 5 * 60 * 1000 },
+      jobId: "school-reminder-scan",
+      removeOnComplete: 20,
+      removeOnFail: 20,
+    },
+  );
+}

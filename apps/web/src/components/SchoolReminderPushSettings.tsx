@@ -5,7 +5,7 @@ import { apiClient, ApiError } from "../lib/client-api";
 import { ensurePushSubscribedWhenEnabling } from "../lib/web-push";
 import { Alert, Checkbox } from "./ui";
 
-export function CalendarReminderPushSettings({
+export function SchoolReminderPushSettings({
   initialEnabled,
   pushAvailable,
 }: {
@@ -17,7 +17,7 @@ export function CalendarReminderPushSettings({
   const [msg, setMsg] = useState<string | null>(null);
 
   const persist = useCallback(async (next: boolean) => {
-    await apiClient.patch("/api/core/profile", { pushCalendarRemindersEnabled: next });
+    await apiClient.patch("/api/core/profile", { pushSchoolRemindersEnabled: next });
     setEnabled(next);
   }, []);
 
@@ -26,8 +26,16 @@ export function CalendarReminderPushSettings({
     setMsg(null);
     try {
       await persist(checked);
-      if (checked) await ensurePushSubscribedWhenEnabling();
-      setMsg(checked ? "Calendar reminder push enabled." : "Calendar reminder push disabled.");
+      if (checked) {
+        const subscribed = await ensurePushSubscribedWhenEnabling();
+        if (subscribed) {
+          setMsg("School reminder push enabled on this device.");
+        } else {
+          setMsg("School reminder push enabled. Allow notifications in your browser to receive alerts.");
+        }
+      } else {
+        setMsg("School reminder push disabled.");
+      }
     } catch (err) {
       setMsg(err instanceof ApiError ? err.message : "Could not update preference");
       setEnabled(!checked);
@@ -40,15 +48,15 @@ export function CalendarReminderPushSettings({
 
   return (
     <fieldset className="space-y-3">
-      <legend className="text-sm font-medium">Calendar reminders</legend>
+      <legend className="text-sm font-medium">School assignments</legend>
       <Checkbox
-        label="Send push notifications before upcoming calendar events"
+        label="Send push when assignments are due today or overdue"
         checked={enabled}
         disabled={busy}
         onChange={(e) => void onToggle(e.target.checked)}
       />
       <p className="text-xs text-[var(--color-text-muted)]">
-        Requires Web Push enabled on this device (Profile → Notice notifications).
+        Notifies enrolled students who have not submitted. Requires Web Push on this device.
       </p>
       {msg && (
         <Alert variant="success" className="text-sm">

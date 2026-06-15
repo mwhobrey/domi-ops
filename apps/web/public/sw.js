@@ -1,5 +1,6 @@
-/* Minimal service worker — installable PWA; network-first for app routes */
-const CACHE = "whome-shell-v1";
+/* Minimal service worker — installable PWA; network-first for app routes.
+ * Bump CACHE when shell assets change so activate purges stale caches. */
+const CACHE = "whome-shell-v3";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -8,7 +9,12 @@ self.addEventListener("install", (event) => {
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim()),
+  );
 });
 
 self.addEventListener("fetch", (event) => {
@@ -18,18 +24,30 @@ self.addEventListener("fetch", (event) => {
   );
 });
 
+function normalizePushPayload(raw) {
+  const url = raw.data?.url ?? raw.url ?? "/dashboard?notices=1";
+  const tag = raw.tag ?? "notice";
+  return {
+    title: raw.title ?? "whome",
+    body: raw.body ?? "",
+    tag,
+    data: { ...(raw.data ?? {}), url },
+  };
+}
+
 self.addEventListener("push", (event) => {
-  let payload = { title: "whome", body: "", tag: "notice", data: { url: "/dashboard?notices=1" } };
+  let raw = { title: "whome", body: "", tag: "notice", data: { url: "/dashboard?notices=1" } };
   try {
-    if (event.data) payload = { ...payload, ...event.data.json() };
+    if (event.data) raw = { ...raw, ...event.data.json() };
   } catch {
     /* ignore */
   }
+  const payload = normalizePushPayload(raw);
   event.waitUntil(
     self.registration.showNotification(payload.title, {
       body: payload.body,
       tag: payload.tag,
-      icon: "/icon.svg",
+      icon: "/icons/icon-192.png",
       data: payload.data,
     }),
   );

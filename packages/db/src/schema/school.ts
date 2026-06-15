@@ -84,6 +84,8 @@ export const schoolAssignments = pgTable("school_assignments", {
   pointsPossible: real("points_possible").notNull().default(100),
   allowLate: boolean("allow_late").notNull().default(true),
   visibility: assignmentVisibilityEnum("visibility").notNull().default("assigned"),
+  /** One-shot Web Push reminder when due today or overdue (worker scan). */
+  dueReminderSentAt: timestamp("due_reminder_sent_at", { withTimezone: true }),
   createdByUserId: uuid("created_by_user_id").references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

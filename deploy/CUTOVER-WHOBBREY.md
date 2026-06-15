@@ -220,8 +220,38 @@ On-box `docker compose up --build` compiles three Node images (~45+ min, RAM-hea
 **One-time setup**
 
 1. GitHub → Settings → Actions → General → Workflow permissions → **Read and write packages** (for `GITHUB_TOKEN` on push to `main`).
-2. Packages stay **private** — droplet needs a PAT with `read:packages` (classic token or fine-grained on this repo).
-3. On droplet: `echo "$GHCR_PAT" | docker login ghcr.io -u YOUR_GITHUB_USER --password-stdin`
+2. **Create a droplet PAT — classic only** (fine-grained tokens do **not** support Packages/GHCR):
+   - GitHub → **Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token (classic)**
+   - Note: e.g. `whome-droplet-ghcr-read`
+   - Expiration: 90 days or custom (set a calendar reminder to rotate)
+   - Scope: **`read:packages`** only (nothing else required for pull)
+   - Copy the token once — you will not see it again.
+3. On the droplet, export it **in the same SSH session** before login (replace with your token):
+
+```bash
+export GHCR_PAT='ghp_xxxxxxxxxxxxxxxxxxxx'   # or github_pat_... for fine-grained
+echo "$GHCR_PAT" | docker login ghcr.io -u mwhobrey --password-stdin
+# Expect: Login Succeeded
+```
+
+**Persist login** (optional — Docker stores creds in `~/.docker/config.json` after successful login; you do not need to re-export `GHCR_PAT` on every deploy unless you log out):
+
+```bash
+# Wrong — GHCR_PAT was never set:
+# echo "$GHCR_PAT" | docker login ...   → "password is empty"
+
+# Wrong — password is not a positional arg:
+# docker login ghcr.io -u mwhobrey --password-stdin "mypassword"
+
+# Wrong — interactive login over SSH without -T:
+# echo "$GHCR_PAT" | docker login ghcr.io -u mwhobrey
+```
+
+To verify packages are reachable after login:
+
+```bash
+docker pull ghcr.io/mwhobrey/whome-api:latest
+```
 
 **Publish** (automatic): `.github/workflows/publish-images.yml` pushes on every `main`/`master` push and on `v*` tags:
 
