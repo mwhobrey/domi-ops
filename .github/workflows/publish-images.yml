@@ -6,6 +6,10 @@ on:
   push:
     branches: [main, master]
     tags: ["v*"]
+    # Docs-only pushes don't change images — skip to save Actions minutes.
+    paths-ignore:
+      - "**/*.md"
+      - ".cursor/**"
   workflow_dispatch:
 
 env:
@@ -64,5 +68,6 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: ${{ matrix.build_args }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # ignore-error: cache API timeouts (results-receiver) should not fail the build
+          cache-from: type=gha,ignore-error=true
+          cache-to: type=gha,mode=max,ignore-error=true
