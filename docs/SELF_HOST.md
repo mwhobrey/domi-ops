@@ -1,5 +1,7 @@
 # Self-hosting whome
 
+> **Household admins:** start with **[SETUP.md](./SETUP.md)** for step-by-step paths, configuration in plain language, optional Google setup, and best practices. This document is the technical reference.
+
 whome is designed for a single household per PostgreSQL instance (`DEPLOYMENT_MODE=single`). This guide consolidates local dev, production Docker, migrations, optional modules, and common troubleshooting.
 
 ## Prerequisites

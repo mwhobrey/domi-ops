@@ -2,12 +2,16 @@
 
 ## Product tiers
 
+whome is designed for **two ways to run the same product**: self-host (OSS) or whome-hosted (managed). **Public launch targets both at once** — open source and hosted tiers ship together when stability, security, and hosted operations are ready. Until then, development focuses on self-host dogfood.
+
 | Tier | Deployment | Database |
 |------|------------|----------|
 | **OSS (free)** | Self-host Docker | Your Postgres (single household) |
 | **Hosted Starter** | whome cloud | Shared Postgres + RLS |
 | **Hosted Family** | whome cloud | Dedicated Neon project per household |
 | **Add-ons** | Either | `school`, `calendar_sync`, `media` (future) |
+
+**Current code:** self-host `DEPLOYMENT_MODE=single` only. Hosted tiers are designed here but not implemented yet.
 
 ## v1 modules (Mike's household)
 

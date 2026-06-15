@@ -2,11 +2,11 @@
 
 ## Executive summary
 
-**whome** is an open-source household operations platform (calendar, homeschool LMS, shopping, chores, notes, expenses) built to replace [HomeHub](https://github.com/surajverma/homehub). It is a TypeScript monorepo: Next.js UI, Hono REST API, BullMQ worker, Drizzle/PostgreSQL, Redis queues, MinIO/S3 files. Primary deployment target is self-hosted Docker on a DigitalOcean droplet behind Caddy; hosted multi-tenant tiers are designed but not implemented in code yet.
+**whome** is an open-source household operations platform (calendar, homeschool LMS, shopping, chores, notes, expenses). It is a TypeScript monorepo: Next.js UI, Hono REST API, BullMQ worker, Drizzle/PostgreSQL, Redis queues, MinIO/S3 files. Primary deployment target today is self-hosted Docker; **public launch plans open source and whome-hosted together** once stability, security, and hosted ops are ready (hosted multi-tenant is designed but not implemented in code yet).
 
 ## North Star
 
-**One household runs daily life in whome** — migrated from HomeHub, Google Calendar imported (then optionally synced), homeschool and core modules on a single Postgres instance — with enterprise-grade UX and a path to optional hosted tiers without rewriting the core.
+**One household runs daily life in whome** — calendar, homeschool, and core modules on a single Postgres instance — with enterprise-grade UX. Self-host and managed hosted tiers share one codebase; both ship at public OSS launch when ready.
 
 ## When to read what
 
