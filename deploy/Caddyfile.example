@@ -9,6 +9,12 @@
 
 whome.whobrey.me {
     encode gzip zstd
+
+    # Browser presigned uploads (S3_PUBLIC_URL=https://whome.whobrey.me/s3/whome)
+    handle_path /s3/* {
+        reverse_proxy minio:9000
+    }
+
     reverse_proxy whome-web:3000
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"

@@ -121,7 +121,9 @@ S3_ACCESS_KEY=<from Phase 2>
 S3_SECRET_KEY=<from Phase 2>
 S3_BUCKET=whome
 S3_FORCE_PATH_STYLE=true
-# S3_PUBLIC_URL optional — uploads use API presign; leave unset unless you expose MinIO via Caddy
+# Required for HTTPS prod — presigned browser uploads (Caddy /s3 → minio:9000)
+S3_PUBLIC_URL=https://whome.whobrey.me/s3/whome
+# S3_PUBLIC_ENDPOINT=https://whome.whobrey.me/s3
 
 GOOGLE_OAUTH_CLIENT_ID=<Google Cloud Console>
 GOOGLE_OAUTH_CLIENT_SECRET=<Google Cloud Console>
@@ -346,6 +348,12 @@ Add **below** the existing `home.whobrey.me` block (HomeHub stays until soak end
 ```caddy
 whome.whobrey.me {
     encode gzip zstd
+
+    # Drive / school / receipt presigned uploads (S3_PUBLIC_URL=https://whome.whobrey.me/s3/whome)
+    handle_path /s3/* {
+        reverse_proxy minio:9000
+    }
+
     reverse_proxy whome-web:3000
     header {
         X-Forwarded-For {remote_host}
@@ -358,6 +366,8 @@ whome.whobrey.me {
     }
 }
 ```
+
+`minio` must be on `headscale_default` — use `docker-compose.proxy-external.yml` when bringing up prod.
 
 Reload (Caddy runs in Docker):
 

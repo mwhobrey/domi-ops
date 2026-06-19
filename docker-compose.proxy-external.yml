@@ -10,3 +10,8 @@ networks:
   proxy:
     external: true
     name: ${PROXY_NETWORK:?Set PROXY_NETWORK to your Caddy/HomeHub network name}
+
+services:
+  minio:
+    networks:
+      - proxy

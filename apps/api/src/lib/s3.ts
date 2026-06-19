@@ -3,16 +3,17 @@ import {
   DeleteObjectCommand,
   GetObjectCommand,
   HeadBucketCommand,
+  PutBucketCorsCommand,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type { Env } from "@whome/config";
 
-export function createS3Client(env: Env): S3Client | null {
-  if (!env.S3_ENDPOINT || !env.S3_ACCESS_KEY || !env.S3_SECRET_KEY) return null;
+export function createS3Client(env: Env, endpoint = env.S3_ENDPOINT): S3Client | null {
+  if (!endpoint || !env.S3_ACCESS_KEY || !env.S3_SECRET_KEY) return null;
   return new S3Client({
-    endpoint: env.S3_ENDPOINT,
+    endpoint,
     region: env.S3_REGION,
     credentials: {
       accessKeyId: env.S3_ACCESS_KEY,
@@ -22,6 +23,34 @@ export function createS3Client(env: Env): S3Client | null {
   });
 }
 
+/**
+ * Browser-reachable S3 API origin for presigned PUT URLs.
+ * `S3_PUBLIC_URL` is the bucket root, e.g. `https://whome.example.com/s3/whome` → `https://whome.example.com/s3`.
+ */
+export function resolveS3PresignEndpoint(env: Env): string | null {
+  if (env.S3_PUBLIC_ENDPOINT) return env.S3_PUBLIC_ENDPOINT.replace(/\/$/, "");
+  if (env.S3_PUBLIC_URL) {
+    try {
+      const u = new URL(env.S3_PUBLIC_URL);
+      const bucket = env.S3_BUCKET;
+      const path = u.pathname.replace(/\/$/, "");
+      if (bucket && path.endsWith(`/${bucket}`)) {
+        const prefix = path.slice(0, -(bucket.length + 1));
+        return `${u.origin}${prefix}`;
+      }
+      return u.origin;
+    } catch {
+      return null;
+    }
+  }
+  return env.S3_ENDPOINT?.replace(/\/$/, "") ?? null;
+}
+
+function createS3PresignClient(env: Env): S3Client | null {
+  const endpoint = resolveS3PresignEndpoint(env);
+  return endpoint ? createS3Client(env, endpoint) : null;
+}
+
 function normalizeContentType(contentType: string | undefined): string {
   const trimmed = contentType?.trim();
   return trimmed ? trimmed : "application/octet-stream";
@@ -29,7 +58,7 @@ function normalizeContentType(contentType: string | undefined): string {
 
 let s3Ready: Promise<void> | null = null;
 
-/** Idempotent: create bucket if missing (browser CORS: run scripts/ensure-minio.mjs). */
+/** Idempotent: create bucket if missing; set browser CORS when PUBLIC_APP_URL is set. */
 export async function ensureS3Bucket(env: Env): Promise<void> {
   const client = createS3Client(env);
   if (!client || !env.S3_BUCKET) throw new Error("s3_not_configured");
@@ -42,6 +71,33 @@ export async function ensureS3Bucket(env: Env): Promise<void> {
     } catch (err) {
       const name = err instanceof Error ? err.name : "";
       if (name !== "BucketAlreadyOwnedByYou" && name !== "BucketAlreadyExists") throw err;
+    }
+  }
+
+  if (env.PUBLIC_APP_URL) {
+    const origin = env.PUBLIC_APP_URL.replace(/\/$/, "");
+    try {
+      await client.send(
+        new PutBucketCorsCommand({
+          Bucket: env.S3_BUCKET,
+          CORSConfiguration: {
+            CORSRules: [
+              {
+                AllowedOrigins: [origin],
+                AllowedMethods: ["GET", "PUT", "HEAD"],
+                AllowedHeaders: ["*"],
+                ExposeHeaders: ["ETag"],
+                MaxAgeSeconds: 3600,
+              },
+            ],
+          },
+        }),
+      );
+    } catch (err) {
+      console.warn(
+        "[whome s3] bucket CORS update failed:",
+        err instanceof Error ? err.message : err,
+      );
     }
   }
 }
@@ -105,7 +161,7 @@ export async function presignedPutUrl(
   contentType: string,
   expiresIn = 15 * 60,
 ): Promise<string> {
-  const client = createS3Client(env);
+  const client = createS3PresignClient(env) ?? createS3Client(env);
   if (!client || !env.S3_BUCKET) throw new Error("s3_not_configured");
   const type = normalizeContentType(contentType);
   return getSignedUrl(

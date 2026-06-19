@@ -50,6 +50,8 @@ export const envSchema = z
       .optional()
       .transform((v) => v === "true" || v === "1"),
     S3_PUBLIC_URL: z.string().url().optional(),
+    /** Optional override for presigned browser uploads (defaults from S3_PUBLIC_URL). */
+    S3_PUBLIC_ENDPOINT: z.string().url().optional(),
     GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
     GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
     GOOGLE_OAUTH_REDIRECT_URI: z.string().url().optional(),
