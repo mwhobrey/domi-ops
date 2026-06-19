@@ -8,3 +8,4 @@ export * from "./username.js";
 export * from "./join-imported.js";
 export * from "./member-label.js";
 export * from "./import-records.js";
+export { hashPassword, verifyPassword } from "better-auth/crypto";

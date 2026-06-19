@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { hashPassword, verifyPassword } from "better-auth/crypto";
+import { hashPassword, verifyPassword } from "@whome/auth";
 import type { Env } from "@whome/config";
 import type { Database } from "@whome/db";
 import { driveObjects, driveShareTokens } from "@whome/db";

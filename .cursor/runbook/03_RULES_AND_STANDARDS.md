@@ -191,6 +191,7 @@ This repo often uses hand-written numbered migrations (`0007_home_status_presenc
 13. **`packages/db/dist/`** — May be committed or built locally; migrations run from `dist/migrate.js` in Docker.
 14. **Drizzle journal** — Unlisted `.sql` files are not applied; see **Database migrations (Drizzle)** above.
 15. **better-sqlite3** — Rebuild after Node version change: `npm rebuild better-sqlite3 -w @whome/import-homehub`.
+16. **API Docker `node_modules`** — `apps/api/Dockerfile` must copy `apps/api/node_modules`; npm workspaces nest `better-auth` there (not hoisted to root). Drive share passwords import via `@whome/auth` re-export.
 
 ## Commit message convention (project lead preference)
 

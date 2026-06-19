@@ -1,7 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { hashPassword } from "better-auth/crypto";
-import type { AuthContext } from "@whome/auth";
+import { hashPassword, type AuthContext } from "@whome/auth";
 import type { Env } from "@whome/config";
 import type { Database } from "@whome/db";
 import {
