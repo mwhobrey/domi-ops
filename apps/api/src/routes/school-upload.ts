@@ -1,7 +1,9 @@
+import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import type { Env } from "@whome/config";
 import type { Database } from "@whome/db";
-import { createS3Client, ensureS3ReadyOnce, presignedPutUrl, publicObjectUrl } from "../lib/s3.js";
+import { createS3Client, ensureS3ReadyOnce, publicObjectUrl } from "../lib/s3.js";
+import { browserUploadPutUrl } from "../lib/upload-token.js";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 
@@ -30,7 +32,19 @@ export function schoolUploadRoutes(_db: Database, env: Env) {
     const key = `school/${auth.householdId}/${Date.now()}-${safe}`;
     const contentType = body.contentType?.trim() || "application/octet-stream";
 
-    const uploadUrl = await presignedPutUrl(env, key, contentType, PRESIGN_EXPIRY_SEC);
+    const uploadId = randomUUID();
+    const uploadUrl = browserUploadPutUrl(
+      env,
+      {
+        uploadId,
+        key,
+        householdId: auth.householdId,
+        memberId: auth.memberId,
+        contentType,
+        maxBytes: null,
+      },
+      PRESIGN_EXPIRY_SEC,
+    );
     const publicUrl = publicObjectUrl(env, key);
 
     return c.json({ uploadUrl, key, publicUrl });

@@ -191,7 +191,8 @@ This repo often uses hand-written numbered migrations (`0007_home_status_presenc
 13. **`packages/db/dist/`** — May be committed or built locally; migrations run from `dist/migrate.js` in Docker.
 14. **Drizzle journal** — Unlisted `.sql` files are not applied; see **Database migrations (Drizzle)** above.
 15. **better-sqlite3** — Rebuild after Node version change: `npm rebuild better-sqlite3 -w @whome/import-homehub`.
-17. **HTTPS presigned uploads** — Set `S3_PUBLIC_URL=https://<domain>/s3/<bucket>`; presign uses that origin (not internal `minio:9000`). Caddy `handle_path /s3/*` → `minio:9000`; attach `minio` to `PROXY_NETWORK` via `docker-compose.proxy-external.yml`. API sets MinIO bucket CORS for `PUBLIC_APP_URL` on boot.
+16. **API Docker `node_modules`** — `apps/api/Dockerfile` must copy `apps/api/node_modules`; npm workspaces nest `better-auth` there (not hoisted to root).
+17. **Browser file uploads** — Presign returns same-origin `PUT /api/core/upload/:id?token=…`; API streams to MinIO. No public MinIO/Caddy `/s3` route required. `S3_PUBLIC_URL` optional for direct object URLs.
 
 ## Commit message convention (project lead preference)
 

@@ -122,8 +122,8 @@ S3_SECRET_KEY=<from Phase 2>
 S3_BUCKET=whome
 S3_FORCE_PATH_STYLE=true
 # Required for HTTPS prod — presigned browser uploads (Caddy /s3 → minio:9000)
-S3_PUBLIC_URL=https://whome.whobrey.me/s3/whome
-# S3_PUBLIC_ENDPOINT=https://whome.whobrey.me/s3
+# Optional if using API upload proxy (default): browser PUT goes to /api/core/upload
+# S3_PUBLIC_URL=https://whome.whobrey.me/s3/whome
 
 GOOGLE_OAUTH_CLIENT_ID=<Google Cloud Console>
 GOOGLE_OAUTH_CLIENT_SECRET=<Google Cloud Console>

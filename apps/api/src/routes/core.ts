@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { randomUUID } from "node:crypto";
 import {
   canProvisionMembers,
   isUsernameAvailable,
@@ -133,10 +134,10 @@ import {
   deleteObject,
   ensureS3ReadyOnce,
   getObjectBuffer,
-  presignedPutUrl,
   putObject,
   contentTypeFromKey,
 } from "../lib/s3.js";
+import { browserUploadPutUrl } from "../lib/upload-token.js";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 
@@ -918,7 +919,15 @@ export function coreRoutes(db: Database, env: Env) {
     }
     const key = shoppingReceiptObjectKey(auth.householdId, body.filename.trim());
     const contentType = body.contentType?.trim() || "application/octet-stream";
-    const uploadUrl = await presignedPutUrl(env, key, contentType);
+    const uploadId = randomUUID();
+    const uploadUrl = browserUploadPutUrl(env, {
+      uploadId,
+      key,
+      householdId: auth.householdId,
+      memberId: auth.memberId,
+      contentType,
+      maxBytes: null,
+    });
     return c.json({ uploadUrl, key });
   });
 

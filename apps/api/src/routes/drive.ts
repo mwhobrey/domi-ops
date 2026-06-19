@@ -44,9 +44,9 @@ import {
   deleteObject,
   ensureS3ReadyOnce,
   getObjectBuffer,
-  presignedPutUrl,
   contentTypeFromKey,
 } from "../lib/s3.js";
+import { browserUploadPutUrl } from "../lib/upload-token.js";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 
@@ -288,7 +288,18 @@ export function driveRoutes(db: Database, env: Env) {
     const objectId = randomUUID();
     const key = driveObjectKey(auth.householdId, objectId, body.filename.trim());
     const contentType = body.contentType?.trim() || "application/octet-stream";
-    const uploadUrl = await presignedPutUrl(env, key, contentType, PRESIGN_EXPIRY_SEC);
+    const uploadUrl = browserUploadPutUrl(
+      env,
+      {
+        uploadId: objectId,
+        key,
+        householdId: auth.householdId,
+        memberId: auth.memberId,
+        contentType,
+        maxBytes: byteSize ?? env.DRIVE_UPLOAD_MAX_BYTES,
+      },
+      PRESIGN_EXPIRY_SEC,
+    );
     return c.json({ uploadUrl, key, objectId });
   });
 
