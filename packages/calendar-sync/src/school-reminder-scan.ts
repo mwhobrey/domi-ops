@@ -3,21 +3,19 @@ import type { Database } from "@whome/db";
 import {
   householdMembers,
   households,
-  pushSubscriptions,
   schoolAssignments,
   schoolClasses,
   schoolEnrollments,
   schoolSubmissions,
   users,
 } from "@whome/db";
-import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
-import webpush from "web-push";
-import { deliverWebPush } from "./push-delivery.js";
-
-// TODO: use household timezone from DB for due-date boundaries (currently UTC date).
-function todayIsoDate(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import {
+  classifyDueReminder,
+  todayIsoDateInTz,
+  type DueReminderKind,
+} from "./household-time.js";
+import { deliverUserNotification } from "./user-notify.js";
 
 function householdHasSchoolModule(modulesEnabled: string): boolean {
   try {
@@ -57,27 +55,43 @@ function submissionBlocksReminder(status: string | null | undefined): boolean {
   return status === "submitted" || status === "graded" || status === "returned";
 }
 
-function configured(env: Env): boolean {
-  return Boolean(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY && env.VAPID_SUBJECT);
+function schoolReminderCopy(
+  title: string,
+  className: string,
+  kind: DueReminderKind,
+): { title: string; body: string } {
+  switch (kind) {
+    case "due_tomorrow":
+      return {
+        title: "Assignment due tomorrow",
+        body: `"${title}" (${className}) is due tomorrow`,
+      };
+    case "due_today":
+      return {
+        title: "Assignment due today",
+        body: `"${title}" (${className}) is due today`,
+      };
+    case "overdue":
+      return {
+        title: "Assignment overdue",
+        body: `"${title}" (${className}) is overdue`,
+      };
+  }
 }
 
 async function notifySchoolAssignmentReminder(
   db: Database,
   env: Env,
   input: {
+    householdId: string;
     assignmentId: string;
     title: string;
     className: string;
     recipientUserIds: string[];
-    kind: "due_today" | "overdue";
+    kind: DueReminderKind;
   },
 ): Promise<void> {
-  if (!configured(env) || input.recipientUserIds.length === 0) return;
-  webpush.setVapidDetails(
-    env.VAPID_SUBJECT!,
-    env.VAPID_PUBLIC_KEY!,
-    env.VAPID_PRIVATE_KEY!,
-  );
+  if (input.recipientUserIds.length === 0) return;
 
   const enabled = await db
     .select({ id: users.id })
@@ -91,38 +105,33 @@ async function notifySchoolAssignmentReminder(
   const enabledIds = enabled.map((u) => u.id);
   if (enabledIds.length === 0) return;
 
-  const subs = await db
-    .select()
-    .from(pushSubscriptions)
-    .where(inArray(pushSubscriptions.userId, enabledIds));
-  if (subs.length === 0) return;
-
-  const body =
-    input.kind === "overdue"
-      ? `"${input.title}" (${input.className}) is overdue`
-      : `"${input.title}" (${input.className}) is due today`;
-
-  await deliverWebPush(db, subs, {
-    title: input.kind === "overdue" ? "Assignment overdue" : "Assignment due today",
-    body,
-    tag: `school-assignment-${input.assignmentId}`,
-    data: { url: `/school/assignment/${input.assignmentId}` },
+  const copy = schoolReminderCopy(input.title, input.className, input.kind);
+  await deliverUserNotification(db, env, {
+    userIds: enabledIds,
+    householdId: input.householdId,
+    title: copy.title,
+    body: copy.body,
+    url: `/school/assignment/${input.assignmentId}`,
+    tag: `school-assignment-${input.assignmentId}-${input.kind}`,
   });
 }
 
 export async function scanSchoolReminders(db: Database, env: Env): Promise<number> {
-  if (!configured(env)) return 0;
-
   const schoolHouseholds = await db
-    .select({ id: households.id, modulesEnabled: households.modulesEnabled })
+    .select({
+      id: households.id,
+      modulesEnabled: households.modulesEnabled,
+      timezone: households.timezone,
+    })
     .from(households);
 
-  const enabledHouseholdIds = schoolHouseholds
-    .filter((h) => householdHasSchoolModule(h.modulesEnabled))
-    .map((h) => h.id);
+  const enabledHouseholds = schoolHouseholds.filter((h) =>
+    householdHasSchoolModule(h.modulesEnabled),
+  );
+  const enabledHouseholdIds = enabledHouseholds.map((h) => h.id);
   if (enabledHouseholdIds.length === 0) return 0;
 
-  const today = todayIsoDate();
+  const tzByHousehold = new Map(enabledHouseholds.map((h) => [h.id, h.timezone]));
   const now = new Date();
   let sent = 0;
 
@@ -131,6 +140,7 @@ export async function scanSchoolReminders(db: Database, env: Env): Promise<numbe
       id: schoolAssignments.id,
       title: schoolAssignments.title,
       dueAt: schoolAssignments.dueAt,
+      dueReminderSentAt: schoolAssignments.dueReminderSentAt,
       classId: schoolAssignments.classId,
       className: schoolClasses.name,
       householdId: schoolClasses.householdId,
@@ -143,17 +153,22 @@ export async function scanSchoolReminders(db: Database, env: Env): Promise<numbe
         eq(schoolClasses.archived, false),
         eq(schoolAssignments.visibility, "assigned"),
         isNotNull(schoolAssignments.dueAt),
-        isNull(schoolAssignments.dueReminderSentAt),
       ),
     );
 
   for (const row of assignmentRows) {
     if (!row.dueAt) continue;
 
-    const dueDateStr = row.dueAt.toISOString().slice(0, 10);
-    let kind: "due_today" | "overdue" | null = null;
-    if (dueDateStr < today) kind = "overdue";
-    else if (dueDateStr === today) kind = "due_today";
+    const tz = tzByHousehold.get(row.householdId) ?? "UTC";
+    const today = todayIsoDateInTz(tz);
+    const dueDateStr = row.dueAt.toLocaleDateString("en-CA", { timeZone: tz });
+    const kind = classifyDueReminder({
+      dueDate: dueDateStr,
+      today,
+      lastSentAt: row.dueReminderSentAt,
+      now,
+      timeZone: tz,
+    });
     if (!kind) continue;
 
     const enrollments = await db
@@ -212,6 +227,7 @@ export async function scanSchoolReminders(db: Database, env: Env): Promise<numbe
     if (recipientUserIds.length === 0) continue;
 
     await notifySchoolAssignmentReminder(db, env, {
+      householdId: row.householdId,
       assignmentId: row.id,
       title: row.title,
       className: row.className,

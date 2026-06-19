@@ -50,7 +50,7 @@ export function SchoolReminderPushSettings({
     <fieldset className="space-y-3">
       <legend className="text-sm font-medium">School assignments</legend>
       <Checkbox
-        label="Send push when assignments are due today or overdue"
+        label="Send push when assignments are due tomorrow, today, or overdue (overdue repeats daily)"
         checked={enabled}
         disabled={busy}
         onChange={(e) => void onToggle(e.target.checked)}

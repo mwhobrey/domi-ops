@@ -5,12 +5,10 @@ import {
   expenseBudgets,
   expenses,
   householdMembers,
-  pushSubscriptions,
   users,
 } from "@whome/db";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import webpush from "web-push";
-import { deliverWebPush } from "./push-delivery.js";
+import { deliverUserNotification } from "./user-notify.js";
 
 export const BUDGET_WARNING_RATIO = 0.8;
 
@@ -19,10 +17,6 @@ export type BudgetAlertKind = "warning" | "over";
 function todayMonthKey(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function configured(env: Env): boolean {
-  return Boolean(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY && env.VAPID_SUBJECT);
 }
 
 async function sumCategorySpend(
@@ -94,13 +88,6 @@ async function notifyBudgetAlert(
     kind: BudgetAlertKind;
   },
 ): Promise<void> {
-  if (!configured(env)) return;
-  webpush.setVapidDetails(
-    env.VAPID_SUBJECT!,
-    env.VAPID_PUBLIC_KEY!,
-    env.VAPID_PRIVATE_KEY!,
-  );
-
   const members = await db
     .select({ userId: householdMembers.userId })
     .from(householdMembers)
@@ -120,11 +107,6 @@ async function notifyBudgetAlert(
   const enabledIds = enabled.map((u) => u.id);
   if (enabledIds.length === 0) return;
 
-  const subs = await db
-    .select()
-    .from(pushSubscriptions)
-    .where(inArray(pushSubscriptions.userId, enabledIds));
-
   const spend = formatMoney(input.monthSpend);
   const target = formatMoney(input.monthlyTarget);
   const title =
@@ -135,11 +117,13 @@ async function notifyBudgetAlert(
       : `${input.category}: ${spend} of ${target} this month`;
 
   const monthKey = todayMonthKey();
-  await deliverWebPush(db, subs, {
+  await deliverUserNotification(db, env, {
+    userIds: enabledIds,
+    householdId: input.householdId,
     title,
     body,
+    url: "/expenses",
     tag: `budget-${input.householdId}-${input.category}-${monthKey}-${input.kind}`,
-    data: { url: "/expenses" },
   });
 }
 

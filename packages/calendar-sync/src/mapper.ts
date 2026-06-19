@@ -1,3 +1,8 @@
+import {
+  googleRemindersBody,
+  offsetsFromGoogleEvent,
+} from "./event-reminders.js";
+
 export interface MappedEventFields {
   title: string;
   description: string | null;
@@ -111,6 +116,7 @@ export type WhomeEventForGoogle = {
   endTime: string | null;
   allDay: boolean;
   timeZone: string | null;
+  reminderOffsets?: number[];
 };
 
 /** Build Google Calendar API event body from a whome event row. */
@@ -123,6 +129,8 @@ export function eventToGoogleBody(
     summary: event.title,
     description: event.description ?? "",
   };
+  const reminders = googleRemindersBody(event.reminderOffsets ?? []);
+  if (reminders) body.reminders = reminders;
   if (event.allDay || !event.startTime) {
     body.start = { date: event.startDate };
     const endBase = event.endDate ?? event.startDate;

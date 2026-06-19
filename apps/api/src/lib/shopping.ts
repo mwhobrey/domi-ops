@@ -172,7 +172,7 @@ export async function collectAisleSuggestions(
 export async function materializeDueRecurring(
   db: Database,
   householdId: string,
-): Promise<number> {
+): Promise<{ created: number; itemNames: string[] }> {
   const today = todayIsoDate();
   const due = await db
     .select()
@@ -186,6 +186,7 @@ export async function materializeDueRecurring(
     );
 
   let created = 0;
+  const itemNames: string[] = [];
   for (const template of due) {
     const [pending] = await db
       .select({ id: shoppingItems.id })
@@ -220,6 +221,7 @@ export async function materializeDueRecurring(
       notes: template.notes,
       recurringId: template.id,
     });
+    itemNames.push(template.item);
 
     const nextAt = advanceRecurringDate(template.interval as RecurringInterval, template.nextAt);
     await db
@@ -229,7 +231,7 @@ export async function materializeDueRecurring(
     created += 1;
   }
 
-  return created;
+  return { created, itemNames };
 }
 
 export async function buildShoppingReports(

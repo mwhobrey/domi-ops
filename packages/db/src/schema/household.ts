@@ -39,6 +39,8 @@ export const households = pgTable("households", {
   /** NULL = unlimited (self-host default); hosted tiers set explicitly in Phase 2 */
   storageQuotaBytes: bigint("storage_quota_bytes", { mode: "number" }),
   storageUsedBytes: bigint("storage_used_bytes", { mode: "number" }).notNull().default(0),
+  /** Set when drive quota warning push was sent; cleared when usage drops below warn threshold */
+  driveQuotaWarnSentAt: timestamp("drive_quota_warn_sent_at", { withTimezone: true }),
   /** Per-role Drive access: member/child/guest → none|read|write (owner/admin always write) */
   drivePermissionsJson: text("drive_permissions_json"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -77,6 +79,12 @@ export const users = pgTable(
   pushSchoolRemindersEnabled: boolean("push_school_reminders_enabled")
     .notNull()
     .default(true),
+  /** When false, shopping recurring-list push is not sent to this user */
+  pushShoppingRemindersEnabled: boolean("push_shopping_reminders_enabled")
+    .notNull()
+    .default(true),
+  /** Local date (YYYY-MM-DD) when the chore morning digest was last sent */
+  choreDigestSentOn: varchar("chore_digest_sent_on", { length: 10 }),
   /** HomeHub import: real login email that should claim this stub user */
   importClaimEmail: varchar("import_claim_email", { length: 320 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

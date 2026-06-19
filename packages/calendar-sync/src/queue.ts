@@ -81,3 +81,33 @@ export async function ensureSchoolReminderScheduler(redisUrl: string): Promise<v
     },
   );
 }
+
+/** Morning chore digest (every 15 minutes; fires once per user after 08:00 local). */
+export async function ensureChoreDigestScheduler(redisUrl: string): Promise<void> {
+  const q = getSyncQueue(redisUrl);
+  await q.add(
+    "chore.digest.scan",
+    { name: "chore.digest.scan", payload: { householdId: "scan" } },
+    {
+      repeat: { every: 15 * 60 * 1000 },
+      jobId: "chore-digest-scan",
+      removeOnComplete: 20,
+      removeOnFail: 20,
+    },
+  );
+}
+
+/** Drive quota threshold warning (every 30 minutes). */
+export async function ensureDriveQuotaScheduler(redisUrl: string): Promise<void> {
+  const q = getSyncQueue(redisUrl);
+  await q.add(
+    "drive.quota.scan",
+    { name: "drive.quota.scan", payload: { householdId: "scan" } },
+    {
+      repeat: { every: 30 * 60 * 1000 },
+      jobId: "drive-quota-scan",
+      removeOnComplete: 20,
+      removeOnFail: 20,
+    },
+  );
+}

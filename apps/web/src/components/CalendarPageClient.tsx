@@ -67,6 +67,31 @@ import { Calendar } from "lucide-react";
 import { cn } from "../lib/cn";
 import { Alert, Button, IconButton, Input } from "./ui";
 
+function mapLoadedEvent(e: CalendarEventView): CalendarEventView {
+  return {
+    id: e.id,
+    title: e.title,
+    description: e.description ?? null,
+    startDate: e.startDate,
+    endDate: e.endDate ?? null,
+    startTime: e.startTime,
+    endTime: e.endTime,
+    allDay: e.allDay,
+    color: e.color,
+    categoryKey: e.categoryKey ?? null,
+    categoryLabel: e.categoryLabel ?? null,
+    timeZone: e.timeZone ?? null,
+    calendarId: e.calendarId,
+    source: e.source,
+    googleEventId: e.googleEventId ?? null,
+    editable: e.editable,
+    pushable: e.pushable,
+    syncStatus: e.syncStatus,
+    recurringRuleId: e.recurringRuleId ?? null,
+    reminderOffsets: e.reminderOffsets ?? [],
+  };
+}
+
 export function CalendarPageClient({
   oauthConfigured,
   defaultSyncMode,
@@ -119,10 +144,19 @@ export function CalendarPageClient({
   const [importWizardOpen, setImportWizardOpen] = useState(false);
   const [needsImportSetup, setNeedsImportSetup] = useState(false);
   const autoOpenedImportRef = useRef(false);
+  const openedEventDeepLinkRef = useRef<string | null>(null);
   const connected = initialConnections.length > 0;
   const { status: syncStatus, refresh: refreshSyncStatus, isActive: syncActive } =
     useCalendarSyncStatus(connected);
   const syncWasActive = useRef(false);
+
+  const clearEventDeepLink = useCallback(() => {
+    const next = new URLSearchParams(searchParams.toString());
+    if (!next.has("event")) return;
+    next.delete("event");
+    const qs = next.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [pathname, router, searchParams]);
 
   useEffect(() => {
     if (!openImportWizard || autoOpenedImportRef.current) return;
@@ -143,6 +177,41 @@ export function CalendarPageClient({
     setViewMode(isDesktop ? readStoredCalendarView() : "agenda");
     setViewReady(true);
   }, [isDesktop]);
+
+  useEffect(() => {
+    const eventId = searchParams.get("event");
+    if (!eventId || openedEventDeepLinkRef.current === eventId) return;
+
+    const openFromDeepLink = async () => {
+      const inList = events.find((e) => e.id === eventId);
+      if (inList) {
+        openedEventDeepLinkRef.current = eventId;
+        setSelected(inList);
+        setSheetOpen(true);
+        setActionError(null);
+        clearEventDeepLink();
+        return;
+      }
+
+      try {
+        const data = await apiClient.get<{ event: CalendarEventView }>(
+          `/api/calendar/events/${eventId}`,
+        );
+        const mapped = mapLoadedEvent(data.event);
+        openedEventDeepLinkRef.current = eventId;
+        setFocusDate(parseLocalDate(mapped.startDate));
+        setSelected(mapped);
+        setSheetOpen(true);
+        setActionError(null);
+        clearEventDeepLink();
+      } catch {
+        setActionError("This event was deleted or you do not have access.");
+        clearEventDeepLink();
+      }
+    };
+
+    void openFromDeepLink();
+  }, [searchParams, events, clearEventDeepLink]);
 
   const persistView = useCallback(
     (v: CalendarViewMode) => {
@@ -193,28 +262,7 @@ export function CalendarPageClient({
         `/api/calendar/events?${params}`,
       );
       setEvents(
-        data.events.map((e) => ({
-          id: e.id,
-          title: e.title,
-          description: e.description ?? null,
-          startDate: e.startDate,
-          endDate: e.endDate ?? null,
-          startTime: e.startTime,
-          endTime: e.endTime,
-          allDay: e.allDay,
-          color: e.color,
-          categoryKey: e.categoryKey ?? null,
-          categoryLabel: e.categoryLabel ?? null,
-          timeZone: e.timeZone ?? null,
-          calendarId: e.calendarId,
-          source: e.source,
-          googleEventId: e.googleEventId ?? null,
-          editable: e.editable,
-          pushable: e.pushable,
-          syncStatus: e.syncStatus,
-          recurringRuleId: e.recurringRuleId ?? null,
-          reminderOffsets: e.reminderOffsets ?? [],
-        })),
+        data.events.map((e) => mapLoadedEvent(e)),
       );
     } catch (err) {
       setFetchError(err instanceof ApiError ? err.message : "Failed to load events");

@@ -24,6 +24,7 @@ export default async function ProfilePage() {
     pushChoresRemindersEnabled: true,
     pushExpenseBudgetAlertsEnabled: true,
     pushSchoolRemindersEnabled: true,
+    pushShoppingRemindersEnabled: true,
     pushSubscribed: false,
     pushAvailable: false,
     avatarUrl: null as string | null,
@@ -33,9 +34,16 @@ export default async function ProfilePage() {
     defaultSyncMode: string;
     connections: { id: string; lastSyncAt: string | null }[];
   } | null = null;
+  let modulesEnabled: string[] = [];
   let loadError: string | null = null;
   try {
     profile = await apiFetch("/api/core/profile");
+    try {
+      const session = await apiFetch<{ modulesEnabled?: string[] }>("/auth/session");
+      modulesEnabled = session.modulesEnabled ?? [];
+    } catch {
+      /* session optional */
+    }
     try {
       const status = await apiFetch<{
         oauthConfigured: boolean;
@@ -71,6 +79,7 @@ export default async function ProfilePage() {
             <ProfileEditor
               initial={profile}
               calendarIntegration={calendarIntegration ?? undefined}
+              modulesEnabled={modulesEnabled}
             />
           </div>
           <ScrollToTopFab className="bottom-[max(5rem,env(safe-area-inset-bottom))] lg:bottom-[max(1.5rem,env(safe-area-inset-bottom))]" />

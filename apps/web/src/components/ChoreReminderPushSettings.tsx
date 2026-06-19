@@ -42,7 +42,7 @@ export function ChoreReminderPushSettings({
     <fieldset className="space-y-3">
       <legend className="text-sm font-medium">Chore reminders</legend>
       <Checkbox
-        label="Send push when chores are due today or overdue"
+        label="Send push when chores are due tomorrow, today, or overdue (overdue repeats daily)"
         checked={enabled}
         disabled={busy}
         onChange={(e) => void onToggle(e.target.checked)}

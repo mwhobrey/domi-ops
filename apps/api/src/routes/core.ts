@@ -38,6 +38,7 @@ import {
   shoppingTripItems,
   shoppingTrips,
   pushSubscriptions,
+  userNotifications,
   users,
 } from "@whome/db";
 import { and, desc, eq, exists, ilike, inArray, or, sql } from "drizzle-orm";
@@ -70,6 +71,7 @@ import {
   type TemperatureUnit,
 } from "../lib/weather-units.js";
 import { avatarObjectKey, processAvatarUpload } from "../lib/avatar-image.js";
+import { memberAvatarUrl } from "../lib/avatar-url.js";
 import { buildChoresGlance } from "../lib/chores-glance.js";
 import {
   collectChoreListSuggestions,
@@ -117,7 +119,7 @@ import {
 } from "../lib/drive-embeds.js";
 import { driveVisibleWhere, filenameFromDriveKey } from "../lib/drive.js";
 import { isHouseholdModuleEnabled } from "../lib/household-modules.js";
-import { memberAvatarUrl } from "../lib/avatar-url.js";
+import { notifyShoppingRecurringMaterialized } from "../lib/push-shopping.js";
 import {
   claimEndpointForUser,
   deletePushSubscriptionForUser,
@@ -516,6 +518,64 @@ export function coreRoutes(db: Database, env: Env) {
     return c.json({ unreadCount: countUnread(auth.userId, mapped) });
   });
 
+  app.get("/notifications", async (c) => {
+    const auth = c.get("auth")!;
+    const rows = await db
+      .select()
+      .from(userNotifications)
+      .where(eq(userNotifications.userId, auth.userId))
+      .orderBy(desc(userNotifications.createdAt))
+      .limit(50);
+    const unreadCount = rows.filter((r) => r.readAt == null).length;
+    return c.json({
+      notifications: rows.map((r) => ({
+        id: r.id,
+        title: r.title,
+        body: r.body,
+        url: r.url,
+        tag: r.tag,
+        read: r.readAt != null,
+        createdAt: r.createdAt.toISOString(),
+      })),
+      unreadCount,
+    });
+  });
+
+  app.get("/notifications/unread-count", async (c) => {
+    const auth = c.get("auth")!;
+    const [row] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(userNotifications)
+      .where(
+        and(eq(userNotifications.userId, auth.userId), sql`${userNotifications.readAt} IS NULL`),
+      );
+    return c.json({ unreadCount: Number(row?.count ?? 0) });
+  });
+
+  app.post("/notifications/mark-read", async (c) => {
+    const auth = c.get("auth")!;
+    const body = await c.req.json<{ ids?: string[]; all?: boolean }>();
+    const now = new Date();
+    if (body.all) {
+      await db
+        .update(userNotifications)
+        .set({ readAt: now })
+        .where(
+          and(eq(userNotifications.userId, auth.userId), sql`${userNotifications.readAt} IS NULL`),
+        );
+      return c.json({ ok: true });
+    }
+    const ids = Array.isArray(body.ids) ? body.ids.filter(Boolean) : [];
+    if (ids.length === 0) return c.json({ error: "ids_required" }, 400);
+    await db
+      .update(userNotifications)
+      .set({ readAt: now })
+      .where(
+        and(eq(userNotifications.userId, auth.userId), inArray(userNotifications.id, ids)),
+      );
+    return c.json({ ok: true });
+  });
+
   app.post("/notices", async (c) => {
     const auth = c.get("auth")!;
     const body = await c.req.json<{ content: string; driveObjectIds?: string[] }>();
@@ -686,7 +746,15 @@ export function coreRoutes(db: Database, env: Env) {
 
   app.get("/shopping", async (c) => {
     const auth = c.get("auth")!;
-    await materializeDueRecurring(db, auth.householdId);
+    const { created, itemNames } = await materializeDueRecurring(db, auth.householdId);
+    if (created > 0) {
+      void notifyShoppingRecurringMaterialized(db, env, {
+        householdId: auth.householdId,
+        itemNames,
+      }).catch(() => {
+        /* best-effort */
+      });
+    }
     const rows = await db
       .select()
       .from(shoppingItems)
@@ -1727,6 +1795,7 @@ export function coreRoutes(db: Database, env: Env) {
         pushChoresRemindersEnabled: users.pushChoresRemindersEnabled,
         pushExpenseBudgetAlertsEnabled: users.pushExpenseBudgetAlertsEnabled,
         pushSchoolRemindersEnabled: users.pushSchoolRemindersEnabled,
+        pushShoppingRemindersEnabled: users.pushShoppingRemindersEnabled,
       })
       .from(users)
       .where(eq(users.id, auth.userId))
@@ -1765,6 +1834,7 @@ export function coreRoutes(db: Database, env: Env) {
       pushChoresRemindersEnabled: userRow?.pushChoresRemindersEnabled ?? true,
       pushExpenseBudgetAlertsEnabled: userRow?.pushExpenseBudgetAlertsEnabled ?? true,
       pushSchoolRemindersEnabled: userRow?.pushSchoolRemindersEnabled ?? true,
+      pushShoppingRemindersEnabled: userRow?.pushShoppingRemindersEnabled ?? true,
       pushSubscribed: Boolean(pushSub),
       pushAvailable: isWebPushConfigured(env),
       avatarUrl: memberAvatarUrl(auth.memberId, memberRow?.avatarKey),
@@ -1781,6 +1851,7 @@ export function coreRoutes(db: Database, env: Env) {
       pushChoresRemindersEnabled?: boolean;
       pushExpenseBudgetAlertsEnabled?: boolean;
       pushSchoolRemindersEnabled?: boolean;
+      pushShoppingRemindersEnabled?: boolean;
     }>();
 
     const patch: {
@@ -1793,6 +1864,7 @@ export function coreRoutes(db: Database, env: Env) {
       pushChoresRemindersEnabled?: boolean;
       pushExpenseBudgetAlertsEnabled?: boolean;
       pushSchoolRemindersEnabled?: boolean;
+      pushShoppingRemindersEnabled?: boolean;
     } = {};
     if (body.name !== undefined) patch.name = body.name.trim().slice(0, 128) || null;
     if (body.temperatureUnit === "fahrenheit" || body.temperatureUnit === "celsius") {
@@ -1815,6 +1887,9 @@ export function coreRoutes(db: Database, env: Env) {
     }
     if (typeof body.pushSchoolRemindersEnabled === "boolean") {
       userPatch.pushSchoolRemindersEnabled = body.pushSchoolRemindersEnabled;
+    }
+    if (typeof body.pushShoppingRemindersEnabled === "boolean") {
+      userPatch.pushShoppingRemindersEnabled = body.pushShoppingRemindersEnabled;
     }
 
     if (Object.keys(userPatch).length > 0) {

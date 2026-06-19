@@ -79,6 +79,11 @@ Workspace-level **Bug** / **Feature** may exist; attach in Linear UI if needed. 
 |-----------|--------|
 | (shipped reference) | [WHO-11](https://linear.app/mikewhob-whome/issue/WHO-11) Notice board MVP |
 | M1 — Web Push | [WHO-10](https://linear.app/mikewhob-whome/issue/WHO-10) |
+| M2 — Calendar push correctness | [WHO-137](https://linear.app/mikewhob-whome/issue/WHO-137), [WHO-138](https://linear.app/mikewhob-whome/issue/WHO-138), [WHO-140](https://linear.app/mikewhob-whome/issue/WHO-140), [WHO-142](https://linear.app/mikewhob-whome/issue/WHO-142) |
+| M3 — Google & import reminder parity | [WHO-139](https://linear.app/mikewhob-whome/issue/WHO-139), [WHO-146](https://linear.app/mikewhob-whome/issue/WHO-146), [WHO-147](https://linear.app/mikewhob-whome/issue/WHO-147) |
+| M4 — Profile notification UX | [WHO-141](https://linear.app/mikewhob-whome/issue/WHO-141) |
+| M5 — Targeting & cadence | [WHO-143](https://linear.app/mikewhob-whome/issue/WHO-143), [WHO-144](https://linear.app/mikewhob-whome/issue/WHO-144) |
+| M6 — Deferred module push | [WHO-148](https://linear.app/mikewhob-whome/issue/WHO-148)–[WHO-151](https://linear.app/mikewhob-whome/issue/WHO-151) |
 
 ### [DevEx & platform](https://linear.app/mikewhob-whome/project/devex-and-platform-2b8c7de9daa6)
 
@@ -192,4 +197,4 @@ Detailed acceptance criteria: `docs/LINEAR_BACKLOG.md` (keep in sync when adding
 |----|--------|--------|
 | [WHO-134](https://linear.app/mikewhob-whome/issue/WHO-134) | Backlog | Marketing landing page (post-OSS) |
 
-Recent: **WHO-133** (GHCR publish) and **WHO-135** (login / public sign-up gate) — Done.
+Recent: **WHO-137**–**WHO-151** notification hardening backlog; **WHO-136** (push infra) Done.

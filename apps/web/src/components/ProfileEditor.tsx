@@ -3,11 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
 import type { HomePresence } from "../lib/home-status";
-import { CalendarReminderPushSettings } from "./CalendarReminderPushSettings";
-import { ChoreReminderPushSettings } from "./ChoreReminderPushSettings";
-import { ExpenseBudgetPushSettings } from "./ExpenseBudgetPushSettings";
-import { NoticePushSettings } from "./NoticePushSettings";
-import { SchoolReminderPushSettings } from "./SchoolReminderPushSettings";
+import { NotificationSettingsPanel } from "./NotificationSettingsPanel";
 import { ProfileCalendarConnect } from "./ProfileCalendarConnect";
 import { Alert, Avatar, Button, Card, CardBody, Input, RadioGroup, SectionHeader } from "./ui";
 
@@ -57,6 +53,7 @@ function ProfileSection({
 export function ProfileEditor({
   initial,
   calendarIntegration,
+  modulesEnabled = [],
 }: {
   initial: {
     email: string | null;
@@ -73,6 +70,7 @@ export function ProfileEditor({
     pushChoresRemindersEnabled: boolean;
     pushExpenseBudgetAlertsEnabled: boolean;
     pushSchoolRemindersEnabled: boolean;
+    pushShoppingRemindersEnabled: boolean;
     pushSubscribed: boolean;
     pushAvailable: boolean;
     avatarUrl: string | null;
@@ -82,6 +80,7 @@ export function ProfileEditor({
     defaultSyncMode: string;
     connections: { id: string; lastSyncAt: string | null }[];
   };
+  modulesEnabled?: string[];
 }) {
   const [name, setName] = useState(initial.name ?? "");
   const [presence, setPresence] = useState<HomePresence>(initial.presence);
@@ -309,29 +308,19 @@ export function ProfileEditor({
           description="Choose which Web Push alerts this browser and account receive."
           className="md:col-span-2"
         >
-          <div className="space-y-4">
-            <NoticePushSettings
-              initialEnabled={initial.pushNoticesEnabled}
-              initialSubscribed={initial.pushSubscribed}
-              pushAvailable={initial.pushAvailable}
-            />
-            <CalendarReminderPushSettings
-              initialEnabled={initial.pushCalendarRemindersEnabled}
-              pushAvailable={initial.pushAvailable}
-            />
-            <ChoreReminderPushSettings
-              initialEnabled={initial.pushChoresRemindersEnabled}
-              pushAvailable={initial.pushAvailable}
-            />
-            <ExpenseBudgetPushSettings
-              initialEnabled={initial.pushExpenseBudgetAlertsEnabled}
-              pushAvailable={initial.pushAvailable}
-            />
-            <SchoolReminderPushSettings
-              initialEnabled={initial.pushSchoolRemindersEnabled}
-              pushAvailable={initial.pushAvailable}
-            />
-          </div>
+          <NotificationSettingsPanel
+            initial={{
+              pushNoticesEnabled: initial.pushNoticesEnabled,
+              pushCalendarRemindersEnabled: initial.pushCalendarRemindersEnabled,
+              pushChoresRemindersEnabled: initial.pushChoresRemindersEnabled,
+              pushExpenseBudgetAlertsEnabled: initial.pushExpenseBudgetAlertsEnabled,
+              pushSchoolRemindersEnabled: initial.pushSchoolRemindersEnabled,
+              pushShoppingRemindersEnabled: initial.pushShoppingRemindersEnabled,
+              pushSubscribed: initial.pushSubscribed,
+              pushAvailable: initial.pushAvailable,
+            }}
+            modulesEnabled={modulesEnabled}
+          />
         </ProfileSection>
       </div>
 

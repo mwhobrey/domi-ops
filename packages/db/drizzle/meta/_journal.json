@@ -218,6 +218,20 @@
       "when": 1780495004000,
       "tag": "0030_school_push_reminders",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1780495005000,
+      "tag": "0031_recurring_reminder_offsets",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1780495006000,
+      "tag": "0032_wave3_notifications",
+      "breakpoints": true
     }
   ]
 }

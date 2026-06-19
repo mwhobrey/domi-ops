@@ -1,9 +1,28 @@
-import { calendars, calendarEvents, importRecords, recurringRules } from "@whome/db";
+import type { Database } from "@whome/db";
+import { calendars, calendarEvents, calendarEventReminders, importRecords, recurringRules } from "@whome/db";
 import { eq, and } from "drizzle-orm";
-import { sqliteTableExists, sqliteSelectExisting } from "../lib/sqlite.js";
+import { sqliteTableExists, sqliteSelectExisting, sqliteColumns } from "../lib/sqlite.js";
 import { requireDb } from "../lib/require-db.js";
 import { lookupImportedTarget, rememberImportedTarget } from "../lib/import-record-index.js";
 import type { ImportContext, MapperResult } from "./types.js";
+
+import { REMINDER_OFFSET_COLUMNS, reminderOffsetsFromHomeHubRow } from "./calendar-reminder-import.js";
+async function insertImportedEventReminders(
+  db: Database,
+  eventId: string,
+  householdId: string,
+  offsets: number[],
+): Promise<void> {
+  if (offsets.length === 0) return;
+  await db.insert(calendarEventReminders).values(
+    offsets.map((offsetMinutes) => ({
+      eventId,
+      householdId,
+      offsetMinutes,
+      enabled: true,
+    })),
+  );
+}
 
 export async function importCalendar(ctx: ImportContext): Promise<MapperResult> {
   const result: MapperResult = { imported: 0, skipped: 0, warnings: [] };
@@ -28,9 +47,11 @@ export async function importCalendar(ctx: ImportContext): Promise<MapperResult> 
       "source",
       "google_event_id",
       "personal_calendar_id",
+      ...REMINDER_OFFSET_COLUMNS,
     ],
     " LIMIT 5000",
   );
+  const reminderColumns = sqliteColumns(ctx.sqlite, "reminder");
 
   if (ctx.dryRun) {
     result.imported = reminders.length;
@@ -281,6 +302,10 @@ export async function importCalendar(ctx: ImportContext): Promise<MapperResult> 
         googleEventId,
       })
       .returning();
+    const importOffsets = reminderOffsetsFromHomeHubRow(r, reminderColumns);
+    if (importOffsets.length > 0) {
+      await insertImportedEventReminders(db, ev.id, ctx.householdId, importOffsets);
+    }
     await db.insert(importRecords).values({
       householdId: ctx.householdId,
       sourceTable: "reminder",

@@ -2,7 +2,7 @@ import type { Env } from "@whome/config";
 import type { Database } from "@whome/db";
 import { householdMembers, pushSubscriptions, users } from "@whome/db";
 import { and, eq, inArray, ne } from "drizzle-orm";
-import webpush from "web-push";
+import { deliverUserNotification } from "@whome/calendar-sync";
 
 export type PushSubscriptionPayload = {
   endpoint: string;
@@ -11,15 +11,6 @@ export type PushSubscriptionPayload = {
 
 export function isWebPushConfigured(env: Env): boolean {
   return Boolean(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY && env.VAPID_SUBJECT);
-}
-
-export function configureWebPush(env: Env): void {
-  if (!isWebPushConfigured(env)) return;
-  webpush.setVapidDetails(
-    env.VAPID_SUBJECT!,
-    env.VAPID_PUBLIC_KEY!,
-    env.VAPID_PRIVATE_KEY!,
-  );
 }
 
 function truncateBody(text: string, max = 140): string {
@@ -39,9 +30,6 @@ export async function notifyHouseholdOfNotice(
     posterDisplayName: string;
   },
 ): Promise<void> {
-  if (!isWebPushConfigured(env)) return;
-  configureWebPush(env);
-
   const members = await db
     .select({ userId: householdMembers.userId })
     .from(householdMembers)
@@ -62,41 +50,15 @@ export async function notifyHouseholdOfNotice(
   const enabledIds = enabled.map((u) => u.id);
   if (enabledIds.length === 0) return;
 
-  const subs = await db
-    .select()
-    .from(pushSubscriptions)
-    .where(inArray(pushSubscriptions.userId, enabledIds));
-
-  if (subs.length === 0) return;
-
-  const payload = JSON.stringify({
+  const body = `${input.posterDisplayName}: ${truncateBody(input.content)}`;
+  await deliverUserNotification(db, env, {
+    userIds: enabledIds,
+    householdId: input.householdId,
     title: "New household notice",
-    body: `${input.posterDisplayName}: ${truncateBody(input.content)}`,
+    body,
+    url: "/dashboard?notices=1",
     tag: `notice-${input.noticeId}`,
-    data: {
-      url: "/dashboard?notices=1",
-      noticeId: input.noticeId,
-    },
   });
-
-  await Promise.all(
-    subs.map(async (sub) => {
-      try {
-        await webpush.sendNotification(
-          {
-            endpoint: sub.endpoint,
-            keys: { p256dh: sub.p256dh, auth: sub.authKey },
-          },
-          payload,
-        );
-      } catch (err: unknown) {
-        const status = (err as { statusCode?: number }).statusCode;
-        if (status === 404 || status === 410) {
-          await db.delete(pushSubscriptions).where(eq(pushSubscriptions.id, sub.id));
-        }
-      }
-    }),
-  );
 }
 
 export async function upsertPushSubscription(

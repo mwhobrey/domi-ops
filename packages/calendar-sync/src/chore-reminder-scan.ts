@@ -1,17 +1,28 @@
 import type { Env } from "@whome/config";
 import type { Database } from "@whome/db";
-import { chores, householdMembers, pushSubscriptions, users } from "@whome/db";
-import { and, eq, inArray, isNull, or } from "drizzle-orm";
-import webpush from "web-push";
-import { deliverWebPush } from "./push-delivery.js";
+import { chores, householdMembers, households, users } from "@whome/db";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import { classifyDueReminder, todayIsoDateInTz, type DueReminderKind } from "./household-time.js";
+import { deliverUserNotification } from "./user-notify.js";
 
-// TODO: use household timezone from DB for due-date boundaries (currently UTC date).
-function todayIsoDate(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function configured(env: Env): boolean {
-  return Boolean(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY && env.VAPID_SUBJECT);
+function choreReminderCopy(description: string, kind: DueReminderKind): { title: string; body: string } {
+  switch (kind) {
+    case "due_tomorrow":
+      return {
+        title: "Chore due tomorrow",
+        body: `"${description}" is due tomorrow`,
+      };
+    case "due_today":
+      return {
+        title: "Chore due today",
+        body: `"${description}" is due today`,
+      };
+    case "overdue":
+      return {
+        title: "Redemption quest",
+        body: `"${description}" is ready for a redemption quest — you've got this!`,
+      };
+  }
 }
 
 async function notifyChoreReminder(
@@ -22,16 +33,9 @@ async function notifyChoreReminder(
     householdId: string;
     description: string;
     assigneeMemberId: string | null;
-    kind: "due_today" | "overdue";
+    kind: DueReminderKind;
   },
 ): Promise<void> {
-  if (!configured(env)) return;
-  webpush.setVapidDetails(
-    env.VAPID_SUBJECT!,
-    env.VAPID_PUBLIC_KEY!,
-    env.VAPID_PRIVATE_KEY!,
-  );
-
   let recipientUserIds: string[] = [];
 
   if (input.assigneeMemberId) {
@@ -68,26 +72,19 @@ async function notifyChoreReminder(
   const enabledIds = enabled.map((u) => u.id);
   if (enabledIds.length === 0) return;
 
-  const subs = await db
-    .select()
-    .from(pushSubscriptions)
-    .where(inArray(pushSubscriptions.userId, enabledIds));
-
-  const body =
-    input.kind === "overdue"
-      ? `"${input.description}" is ready for a redemption quest — you've got this!`
-      : `"${input.description}" is due today`;
-
-  await deliverWebPush(db, subs, {
-    title: input.kind === "overdue" ? "Redemption quest" : "Chore due today",
-    body,
-    tag: `chore-${input.choreId}`,
-    data: { url: "/chores" },
+  const copy = choreReminderCopy(input.description, input.kind);
+  await deliverUserNotification(db, env, {
+    userIds: enabledIds,
+    householdId: input.householdId,
+    title: copy.title,
+    body: copy.body,
+    url: "/chores",
+    tag: `chore-${input.choreId}-${input.kind}`,
   });
 }
 
 export async function scanChoreReminders(db: Database, env: Env): Promise<number> {
-  const today = todayIsoDate();
+  const now = new Date();
   const rows = await db
     .select({
       id: chores.id,
@@ -95,23 +92,27 @@ export async function scanChoreReminders(db: Database, env: Env): Promise<number
       description: chores.description,
       dueDate: chores.dueDate,
       assigneeMemberId: chores.assigneeMemberId,
+      dueReminderSentAt: chores.dueReminderSentAt,
+      timezone: households.timezone,
     })
     .from(chores)
-    .where(and(eq(chores.done, false), or(isNull(chores.dueReminderSentAt))));
+    .innerJoin(households, eq(chores.householdId, households.id))
+    .where(and(eq(chores.done, false), isNotNull(chores.dueDate)));
 
   let sent = 0;
-  const now = new Date();
 
   for (const row of rows) {
     if (!row.dueDate) continue;
-
-    let kind: "due_today" | "overdue" | null = null;
-    if (row.dueDate < today) {
-      kind = "overdue";
-    } else if (row.dueDate === today) {
-      kind = "due_today";
-    }
-    if (!kind) continue;
+    const today = todayIsoDateInTz(row.timezone);
+    const kind = classifyDueReminder({
+      dueDate: row.dueDate,
+      today,
+      lastSentAt: row.dueReminderSentAt,
+      now,
+      timeZone: row.timezone,
+    });
+    // due_today is covered by the morning digest (chore.digest.scan)
+    if (!kind || kind === "due_today") continue;
 
     await notifyChoreReminder(db, env, {
       choreId: row.id,

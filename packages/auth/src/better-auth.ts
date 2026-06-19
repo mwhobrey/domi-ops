@@ -94,6 +94,12 @@ export function createBetterAuth(db: Database, env: Env): WhomeBetterAuth {
           defaultValue: true,
           input: false,
         },
+        pushShoppingRemindersEnabled: {
+          type: "boolean",
+          required: false,
+          defaultValue: true,
+          input: false,
+        },
       },
     },
     session: {

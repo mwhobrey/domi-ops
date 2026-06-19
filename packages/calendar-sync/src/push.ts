@@ -8,6 +8,7 @@ import {
 } from "@whome/db";
 import { asc, eq } from "drizzle-orm";
 import { CalendarCredentialsError, ensureAccessToken } from "./client.js";
+import { listReminderOffsetsForEvent } from "./event-reminders.js";
 import { eventToGoogleBody } from "./mapper.js";
 
 async function googleCalendarMutate(
@@ -69,7 +70,8 @@ export async function pushEventUpdate(
   }
 
   const tz = conn.timeZone ?? "UTC";
-  const body = eventToGoogleBody(ev, tz);
+  const reminderOffsets = await listReminderOffsetsForEvent(db, ev.id);
+  const body = eventToGoogleBody({ ...ev, reminderOffsets }, tz);
   try {
     const updated = await googleCalendarMutate(
       accessToken,

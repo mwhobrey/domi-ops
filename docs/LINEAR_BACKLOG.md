@@ -218,6 +218,324 @@ Notice board has unread counts and read state; no OS/browser push.
 
 ---
 
+## Epic: Notifications hardening (audit 2026-06-18)
+
+*Created in Linear under [Notifications](https://linear.app/mikewhob-whome/project/notifications-9c965c13ece0). [WHO-136](https://linear.app/mikewhob-whome/issue/WHO-136) (Done) shipped general `data.url` + school push; gaps below are follow-ups.*
+
+### Wave 1 — implement first
+
+| ID | Title | State |
+|----|--------|-------|
+| [WHO-137](https://linear.app/mikewhob-whome/issue/WHO-137) | Calendar push deep link — `?event=` opens event sheet | **Todo** |
+| [WHO-140](https://linear.app/mikewhob-whome/issue/WHO-140) | Recurring events — propagate reminders on materialize | Backlog |
+| [WHO-138](https://linear.app/mikewhob-whome/issue/WHO-138) | Reminder scans — household timezone | Backlog |
+| [WHO-139](https://linear.app/mikewhob-whome/issue/WHO-139) | Google Calendar — import/sync event reminders | Backlog |
+| [WHO-141](https://linear.app/mikewhob-whome/issue/WHO-141) | Profile — unified notification settings panel | Backlog |
+
+### Wave 2 — correctness & targeting
+
+| ID | Title |
+|----|--------|
+| [WHO-142](https://linear.app/mikewhob-whome/issue/WHO-142) | Calendar reminder scan — lookback window |
+| [WHO-143](https://linear.app/mikewhob-whome/issue/WHO-143) | Calendar push — calendar share targeting |
+| [WHO-144](https://linear.app/mikewhob-whome/issue/WHO-144) | Chore/school push — advance & re-notify |
+| [WHO-145](https://linear.app/mikewhob-whome/issue/WHO-145) | Remove duplicate `push-calendar-reminders.ts` |
+| [WHO-146](https://linear.app/mikewhob-whome/issue/WHO-146) | HomeHub import — reminder offsets |
+| [WHO-147](https://linear.app/mikewhob-whome/issue/WHO-147) | Calendar — custom reminder offsets |
+
+### Deferred
+
+| ID | Title |
+|----|--------|
+| [WHO-148](https://linear.app/mikewhob-whome/issue/WHO-148) | Chore morning digest push |
+| [WHO-149](https://linear.app/mikewhob-whome/issue/WHO-149) | In-app notification inbox |
+| [WHO-150](https://linear.app/mikewhob-whome/issue/WHO-150) | Shopping module push |
+| [WHO-151](https://linear.app/mikewhob-whome/issue/WHO-151) | Drive quota warning push |
+
+---
+
+### Issue: Calendar push deep link — WHO-137
+
+**Type:** Bug  
+**Priority:** Urgent  
+**Labels:** `enhancement`, `web`, `notifications`  
+**Project:** Notifications · M2 — Calendar push correctness
+
+**Problem**  
+Calendar reminder Web Push uses `data.url: /calendar?event={id}` but `CalendarPageClient` never reads `event` from search params. Tap lands on calendar without opening the event sheet (notices correctly handle `?notices=1`).
+
+**Acceptance criteria**
+
+- [ ] On `/calendar?event={uuid}`, open `CalendarEventSheet` for that event after load.
+- [ ] If event outside current view range, fetch single event or widen range; show not-found alert if deleted.
+- [ ] Clear `event` param from URL after open (replaceState, same pattern as `?import`).
+- [ ] Manual QA: trigger push (or mock navigation) → sheet opens with correct title.
+
+**Technical notes**
+
+- `CalendarPageClient.tsx`, `CalendarEventSheet.tsx`, `push-calendar.ts` payload already correct.
+
+---
+
+### Issue: Recurring events — propagate reminders on materialize — WHO-140
+
+**Type:** Bug  
+**Priority:** Urgent  
+**Labels:** `enhancement`, `worker`, `db`, `notifications`  
+**Project:** Notifications · M2 — Calendar push correctness
+
+**Problem**  
+`POST /api/calendar/events` with `repeatRule` writes `calendar_event_reminders` only on the seed instance. `materializeRecurringForHousehold` inserts future instances without reminder rows — weekly events fire push once.
+
+**Acceptance criteria**
+
+- [ ] New materialized instances get the same enabled offsets as the series (seed event or rule defaults).
+- [ ] Editing series reminders updates future instances (define scope: this occurrence vs series).
+- [ ] Duplicate event already copies offsets — keep parity.
+- [ ] Vitest: materialize + reminder rows exist per instance.
+
+**Technical notes**
+
+- Option A: `recurring_rules.reminder_offsets_json` column.
+- Option B: copy from seed event offsets on each materialize.
+- `packages/calendar-sync/src/recurring.ts`, `apps/api/src/lib/calendar-event-reminders.ts`, migration if needed.
+
+---
+
+### Issue: Reminder scans — household timezone — WHO-138
+
+**Type:** Bug  
+**Priority:** High  
+**Labels:** `enhancement`, `worker`, `notifications`  
+**Project:** Notifications · M2 — Calendar push correctness
+
+**Problem**  
+`reminder-scan.ts` uses server-local `Date` strings without `event.timeZone`; all-day events hardcoded `T09:00:00`. Chores/school use UTC `todayIsoDate()` (TODO in source).
+
+**Acceptance criteria**
+
+- [ ] Shared helper: `todayInTimeZone(household.timezone)` and `eventStartInstant(event, householdTz)`.
+- [ ] Calendar fire times respect `calendar_events.time_zone` with household fallback.
+- [ ] Chore due-today/overdue and school due boundaries use household timezone.
+- [ ] Document all-day reminder default (e.g. 09:00 local) in runbook.
+
+**Technical notes**
+
+- `households.timezone` already on settings; `packages/calendar-sync/src/reminder-scan.ts`, `chore-reminder-scan.ts`, `school-reminder-scan.ts`.
+
+---
+
+### Issue: Google Calendar — import/sync event reminders — WHO-139
+
+**Type:** Enhancement  
+**Priority:** High  
+**Labels:** `enhancement`, `worker`, `notifications`  
+**Project:** Calendar · M5 — Reminder parity
+
+**Problem**  
+`eventToFields` / Google pull ignore `event.reminders`; bidirectional `eventToGoogleBody` does not push whome offsets to Google.
+
+**Acceptance criteria**
+
+- [ ] On Google pull: map `reminders.overrides` / `useDefault` into `calendar_event_reminders` (normalize to allowed offsets or nearest).
+- [ ] On whome → Google push (bidirectional mode): include `reminders` in API body when event has offsets.
+- [ ] No duplicate push if user also has Google app notifications (document in SETUP.md).
+- [ ] Parity row in `docs/CALENDAR_EVENT_PARITY.md`.
+
+**Technical notes**
+
+- `packages/calendar-sync/src/mapper.ts`, sync upsert path, `replaceEventReminders`.
+
+---
+
+### Issue: Profile — unified notification settings — WHO-141
+
+**Type:** Enhancement  
+**Priority:** High  
+**Labels:** `enhancement`, `web`, `profile`, `notifications`  
+**Project:** Profile & identity · M4 — Profile UX
+
+**Problem**  
+Device subscribe UX only under Notice settings; other toggles return `null` when VAPID missing; calendar/school/chore toggles show when modules disabled; five disconnected fieldsets.
+
+**Acceptance criteria**
+
+- [ ] Single “This device” block: permission state, subscribe/unsubscribe, link to enable.
+- [ ] Per-type toggles gated by `modulesEnabled` from session (hide calendar when `calendar_sync` off, etc.).
+- [ ] When VAPID unset: one admin-visible message (not silent `return null` on child toggles).
+- [ ] Permission denied: recovery copy (browser settings / iOS PWA install).
+- [ ] 44px touch targets; fieldset legends remain accessible.
+
+**Technical notes**
+
+- `ProfileEditor.tsx`, `*PushSettings.tsx`, `profile/page.tsx` pass `modulesEnabled`.
+
+---
+
+### Issue: Calendar reminder scan — lookback window — WHO-142
+
+**Type:** Bug  
+**Priority:** Normal  
+**Labels:** `enhancement`, `worker`, `notifications`
+
+**Problem**  
+Scan only fires if `fireAt` is within the next 6 minutes. Worker outage → reminder never sent (`lastSentAt` stays null but window passes).
+
+**Acceptance criteria**
+
+- [ ] Fire if `fireAt <= now` and `fireAt > now - 30m` and `lastSentAt` is null.
+- [ ] Do not double-send on overlapping scans.
+- [ ] Log/metric count of “late” fires for ops.
+
+---
+
+### Issue: Calendar push — calendar share targeting — WHO-143
+
+**Type:** Enhancement  
+**Priority:** Normal  
+**Labels:** `enhancement`, `worker`, `notifications`, `household`
+
+**Problem**  
+`notifyHouseholdOfCalendarReminder` notifies all household members with toggle on. Private/shared calendars should limit to owners + grantees.
+
+**Acceptance criteria**
+
+- [ ] Resolve recipients from `calendars` visibility + `calendar_shares` for the event’s `calendar_id`.
+- [ ] Public household calendars still notify all members (current behavior).
+- [ ] Profile toggle still required per user.
+
+---
+
+### Issue: Chore/school push — advance & re-notify policy — WHO-144
+
+**Type:** Enhancement  
+**Priority:** Normal  
+**Labels:** `enhancement`, `worker`, `notifications`
+
+**Problem**  
+`dueReminderSentAt` / `due_reminder_sent_at` fire once; no “due tomorrow”; overdue chores don’t re-notify.
+
+**Acceptance criteria**
+
+- [ ] Product decision documented: e.g. due-today at 08:00 local + overdue every N days max 3.
+- [ ] Schema/API changes if needed for re-notify cadence.
+- [ ] School: optional parent/teacher copy (stretch).
+
+---
+
+### Issue: Remove duplicate push-calendar-reminders API module — WHO-145
+
+**Type:** Chore  
+**Priority:** Low  
+**Labels:** `chore`, `api`, `notifications`
+
+**Problem**  
+`apps/api/src/lib/push-calendar-reminders.ts` duplicates `packages/calendar-sync/src/push-calendar.ts` and is unused.
+
+**Acceptance criteria**
+
+- [ ] Delete dead file; grep confirms worker uses calendar-sync only.
+- [ ] No import regressions.
+
+---
+
+### Issue: HomeHub import — calendar reminder offsets — WHO-146
+
+**Type:** Enhancement  
+**Priority:** Low  
+**Labels:** `enhancement`, `worker`, `notifications`
+
+**Problem**  
+Import maps `reminder` → `calendar_events` but not `calendar_event_reminders` (HomeHub may have had lead times in other columns — verify SQLite schema).
+
+**Acceptance criteria**
+
+- [ ] If HomeHub stores lead time, map to whome offsets; else default none.
+- [ ] Fixture test in `import-homehub`.
+
+---
+
+### Issue: Calendar — custom reminder offset options — WHO-147
+
+**Type:** Enhancement  
+**Priority:** Low  
+**Labels:** `enhancement`, `web`, `api`, `notifications`
+
+**Problem**  
+Only 15m, 60m, 1440m allowed (`ALLOWED_OFFSETS`).
+
+**Acceptance criteria**
+
+- [ ] Expand presets or free-form minutes with sane max (e.g. 1 week).
+- [ ] UI + API validation aligned.
+
+---
+
+### Issue: Chore morning digest push — WHO-148
+
+**Type:** Enhancement  
+**Priority:** Low  
+**Labels:** `enhancement`, `worker`, `notifications`  
+**Project:** Chores · M3 — Notifications
+
+**Context**  
+`docs/CHORES_PARITY.md` recommended follow-up: one daily push summarizing due-today chores instead of per-item scan.
+
+**Acceptance criteria**
+
+- [ ] Single push per user per morning (household TZ) listing open due-today chores.
+- [ ] Profile opt-out respects `pushChoresRemindersEnabled`.
+- [ ] Replaces or complements per-item scan (document behavior).
+
+---
+
+### Issue: In-app notification inbox — WHO-149
+
+**Type:** Feature  
+**Priority:** Low  
+**Labels:** `enhancement`, `web`, `api`, `notifications`
+
+**Context**  
+Push-only + notice unread badge; no cross-module history when permission denied.
+
+**Acceptance criteria**
+
+- [ ] `notifications` table or reuse notice pattern for system events.
+- [ ] Header bell with unread count; list + mark read.
+- [ ] Deep links match push `data.url` routes.
+
+---
+
+### Issue: Shopping — push notifications — WHO-150
+
+**Type:** Feature  
+**Priority:** Low  
+**Labels:** `enhancement`, `worker`, `notifications`  
+**Project:** Shopping
+
+**Acceptance criteria**
+
+- [ ] Define triggers: recurring list materialized, item assigned?, trip reminder (TBD).
+- [ ] Profile toggle `pushShoppingRemindersEnabled` + migration.
+- [ ] Deep link `/shopping`.
+
+---
+
+### Issue: Drive — quota warning push — WHO-151
+
+**Type:** Enhancement  
+**Priority:** Low  
+**Labels:** `enhancement`, `worker`, `notifications`, `storage`  
+**Project:** Household Drive
+
+**Acceptance criteria**
+
+- [ ] Worker scan when `storage_used_bytes` crosses `DRIVE_QUOTA_WARN_PERCENT`.
+- [ ] Notify owner/admin; deep link `/settings` or `/drive`.
+- [ ] Profile toggle or household-level only (decide).
+
+---
+
 ## Epic: DevEx & runbook (optional)
 
 ### Issue: Document migration journal workflow for Drizzle SQL files
@@ -264,6 +582,7 @@ Manual SQL under `packages/db/drizzle/` must be registered in `drizzle/meta/_jou
 | [WHO-11](https://linear.app/mikewhob-whome/issue/WHO-11) | Notice board MVP (Done reference) | Notifications |
 | [WHO-9](https://linear.app/mikewhob-whome/issue/WHO-9) | Drizzle migration journal | DevEx & platform |
 | [WHO-14](https://linear.app/mikewhob-whome/issue/WHO-14) | Standardize local dev port (native :3000 default) | DevEx & platform |
+| [WHO-137](https://linear.app/mikewhob-whome/issue/WHO-137)–[WHO-151](https://linear.app/mikewhob-whome/issue/WHO-151) | Notifications hardening (see epic below) | Notifications / Calendar / Chores / Drive |
 
 ---
 

@@ -2,6 +2,7 @@ import {
   boolean,
   date,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   text,
@@ -153,6 +154,7 @@ export const recurringRules = pgTable("recurring_rules", {
   color: varchar("color", { length: 16 }),
   lastGeneratedDate: date("last_generated_date"),
   googleRecurringEventId: varchar("google_recurring_event_id", { length: 256 }),
+  reminderOffsetsJson: jsonb("reminder_offsets_json").$type<number[]>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

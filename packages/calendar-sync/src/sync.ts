@@ -14,11 +14,14 @@ import {
   findFuzzyGoogleEventMatch,
 } from "./google-event-match.js";
 import { eventToFields, syncWindow } from "./mapper.js";
+import { offsetsFromGoogleEvent, replaceEventReminders } from "./event-reminders.js";
 import { processOutboxForConnection } from "./push.js";
 import { materializeRecurringForHousehold } from "./recurring.js";
 import { scanCalendarReminders } from "./reminder-scan.js";
 import { scanBudgetAlerts } from "./budget-alert-scan.js";
 import { scanChoreReminders } from "./chore-reminder-scan.js";
+import { scanChoreDigest } from "./chore-digest-scan.js";
+import { scanDriveQuotaWarnings } from "./drive-quota-scan.js";
 import { scanSchoolReminders } from "./school-reminder-scan.js";
 import { setSyncRun } from "./sync-run.js";
 import type { SyncJobPayload } from "./index.js";
@@ -168,6 +171,7 @@ export async function pullLinkedCalendar(
     if (!fields.googleEventId) continue;
     fields.categoryKey = defaultCategoryKey;
     fields.color = null;
+    const reminderOffsets = offsetsFromGoogleEvent(event);
 
     let existing =
       (await findExistingGoogleEvent(
@@ -201,8 +205,9 @@ export async function pullLinkedCalendar(
           updatedAt: new Date(),
         })
         .where(eq(calendarEvents.id, existing.id));
+      await replaceEventReminders(db, existing.id, conn.householdId, reminderOffsets);
     } else {
-      await db.insert(calendarEvents).values({
+      const [inserted] = await db.insert(calendarEvents).values({
         householdId: conn.householdId,
         calendarId: targetCalendarId,
         title: fields.title,
@@ -220,7 +225,10 @@ export async function pullLinkedCalendar(
         googleEtag: fields.googleEtag,
         categoryKey: fields.categoryKey,
         color: fields.color,
-      });
+      }).returning({ id: calendarEvents.id });
+      if (inserted) {
+        await replaceEventReminders(db, inserted.id, conn.householdId, reminderOffsets);
+      }
     }
   }
 
@@ -363,6 +371,12 @@ export async function runCalendarSyncJob(
       break;
     case "school.reminder.scan":
       await scanSchoolReminders(db, env);
+      break;
+    case "chore.digest.scan":
+      await scanChoreDigest(db, env);
+      break;
+    case "drive.quota.scan":
+      await scanDriveQuotaWarnings(db, env);
       break;
     default:
       throw new Error(`Unknown sync job: ${name}`);

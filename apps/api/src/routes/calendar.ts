@@ -401,6 +401,26 @@ export function calendarRoutes(db: Database, env: Env) {
     return c.json({ events });
   });
 
+  app.get("/events/:id", async (c) => {
+    const auth = c.get("auth")!;
+    const id = c.req.param("id");
+    const [row] = await db
+      .select()
+      .from(calendarEvents)
+      .where(and(eq(calendarEvents.id, id), eq(calendarEvents.householdId, auth.householdId)))
+      .limit(1);
+    if (!row) return c.json({ error: "not_found" }, 404);
+
+    const visible = await listVisibleCalendars(db, auth.householdId, auth.userId);
+    if (!visible.some((cal) => cal.id === row.calendarId)) {
+      return c.json({ error: "not_found" }, 404);
+    }
+
+    const policyCtx = await loadEventPolicyContext(db, auth.householdId, auth.userId);
+    const event = await enrichEventDto(db, auth.householdId, row, computeEventPolicy(row, policyCtx));
+    return c.json({ event });
+  });
+
   app.post("/sync", async (c) => {
     const auth = c.get("auth")!;
     const [conn] = await db
@@ -787,6 +807,7 @@ export function calendarRoutes(db: Database, env: Env) {
 
     if (repeatRule?.freq) {
       const freq = repeatRule.freq;
+      const offsets = normalizeReminderOffsets(body.reminderOffsets);
       const [rule] = await db
         .insert(recurringRules)
         .values({
@@ -808,6 +829,7 @@ export function calendarRoutes(db: Database, env: Env) {
           allDay,
           categoryKey: body.categoryKey,
           color: eventColor,
+          reminderOffsetsJson: offsets.length > 0 ? offsets : null,
         })
         .returning();
       const [ev] = await db
@@ -830,7 +852,6 @@ export function calendarRoutes(db: Database, env: Env) {
           createdByUserId: auth.userId,
         })
         .returning();
-      const offsets = normalizeReminderOffsets(body.reminderOffsets);
       if (offsets.length) await replaceEventReminders(db, ev!.id, auth.householdId, offsets);
       const redisUrl = env.REDIS_URL ?? "redis://localhost:6379";
       if (isModuleEnabled(env, "calendar_sync")) {
@@ -962,12 +983,22 @@ export function calendarRoutes(db: Database, env: Env) {
     }
 
     if (body.reminderOffsets !== undefined) {
-      await replaceEventReminders(
-        db,
-        ev.id,
-        auth.householdId,
-        normalizeReminderOffsets(body.reminderOffsets),
-      );
+      const offsets = normalizeReminderOffsets(body.reminderOffsets);
+      await replaceEventReminders(db, ev.id, auth.householdId, offsets);
+      if (existing.recurringRuleId && recurringScope === "series") {
+        await db
+          .update(recurringRules)
+          .set({ reminderOffsetsJson: offsets.length > 0 ? offsets : null })
+          .where(eq(recurringRules.id, existing.recurringRuleId));
+        const siblings = await db
+          .select({ id: calendarEvents.id })
+          .from(calendarEvents)
+          .where(eq(calendarEvents.recurringRuleId, existing.recurringRuleId));
+        for (const sibling of siblings) {
+          if (sibling.id === ev.id) continue;
+          await replaceEventReminders(db, sibling.id, auth.householdId, offsets);
+        }
+      }
     }
 
     const outPolicy = computeEventPolicy(ev, policyCtx);

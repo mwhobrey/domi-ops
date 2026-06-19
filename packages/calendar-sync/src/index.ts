@@ -14,7 +14,9 @@ export type SyncJobName =
   | "calendar.reminder.scan"
   | "chore.reminder.scan"
   | "expense.budget.scan"
-  | "school.reminder.scan";
+  | "school.reminder.scan"
+  | "chore.digest.scan"
+  | "drive.quota.scan";
 
 export interface SyncJobPayload {
   householdId: string;
@@ -31,6 +33,8 @@ export {
   ensureChoreReminderScheduler,
   ensureExpenseBudgetScheduler,
   ensureSchoolReminderScheduler,
+  ensureChoreDigestScheduler,
+  ensureDriveQuotaScheduler,
 } from "./queue.js";
 export { runCalendarSyncJob, syncConnection, pullLinkedCalendar } from "./sync.js";
 export { eventToFields, eventToGoogleBody, inferSourceCategory } from "./mapper.js";
@@ -38,6 +42,9 @@ export { processOutboxForConnection, pushEventUpdate } from "./push.js";
 export { materializeRecurringForHousehold, parseRrule } from "./recurring.js";
 export { scanCalendarReminders } from "./reminder-scan.js";
 export { scanChoreReminders } from "./chore-reminder-scan.js";
+export { scanChoreDigest, CHORE_DIGEST_HOUR } from "./chore-digest-scan.js";
+export { scanDriveQuotaWarnings } from "./drive-quota-scan.js";
+export { deliverUserNotification, persistUserNotifications } from "./user-notify.js";
 export { scanSchoolReminders } from "./school-reminder-scan.js";
 export { checkHouseholdBudgetAlerts, scanBudgetAlerts } from "./budget-alert-scan.js";
 export {
@@ -59,6 +66,27 @@ export {
   findExistingGoogleEvent,
   findFuzzyGoogleEventMatch,
 } from "./google-event-match.js";
+export {
+  normalizeReminderOffsets,
+  replaceEventReminders,
+  listReminderOffsetsForEvent,
+  offsetsFromGoogleEvent,
+  googleRemindersBody,
+  REMINDER_PRESET_OFFSETS,
+  MAX_REMINDER_OFFSET_MINUTES,
+  reminderOffsetLabel,
+} from "./event-reminders.js";
+export { calendarReminderRecipientUserIds } from "./calendar-recipients.js";
+export {
+  todayIsoDateInTz,
+  eventStartInstant,
+  ALL_DAY_REMINDER_HOUR,
+  addDaysIso,
+  classifyDueReminder,
+  localHourInTz,
+  OVERDUE_REMINDER_COOLDOWN_MS,
+  type DueReminderKind,
+} from "./household-time.js";
 export { listGoogleCalendars, ensureAccessToken, CalendarCredentialsError } from "./client.js";
 
 /** Job handlers registered by apps/worker */

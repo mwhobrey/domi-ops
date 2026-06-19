@@ -37,9 +37,16 @@ type EventCategory = {
 type HouseholdCalendar = { id: string; name: string };
 
 const REMINDER_OPTIONS = [
+  { value: 5, label: "5 minutes before" },
+  { value: 10, label: "10 minutes before" },
   { value: 15, label: "15 minutes before" },
+  { value: 30, label: "30 minutes before" },
   { value: 60, label: "1 hour before" },
+  { value: 120, label: "2 hours before" },
+  { value: 180, label: "3 hours before" },
   { value: 1440, label: "1 day before" },
+  { value: 2880, label: "2 days before" },
+  { value: 10080, label: "1 week before" },
 ];
 
 const REPEAT_OPTIONS: { value: RepeatFreq; label: string }[] = [

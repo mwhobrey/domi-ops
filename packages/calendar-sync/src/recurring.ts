@@ -1,6 +1,10 @@
 import type { Database } from "@whome/db";
 import { calendarEvents, recurringRules } from "@whome/db";
 import { and, eq, gte, lte } from "drizzle-orm";
+import {
+  parseRuleReminderOffsets,
+  replaceEventReminders,
+} from "./event-reminders.js";
 
 export type ParsedRrule = {
   freq: "DAILY" | "WEEKLY" | "MONTHLY";
@@ -113,6 +117,7 @@ export async function materializeRecurringForHousehold(
 
   let created = 0;
   for (const rule of rules) {
+    const offsets = parseRuleReminderOffsets(rule.reminderOffsetsJson);
     const from =
       rule.lastGeneratedDate && rule.lastGeneratedDate > rule.startDate
         ? addDaysIso(rule.lastGeneratedDate, 1)
@@ -134,21 +139,27 @@ export async function materializeRecurringForHousehold(
 
     for (const date of dates) {
       if (have.has(date)) continue;
-      await db.insert(calendarEvents).values({
-        householdId: rule.householdId,
-        calendarId: rule.calendarId,
-        title: rule.title,
-        description: rule.description,
-        categoryKey: rule.categoryKey,
-        startDate: date,
-        endDate: rule.endDate,
-        startTime: rule.allDay ? null : rule.startTime,
-        endTime: rule.allDay ? null : rule.endTime,
-        allDay: rule.allDay,
-        color: rule.color,
-        source: "local",
-        recurringRuleId: rule.id,
-      });
+      const [ev] = await db
+        .insert(calendarEvents)
+        .values({
+          householdId: rule.householdId,
+          calendarId: rule.calendarId,
+          title: rule.title,
+          description: rule.description,
+          categoryKey: rule.categoryKey,
+          startDate: date,
+          endDate: rule.endDate,
+          startTime: rule.allDay ? null : rule.startTime,
+          endTime: rule.allDay ? null : rule.endTime,
+          allDay: rule.allDay,
+          color: rule.color,
+          source: "local",
+          recurringRuleId: rule.id,
+        })
+        .returning({ id: calendarEvents.id });
+      if (ev && offsets.length > 0) {
+        await replaceEventReminders(db, ev.id, rule.householdId, offsets);
+      }
       created += 1;
     }
 
