@@ -102,7 +102,9 @@ export function LoginForm({
         callbackURL: nextPath,
       });
     } catch {
-      setError("Google sign-in failed. Check OAuth redirect URIs.");
+      setError(
+        "Google sign-in failed. Open the app at the same host as PUBLIC_APP_URL (e.g. http://localhost:3000, not 127.0.0.1) and confirm OAuth redirect URIs.",
+      );
       setPending(false);
     }
   }

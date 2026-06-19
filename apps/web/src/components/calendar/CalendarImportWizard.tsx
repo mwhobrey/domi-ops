@@ -280,8 +280,16 @@ export function CalendarImportWizard({
         });
       }
       setMapById(nextMap);
-    } catch {
-      setError("Connect Google Calendar first, then try again.");
+    } catch (err) {
+      const revoked =
+        err instanceof ApiError &&
+        (err.body?.includes("token_revoked") ||
+          err.body?.includes("expired or was revoked"));
+      setError(
+        revoked
+          ? "Google Calendar access expired or was revoked. Reconnect Google in calendar settings, then open this wizard again."
+          : "Connect Google Calendar first, then try again.",
+      );
       setLinked([]);
     } finally {
       setLoading(false);

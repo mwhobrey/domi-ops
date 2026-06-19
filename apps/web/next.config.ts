@@ -32,6 +32,7 @@ const nextConfig: NextConfig = {
   output: "standalone",
   env: {
     NEXT_PUBLIC_APP_URL: process.env.PUBLIC_APP_URL ?? "http://localhost:3000",
+    PUBLIC_APP_URL: process.env.PUBLIC_APP_URL ?? "http://localhost:3000",
   },
   async headers() {
     return [

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { devCanonicalHostRedirect } from "./lib/canonical-dev-host";
 
 const PUBLIC_PATHS = ["/", "/login"];
 
@@ -10,6 +11,9 @@ const MODULE_ROUTE_PREFIXES: { prefix: string; module: string }[] = [
 ];
 
 export async function middleware(request: NextRequest) {
+  const canonicalRedirect = devCanonicalHostRedirect(request);
+  if (canonicalRedirect) return canonicalRedirect;
+
   const { pathname } = request.nextUrl;
   if (PUBLIC_PATHS.includes(pathname)) {
     return NextResponse.next();
@@ -51,6 +55,8 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    "/login",
+    "/",
     "/dashboard",
     "/dashboard/:path*",
     "/calendar",

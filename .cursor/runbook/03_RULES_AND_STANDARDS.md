@@ -173,17 +173,18 @@ This repo often uses hand-written numbered migrations (`0007_home_status_presenc
 
 ## Gotchas & technical debt
 
-1. **Auth proxy vs rewrite** — `/auth` must stay on Route Handler; rewrites break `Set-Cookie` domain for Docker `:3001`.
-2. **Two Google OAuth flows** — login via Better Auth (`/auth/callback/google`) and calendar (`/auth/google/calendar/*`); both redirect URIs must be in Google Cloud Console (`docs/GOOGLE_OAUTH_SETUP.md`).
-3. **API auth middleware order** — `createAuthMiddleware` in `apps/api/src/index.ts` must run **before** `googleCalendarAuthRoutes`; `/start` reads `c.get("auth")`. If registered after, logged-in users get bounced to `/login?next=/auth/google/calendar/start` and can hit a redirect loop.
-3. **Middleware dev bypass** — Broken API in dev still shows protected pages; production does not bypass.
+1. **Auth proxy vs rewrite** — `/auth` must stay on Route Handler; rewrites break `Set-Cookie` domain for Docker `:3001`. Proxy must forward each `Set-Cookie` via `getSetCookie()` (comma-joined cookies break OAuth state).
+2. **localhost vs 127.0.0.1** — `PUBLIC_APP_URL` / Google redirect URIs use one loopback host (usually `localhost`). Cookies set on `127.0.0.1` are not sent on `localhost` callbacks → Better Auth `state_security_mismatch`. Dev middleware + auth proxy redirect `127.0.0.1` → canonical host; browse `http://localhost:3000` (or `:3001` docker).
+3. **Two Google OAuth flows** — login via Better Auth (`/auth/callback/google`) and calendar (`/auth/google/calendar/*`); both redirect URIs must be in Google Cloud Console (`docs/GOOGLE_OAUTH_SETUP.md`).
+4. **API auth middleware order** — `createAuthMiddleware` in `apps/api/src/index.ts` must run **before** `googleCalendarAuthRoutes`; `/start` reads `c.get("auth")`. If registered after, logged-in users get bounced to `/login?next=/auth/google/calendar/start` and can hit a redirect loop.
+5. **Middleware dev bypass** — Broken API in dev still shows protected pages; production does not bypass.
 4. **`requireAuth` dev bypass** — API allows unauthenticated access to protected routes when `AUTH_REQUIRED=false` in development.
 5. **Calendar push / recurring** — Jobs enqueue but worker only warns (`packages/calendar-sync/src/sync.ts`).
 6. **School presign** — Real `@aws-sdk/s3-request-presigner`; requires S3 env in API.
 7. **HomeHub import** — Real droplet `app.db` not in CI; use `npm run import:validate` on fixture + `--strict` on operator dry-run.
 8. **Post-import auth** — Google/email login joins imported household; claim emails from HomeHub `config.yml` import; profile display name + home/away.
 9. **`registerSyncHandler` in calendar-sync** — Dead code path; worker calls `runCalendarSyncJob` directly.
-10. **OAuth state** — Redis-backed (`REDIS_URL` required for login/calendar CSRF).
+10. **OAuth state** — Better Auth login uses `ba_verifications` + signed `better-auth.state` cookie; calendar connect uses Redis (`oauth:calendar:*`). Both require matching browser host with `PUBLIC_APP_URL`.
 11. **RLS / hosted tiers** — Documented only; schema has `deployment_tier` enum but no policies.
 12. **LICENSE** — MIT in repo root.
 13. **`packages/db/dist/`** — May be committed or built locally; migrations run from `dist/migrate.js` in Docker.

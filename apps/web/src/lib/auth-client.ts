@@ -3,10 +3,17 @@
 import { createAuthClient } from "better-auth/react";
 import { usernameClient } from "better-auth/client/plugins";
 
-/** Same-origin in the browser — avoids localhost vs 127.0.0.1 cross-origin NetworkError. */
+/** Must match PUBLIC_APP_URL — Google OAuth callbacks always land there, not on 127.0.0.1 aliases. */
 function authBaseUrl(): string {
-  if (typeof window !== "undefined") return window.location.origin;
-  return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const canonical = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  if (typeof window !== "undefined") {
+    try {
+      return new URL(canonical).origin;
+    } catch {
+      return window.location.origin;
+    }
+  }
+  return canonical;
 }
 
 export const authClient = createAuthClient({

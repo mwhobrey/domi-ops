@@ -3,7 +3,6 @@ import { memberShownLabel } from "../lib/member-label";
 import { Suspense } from "react";
 import { AppChrome, type ShellUser } from "./AppChrome";
 import { NoticeBoardActions } from "./NoticeBoard";
-import { NotificationInbox } from "./NotificationInbox";
 import { Breadcrumb, type BreadcrumbItem, PageHeader } from "./ui";
 
 export async function AppShell({
@@ -60,10 +59,7 @@ export async function AppShell({
         actions={
           <>
             <Suspense fallback={null}>
-              <div className="flex items-center gap-2">
-                <NotificationInbox />
-                <NoticeBoardActions />
-              </div>
+              <NoticeBoardActions />
             </Suspense>
             {actions}
           </>

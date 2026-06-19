@@ -104,9 +104,27 @@ export async function refreshGoogleAccessToken(
     }),
   });
   if (!res.ok) {
-    throw new Error(`Google token refresh failed: ${await res.text()}`);
+    const text = await res.text();
+    let oauthError: string | undefined;
+    try {
+      oauthError = (JSON.parse(text) as { error?: string }).error;
+    } catch {
+      /* non-JSON body */
+    }
+    throw new GoogleOAuthTokenError(`Google token refresh failed: ${text}`, oauthError);
   }
   return res.json() as Promise<GoogleTokenResponse>;
+}
+
+/** Google OAuth token endpoint failure with parsed `error` code when JSON. */
+export class GoogleOAuthTokenError extends Error {
+  readonly oauthError?: string;
+
+  constructor(message: string, oauthError?: string) {
+    super(message);
+    this.name = "GoogleOAuthTokenError";
+    this.oauthError = oauthError;
+  }
 }
 
 export interface GoogleUserInfo {

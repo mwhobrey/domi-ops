@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { devCanonicalHostRedirect } from "./canonical-dev-host";
 
 function apiOrigin(): string {
   return (process.env.API_URL ?? "http://localhost:4000").replace(/\/$/, "");
@@ -9,6 +10,9 @@ export async function proxyAuthToApi(
   request: NextRequest,
   pathSegments: string[],
 ): Promise<NextResponse> {
+  const canonicalRedirect = devCanonicalHostRedirect(request);
+  if (canonicalRedirect) return canonicalRedirect;
+
   const path = pathSegments.length ? `/${pathSegments.join("/")}` : "";
   const target = `${apiOrigin()}/auth${path}${request.nextUrl.search}`;
 
@@ -49,11 +53,19 @@ export async function proxyAuthToApi(
   }
 
   const outHeaders = new Headers();
+  const skipHeaders = new Set(["transfer-encoding", "connection", "content-length", "set-cookie"]);
   upstream.headers.forEach((value, key) => {
-    const lower = key.toLowerCase();
-    if (lower === "transfer-encoding" || lower === "connection" || lower === "content-length") return;
+    if (skipHeaders.has(key.toLowerCase())) return;
     outHeaders.append(key, value);
   });
+  // Multiple Set-Cookie values must stay separate — forEach merges them and breaks OAuth state cookies.
+  const setCookies =
+    typeof upstream.headers.getSetCookie === "function"
+      ? upstream.headers.getSetCookie()
+      : [];
+  for (const cookie of setCookies) {
+    outHeaders.append("set-cookie", cookie);
+  }
 
   return new NextResponse(responseBody, {
     status: upstream.status,

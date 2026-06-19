@@ -31,7 +31,11 @@ export async function deliverWebPush(
           json,
         );
       } catch (err: unknown) {
-        const status = (err as { statusCode?: number }).statusCode;
+        const status = (err as { statusCode?: number; body?: string }).statusCode;
+        const body = (err as { body?: string }).body;
+        if (process.env.NODE_ENV === "development") {
+          console.warn("[whome push] delivery failed", { status, body: body?.slice(0, 200) });
+        }
         if (status === 404 || status === 410) {
           await db.delete(pushSubscriptions).where(eq(pushSubscriptions.id, sub.id));
         }

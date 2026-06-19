@@ -1,15 +1,19 @@
 "use client";
 
-import { Megaphone } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { Bell, Megaphone } from "lucide-react";
+import Link from "next/link";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   fetchPushConfig,
   isPushSupported,
   subscribeBrowserPush,
+  syncPushSubscription,
 } from "../lib/web-push";
 import { ApiError, apiClient } from "../lib/client-api";
+import { isNoticeMirrorAlert, showBrowserNotification } from "../lib/browser-notify";
 import { cn } from "../lib/cn";
+import { useLiveRefresh } from "../lib/use-live-refresh";
 import type { DriveAttachmentSummary } from "../lib/drive-types";
 import { driveAttachmentToReference } from "../lib/drive-types";
 import { DriveAttachmentChips } from "./DriveAttachmentChips";
@@ -27,6 +31,18 @@ export type NoticeItem = {
   attachments?: DriveAttachmentSummary[];
 };
 
+export type InboxNotification = {
+  id: string;
+  title: string;
+  body: string;
+  url: string;
+  tag: string | null;
+  read: boolean;
+  createdAt: string;
+};
+
+type PanelTab = "notices" | "alerts";
+
 function formatWhen(iso: string): string {
   const d = new Date(iso);
   const now = new Date();
@@ -43,9 +59,12 @@ function formatWhen(iso: string): string {
 export function NoticeBoardActions({ className }: { className?: string }) {
   const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<PanelTab>("notices");
   const [pushPrompt, setPushPrompt] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [noticeUnread, setNoticeUnread] = useState(0);
+  const [alertUnread, setAlertUnread] = useState(0);
   const [notices, setNotices] = useState<NoticeItem[]>([]);
+  const [alerts, setAlerts] = useState<InboxNotification[]>([]);
   const [loading, setLoading] = useState(false);
   const [draft, setDraft] = useState("");
   const [posting, setPosting] = useState(false);
@@ -53,37 +72,80 @@ export function NoticeBoardActions({ className }: { className?: string }) {
   const [driveEnabled, setDriveEnabled] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pendingAttachments, setPendingAttachments] = useState<DriveAttachmentSummary[]>([]);
+  const prevTotalUnread = useRef(0);
+  const skipNotifyOnce = useRef(true);
 
-  const refreshCount = useCallback(async () => {
-    try {
-      const res = await apiClient.get<{ unreadCount: number }>("/api/core/notices/unread-count");
-      setUnreadCount(res.unreadCount);
-    } catch {
-      /* ignore badge errors */
-    }
-  }, []);
+  const totalUnread = noticeUnread + alertUnread;
 
   const loadNotices = useCallback(async () => {
+    const res = await apiClient.get<{ notices: NoticeItem[]; unreadCount: number }>(
+      "/api/core/notices",
+    );
+    setNotices(res.notices);
+    setNoticeUnread(res.unreadCount);
+    return res;
+  }, []);
+
+  const loadAlerts = useCallback(async () => {
+    const res = await apiClient.get<{ notifications: InboxNotification[]; unreadCount: number }>(
+      "/api/core/notifications",
+    );
+    const filtered = res.notifications.filter((n) => !isNoticeMirrorAlert(n.tag));
+    setAlerts(filtered);
+    setAlertUnread(filtered.filter((n) => !n.read).length);
+    return { ...res, notifications: res.notifications };
+  }, []);
+
+  const refresh = useCallback(async () => {
+    try {
+      const [noticeCountRes, notifRes] = await Promise.all([
+        apiClient.get<{ unreadCount: number }>("/api/core/notices/unread-count"),
+        apiClient.get<{ notifications: InboxNotification[] }>("/api/core/notifications"),
+      ]);
+
+      setNoticeUnread(noticeCountRes.unreadCount);
+      const filtered = notifRes.notifications.filter((n) => !isNoticeMirrorAlert(n.tag));
+      const alertU = filtered.filter((n) => !n.read).length;
+      setAlertUnread(alertU);
+      if (open) setAlerts(filtered);
+
+      const total = noticeCountRes.unreadCount + alertU;
+      const newestUnread = notifRes.notifications.find((n) => !n.read);
+      if (skipNotifyOnce.current) {
+        skipNotifyOnce.current = false;
+      } else if (newestUnread && total > prevTotalUnread.current && !open) {
+        void showBrowserNotification(
+          newestUnread.title,
+          newestUnread.body,
+          newestUnread.url,
+          newestUnread.tag ?? undefined,
+        );
+      }
+      prevTotalUnread.current = total;
+    } catch {
+      /* polling best-effort */
+    }
+  }, [open]);
+
+  const loadPanel = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await apiClient.get<{ notices: NoticeItem[]; unreadCount: number }>(
-        "/api/core/notices",
-      );
-      setNotices(res.notices);
-      setUnreadCount(res.unreadCount);
+      await Promise.all([loadNotices(), loadAlerts()]);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load notices");
+      setError(err instanceof ApiError ? err.message : "Could not load");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadAlerts, loadNotices]);
 
-  useEffect(() => {
-    refreshCount();
-    const t = setInterval(refreshCount, 60_000);
-    return () => clearInterval(t);
-  }, [refreshCount]);
+  useLiveRefresh(
+    useCallback(async () => {
+      if (open) await loadPanel();
+      else await refresh();
+    }, [open, loadPanel, refresh]),
+    { intervalMs: 15_000 },
+  );
 
   useEffect(() => {
     void apiClient
@@ -93,12 +155,26 @@ export function NoticeBoardActions({ className }: { className?: string }) {
   }, []);
 
   useEffect(() => {
-    if (open) loadNotices();
-  }, [open, loadNotices]);
+    if (open) void loadPanel();
+  }, [open, loadPanel]);
 
   useEffect(() => {
-    if (searchParams.get("notices") === "1") setOpen(true);
+    if (searchParams.get("notices") === "1") {
+      setTab("notices");
+      setOpen(true);
+    }
+    if (searchParams.get("alerts") === "1") {
+      setTab("alerts");
+      setOpen(true);
+    }
   }, [searchParams]);
+
+  useEffect(() => {
+    if (!isPushSupported() || Notification.permission !== "granted") return;
+    void fetchPushConfig().then((cfg) => {
+      if (cfg.enabled && cfg.publicKey) void syncPushSubscription(cfg.publicKey);
+    });
+  }, []);
 
   useEffect(() => {
     if (!isPushSupported() || Notification.permission !== "default") return;
@@ -129,8 +205,7 @@ export function NoticeBoardActions({ className }: { className?: string }) {
       });
       setDraft("");
       setPendingAttachments([]);
-      await loadNotices();
-      await refreshCount();
+      await loadPanel();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not post notice");
     } finally {
@@ -138,55 +213,107 @@ export function NoticeBoardActions({ className }: { className?: string }) {
     }
   }
 
-  async function markRead(id: string) {
+  async function markNoticeRead(id: string) {
     try {
       await apiClient.post(`/api/core/notices/${id}/read`);
       setNotices((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
-      setUnreadCount((c) => Math.max(0, c - 1));
+      setNoticeUnread((c) => Math.max(0, c - 1));
     } catch {
       /* ignore */
     }
   }
 
-  async function markAllRead() {
+  async function markAllNoticesRead() {
     try {
       await apiClient.post("/api/core/notices/read-all");
       setNotices((prev) => prev.map((n) => ({ ...n, read: true })));
-      setUnreadCount(0);
+      setNoticeUnread(0);
     } catch {
       /* ignore */
     }
   }
 
-  const unread = notices.filter((n) => !n.read && !n.isOwn);
+  async function markAlertRead(id: string) {
+    try {
+      await apiClient.post("/api/core/notifications/mark-read", { ids: [id] });
+      setAlerts((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+      setAlertUnread((c) => Math.max(0, c - 1));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function markAllAlertsRead() {
+    try {
+      await apiClient.post("/api/core/notifications/mark-read", { all: true });
+      setAlerts((prev) => prev.map((n) => ({ ...n, read: true })));
+      setAlertUnread(0);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const unreadNotices = notices.filter((n) => !n.read && !n.isOwn);
   const latest = notices[0] ?? null;
-  const showLatestHighlight = unreadCount === 0 && latest;
+  const showLatestHighlight = noticeUnread === 0 && latest;
 
   return (
     <>
       <button
         type="button"
         onClick={() => setOpen(true)}
-        aria-label="Notice board"
+        aria-label="Notices and alerts"
         className={cn(
           "relative inline-flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-subtle)] px-3 py-1.5 text-sm font-medium transition hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-surface-elevated)] max-sm:px-2.5 max-sm:py-2",
           className,
         )}
       >
         <Megaphone className="h-4 w-4 text-[var(--color-accent)]" aria-hidden />
-        <span className="max-sm:sr-only">Notice board</span>
-        {unreadCount > 0 && (
+        <span className="max-sm:sr-only">Notices</span>
+        {totalUnread > 0 && (
           <span
             className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--color-accent)] px-1 text-[10px] font-semibold text-white"
-            aria-label={`${unreadCount} unread`}
+            aria-label={`${totalUnread} unread`}
           >
-            {unreadCount > 9 ? "9+" : unreadCount}
+            {totalUnread > 9 ? "9+" : totalUnread}
           </span>
         )}
       </button>
 
-      <Sheet open={open} onClose={() => setOpen(false)} title="Notice board">
+      <Sheet open={open} onClose={() => setOpen(false)} title="Notices & alerts">
         <div className="flex flex-col gap-4 p-5">
+          <div
+            className="flex rounded-[var(--radius-lg)] border border-[var(--color-border)] p-1 text-sm"
+            role="tablist"
+            aria-label="Notice panel section"
+          >
+            {(
+              [
+                { id: "notices" as const, label: "Notices", count: noticeUnread },
+                { id: "alerts" as const, label: "Alerts", count: alertUnread },
+              ] as const
+            ).map(({ id, label, count }) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={tab === id}
+                className={cn(
+                  "relative min-h-10 flex-1 rounded-[var(--radius-md)] px-3 py-2 font-medium transition-colors",
+                  tab === id
+                    ? "bg-[var(--color-accent)] text-[var(--color-accent-fg)]"
+                    : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]",
+                )}
+                onClick={() => setTab(id)}
+              >
+                {label}
+                {count > 0 ? (
+                  <span className="ml-1.5 text-xs opacity-90">({count > 9 ? "9+" : count})</span>
+                ) : null}
+              </button>
+            ))}
+          </div>
+
           {error && (
             <Alert variant="error" className="text-sm">
               {error}
@@ -195,23 +322,21 @@ export function NoticeBoardActions({ className }: { className?: string }) {
 
           {loading ? (
             <p className="text-sm text-[var(--color-text-muted)]">Loading…</p>
-          ) : (
+          ) : tab === "notices" ? (
             <>
-              {unreadCount > 0 && (
+              {noticeUnread > 0 && (
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-label text-[var(--color-text-muted)]">
-                    {unreadCount} unread
-                  </p>
-                  <Button size="sm" variant="secondary" onClick={markAllRead}>
+                  <p className="text-label text-[var(--color-text-muted)]">{noticeUnread} unread</p>
+                  <Button size="sm" variant="secondary" onClick={() => void markAllNoticesRead()}>
                     Mark all read
                   </Button>
                 </div>
               )}
 
-              {unread.length > 0 && (
+              {unreadNotices.length > 0 && (
                 <ul className="space-y-2">
-                  {unread.map((n) => (
-                    <NoticeCard key={n.id} notice={n} onMarkRead={() => markRead(n.id)} />
+                  {unreadNotices.map((n) => (
+                    <NoticeCard key={n.id} notice={n} onMarkRead={() => void markNoticeRead(n.id)} />
                   ))}
                 </ul>
               )}
@@ -223,91 +348,139 @@ export function NoticeBoardActions({ className }: { className?: string }) {
                 </div>
               )}
 
-              {notices.length > 0 && unreadCount > 0 && (
+              {notices.length > 0 && noticeUnread > 0 && (
                 <p className="text-label text-[var(--color-text-muted)]">All notices</p>
               )}
 
               {notices.length > 0 && (
                 <ul className="max-h-[40vh] space-y-2 overflow-y-auto">
                   {notices
-                    .filter((n) => !unread.some((u) => u.id === n.id))
+                    .filter((n) => !unreadNotices.some((u) => u.id === n.id))
                     .filter((n) => !(showLatestHighlight && n.id === latest?.id))
                     .map((n) => (
                       <NoticeCard
                         key={n.id}
                         notice={n}
                         muted
-                        onMarkRead={!n.read && !n.isOwn ? () => markRead(n.id) : undefined}
+                        onMarkRead={!n.read && !n.isOwn ? () => void markNoticeRead(n.id) : undefined}
                       />
                     ))}
                 </ul>
               )}
 
-              {notices.length === 0 && !loading && (
+              {notices.length === 0 && (
                 <p className="text-sm text-[var(--color-text-muted)]">
                   No notices yet. Post one for the household.
                 </p>
               )}
+
+              {pushPrompt && (
+                <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-subtle)] px-3 py-2.5 text-sm">
+                  <p className="text-[var(--color-text-muted)]">
+                    Get desktop alerts when someone posts or when reminders fire?
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={async () => {
+                        const cfg = await fetchPushConfig();
+                        if (cfg.publicKey) {
+                          const ok = await subscribeBrowserPush(cfg.publicKey);
+                          if (ok) setPushPrompt(false);
+                        }
+                      }}
+                    >
+                      Enable desktop alerts
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setPushPrompt(false)}>
+                      Not now
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              <div className="border-t border-[var(--color-border)] pt-4">
+                <Textarea
+                  className="min-h-[88px]"
+                  placeholder="Post a notice for everyone…"
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                />
+                {driveEnabled ? (
+                  <div className="mt-2 space-y-2">
+                    {pendingAttachments.length > 0 ? (
+                      <DriveAttachmentChips
+                        references={pendingAttachments.map(driveAttachmentToReference)}
+                        onRemove={(id) =>
+                          setPendingAttachments((prev) => prev.filter((a) => a.id !== id))
+                        }
+                      />
+                    ) : null}
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setPickerOpen(true)}
+                    >
+                      Attach from Drive
+                    </Button>
+                  </div>
+                ) : null}
+                <Button className="mt-2" size="sm" loading={posting} onClick={() => void postNotice()}>
+                  Post notice
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm text-[var(--color-text-muted)]">
+                  {alertUnread > 0 ? `${alertUnread} unread` : "Calendar, chores, school, and system alerts"}
+                </p>
+                {alertUnread > 0 ? (
+                  <Button size="sm" variant="secondary" onClick={() => void markAllAlertsRead()}>
+                    Mark all read
+                  </Button>
+                ) : null}
+              </div>
+
+              {alerts.length === 0 ? (
+                <p className="text-sm text-[var(--color-text-muted)]">
+                  No alerts yet. Reminders and household events will show here.
+                </p>
+              ) : (
+                <ul className="divide-y divide-[var(--color-border)]">
+                  {alerts.map((n) => (
+                    <li key={n.id}>
+                      <Link
+                        href={n.url}
+                        className={cn(
+                          "block py-3 transition hover:bg-[var(--color-border)]/30 -mx-2 px-2 rounded-lg",
+                          !n.read && "bg-[var(--color-accent-subtle)]/40",
+                        )}
+                        onClick={() => {
+                          if (!n.read) void markAlertRead(n.id);
+                          setOpen(false);
+                        }}
+                      >
+                        <p className="flex items-center gap-2 text-sm font-medium text-[var(--color-text)]">
+                          <Bell className="h-4 w-4 shrink-0 text-[var(--color-accent)]" aria-hidden />
+                          {n.title}
+                        </p>
+                        <p className="mt-0.5 pl-6 text-sm text-[var(--color-text-muted)] line-clamp-2">
+                          {n.body}
+                        </p>
+                        <p className="mt-1 pl-6 text-xs text-[var(--color-text-muted)]">
+                          {formatWhen(n.createdAt)}
+                        </p>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </>
           )}
-
-          {pushPrompt && (
-            <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-subtle)] px-3 py-2.5 text-sm">
-              <p className="text-[var(--color-text-muted)]">
-                Get notified when someone posts a notice?
-              </p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={async () => {
-                    const cfg = await fetchPushConfig();
-                    if (cfg.publicKey) {
-                      const ok = await subscribeBrowserPush(cfg.publicKey);
-                      if (ok) setPushPrompt(false);
-                    }
-                  }}
-                >
-                  Enable notifications
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => setPushPrompt(false)}>
-                  Not now
-                </Button>
-              </div>
-            </div>
-          )}
-
-          <div className="border-t border-[var(--color-border)] pt-4">
-            <Textarea
-              className="min-h-[88px]"
-              placeholder="Post a notice for everyone…"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-            />
-            {driveEnabled ? (
-              <div className="mt-2 space-y-2">
-                {pendingAttachments.length > 0 ? (
-                  <DriveAttachmentChips
-                    references={pendingAttachments.map(driveAttachmentToReference)}
-                    onRemove={(id) =>
-                      setPendingAttachments((prev) => prev.filter((a) => a.id !== id))
-                    }
-                  />
-                ) : null}
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => setPickerOpen(true)}
-                >
-                  Attach from Drive
-                </Button>
-              </div>
-            ) : null}
-            <Button className="mt-2" size="sm" loading={posting} onClick={postNotice}>
-              Post notice
-            </Button>
-          </div>
         </div>
       </Sheet>
 

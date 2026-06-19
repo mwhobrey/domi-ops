@@ -19,7 +19,7 @@
     "@whome/crypto": "*",
     "@whome/db": "*",
     "better-auth": "^1.6.14",
-    "drizzle-orm": "^0.44.2",
+    "drizzle-orm": "^0.45.2",
     "nodemailer": "^8.0.10"
   },
   "devDependencies": {

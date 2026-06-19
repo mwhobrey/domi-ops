@@ -17,6 +17,7 @@ import {
   users,
 } from "@whome/db";
 import {
+  CalendarCredentialsError,
   dedupeHouseholdGoogleEvents,
   ensureAccessToken,
   enqueueSyncJob,
@@ -62,6 +63,14 @@ import {
   replaceEventReminders,
 } from "../lib/calendar-event-reminders.js";
 import { buildRrule } from "../lib/calendar-repeat.js";
+import type { Context } from "hono";
+
+function calendarTokenRevokedResponse(c: Context, e: unknown): Response | null {
+  if (e instanceof CalendarCredentialsError) {
+    return c.json({ error: "token_revoked", message: e.message }, 401);
+  }
+  return null;
+}
 
 export function calendarRoutes(db: Database, env: Env) {
   const app = new Hono<{ Variables: AppVariables }>();
@@ -485,7 +494,14 @@ export function calendarRoutes(db: Database, env: Env) {
     const conn = await connectionForUser(auth);
     if (!conn) return c.json({ error: "not_connected" }, 400);
 
-    const accessToken = await ensureAccessToken(db, env, conn);
+    let accessToken: string;
+    try {
+      accessToken = await ensureAccessToken(db, env, conn);
+    } catch (e) {
+      const revoked = calendarTokenRevokedResponse(c, e);
+      if (revoked) return revoked;
+      throw e;
+    }
     const gCalList = await listGoogleCalendars(accessToken);
     let added = 0;
     for (const item of gCalList) {
@@ -549,7 +565,14 @@ export function calendarRoutes(db: Database, env: Env) {
       .orderBy(asc(calendars.name));
 
     const calendarById = new Map(targetCalendars.map((cal) => [cal.id, cal]));
-    const accessToken = await ensureAccessToken(db, env, conn);
+    let accessToken: string;
+    try {
+      accessToken = await ensureAccessToken(db, env, conn);
+    } catch (e) {
+      const revoked = calendarTokenRevokedResponse(c, e);
+      if (revoked) return revoked;
+      throw e;
+    }
 
     const linkedCalendars = await Promise.all(
       linked.map(async (lc) => {

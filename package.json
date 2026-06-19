@@ -23,11 +23,15 @@
     "fixture:homehub": "node packages/import-homehub/scripts/create-fixture.mjs"
   },
   "devDependencies": {
+    "node-gyp": "^11.5.0",
     "turbo": "^2.5.4",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
   },
   "engines": {
     "node": ">=20"
+  },
+  "overrides": {
+    "drizzle-orm": "^0.45.2"
   }
 }

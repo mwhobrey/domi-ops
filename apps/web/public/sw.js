@@ -1,6 +1,6 @@
 /* Minimal service worker — installable PWA; network-first for app routes.
  * Bump CACHE when shell assets change so activate purges stale caches. */
-const CACHE = "whome-shell-v3";
+const CACHE = "whome-shell-v4";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -44,12 +44,18 @@ self.addEventListener("push", (event) => {
   }
   const payload = normalizePushPayload(raw);
   event.waitUntil(
-    self.registration.showNotification(payload.title, {
-      body: payload.body,
-      tag: payload.tag,
-      icon: "/icons/icon-192.png",
-      data: payload.data,
-    }),
+    (async () => {
+      await self.registration.showNotification(payload.title, {
+        body: payload.body,
+        tag: payload.tag,
+        icon: "/icons/icon-192.png",
+        data: payload.data,
+      });
+      const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      for (const client of clients) {
+        client.postMessage({ type: "whome:notification" });
+      }
+    })(),
   );
 });
 

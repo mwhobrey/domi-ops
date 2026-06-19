@@ -629,8 +629,10 @@ export function coreRoutes(db: Database, env: Env) {
       noticeId: row.id,
       content,
       posterDisplayName: label,
-    }).catch(() => {
-      /* push is best-effort */
+    }).catch((err) => {
+      if (env.NODE_ENV === "development") {
+        console.error("[whome] notice push failed", err);
+      }
     });
     return c.json({ notice: mapped }, 201);
   });

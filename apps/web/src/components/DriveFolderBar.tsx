@@ -1,6 +1,6 @@
 "use client";
 
-import { Folder, FolderPlus, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeft, Folder, FolderPlus, FolderUp, Pencil, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
 import type { DriveFolder } from "../lib/drive-types";
@@ -9,6 +9,8 @@ import {
   childFoldersForParent,
   DRIVE_OBJECT_DRAG_TYPE,
   isExternalFileDrag,
+  parentFolderId,
+  parentFolderLabel,
 } from "../lib/drive-folders-ui";
 import { Breadcrumb } from "./ui/Breadcrumb";
 import { Button, ConfirmDialog, Input } from "./ui";
@@ -72,6 +74,21 @@ export function DriveFolderBar({
     [folders, currentFolderId],
   );
 
+  const upFolderId = useMemo(
+    () => parentFolderId(folders, currentFolderId),
+    [folders, currentFolderId],
+  );
+
+  const upFolderName = useMemo(
+    () => parentFolderLabel(folders, currentFolderId),
+    [folders, currentFolderId],
+  );
+
+  const currentFolder = useMemo(
+    () => (currentFolderId ? folders.find((f) => f.id === currentFolderId) : null),
+    [folders, currentFolderId],
+  );
+
   const breadcrumbItems = useMemo(() => {
     const items = buildFolderBreadcrumbItems(folders, currentFolderId);
     return items.map((item, i) => ({
@@ -94,6 +111,46 @@ export function DriveFolderBar({
 
   return (
     <div className="space-y-3">
+      {currentFolderId ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-subtle)] px-3 py-3">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="shrink-0"
+              onClick={() => onNavigate(upFolderId)}
+              aria-label={`Back to ${upFolderName}`}
+            >
+              <ArrowLeft className="h-4 w-4" aria-hidden />
+              Back to {upFolderName}
+            </Button>
+            <div className="flex min-w-0 items-center gap-2">
+              <Folder className="h-5 w-5 shrink-0 text-[var(--color-accent)]" aria-hidden />
+              <span className="truncate text-base font-semibold text-[var(--color-text)]">
+                {currentFolder?.name ?? "Folder"}
+              </span>
+            </div>
+          </div>
+          {canWrite ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              aria-label="Create folder"
+              onClick={() => {
+                setNewName("");
+                setCreateOpen(true);
+                setError(null);
+              }}
+            >
+              <FolderPlus className="h-4 w-4" aria-hidden />
+              New folder
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div
           className={`rounded-[var(--radius-md)] transition ${
@@ -106,6 +163,7 @@ export function DriveFolderBar({
           onDrop={(e) => void handleObjectDrop(e, null)}
         >
           <Breadcrumb
+            className={currentFolderId ? "mb-0" : undefined}
             items={breadcrumbItems.map((item, i) => ({
               ...item,
               href:
@@ -115,7 +173,7 @@ export function DriveFolderBar({
             }))}
           />
         </div>
-        {canWrite ? (
+        {!currentFolderId && canWrite ? (
           <Button
             type="button"
             size="sm"
@@ -139,8 +197,21 @@ export function DriveFolderBar({
         </p>
       ) : null}
 
-      {childFolders.length > 0 ? (
+      {currentFolderId || childFolders.length > 0 ? (
         <ul className="grid gap-2 sm:grid-cols-2" aria-label="Folders">
+          {currentFolderId ? (
+            <li>
+              <button
+                type="button"
+                className="flex min-h-11 w-full items-center gap-2 rounded-[var(--radius-lg)] border border-dashed border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-left transition hover:border-[var(--color-accent)] hover:bg-[var(--color-accent-subtle)] hover:text-[var(--color-accent)]"
+                onClick={() => onNavigate(upFolderId)}
+                aria-label={`Up to ${upFolderName}`}
+              >
+                <FolderUp className="h-5 w-5 shrink-0" aria-hidden />
+                <span className="truncate font-medium">{upFolderName}</span>
+              </button>
+            </li>
+          ) : null}
           {childFolders.map((folder) => {
             const folderDropActive = dropTargetFolderId === folder.id;
             return (

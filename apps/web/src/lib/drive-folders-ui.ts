@@ -40,6 +40,24 @@ export function currentFolderLabel(
   return folders.find((f) => f.id === folderId)?.name ?? "Unknown folder";
 }
 
+/** Parent folder id for navigation up; `null` means Drive root. */
+export function parentFolderId(
+  folders: DriveFolder[],
+  folderId: string | null,
+): string | null {
+  if (!folderId) return null;
+  return folders.find((f) => f.id === folderId)?.parentId ?? null;
+}
+
+export function parentFolderLabel(
+  folders: DriveFolder[],
+  folderId: string | null,
+): string {
+  const parentId = parentFolderId(folders, folderId);
+  if (!parentId) return "Drive";
+  return folders.find((f) => f.id === parentId)?.name ?? "Drive";
+}
+
 export function folderSelectOptions(
   folders: DriveFolder[],
 ): { id: string; label: string }[] {

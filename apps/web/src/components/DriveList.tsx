@@ -139,6 +139,7 @@ export function DriveList({
   const skipFilterFetch = useRef(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragDepthRef = useRef(0);
+  const uploadingRef = useRef(false);
 
   const fetchTagSuggestions = useCallback(async (query: string) => {
     try {
@@ -247,9 +248,12 @@ export function DriveList({
       if (!isExternalFileDrag(e)) return;
       e.preventDefault();
     }
-    function onDrop() {
+    function onDrop(e: DragEvent) {
+      if (!isExternalFileDrag(e)) return;
+      e.preventDefault();
       dragDepthRef.current = 0;
       setPageDragActive(false);
+      setListDropActive(false);
     }
     document.addEventListener("dragenter", onDragEnter);
     document.addEventListener("dragleave", onDragLeave);
@@ -297,7 +301,9 @@ export function DriveList({
 
   const uploadFiles = useCallback(
     async (fileArray: File[]) => {
-      if (fileArray.length === 0) return;
+      if (fileArray.length === 0 || uploadingRef.current) return;
+      uploadingRef.current = true;
+      try {
       setLoading(true);
       setError(null);
       const entries: FileUploadEntry[] = fileArray.map((f) => ({
@@ -354,6 +360,9 @@ export function DriveList({
       void fetchTagSuggestions("");
       setLoading(false);
       window.setTimeout(() => setUploadQueue([]), 4000);
+      } finally {
+        uploadingRef.current = false;
+      }
     },
     [currentFolderId, description, fetchObjects, fetchTagSuggestions, hasActiveFilter, searchQuery, activeTag, tagsInput, title],
   );
@@ -386,6 +395,7 @@ export function DriveList({
   function handleListFileDrop(e: React.DragEvent) {
     if (!canWrite || !isExternalFileDrag(e)) return;
     e.preventDefault();
+    e.stopPropagation();
     dragDepthRef.current = 0;
     setPageDragActive(false);
     setListDropActive(false);
@@ -395,7 +405,11 @@ export function DriveList({
 
   return (
     <>
-      <DriveDropOverlay visible={pageDragActive && canWrite} folderLabel={uploadFolderLabel} />
+      <DriveDropOverlay
+        visible={pageDragActive && canWrite}
+        folderLabel={uploadFolderLabel}
+        onDrop={handleListFileDrop}
+      />
       <ListPage
       error={error}
       onDismissError={() => setError(null)}

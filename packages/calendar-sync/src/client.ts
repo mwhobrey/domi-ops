@@ -1,6 +1,6 @@
 import { decryptSensitive, encryptSensitive, SensitiveDecryptError } from "@whome/crypto";
 import type { Env } from "@whome/config";
-import { refreshGoogleAccessToken } from "@whome/auth";
+import { refreshGoogleAccessToken, GoogleOAuthTokenError } from "@whome/auth";
 import type { Database } from "@whome/db";
 import { calendarConnections } from "@whome/db";
 import { eq } from "drizzle-orm";
@@ -57,7 +57,25 @@ export async function ensureAccessToken(
   if (!tokens.refreshToken) {
     throw new CalendarCredentialsError("Missing refresh token — reconnect Google Calendar");
   }
-  const refreshed = await refreshGoogleAccessToken(env, tokens.refreshToken);
+  let refreshed;
+  try {
+    refreshed = await refreshGoogleAccessToken(env, tokens.refreshToken);
+  } catch (e) {
+    if (e instanceof GoogleOAuthTokenError && e.oauthError === "invalid_grant") {
+      await db
+        .update(calendarConnections)
+        .set({
+          syncRunStatus: "error",
+          syncRunError:
+            "Google Calendar access expired or was revoked — reconnect in Calendar settings",
+        })
+        .where(eq(calendarConnections.id, conn.id));
+      throw new CalendarCredentialsError(
+        "Google Calendar access expired or was revoked — reconnect Google",
+      );
+    }
+    throw e;
+  }
   const accessEnc = encryptSensitive(refreshed.access_token, key);
   const tokenExpiry = new Date(Date.now() + (refreshed.expires_in ?? 3600) * 1000);
   await db
