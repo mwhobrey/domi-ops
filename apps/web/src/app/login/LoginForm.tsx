@@ -101,10 +101,19 @@ export function LoginForm({
         provider: "google",
         callbackURL: nextPath,
       });
-    } catch {
-      setError(
-        "Google sign-in failed. Open the app at the same host as PUBLIC_APP_URL (e.g. http://localhost:3000, not 127.0.0.1) and confirm OAuth redirect URIs.",
-      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : null;
+      if (msg?.includes("NetworkError") || msg?.includes("Failed to fetch")) {
+        setError(
+          "Could not reach the sign-in service. Confirm the site is up and try again.",
+        );
+      } else if (process.env.NODE_ENV === "development") {
+        setError(
+          "Google sign-in failed. Open the app at the same host as PUBLIC_APP_URL (e.g. http://localhost:3000, not 127.0.0.1) and confirm OAuth redirect URIs.",
+        );
+      } else {
+        setError(msg?.trim() ? `Google sign-in failed: ${msg}` : "Google sign-in failed. Try again.");
+      }
       setPending(false);
     }
   }

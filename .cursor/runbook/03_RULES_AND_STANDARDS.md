@@ -175,6 +175,7 @@ This repo often uses hand-written numbered migrations (`0007_home_status_presenc
 
 1. **Auth proxy vs rewrite** — `/auth` must stay on Route Handler; rewrites break `Set-Cookie` domain for Docker `:3001`. Proxy must forward each `Set-Cookie` via `getSetCookie()` (comma-joined cookies break OAuth state).
 2. **localhost vs 127.0.0.1** — `PUBLIC_APP_URL` / Google redirect URIs use one loopback host (usually `localhost`). Cookies set on `127.0.0.1` are not sent on `localhost` callbacks → Better Auth `state_security_mismatch`. Dev middleware + auth proxy redirect `127.0.0.1` → canonical host; browse `http://localhost:3000` (or `:3001` docker).
+2b. **GHCR web image + OAuth** — CI builds the web image without your droplet `PUBLIC_APP_URL`. `auth-client` must use `window.location.origin` in the browser (same-origin `/auth/*` proxy). API/worker still read runtime `PUBLIC_APP_URL` from `.env` for Better Auth `baseURL` and Google redirect URIs.
 3. **Two Google OAuth flows** — login via Better Auth (`/auth/callback/google`) and calendar (`/auth/google/calendar/*`); both redirect URIs must be in Google Cloud Console (`docs/GOOGLE_OAUTH_SETUP.md`).
 4. **API auth middleware order** — `createAuthMiddleware` in `apps/api/src/index.ts` must run **before** `googleCalendarAuthRoutes`; `/start` reads `c.get("auth")`. If registered after, logged-in users get bounced to `/login?next=/auth/google/calendar/start` and can hit a redirect loop.
 5. **Middleware dev bypass** — Broken API in dev still shows protected pages; production does not bypass.
