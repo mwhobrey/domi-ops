@@ -29,7 +29,7 @@
 - **Email verification:** Better Auth `emailVerification` + optional SMTP (`SMTP_*`, `EMAIL_VERIFICATION_REQUIRED`); dev logs link when SMTP unset (`packages/auth/src/mail.ts`).
 - **Post-import join:** session hook moves users onto the **import marker** household; stubs claimed via **`users.import_claim_email`** + `import_records` (`homehub_claim_email`) from HomeHub **`config.yml`**, then Google display name / username fallback. Optional deprecated env: `HOUSEHOLD_MEMBER_EMAIL_MAP`. **Single-tenant:** live import targets the **oldest** household when one already exists.
 - Whome session DTO: `GET /auth/session` (household member context for API/UI).
-- **Google login (dev):** `127.0.0.1` → `PUBLIC_APP_URL` host redirect (`canonical-dev-host.ts`); auth proxy forwards `Set-Cookie` via `getSetCookie()`; `auth-client` uses browser `window.location.origin` (GHCR-safe).
+- **Google login (dev):** `127.0.0.1` → `PUBLIC_APP_URL` host redirect (`canonical-dev-host.ts`); auth proxy forwards `Set-Cookie` via `getSetCookie()`; `auth-client` omits `baseURL` (browser origin default).
 - **Google Calendar token refresh:** `invalid_grant` → `token_revoked` API + `CalendarCredentialsError` in worker; reconnect in calendar settings.
 - Calendar OAuth remains separate (`/auth/google/calendar/*`); state in Redis. **`createAuthMiddleware` must run before calendar routes** so `/start` sees session (WHO-84).
 

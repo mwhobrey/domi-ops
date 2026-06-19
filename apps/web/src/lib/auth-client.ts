@@ -3,20 +3,11 @@
 import { createAuthClient } from "better-auth/react";
 import { usernameClient } from "better-auth/client/plugins";
 
-/** Browser origin — /auth/* is same-origin via Next route handler. Avoids GHCR images baking localhost at build time. */
-function authBaseUrl(): string {
-  if (typeof window !== "undefined") {
-    return window.location.origin;
-  }
-  return (
-    process.env.NEXT_PUBLIC_APP_URL ??
-    process.env.PUBLIC_APP_URL ??
-    "http://localhost:3000"
-  );
-}
-
+/**
+ * Same-origin /auth/* via Next route handler — omit baseURL so better-auth uses
+ * window.location.origin in the browser (GHCR images bake localhost otherwise).
+ */
 export const authClient = createAuthClient({
-  baseURL: authBaseUrl(),
   basePath: "/auth",
   plugins: [usernameClient()],
 });
