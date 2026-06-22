@@ -85,7 +85,15 @@ export {
   classifyDueReminder,
   localHourInTz,
   OVERDUE_REMINDER_COOLDOWN_MS,
+  monFriWeekRange,
+  mondayOfWeekIso,
+  isoDateInRange,
+  isoWeekday,
+  localDateOfInstant,
+  weeksOverlappingRange,
+  MAX_WEEKS_IN_RANGE,
   type DueReminderKind,
+  type MonFriWeekRange,
 } from "./household-time.js";
 export { listGoogleCalendars, ensureAccessToken, CalendarCredentialsError } from "./client.js";
 

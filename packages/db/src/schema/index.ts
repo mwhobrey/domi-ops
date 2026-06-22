@@ -8,3 +8,4 @@ export * from "./core.js";
 export * from "./drive.js";
 export * from "./push.js";
 export * from "./notifications.js";
+export * from "./google-docs.js";

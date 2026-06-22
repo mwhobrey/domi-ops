@@ -28,6 +28,7 @@ import {
   type SchoolReportView,
 } from "../lib/school-reports";
 import { Badge, Button, EmptyState, LinkButton, Select } from "./ui";
+import { WeeklyReportPanel } from "./WeeklyReportPanel";
 
 function SummaryStat({
   label,
@@ -101,6 +102,7 @@ function ViewTabs({
     { id: "missing", label: "Open work" },
     { id: "progress", label: "Progress" },
     { id: "transcript", label: "Transcript" },
+    { id: "weekly", label: "Weekly schedule" },
   ];
 
   return (
@@ -412,8 +414,8 @@ export function SchoolReports({ reports }: { reports: SchoolReportsData }) {
   const [view, setView] = useState<SchoolReportView>("by-class");
 
   const exportActions = useMemo(() => {
+    if (view === "weekly" || view === "transcript") return null;
     if (view === "missing") return { label: "Export open work CSV", action: () => downloadMissingDigestCsv(reports) };
-    if (view === "transcript") return null;
     return { label: "Export summary CSV", action: () => downloadReportsSummaryCsv(reports) };
   }, [view, reports]);
 
@@ -450,6 +452,7 @@ export function SchoolReports({ reports }: { reports: SchoolReportsData }) {
       {view === "missing" && <MissingDigestView reports={reports} />}
       {view === "progress" && <ProgressView reports={reports} />}
       {view === "transcript" && <TranscriptView reports={reports} />}
+      {view === "weekly" && <WeeklyReportPanel module="school" />}
 
       {reports.summary.missingTotal > 0 && view !== "missing" && (
         <p className="flex items-center gap-2 text-sm text-[var(--color-warning)]">

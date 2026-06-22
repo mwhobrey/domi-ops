@@ -33,12 +33,14 @@ whome sends redirects based on **`PUBLIC_APP_URL`** (Next proxies `/auth/*` to t
 |---------|----------------|
 | Sign in (Better Auth) | `{PUBLIC_APP_URL}/auth/callback/google` |
 | Calendar sync | `{PUBLIC_APP_URL}/auth/google/calendar/callback` |
+| Docs / Drive export | `{PUBLIC_APP_URL}/auth/google/docs/callback` |
 
 **Local Docker example** (`PUBLIC_APP_URL=http://localhost:3001`):
 
 ```
 http://localhost:3001/auth/callback/google
 http://localhost:3001/auth/google/calendar/callback
+http://localhost:3001/auth/google/docs/callback
 ```
 
 Remove stale HomeHub URIs unless you still use them:
@@ -53,7 +55,7 @@ Optional override: set `GOOGLE_OAUTH_REDIRECT_URI` only for calendar if you need
 2. **Publishing status:** **Testing** for personal/homelab use.
 3. **Test users:** Add every Google account that will sign in (required in Testing mode).
 4. **App domain:** Set **Application home page** and **Privacy policy** URLs. Google often blocks sign-in without a privacy policy link, even for localhost dev. Use your real domain or a static page you control.
-5. **Scopes:** Login uses `openid`, email, profile. Calendar connect adds the Calendar scope (sensitive — Testing + test users is fine).
+5. **Scopes:** Login uses `openid`, email, profile. Calendar connect adds the Calendar scope. Docs export adds `documents` + `drive.file` (sensitive — Testing + test users is fine). Enable **Google Docs API** and **Google Drive API** in the same GCP project.
 
 ## 6. `.env` alignment
 

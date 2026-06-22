@@ -13,6 +13,77 @@ export function addDaysIso(iso: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+/** UTC weekday for a calendar ISO date: 0 = Sunday … 6 = Saturday. */
+export function isoWeekday(iso: string): number {
+  return new Date(`${iso}T12:00:00Z`).getUTCDay();
+}
+
+/** Monday (ISO date) of the week containing `iso`. */
+export function mondayOfWeekIso(iso: string): string {
+  const day = isoWeekday(iso);
+  const offset = day === 0 ? -6 : 1 - day;
+  return addDaysIso(iso, offset);
+}
+
+export interface MonFriWeekRange {
+  weekStart: string;
+  weekEnd: string;
+  weekLabel: string;
+}
+
+function formatShortDate(iso: string): string {
+  const [year, month, day] = iso.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+}
+
+/** Current (or requested) Mon–Fri school week in household local calendar dates. */
+export function monFriWeekRange(params: {
+  timeZone: string;
+  referenceDate?: string;
+  weekStart?: string | null;
+}): MonFriWeekRange {
+  const today = params.referenceDate ?? todayIsoDateInTz(params.timeZone);
+  const weekStart = params.weekStart?.trim()
+    ? mondayOfWeekIso(params.weekStart.trim())
+    : mondayOfWeekIso(today);
+  const weekEnd = addDaysIso(weekStart, 4);
+  const startLabel = formatShortDate(weekStart);
+  const endLabel = formatShortDate(weekEnd);
+  const year = weekStart.slice(0, 4);
+  const weekLabel =
+    weekStart.slice(0, 4) === weekEnd.slice(0, 4)
+      ? `${startLabel}–${endLabel}, ${year}`
+      : `${startLabel}, ${weekStart.slice(0, 4)} – ${endLabel}, ${weekEnd.slice(0, 4)}`;
+  return { weekStart, weekEnd, weekLabel };
+}
+
+export function isoDateInRange(iso: string, start: string, end: string): boolean {
+  return iso >= start && iso <= end;
+}
+
+const MAX_WEEKS_IN_RANGE = 26;
+
+/** Mon–Fri weeks whose calendar span overlaps `[fromIso, toIso]` (inclusive). */
+export function weeksOverlappingRange(
+  fromIso: string,
+  toIso: string,
+  timeZone: string,
+): MonFriWeekRange[] {
+  if (fromIso > toIso) return [];
+  const weeks: MonFriWeekRange[] = [];
+  let monday = mondayOfWeekIso(fromIso);
+  while (weeks.length < MAX_WEEKS_IN_RANGE) {
+    const range = monFriWeekRange({ timeZone, weekStart: monday });
+    if (range.weekStart > toIso) break;
+    if (range.weekEnd >= fromIso) weeks.push(range);
+    monday = addDaysIso(monday, 7);
+  }
+  return weeks;
+}
+
+export { MAX_WEEKS_IN_RANGE };
+
 export function localDateOfInstant(instant: Date, timeZone: string): string {
   try {
     return instant.toLocaleDateString("en-CA", { timeZone });

@@ -40,6 +40,8 @@ whome/
 | `src/app/chores/page.tsx`, `notes/page.tsx`, `expenses/page.tsx` | Core list modules |
 | `src/app/profile/page.tsx` | Profile editor (identity, presence, prefs, integrations, notifications) |
 | `src/components/ProfileCalendarConnect.tsx` | Slim Google Calendar connect status for profile |
+| `src/components/ProfileGoogleDocsConnect.tsx` | Google Docs/Drive export OAuth connect on profile |
+| `src/components/WeeklyReportPanel.tsx` | Shared weekly schedule UI (week/range, group-by, export preview) |
 | `src/app/settings/page.tsx` | Household settings (owner/admin): name, timezone, slug, module toggles, members, integrations |
 | `src/components/HouseholdSettingsEditor.tsx` | Household name/slug/timezone + module toggle checkboxes |
 | `src/components/HouseholdMembersPanel.tsx` | Member list, role dropdown, username provisioning |
@@ -76,6 +78,11 @@ whome/
 | `src/middleware/auth.ts` | `createAuthMiddleware`, `requireAuth` |
 | `src/routes/auth.ts` | Session, Google login/callback, logout |
 | `src/routes/google-calendar-auth.ts` | Calendar OAuth + enqueue import |
+| `src/routes/google-docs-auth.ts` | Google Docs/Drive export OAuth (`/auth/google/docs/*`) |
+| `src/routes/weekly-reports.ts` | Weekly schedule reports + export (`/api/core/weekly-reports`) |
+| `src/lib/weekly-reports/` | Per-module Mon–Fri report builders (school, chores, shopping, expenses) |
+| `src/lib/report-render.ts` | Plain/styled HTML render for weekly exports |
+| `src/lib/google-docs-export.ts` | Google Docs/Drive API + token refresh |
 | `src/routes/calendar.ts` | Connections, events, sync trigger |
 | `src/routes/core.ts` | Dashboard, shopping, chores, notes, expenses |
 | `src/routes/school.ts` | Classes, assignments, submissions |
@@ -112,6 +119,7 @@ whome/
 | `drizzle/*.sql` | Applied migrations (must be listed in `drizzle/meta/_journal.json`) |
 | `drizzle/meta/_journal.json` | Migration order registry for `migrate:run` |
 | `src/schema/push.ts` | `push_subscriptions` for Web Push |
+| `src/schema/google-docs.ts` | `google_docs_connections` (encrypted OAuth tokens for report export) |
 | `drizzle.config.ts` | Drizzle Kit config |
 
 Exports: `@whome/db`, `@whome/db/schema` (package.json `exports`).

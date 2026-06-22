@@ -5,6 +5,7 @@ import { ApiError, apiClient } from "../lib/client-api";
 import type { HomePresence } from "../lib/home-status";
 import { NotificationSettingsPanel } from "./NotificationSettingsPanel";
 import { ProfileCalendarConnect } from "./ProfileCalendarConnect";
+import { ProfileGoogleDocsConnect } from "./ProfileGoogleDocsConnect";
 import { Alert, Avatar, Button, Card, CardBody, Input, RadioGroup, SectionHeader } from "./ui";
 
 type TemperatureUnit = "fahrenheit" | "celsius";
@@ -290,18 +291,19 @@ export function ProfileEditor({
           />
         </ProfileSection>
 
-        {calendarIntegration ? (
-          <ProfileSection
-            title="Integrations"
-            description="Connect external services used across the household."
-          >
+        <ProfileSection
+          title="Integrations"
+          description="Connect external services used across the household."
+        >
+          {calendarIntegration ? (
             <ProfileCalendarConnect
               oauthConfigured={calendarIntegration.oauthConfigured}
               defaultSyncMode={calendarIntegration.defaultSyncMode}
               connections={calendarIntegration.connections}
             />
-          </ProfileSection>
-        ) : null}
+          ) : null}
+          <ProfileGoogleDocsConnect />
+        </ProfileSection>
 
         <ProfileSection
           title="Notifications"

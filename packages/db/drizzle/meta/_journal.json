@@ -232,6 +232,13 @@
       "when": 1780495006000,
       "tag": "0032_wave3_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1780495007000,
+      "tag": "0033_google_docs_connections",
+      "breakpoints": true
     }
   ]
 }

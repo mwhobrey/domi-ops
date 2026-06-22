@@ -23,6 +23,12 @@ export const GOOGLE_CALENDAR_SCOPES = [
   "https://www.googleapis.com/auth/calendar",
 ];
 
+export const GOOGLE_DOCS_SCOPES = [
+  ...GOOGLE_LOGIN_SCOPES,
+  "https://www.googleapis.com/auth/documents",
+  "https://www.googleapis.com/auth/drive.file",
+];
+
 export function googleAuthUrl(
   env: Env,
   opts: {

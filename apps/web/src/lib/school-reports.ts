@@ -127,7 +127,8 @@ export type SchoolReportView =
   | "weighted"
   | "missing"
   | "progress"
-  | "transcript";
+  | "transcript"
+  | "weekly";
 
 export function reportsUrl(term: string | null): string {
   if (!term) return "/school/reports";

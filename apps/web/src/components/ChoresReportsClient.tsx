@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
-import { Alert, Button, Input, Spinner } from "./ui";
+import { Alert, Button, Input, SectionHeader, Spinner } from "./ui";
+import { WeeklyReportPanel } from "./WeeklyReportPanel";
 
 interface ChoreMemberReport {
   memberId: string;
@@ -83,7 +84,14 @@ export function ChoresReportsClient() {
   }, [load]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
+      <section className="space-y-4">
+        <SectionHeader title="Weekly schedule" />
+        <WeeklyReportPanel module="chores" />
+      </section>
+
+      <section className="space-y-4">
+        <SectionHeader title="Completion history" />
       {error ? (
         <Alert variant="error">
           {error}{" "}
@@ -234,6 +242,7 @@ export function ChoresReportsClient() {
           ) : null}
         </>
       ) : null}
+      </section>
     </div>
   );
 }

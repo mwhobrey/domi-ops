@@ -15,6 +15,8 @@ import { schoolUploadRoutes } from "./routes/school-upload.js";
 import { browserUploadRoutes } from "./routes/browser-upload.js";
 import { driveRoutes } from "./routes/drive.js";
 import { drivePublicRoutes } from "./routes/drive-public.js";
+import { googleDocsAuthRoutes } from "./routes/google-docs-auth.js";
+import { weeklyReportRoutes } from "./routes/weekly-reports.js";
 import { ensureS3ReadyOnce } from "./lib/s3.js";
 
 const env = loadEnv();
@@ -35,6 +37,7 @@ app.use(
 app.use("*", createAuthMiddleware(db, env, betterAuth));
 
 app.route("/auth/google/calendar", googleCalendarAuthRoutes(db, env));
+app.route("/auth/google/docs", googleDocsAuthRoutes(db, env));
 app.route("/auth", whomeSessionRoutes(db, betterAuth));
 
 app.on(["POST", "GET"], "/auth/*", (c) => {
@@ -50,6 +53,7 @@ app.on(["POST", "GET"], "/auth/*", (c) => {
 app.route("/", healthRoutes(db));
 app.route("/api/calendar", calendarRoutes(db, env));
 app.route("/api/core", coreRoutes(db, env));
+app.route("/api/core", weeklyReportRoutes(db, env));
 app.route("/api/core/upload", browserUploadRoutes(env));
 app.route("/api/core/drive", driveRoutes(db, env));
 app.route("/s", drivePublicRoutes(db, env));

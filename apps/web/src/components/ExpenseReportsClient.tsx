@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
 import { Alert, Badge, Button, EmptyState, Input, SectionHeader, Spinner } from "./ui";
+import { WeeklyReportPanel } from "./WeeklyReportPanel";
 
 interface ExpenseReportCategoryRow {
   category: string;
@@ -214,7 +215,14 @@ export function ExpenseReportsClient() {
   }, [load]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
+      <section className="space-y-4">
+        <SectionHeader title="Weekly schedule" />
+        <WeeklyReportPanel module="expenses" />
+      </section>
+
+      <section className="space-y-4">
+        <SectionHeader title="Monthly spending" />
       {error ? (
         <Alert variant="error">
           {error}{" "}
@@ -377,6 +385,7 @@ export function ExpenseReportsClient() {
           ) : null}
         </>
       ) : null}
+      </section>
     </div>
   );
 }

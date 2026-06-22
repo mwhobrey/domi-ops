@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
-import { Alert, Button, Input, Spinner } from "./ui";
+import { Alert, Button, Input, SectionHeader, Spinner } from "./ui";
+import { WeeklyReportPanel } from "./WeeklyReportPanel";
 
 interface ReportTrip {
   id: string;
@@ -64,7 +65,14 @@ export function ShoppingReportsClient() {
   }, [load]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
+      <section className="space-y-4">
+        <SectionHeader title="Weekly schedule" />
+        <WeeklyReportPanel module="shopping" />
+      </section>
+
+      <section className="space-y-4">
+        <SectionHeader title="Trip history" />
       {error ? (
         <Alert variant="error">
           {error}{" "}
@@ -221,6 +229,7 @@ export function ShoppingReportsClient() {
           ) : null}
         </>
       ) : null}
+      </section>
     </div>
   );
 }
