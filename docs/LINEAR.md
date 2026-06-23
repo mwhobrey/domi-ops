@@ -176,9 +176,9 @@ Cross-cutting app chrome, nav density, page headers, and layout polish (June 202
 
 | Milestone | Issues |
 |-----------|--------|
-| M1 — Shell & nav (critical) | [WHO-156](https://linear.app/mikewhob-whome/issue/WHO-156), [WHO-157](https://linear.app/mikewhob-whome/issue/WHO-157), [WHO-158](https://linear.app/mikewhob-whome/issue/WHO-158), [WHO-159](https://linear.app/mikewhob-whome/issue/WHO-159) |
-| M2 — Page chrome & density (high) | [WHO-160](https://linear.app/mikewhob-whome/issue/WHO-160)–[WHO-162](https://linear.app/mikewhob-whome/issue/WHO-162) |
-| M3 — Module layout polish (medium) | [WHO-163](https://linear.app/mikewhob-whome/issue/WHO-163)–[WHO-165](https://linear.app/mikewhob-whome/issue/WHO-165) |
+| M1 — Shell & nav (critical) | [WHO-156](https://linear.app/mikewhob-whome/issue/WHO-156)–[WHO-159](https://linear.app/mikewhob-whome/issue/WHO-159) **Done** |
+| M2 — Page chrome & density (high) | [WHO-160](https://linear.app/mikewhob-whome/issue/WHO-160)–[WHO-162](https://linear.app/mikewhob-whome/issue/WHO-162), [WHO-170](https://linear.app/mikewhob-whome/issue/WHO-170) |
+| M3 — Module layout polish (medium) | [WHO-163](https://linear.app/mikewhob-whome/issue/WHO-163)–[WHO-165](https://linear.app/mikewhob-whome/issue/WHO-165), [WHO-169](https://linear.app/mikewhob-whome/issue/WHO-169) |
 | M4 — A11y & micro-polish (low) | [WHO-166](https://linear.app/mikewhob-whome/issue/WHO-166)–[WHO-168](https://linear.app/mikewhob-whome/issue/WHO-168) |
 
 ## Suggested work order
@@ -208,4 +208,4 @@ Detailed acceptance criteria: `docs/LINEAR_BACKLOG.md` (keep in sync when adding
 |----|--------|--------|
 | [WHO-134](https://linear.app/mikewhob-whome/issue/WHO-134) | Backlog | Marketing landing page (post-OSS) |
 
-Recent: **WHO-137**–**WHO-151** notification hardening backlog; **WHO-136** (push infra) Done.
+Recent: **WHO-156**–**WHO-159** M1 shell/nav polish Done; **WHO-169**–**WHO-170** calendar UX backlog added.
