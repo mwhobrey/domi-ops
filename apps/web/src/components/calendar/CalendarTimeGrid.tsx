@@ -292,7 +292,7 @@ export function CalendarTimeGrid({
 
   const [allDayDragDateKey, setAllDayDragDateKey] = useState<string | null>(null);
 
-
+  const [allDayBandHeight, setAllDayBandHeight] = useState(40);
 
   const dateKeys = useMemo(() => dates.map((d) => formatDateLocal(d)), [dates]);
 
@@ -346,7 +346,27 @@ export function CalendarTimeGrid({
 
   }, [dateKeys, dates, events]);
 
+  const allDayEventCount = useMemo(
+    () => columns.reduce((n, col) => n + col.allDay.length, 0),
+    [columns],
+  );
 
+  useEffect(() => {
+    const els = allDayColumnRefs.current.filter(
+      (el): el is HTMLDivElement => el != null,
+    );
+    if (els.length === 0 || typeof ResizeObserver === "undefined") return;
+
+    function measure() {
+      const max = Math.max(...els.map((el) => el.getBoundingClientRect().height));
+      if (max > 0) setAllDayBandHeight(max);
+    }
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    for (const el of els) observer.observe(el);
+    return () => observer.disconnect();
+  }, [colCount, allDayEventCount]);
 
   const hours = hourSlots();
 
@@ -878,7 +898,10 @@ export function CalendarTimeGrid({
 
 
 
-        <div className="sticky top-[2.5rem] z-20 border-b border-[var(--color-border)] bg-[var(--color-surface-elevated)]" />
+        <div
+          className="sticky z-20 border-b border-[var(--color-border)] bg-[var(--color-surface-elevated)]"
+          style={{ top: allDayBandHeight }}
+        />
 
         {columns.map((col) => (
 
@@ -886,7 +909,9 @@ export function CalendarTimeGrid({
 
             key={`hdr-${col.key}`}
 
-            className="sticky top-[2.5rem] z-20 border-b border-l border-[var(--color-border)] bg-[var(--color-surface-elevated)] p-2 text-center text-sm font-medium"
+            className="sticky z-20 border-b border-l border-[var(--color-border)] bg-[var(--color-surface-elevated)] p-2 text-center text-sm font-medium"
+
+            style={{ top: allDayBandHeight }}
 
           >
 

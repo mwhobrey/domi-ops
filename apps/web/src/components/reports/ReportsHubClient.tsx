@@ -4,14 +4,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ApiError, apiClient } from "../../lib/client-api";
 import type { ReportCatalogEntry, ReportKind, ReportModule } from "../../lib/reports";
-import { REPORT_KIND_LABELS, REPORT_MODULE_LABELS } from "../../lib/reports";
 import { WeeklyReportPanel } from "../WeeklyReportPanel";
 import { ChoresCompletionReportSection } from "./ChoresCompletionReportSection";
 import { ExpenseMonthlyReportSection } from "./ExpenseMonthlyReportSection";
 import { HealthOverviewReportSection } from "./HealthOverviewReportSection";
 import { SchoolReportsSection } from "./SchoolReportsSection";
 import { ShoppingTripReportSection } from "./ShoppingTripReportSection";
-import { Alert, Select, Spinner } from "../ui";
+import { Alert, Card, CardBody, Select, Spinner } from "../ui";
 
 function parseModule(value: string | null): ReportModule | null {
   if (
@@ -109,11 +108,6 @@ export function ReportsHubClient() {
     };
   }, [moduleParam, router]);
 
-  const kindLabel = useMemo(
-    () => REPORT_KIND_LABELS[activeKind] ?? activeKind,
-    [activeKind],
-  );
-
   const reportPane = useMemo(() => {
     if (activeModule === "school") {
       if (activeKind === "weekly") {
@@ -172,56 +166,115 @@ export function ReportsHubClient() {
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[14rem_minmax(0,1fr)]">
-      <aside className="space-y-4">
-        <nav aria-label="Report modules" className="space-y-1">
-          {catalog.map((entry) => (
-            <button
-              key={entry.module}
-              type="button"
-              className={`w-full rounded-[var(--radius-md)] px-3 py-2 text-left text-sm font-medium transition-colors ${
-                entry.module === activeModule
-                  ? "bg-[var(--color-accent-subtle)] text-[var(--color-text)]"
-                  : "text-[var(--color-text-muted)] hover:bg-[var(--color-border)]/40 hover:text-[var(--color-text)]"
-              }`}
-              onClick={() => {
-                const kind = entry.kinds[0]?.id ?? defaultKindForModule(entry.module);
-                setSelection(entry.module, kind);
-              }}
-            >
-              {entry.moduleLabel}
-            </button>
-          ))}
-        </nav>
+    <div className="space-y-6">
+      <Card className="lg:hidden">
+        <CardBody className="space-y-3">
+          <nav aria-label="Report modules" className="flex gap-2 overflow-x-auto pb-1">
+            {catalog.map((entry) => (
+              <button
+                key={entry.module}
+                type="button"
+                aria-current={entry.module === activeModule ? "page" : undefined}
+                className={`shrink-0 rounded-[var(--radius-md)] px-3 py-2 text-sm font-medium transition-colors ${
+                  entry.module === activeModule
+                    ? "bg-[var(--color-accent-subtle)] text-[var(--color-text)]"
+                    : "text-[var(--color-text-muted)] hover:bg-[var(--color-border)]/40 hover:text-[var(--color-text)]"
+                }`}
+                onClick={() => {
+                  const kind = entry.kinds[0]?.id ?? defaultKindForModule(entry.module);
+                  setSelection(entry.module, kind);
+                }}
+              >
+                {entry.moduleLabel}
+              </button>
+            ))}
+          </nav>
 
-        {activeEntry && activeEntry.kinds.length > 1 ? (
-          <label className="block space-y-1 text-sm">
-            <span className="text-[var(--color-text-muted)]">Report type</span>
-            <Select
-              value={activeKind}
-              onChange={(e) => setSelection(activeModule, e.target.value as ReportKind)}
-              aria-label="Report type"
-            >
-              {activeEntry.kinds.map((k) => (
-                <option key={k.id} value={k.id}>
-                  {k.label}
-                </option>
-              ))}
-            </Select>
-          </label>
-        ) : null}
-      </aside>
+          {activeEntry && activeEntry.kinds.length > 1 ? (
+            activeEntry.kinds.length <= 4 ? (
+              <nav aria-label="Report type" className="flex flex-wrap gap-2">
+                {activeEntry.kinds.map((k) => (
+                  <button
+                    key={k.id}
+                    type="button"
+                    aria-current={k.id === activeKind ? "page" : undefined}
+                    className={`rounded-[var(--radius-md)] px-3 py-1.5 text-sm font-medium transition-colors ${
+                      k.id === activeKind
+                        ? "bg-[var(--color-accent-subtle)] text-[var(--color-text)]"
+                        : "text-[var(--color-text-muted)] hover:bg-[var(--color-border)]/40 hover:text-[var(--color-text)]"
+                    }`}
+                    onClick={() => setSelection(activeModule, k.id)}
+                  >
+                    {k.label}
+                  </button>
+                ))}
+              </nav>
+            ) : (
+              <label className="block space-y-1 text-sm">
+                <span className="text-[var(--color-text-muted)]">Report type</span>
+                <Select
+                  value={activeKind}
+                  onChange={(e) => setSelection(activeModule, e.target.value as ReportKind)}
+                  aria-label="Report type"
+                >
+                  {activeEntry.kinds.map((k) => (
+                    <option key={k.id} value={k.id}>
+                      {k.label}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+            )
+          ) : null}
 
-      <div className="min-w-0 space-y-4">
-        <div>
-          <h2 className="text-lg font-semibold">
-            {REPORT_MODULE_LABELS[activeModule]} — {kindLabel}
-          </h2>
           <p className="text-sm text-[var(--color-text-muted)]">
-            Run and export without leaving this page. Module pages still link here for the same reports.
+            Run and export without leaving this page.
           </p>
-        </div>
-        {reportPane}
+        </CardBody>
+      </Card>
+
+      <div className="grid gap-6 lg:grid-cols-[14rem_minmax(0,1fr)]">
+        <aside className="hidden space-y-4 lg:block">
+          <nav aria-label="Report modules" className="space-y-1">
+            {catalog.map((entry) => (
+              <button
+                key={entry.module}
+                type="button"
+                aria-current={entry.module === activeModule ? "page" : undefined}
+                className={`w-full rounded-[var(--radius-md)] px-3 py-2 text-left text-sm font-medium transition-colors ${
+                  entry.module === activeModule
+                    ? "bg-[var(--color-accent-subtle)] text-[var(--color-text)]"
+                    : "text-[var(--color-text-muted)] hover:bg-[var(--color-border)]/40 hover:text-[var(--color-text)]"
+                }`}
+                onClick={() => {
+                  const kind = entry.kinds[0]?.id ?? defaultKindForModule(entry.module);
+                  setSelection(entry.module, kind);
+                }}
+              >
+                {entry.moduleLabel}
+              </button>
+            ))}
+          </nav>
+
+          {activeEntry && activeEntry.kinds.length > 1 ? (
+            <label className="block space-y-1 text-sm">
+              <span className="text-[var(--color-text-muted)]">Report type</span>
+              <Select
+                value={activeKind}
+                onChange={(e) => setSelection(activeModule, e.target.value as ReportKind)}
+                aria-label="Report type"
+              >
+                {activeEntry.kinds.map((k) => (
+                  <option key={k.id} value={k.id}>
+                    {k.label}
+                  </option>
+                ))}
+              </Select>
+            </label>
+          ) : null}
+        </aside>
+
+        <div className="min-w-0">{reportPane}</div>
       </div>
     </div>
   );

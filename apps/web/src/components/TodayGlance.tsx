@@ -65,14 +65,16 @@ export function TodayGlance({ driveModuleEnabled = false }: { driveModuleEnabled
       </CardHeader>
       <CardBody>
         {loading ? (
-          <div className={`grid gap-3 ${columnCount > 1 ? "sm:grid-cols-2" : ""}`}>
+          <div
+            className={`grid gap-3 ${columnCount > 1 ? "sm:grid-cols-2" : ""} ${columnCount > 2 ? "xl:grid-cols-3" : ""}`}
+          >
             <Skeleton className="h-28 w-full" />
             {columnCount > 1 ? <Skeleton className="h-28 w-full" /> : null}
-            {columnCount > 2 ? <Skeleton className="h-28 w-full sm:col-span-2" /> : null}
+            {columnCount > 2 ? <Skeleton className="h-28 w-full sm:col-span-2 xl:col-span-1" /> : null}
           </div>
         ) : (
           <div
-            className={`grid gap-3 ${columnCount > 1 ? "sm:grid-cols-2" : ""} ${columnCount > 2 ? "md:grid-cols-3" : ""}`}
+            className={`grid gap-3 ${columnCount > 1 ? "sm:grid-cols-2" : ""} ${columnCount > 2 ? "xl:grid-cols-3" : ""}`}
           >
             {chores && (
               <GlanceTile

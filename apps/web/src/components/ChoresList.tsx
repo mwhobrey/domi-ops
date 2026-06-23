@@ -21,6 +21,7 @@ import {
   Select,
 } from "./ui";
 import { ListPage } from "./lists/ListPage";
+import { CollapsibleAddForm } from "./lists/CollapsibleAddForm";
 
 export type ChorePriority = 0 | 1 | 2 | 3;
 
@@ -564,6 +565,7 @@ export function ChoresList({
         </div>
       }
       addForm={
+        <CollapsibleAddForm label="Add chore">
         <form className="space-y-2" onSubmit={addChore}>
           <div className="flex flex-wrap gap-2">
             <Input
@@ -634,6 +636,7 @@ export function ChoresList({
             ))}
           </datalist>
         </form>
+        </CollapsibleAddForm>
       }
     >
       <ChoreKarmaBar members={initialKarma} />

@@ -4,10 +4,7 @@ import { ReportsHubClient } from "../../components/reports/ReportsHubClient";
 
 export default function ReportsPage() {
   return (
-    <AppShell
-      title="Reports"
-      description="Household reports across school, chores, shopping, expenses, and health"
-    >
+    <AppShell title="Reports">
       <Suspense
         fallback={
           <p className="text-sm text-[var(--color-text-muted)]">Loading reports…</p>

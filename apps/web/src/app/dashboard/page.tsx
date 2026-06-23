@@ -10,6 +10,7 @@ export default async function DashboardPage() {
   let loadError: string | null = null;
 
   let driveModuleEnabled = false;
+  let schoolModuleEnabled = false;
 
   try {
     const [dashboard, profile, session] = await Promise.all([
@@ -27,6 +28,7 @@ export default async function DashboardPage() {
     ]);
     whosHome = dashboard.whosHome;
     driveModuleEnabled = (session.modulesEnabled ?? []).includes("drive");
+    schoolModuleEnabled = (session.modulesEnabled ?? []).includes("school");
     if (profile.homeStatusId) {
       self = {
         homeStatusId: profile.homeStatusId,
@@ -51,6 +53,7 @@ export default async function DashboardPage() {
           whosHome={whosHome}
           self={self}
           driveModuleEnabled={driveModuleEnabled}
+          denseGlanceLayout={schoolModuleEnabled && driveModuleEnabled}
         />
       )}
     </AppShell>

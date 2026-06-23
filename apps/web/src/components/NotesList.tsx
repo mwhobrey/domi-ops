@@ -22,6 +22,7 @@ import {
   MarkdownEditor,
 } from "./ui";
 import { ListPage } from "./lists/ListPage";
+import { CollapsibleAddForm } from "./lists/CollapsibleAddForm";
 
 const PREVIEW_LENGTH = 120;
 
@@ -182,6 +183,7 @@ export function NotesList({
       error={error}
       onDismissError={() => setError(null)}
       addForm={
+        <CollapsibleAddForm label="Add note">
         <form
           className="space-y-3"
           onSubmit={async (e) => {
@@ -269,6 +271,7 @@ export function NotesList({
             Add note
           </Button>
         </form>
+        </CollapsibleAddForm>
       }
     >
       <div className="mb-4 space-y-3">

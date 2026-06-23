@@ -7,7 +7,7 @@
 - **Overlays:** native `<dialog>` via `Modal`, `Sheet`, `Drawer` (focus trap, Escape, focus restore)
 - **Client API:** [`apps/web/src/lib/client-api.ts`](../apps/web/src/lib/client-api.ts)
 - **Server API:** [`apps/web/src/lib/api.ts`](../apps/web/src/lib/api.ts)
-- **List layout:** [`ListPage`](../apps/web/src/components/lists/ListPage.tsx)
+- **List layout:** [`ListPage`](../apps/web/src/components/lists/ListPage.tsx) + [`CollapsibleAddForm`](../apps/web/src/components/lists/CollapsibleAddForm.tsx) (desktop collapsed by default for add forms; always open below `md`)
 - **Load errors:** [`load-error.ts`](../apps/web/src/lib/load-error.ts)
 - **A11y helpers:** [`color-contrast.ts`](../apps/web/src/lib/color-contrast.ts), [`use-media-query.ts`](../apps/web/src/lib/use-media-query.ts)
 - **Member colors:** [`member-color.ts`](../apps/web/src/lib/member-color.ts)
@@ -51,12 +51,14 @@ Typography: **Inter** via `next/font` on `layout.tsx`.
 - **`PageHeader`** — `descriptionVisibility`: `desktop` (default when `description` set) hides subtitle below `lg`; list modules omit `description`.
 - **`PageHeaderActions`** — when `actions` has 2+ children, below `md` shows an overflow menu instead of a wrapping row.
 - **Notices** — `NoticeBoardActions` lives in `AppChrome` header, not `PageHeader`.
+- **Reports hub** — `/reports` title only; mobile module/kind pill picker card; desktop sidebar nav at `lg+`.
 
 ## Dashboard widgets
 
 - **Weather:** Open-Meteo via `GET /api/core/weather?lat=&lon=&label=` and `GET /api/core/weather/geocode?q=`. Users pick **Use my location** (browser geolocation) or search city/state/ZIP; saved in `localStorage` (`whome:weather-location`). Optional server default in `.env`.
 - **Household:** `HouseholdPanel` — current user status highlighted; other members below.
 - **Month calendar:** `DashboardMonthCalendar` — tap day for event sheet (close via X, backdrop, or Escape).
+- **Today at a glance:** when school + drive modules on, glance card spans full width above calendar; 3 tiles use 2 cols until `xl`.
 
 ## PWA
 
