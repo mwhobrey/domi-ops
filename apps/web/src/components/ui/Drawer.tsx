@@ -12,6 +12,7 @@ export function Drawer({
   children,
   className,
   footer,
+  visibility = "mobile",
 }: {
   open: boolean;
   onClose: () => void;
@@ -19,6 +20,8 @@ export function Drawer({
   children: React.ReactNode;
   className?: string;
   footer?: React.ReactNode;
+  /** mobile: left sheet below lg (hamburger). desktop: left sheet lg+ only (modules menu). */
+  visibility?: "mobile" | "desktop";
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const onCloseRef = useRef(onClose);
@@ -68,7 +71,10 @@ export function Drawer({
       ref={ref}
       aria-label={title}
       className={cn(
-        "dialog-drawer fixed inset-y-0 left-0 z-50 m-0 flex h-full max-h-full w-72 flex-col border-0 border-r border-[var(--color-border)] bg-[var(--color-surface-elevated)] p-0 backdrop:bg-black/60 md:hidden",
+        "dialog-drawer fixed inset-y-0 left-0 z-50 m-0 flex h-full max-h-full flex-col border-0 border-r border-[var(--color-border)] bg-[var(--color-surface-elevated)] p-0 backdrop:bg-black/60",
+        visibility === "desktop"
+          ? "hidden w-80 lg:flex"
+          : "w-72 lg:hidden",
         className,
       )}
       onClick={(e) => {

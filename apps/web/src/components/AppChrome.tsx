@@ -2,48 +2,15 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import {
-  BookOpen,
-  BarChart3,
-  Calendar,
-  ClipboardList,
-  FolderOpen,
-  Heart,
-  Home,
-  LayoutDashboard,
-  Menu,
-  NotebookPen,
-  Receipt,
-  ShoppingCart,
-} from "lucide-react";
+import { Home, LayoutGrid, Menu } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { filterVisibleNav } from "../lib/app-nav";
 import { cn } from "../lib/cn";
 import { authClient } from "../lib/auth-client";
 import { Avatar } from "./ui/Avatar";
 import { Drawer } from "./ui/Drawer";
 import { IconButton } from "./ui/IconButton";
 import { ProfileOnboardingBanner } from "./ProfileOnboardingBanner";
-
-const nav = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/reports", label: "Reports", icon: BarChart3 },
-  { href: "/calendar", label: "Calendar", icon: Calendar, module: "calendar_sync" },
-  { href: "/school", label: "School", icon: BookOpen, module: "school" },
-  { href: "/shopping", label: "Shopping", icon: ShoppingCart },
-  { href: "/chores", label: "Chores", icon: ClipboardList },
-  { href: "/notes", label: "Notes", icon: NotebookPen },
-  { href: "/drive", label: "Drive", icon: FolderOpen, module: "drive" },
-  { href: "/health", label: "Health", icon: Heart, module: "health" },
-  { href: "/expenses", label: "Expenses", icon: Receipt },
-] as const;
-
-function isNavItemVisible(
-  item: (typeof nav)[number],
-  modulesEnabled: string[] | undefined,
-): boolean {
-  if (!("module" in item) || !item.module) return true;
-  return modulesEnabled?.includes(item.module) ?? false;
-}
 
 export type ShellUser = {
   email: string | null;
@@ -66,7 +33,7 @@ function NavLink({
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   onClick?: () => void;
-  /** compact = icon-only (header bar); always = text + icon (mobile drawer) */
+  /** compact = icon-only (header bar); always = text + icon (drawers) */
   showLabel?: "compact" | "always";
 }) {
   const pathname = usePathname();
@@ -105,6 +72,7 @@ export function AppChrome({
 }) {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [modulesOpen, setModulesOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
   const [signOutPending, setSignOutPending] = useState(false);
   const userRef = useRef<HTMLDivElement>(null);
@@ -112,11 +80,25 @@ export function AppChrome({
   const menuRef = useRef<HTMLDivElement>(null);
 
   const closeUserMenu = useCallback(() => setUserOpen(false), []);
+  const closeModulesDrawer = useCallback(() => setModulesOpen(false), []);
+
+  const openMobileMenu = useCallback(() => {
+    setModulesOpen(false);
+    setUserOpen(false);
+    setMenuOpen(true);
+  }, []);
+
+  const openModulesDrawer = useCallback(() => {
+    setMenuOpen(false);
+    setUserOpen(false);
+    setModulesOpen(true);
+  }, []);
 
   async function onSignOut() {
     if (signOutPending) return;
     setUserOpen(false);
     setMenuOpen(false);
+    setModulesOpen(false);
     setSignOutPending(true);
     try {
       const res = await authClient.signOut();
@@ -164,7 +146,7 @@ export function AppChrome({
   }, [userOpen, closeUserMenu]);
 
   const visibleNav = useMemo(
-    () => nav.filter((item) => isNavItemVisible(item, modulesEnabled)),
+    () => filterVisibleNav(modulesEnabled),
     [modulesEnabled],
   );
 
@@ -181,7 +163,7 @@ export function AppChrome({
             <IconButton
               className="lg:hidden"
               label="Open menu"
-              onClick={() => setMenuOpen(true)}
+              onClick={openMobileMenu}
             >
               <Menu className="h-5 w-5" />
             </IconButton>
@@ -200,56 +182,70 @@ export function AppChrome({
             ))}
           </nav>
 
-          <div className="relative" ref={userRef}>
-            <button
-              ref={userTriggerRef}
-              type="button"
-              aria-expanded={userOpen}
-              aria-haspopup="menu"
-              className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] px-3 py-1.5 text-sm hover:bg-[var(--color-border)]/30"
-              onClick={() => setUserOpen((v) => !v)}
+          <div className="flex items-center gap-2">
+            <IconButton
+              className="hidden lg:inline-flex"
+              label="All modules"
+              aria-expanded={modulesOpen}
+              onClick={() => (modulesOpen ? closeModulesDrawer() : openModulesDrawer())}
             >
-              <Avatar id={avatarId} name={label} src={user?.avatarUrl} size="sm" />
-              <span className="hidden max-w-[120px] truncate sm:inline">{label}</span>
-            </button>
-            {userOpen && (
-              <div
-                ref={menuRef}
-                role="menu"
-                className="absolute right-0 mt-2 w-48 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-elevated)] py-1 shadow-[var(--shadow-elevated)]"
+              <LayoutGrid className="h-5 w-5" />
+            </IconButton>
+
+            <div className="relative" ref={userRef}>
+              <button
+                ref={userTriggerRef}
+                type="button"
+                aria-expanded={userOpen}
+                aria-haspopup="menu"
+                className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] px-3 py-1.5 text-sm hover:bg-[var(--color-border)]/30"
+                onClick={() => {
+                  setModulesOpen(false);
+                  setUserOpen((v) => !v);
+                }}
               >
-                <p className="truncate px-3 py-2 text-xs text-[var(--color-text-muted)]">
-                  {user?.username ? `@${user.username}` : user?.email ?? "Signed in"}
-                </p>
-                <Link
-                  href="/profile"
-                  role="menuitem"
-                  className="block px-3 py-2 text-sm hover:bg-[var(--color-border)]/40"
-                  onClick={() => setUserOpen(false)}
+                <Avatar id={avatarId} name={label} src={user?.avatarUrl} size="sm" />
+                <span className="hidden max-w-[120px] truncate sm:inline">{label}</span>
+              </button>
+              {userOpen && (
+                <div
+                  ref={menuRef}
+                  role="menu"
+                  className="absolute right-0 mt-2 w-48 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-elevated)] py-1 shadow-[var(--shadow-elevated)]"
                 >
-                  Your profile
-                </Link>
-                {canManageHousehold && (
+                  <p className="truncate px-3 py-2 text-xs text-[var(--color-text-muted)]">
+                    {user?.username ? `@${user.username}` : user?.email ?? "Signed in"}
+                  </p>
                   <Link
-                    href="/settings"
+                    href="/profile"
                     role="menuitem"
                     className="block px-3 py-2 text-sm hover:bg-[var(--color-border)]/40"
                     onClick={() => setUserOpen(false)}
                   >
-                    Household settings
+                    Your profile
                   </Link>
-                )}
-                <button
-                  type="button"
-                  role="menuitem"
-                  disabled={signOutPending}
-                  className="w-full px-3 py-2 text-left text-sm hover:bg-[var(--color-border)]/40 disabled:opacity-60"
-                  onClick={() => void onSignOut()}
-                >
-                  Sign out
-                </button>
-              </div>
-            )}
+                  {canManageHousehold && (
+                    <Link
+                      href="/settings"
+                      role="menuitem"
+                      className="block px-3 py-2 text-sm hover:bg-[var(--color-border)]/40"
+                      onClick={() => setUserOpen(false)}
+                    >
+                      Household settings
+                    </Link>
+                  )}
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={signOutPending}
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-[var(--color-border)]/40 disabled:opacity-60"
+                    onClick={() => void onSignOut()}
+                  >
+                    Sign out
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </header>
@@ -301,6 +297,24 @@ export function AppChrome({
         <nav className="flex flex-col gap-1" aria-label="Main">
           {visibleNav.map((item) => (
             <NavLink key={item.href} {...item} showLabel="always" onClick={() => setMenuOpen(false)} />
+          ))}
+        </nav>
+      </Drawer>
+
+      <Drawer
+        open={modulesOpen}
+        onClose={closeModulesDrawer}
+        title="All modules"
+        visibility="desktop"
+      >
+        <nav className="flex flex-col gap-1" aria-label="All modules">
+          {visibleNav.map((item) => (
+            <NavLink
+              key={item.href}
+              {...item}
+              showLabel="always"
+              onClick={() => setModulesOpen(false)}
+            />
           ))}
         </nav>
       </Drawer>
