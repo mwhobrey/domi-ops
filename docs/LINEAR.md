@@ -208,4 +208,4 @@ Detailed acceptance criteria: `docs/LINEAR_BACKLOG.md` (keep in sync when adding
 |----|--------|--------|
 | [WHO-134](https://linear.app/mikewhob-whome/issue/WHO-134) | Backlog | Marketing landing page (post-OSS) |
 
-Recent: **WHO-156**–**WHO-159** M1 shell/nav polish Done; **WHO-169**–**WHO-170** calendar UX backlog added.
+Recent: **WHO-160**–**WHO-170** M2 page chrome **Done** (UI & shell polish M1–M2 at 100%); next **M3** WHO-163–165, WHO-169.
