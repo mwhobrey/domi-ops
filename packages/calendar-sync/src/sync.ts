@@ -22,6 +22,7 @@ import { scanBudgetAlerts } from "./budget-alert-scan.js";
 import { scanChoreReminders } from "./chore-reminder-scan.js";
 import { scanChoreDigest } from "./chore-digest-scan.js";
 import { scanDriveQuotaWarnings } from "./drive-quota-scan.js";
+import { scanHealthMedReminders } from "./health-med-reminder-scan.js";
 import { scanSchoolReminders } from "./school-reminder-scan.js";
 import { setSyncRun } from "./sync-run.js";
 import type { SyncJobPayload } from "./index.js";
@@ -377,6 +378,9 @@ export async function runCalendarSyncJob(
       break;
     case "drive.quota.scan":
       await scanDriveQuotaWarnings(db, env);
+      break;
+    case "health.med.reminder.scan":
+      await scanHealthMedReminders(db, env);
       break;
     default:
       throw new Error(`Unknown sync job: ${name}`);

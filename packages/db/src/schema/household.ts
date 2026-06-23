@@ -83,6 +83,22 @@ export const users = pgTable(
   pushShoppingRemindersEnabled: boolean("push_shopping_reminders_enabled")
     .notNull()
     .default(true),
+  /** When false, health medication reminder push is not sent to this user */
+  pushHealthRemindersEnabled: boolean("push_health_reminders_enabled")
+    .notNull()
+    .default(true),
+  /** Show school assignment due dates on the calendar */
+  calendarOverlaySchoolEnabled: boolean("calendar_overlay_school_enabled")
+    .notNull()
+    .default(true),
+  /** Show health events on the calendar */
+  calendarOverlayHealthEventsEnabled: boolean("calendar_overlay_health_events_enabled")
+    .notNull()
+    .default(true),
+  /** Show scheduled medication doses on the calendar */
+  calendarOverlayHealthMedsEnabled: boolean("calendar_overlay_health_meds_enabled")
+    .notNull()
+    .default(true),
   /** Local date (YYYY-MM-DD) when the chore morning digest was last sent */
   choreDigestSentOn: varchar("chore_digest_sent_on", { length: 10 }),
   /** HomeHub import: real login email that should claim this stub user */

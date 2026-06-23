@@ -35,6 +35,7 @@ whome/
 | `src/app/login/page.tsx` | Google sign-in entry |
 | `src/app/dashboard/page.tsx` | Core dashboard via `apiFetch` |
 | `src/app/calendar/page.tsx` | Calendar UI |
+| `src/app/health/page.tsx` | Health tracker UI (`/health` — module-gated; API liveness is separate rewrite) |
 | `src/app/school/page.tsx` | School LMS UI |
 | `src/app/shopping/page.tsx` | Shopping list |
 | `src/app/chores/page.tsx`, `notes/page.tsx`, `expenses/page.tsx` | Core list modules |
@@ -53,7 +54,9 @@ whome/
 | `src/lib/api.ts` | Server `apiFetch`, `apiBase`, `ApiError` |
 | `src/lib/auth-links.ts` | OAuth URL helpers (client-safe import) |
 | `src/lib/load-error.ts` | SSR `loadErrorMessage()` helper |
-| `src/lib/use-media-query.ts` | `useIsDesktop()` for calendar responsive |
+| `src/components/HealthPageClient.tsx` | Health events + medications UI |
+| `src/lib/calendar-filters.ts` | Calendar lane/category + overlay filter pills (`whome:calendar-hidden-overlays`) |
+| `src/lib/calendar-utils.ts` | Calendar DTO helpers; `isOverlayEvent`, overlay `source`/`deepLink` |
 | `src/lib/color-contrast.ts` | WCAG text color for event chips |
 | `src/lib/member-color.ts` | Deterministic avatar hues |
 | `src/components/lists/ListPage.tsx` | Shared list layout (add form card + errors) |
@@ -83,11 +86,16 @@ whome/
 | `src/lib/weekly-reports/` | Per-module Mon–Fri report builders (school, chores, shopping, expenses) |
 | `src/lib/report-render.ts` | Plain/styled HTML render for weekly exports |
 | `src/lib/google-docs-export.ts` | Google Docs/Drive API + token refresh |
-| `src/routes/calendar.ts` | Connections, events, sync trigger |
-| `src/routes/core.ts` | Dashboard, shopping, chores, notes, expenses |
+| `src/routes/calendar.ts` | Connections, events, sync trigger; `GET /events` merges overlays |
+| `src/lib/calendar-overlays.ts` | School due-date + health virtual events for calendar |
+| `src/routes/household-health.ts` | `/api/health` — events, medications, dose log, glance |
+| `src/lib/health-access.ts` | Health visibility + shares (notes pattern) |
+| `src/lib/health-crypto.ts` | Field encryption for PHI-like health columns |
+| `src/lib/health-serialize.ts` | Health DTO encrypt/decrypt + schedule JSON |
+| `src/routes/core.ts` | Dashboard, shopping, chores, notes, expenses; profile overlay prefs |
 | `src/routes/school.ts` | Classes, assignments, submissions |
 | `src/routes/school-upload.ts` | Presign stub |
-| `src/routes/health.ts` | DB ping |
+| `src/routes/health.ts` | API DB ping (`GET /health` on API host) |
 | `Dockerfile` + `scripts/docker-entrypoint-api.sh` | Migrate on start |
 
 ### `apps/worker` — Queue consumer
@@ -112,6 +120,7 @@ whome/
 | `src/schema/better-auth.ts` | `ba_sessions`, `ba_accounts`, `ba_verifications` |
 | `src/schema/calendar.ts` | Calendars, events, Google link tables, outbox |
 | `src/schema/school.ts` | LMS tables |
+| `src/schema/health.ts` | Health events, medications, dose logs, reminder sent |
 | `src/schema/core.ts` | Shopping, chores, notes, expenses, notices, home_status |
 | `src/schema/import.ts` | `import_records` |
 | `src/client.ts` | `createDb(url)` |
@@ -178,7 +187,8 @@ Browser calls use `apiBase() === ""` so fetches are same-origin; server componen
 
 - **core:** `shopping_items`, `chores`, `notes`, `expenses`, `notices`, `notice_reads`, `home_status`
 - **school:** `school_*` tables (classes through attendance)
-- **calendar_sync:** `calendar_*`, `linked_google_calendars`, `calendar_sync_outbox`
+- **health:** `health_*` tables (events, medications, logs, reminder sent)
+- **calendar_sync:** `calendar_*`, `linked_google_calendars`, `calendar_sync_outbox`; overlay merge in `calendar-overlays.ts`
 - **import:** `import_records`
 
 All household-scoped rows tie to `auth.householdId` from session context.

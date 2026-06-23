@@ -7,6 +7,7 @@ import {
   Calendar,
   ClipboardList,
   FolderOpen,
+  Heart,
   Home,
   LayoutDashboard,
   Menu,
@@ -30,6 +31,7 @@ const nav = [
   { href: "/chores", label: "Chores", icon: ClipboardList },
   { href: "/notes", label: "Notes", icon: NotebookPen },
   { href: "/drive", label: "Drive", icon: FolderOpen, module: "drive" },
+  { href: "/health", label: "Health", icon: Heart, module: "health" },
   { href: "/expenses", label: "Expenses", icon: Receipt },
 ] as const;
 
@@ -166,7 +168,7 @@ export function AppChrome({
 
   return (
     <div className="min-h-dvh bg-[var(--color-surface-inset)]">
-      <header className="sticky top-0 z-40 border-b border-[var(--color-border)] bg-[var(--color-surface-elevated)]/95 pt-[env(safe-area-inset-top)] backdrop-blur">
+      <header className="no-print sticky top-0 z-40 border-b border-[var(--color-border)] bg-[var(--color-surface-elevated)]/95 pt-[env(safe-area-inset-top)] backdrop-blur">
         <div className="bg-page-gradient pointer-events-none absolute inset-0 opacity-30" aria-hidden />
         <div className="relative mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-3">

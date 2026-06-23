@@ -6,7 +6,7 @@ import type { HomePresence } from "../lib/home-status";
 import { NotificationSettingsPanel } from "./NotificationSettingsPanel";
 import { ProfileCalendarConnect } from "./ProfileCalendarConnect";
 import { ProfileGoogleDocsConnect } from "./ProfileGoogleDocsConnect";
-import { Alert, Avatar, Button, Card, CardBody, Input, RadioGroup, SectionHeader } from "./ui";
+import { Alert, Avatar, Button, Card, CardBody, Checkbox, Input, RadioGroup, SectionHeader } from "./ui";
 
 type TemperatureUnit = "fahrenheit" | "celsius";
 
@@ -72,6 +72,10 @@ export function ProfileEditor({
     pushExpenseBudgetAlertsEnabled: boolean;
     pushSchoolRemindersEnabled: boolean;
     pushShoppingRemindersEnabled: boolean;
+    pushHealthRemindersEnabled: boolean;
+    calendarOverlaySchoolEnabled: boolean;
+    calendarOverlayHealthEventsEnabled: boolean;
+    calendarOverlayHealthMedsEnabled: boolean;
     pushSubscribed: boolean;
     pushAvailable: boolean;
     avatarUrl: string | null;
@@ -306,6 +310,21 @@ export function ProfileEditor({
         </ProfileSection>
 
         <ProfileSection
+          title="Calendar overlays"
+          description="Show school due dates and health items on the main calendar (read-only)."
+          className="md:col-span-2"
+        >
+          <CalendarOverlaySettings
+            initial={{
+              school: initial.calendarOverlaySchoolEnabled,
+              healthEvents: initial.calendarOverlayHealthEventsEnabled,
+              healthMeds: initial.calendarOverlayHealthMedsEnabled,
+            }}
+            modulesEnabled={modulesEnabled}
+          />
+        </ProfileSection>
+
+        <ProfileSection
           title="Notifications"
           description="Choose which Web Push alerts this browser and account receive."
           className="md:col-span-2"
@@ -318,6 +337,7 @@ export function ProfileEditor({
               pushExpenseBudgetAlertsEnabled: initial.pushExpenseBudgetAlertsEnabled,
               pushSchoolRemindersEnabled: initial.pushSchoolRemindersEnabled,
               pushShoppingRemindersEnabled: initial.pushShoppingRemindersEnabled,
+              pushHealthRemindersEnabled: initial.pushHealthRemindersEnabled,
               pushSubscribed: initial.pushSubscribed,
               pushAvailable: initial.pushAvailable,
             }}
@@ -361,6 +381,65 @@ export function ProfileEditor({
           {msg && variant ? <Alert variant={variant}>{msg}</Alert> : null}
         </CardBody>
       </Card>
+    </div>
+  );
+}
+
+function CalendarOverlaySettings({
+  initial,
+  modulesEnabled,
+}: {
+  initial: { school: boolean; healthEvents: boolean; healthMeds: boolean };
+  modulesEnabled: string[];
+}) {
+  const [school, setSchool] = useState(initial.school);
+  const [healthEvents, setHealthEvents] = useState(initial.healthEvents);
+  const [healthMeds, setHealthMeds] = useState(initial.healthMeds);
+
+  async function persist(patch: Record<string, boolean>) {
+    await apiClient.patch("/api/core/profile", patch);
+  }
+
+  return (
+    <div className="space-y-3">
+      {modulesEnabled.includes("school") ? (
+        <Checkbox
+          label="School assignment due dates"
+          checked={school}
+          onChange={async (e) => {
+            const next = e.target.checked;
+            setSchool(next);
+            await persist({ calendarOverlaySchoolEnabled: next });
+          }}
+        />
+      ) : null}
+      {modulesEnabled.includes("health") ? (
+        <>
+          <Checkbox
+            label="Health events"
+            checked={healthEvents}
+            onChange={async (e) => {
+              const next = e.target.checked;
+              setHealthEvents(next);
+              await persist({ calendarOverlayHealthEventsEnabled: next });
+            }}
+          />
+          <Checkbox
+            label="Scheduled medication doses"
+            checked={healthMeds}
+            onChange={async (e) => {
+              const next = e.target.checked;
+              setHealthMeds(next);
+              await persist({ calendarOverlayHealthMedsEnabled: next });
+            }}
+          />
+        </>
+      ) : null}
+      {!modulesEnabled.includes("school") && !modulesEnabled.includes("health") ? (
+        <p className="text-sm text-[var(--color-text-muted)]">
+          Enable the school or health module in household settings to configure calendar overlays.
+        </p>
+      ) : null}
     </div>
   );
 }

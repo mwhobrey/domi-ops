@@ -106,6 +106,39 @@ export function localHourInTz(instant: Date, timeZone: string): number {
   }
 }
 
+/** Local HH:mm (24h) for an instant in an IANA timezone. */
+export function localTimeHhmm(instant: Date, timeZone: string): string {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).formatToParts(instant);
+    const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "00";
+    const hour = String(Number(get("hour")) % 24).padStart(2, "0");
+    return `${hour}:${get("minute")}`;
+  } catch {
+    return instant.toISOString().slice(11, 16);
+  }
+}
+
+export function isMidnightInTz(instant: Date, timeZone: string): boolean {
+  return localTimeHhmm(instant, timeZone) === "00:00";
+}
+
+export function formatTimeLabelInTz(instant: Date, timeZone: string): string {
+  try {
+    return instant.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone,
+    });
+  } catch {
+    return instant.toISOString().slice(11, 16);
+  }
+}
+
 /** Minimum gap between overdue chore/school reminder pushes. */
 export const OVERDUE_REMINDER_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 

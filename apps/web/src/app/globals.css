@@ -309,3 +309,27 @@ dialog.dialog-sheet::backdrop {
   border: 2px solid #fff;
   box-shadow: 0 1px 4px rgb(0 0 0 / 0.45);
 }
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  main {
+    max-width: none !important;
+    padding: 0.4in 0.55in !important;
+  }
+
+  .health-report-print {
+    color: #000;
+  }
+
+  .health-report-print a {
+    color: inherit !important;
+    text-decoration: none !important;
+  }
+
+  .health-report-print .rounded-\[var\(--radius-lg\)\] {
+    break-inside: avoid;
+  }
+}

@@ -1807,6 +1807,10 @@ export function coreRoutes(db: Database, env: Env) {
         pushExpenseBudgetAlertsEnabled: users.pushExpenseBudgetAlertsEnabled,
         pushSchoolRemindersEnabled: users.pushSchoolRemindersEnabled,
         pushShoppingRemindersEnabled: users.pushShoppingRemindersEnabled,
+        pushHealthRemindersEnabled: users.pushHealthRemindersEnabled,
+        calendarOverlaySchoolEnabled: users.calendarOverlaySchoolEnabled,
+        calendarOverlayHealthEventsEnabled: users.calendarOverlayHealthEventsEnabled,
+        calendarOverlayHealthMedsEnabled: users.calendarOverlayHealthMedsEnabled,
       })
       .from(users)
       .where(eq(users.id, auth.userId))
@@ -1846,6 +1850,10 @@ export function coreRoutes(db: Database, env: Env) {
       pushExpenseBudgetAlertsEnabled: userRow?.pushExpenseBudgetAlertsEnabled ?? true,
       pushSchoolRemindersEnabled: userRow?.pushSchoolRemindersEnabled ?? true,
       pushShoppingRemindersEnabled: userRow?.pushShoppingRemindersEnabled ?? true,
+      pushHealthRemindersEnabled: userRow?.pushHealthRemindersEnabled ?? true,
+      calendarOverlaySchoolEnabled: userRow?.calendarOverlaySchoolEnabled ?? true,
+      calendarOverlayHealthEventsEnabled: userRow?.calendarOverlayHealthEventsEnabled ?? true,
+      calendarOverlayHealthMedsEnabled: userRow?.calendarOverlayHealthMedsEnabled ?? true,
       pushSubscribed: Boolean(pushSub),
       pushAvailable: isWebPushConfigured(env),
       avatarUrl: memberAvatarUrl(auth.memberId, memberRow?.avatarKey),
@@ -1863,6 +1871,10 @@ export function coreRoutes(db: Database, env: Env) {
       pushExpenseBudgetAlertsEnabled?: boolean;
       pushSchoolRemindersEnabled?: boolean;
       pushShoppingRemindersEnabled?: boolean;
+      pushHealthRemindersEnabled?: boolean;
+      calendarOverlaySchoolEnabled?: boolean;
+      calendarOverlayHealthEventsEnabled?: boolean;
+      calendarOverlayHealthMedsEnabled?: boolean;
     }>();
 
     const patch: {
@@ -1876,6 +1888,10 @@ export function coreRoutes(db: Database, env: Env) {
       pushExpenseBudgetAlertsEnabled?: boolean;
       pushSchoolRemindersEnabled?: boolean;
       pushShoppingRemindersEnabled?: boolean;
+      pushHealthRemindersEnabled?: boolean;
+      calendarOverlaySchoolEnabled?: boolean;
+      calendarOverlayHealthEventsEnabled?: boolean;
+      calendarOverlayHealthMedsEnabled?: boolean;
     } = {};
     if (body.name !== undefined) patch.name = body.name.trim().slice(0, 128) || null;
     if (body.temperatureUnit === "fahrenheit" || body.temperatureUnit === "celsius") {
@@ -1901,6 +1917,18 @@ export function coreRoutes(db: Database, env: Env) {
     }
     if (typeof body.pushShoppingRemindersEnabled === "boolean") {
       userPatch.pushShoppingRemindersEnabled = body.pushShoppingRemindersEnabled;
+    }
+    if (typeof body.pushHealthRemindersEnabled === "boolean") {
+      userPatch.pushHealthRemindersEnabled = body.pushHealthRemindersEnabled;
+    }
+    if (typeof body.calendarOverlaySchoolEnabled === "boolean") {
+      userPatch.calendarOverlaySchoolEnabled = body.calendarOverlaySchoolEnabled;
+    }
+    if (typeof body.calendarOverlayHealthEventsEnabled === "boolean") {
+      userPatch.calendarOverlayHealthEventsEnabled = body.calendarOverlayHealthEventsEnabled;
+    }
+    if (typeof body.calendarOverlayHealthMedsEnabled === "boolean") {
+      userPatch.calendarOverlayHealthMedsEnabled = body.calendarOverlayHealthMedsEnabled;
     }
 
     if (Object.keys(userPatch).length > 0) {

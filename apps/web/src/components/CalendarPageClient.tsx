@@ -39,18 +39,24 @@ import {
   categoriesFromEvents,
   filterEventsByCategories,
   filterEventsByLanes,
+  filterEventsByOverlays,
   filterLaneGroupsWithEvents,
   groupLanesByName,
+  overlayKindsFromEvents,
   readDefaultCalendarId,
   readHiddenCategoryKeys,
+  readHiddenOverlayKinds,
   sortLaneGroupsForDisplay,
   readHiddenLaneIds,
   toggleHiddenCategory,
+  toggleHiddenOverlay,
   toggleLaneGroup,
   writeDefaultCalendarId,
   type CalendarLaneMeta,
   type EventCategoryMeta,
+  type OverlayFilterMeta,
 } from "../lib/calendar-filters";
+import { isOverlayEvent } from "../lib/calendar-utils";
 import {
   RecurringScopeSheet,
   type RecurringScope,
@@ -89,6 +95,8 @@ function mapLoadedEvent(e: CalendarEventView): CalendarEventView {
     syncStatus: e.syncStatus,
     recurringRuleId: e.recurringRuleId ?? null,
     reminderOffsets: e.reminderOffsets ?? [],
+    overlayKind: e.overlayKind,
+    deepLink: e.deepLink,
   };
 }
 
@@ -131,6 +139,9 @@ export function CalendarPageClient({
   const [hiddenLaneIds, setHiddenLaneIds] = useState<Set<string>>(() => readHiddenLaneIds());
   const [hiddenCategoryKeys, setHiddenCategoryKeys] = useState<Set<string>>(() =>
     readHiddenCategoryKeys(),
+  );
+  const [hiddenOverlayKinds, setHiddenOverlayKinds] = useState<Set<string>>(() =>
+    readHiddenOverlayKinds(),
   );
   const [presetCategories, setPresetCategories] = useState<EventCategoryMeta[]>([]);
   const [defaultCalendarId, setDefaultCalendarId] = useState<string | null>(() =>
@@ -443,9 +454,32 @@ export function CalendarPageClient({
     [events, hiddenLaneIds],
   );
 
-  const visibleEvents = useMemo(
+  const categoryFilteredEvents = useMemo(
     () => filterEventsByCategories(laneFilteredEvents, hiddenCategoryKeys),
     [laneFilteredEvents, hiddenCategoryKeys],
+  );
+
+  const visibleEvents = useMemo(
+    () => filterEventsByOverlays(categoryFilteredEvents, hiddenOverlayKinds),
+    [categoryFilteredEvents, hiddenOverlayKinds],
+  );
+
+  const overlayFilterGroups = useMemo(
+    () => overlayKindsFromEvents(events),
+    [events],
+  );
+
+  const openEventFromGrid = useCallback(
+    (ev: CalendarEventView) => {
+      if (isOverlayEvent(ev) && ev.deepLink) {
+        router.push(ev.deepLink);
+        return;
+      }
+      setSelected(ev);
+      setCreateDraft(null);
+      setSheetOpen(true);
+    },
+    [router],
   );
 
   const dayAgendaEvents = useMemo(() => {
@@ -599,11 +633,16 @@ export function CalendarPageClient({
               hiddenIds={hiddenLaneIds}
               categoryGroups={categoryFilterGroups}
               hiddenCategoryKeys={hiddenCategoryKeys}
+              overlayGroups={overlayFilterGroups}
+              hiddenOverlayKinds={hiddenOverlayKinds}
               defaultCalendarId={defaultCalendarId}
               onToggleLaneGroup={(group) =>
                 setHiddenLaneIds(toggleLaneGroup(group, hiddenLaneIds))
               }
               onToggleCategory={(key) => setHiddenCategoryKeys(toggleHiddenCategory(key))}
+              onToggleOverlay={(kind) =>
+                setHiddenOverlayKinds(toggleHiddenOverlay(kind))
+              }
               onDefaultCalendarChange={(id) => {
                 setDefaultCalendarId(id);
                 writeDefaultCalendarId(id);
@@ -611,6 +650,7 @@ export function CalendarPageClient({
               onShowAllFilters={() => {
                 setHiddenLaneIds(new Set());
                 setHiddenCategoryKeys(new Set());
+                setHiddenOverlayKinds(new Set());
               }}
             />
           ) : null}
@@ -698,11 +738,7 @@ export function CalendarPageClient({
           onSlotClick={openCreateDraft}
           onEventReschedule={requestReschedule}
           onAllDayReschedule={requestReschedule}
-          onEventClick={(ev) => {
-            setSelected(ev);
-            setCreateDraft(null);
-            setSheetOpen(true);
-          }}
+          onEventClick={openEventFromGrid}
         />
       )}
 
@@ -718,11 +754,7 @@ export function CalendarPageClient({
           onSlotClick={openCreateDraft}
           onEventReschedule={requestReschedule}
           onAllDayReschedule={requestReschedule}
-          onEventClick={(ev) => {
-            setSelected(ev);
-            setCreateDraft(null);
-            setSheetOpen(true);
-          }}
+          onEventClick={openEventFromGrid}
         />
       )}
 
@@ -731,10 +763,7 @@ export function CalendarPageClient({
           events={dayAgendaEvents}
           loading={loading}
           categoryColorByKey={categoryColorByKey}
-          onEventClick={(ev) => {
-            setSelected(ev);
-            setSheetOpen(true);
-          }}
+          onEventClick={openEventFromGrid}
         />
       )}
 
@@ -743,10 +772,7 @@ export function CalendarPageClient({
           events={visibleEvents}
           loading={loading}
           categoryColorByKey={categoryColorByKey}
-          onEventClick={(ev) => {
-            setSelected(ev);
-            setSheetOpen(true);
-          }}
+          onEventClick={openEventFromGrid}
         />
       )}
       </div>
@@ -762,8 +788,7 @@ export function CalendarPageClient({
         }}
         onEventClick={(ev) => {
           setDaySheetOpen(false);
-          setSelected(ev);
-          setSheetOpen(true);
+          openEventFromGrid(ev);
         }}
         onViewDay={
           daySheetDate && isDesktop

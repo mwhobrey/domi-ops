@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { cn } from "../lib/cn";
 import { ApiError, apiClient } from "../lib/client-api";
 import type { CalendarEventView } from "../lib/calendar-utils";
-import { addMonths, monthRange, startOfMonth } from "../lib/calendar-utils";
+import { addMonths, isOverlayEvent, monthRange, startOfMonth } from "../lib/calendar-utils";
 import { tempUnitSuffix } from "../lib/home-status";
 import { dayWeatherSummary, matchSlotForEvent } from "../lib/weather-hourly-match";
 import { useWeatherForecast } from "../lib/use-weather-forecast";
@@ -14,6 +15,7 @@ import { CalendarMonthView } from "./calendar/CalendarMonthView";
 import { Alert, Button, Card, CardBody, CardHeader, SectionHeader, Sheet, Skeleton } from "./ui";
 
 export function DashboardMonthCalendar({ compact = false }: { compact?: boolean }) {
+  const router = useRouter();
   const [monthStart, setMonthStart] = useState(() => startOfMonth(new Date()));
   const [events, setEvents] = useState<CalendarEventView[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,6 +43,9 @@ export function DashboardMonthCalendar({ compact = false }: { compact?: boolean 
           allDay: e.allDay,
           color: e.color,
           calendarId: e.calendarId,
+          deepLink: e.deepLink,
+          source: e.source,
+          overlayKind: e.overlayKind,
         })),
       );
     } catch (err) {
@@ -169,11 +174,18 @@ export function DashboardMonthCalendar({ compact = false }: { compact?: boolean 
                     ? matchSlotForEvent(ev.startTime, dayForecast.dayHourly)
                     : null;
                 return (
-                  <li
-                    key={ev.id}
-                    className="rounded-[var(--radius-lg)] border border-[var(--color-border)] px-4 py-3"
-                  >
-                    <div className="flex items-start gap-3">
+                  <li key={ev.id}>
+                    <button
+                      type="button"
+                      className="w-full rounded-[var(--radius-lg)] border border-[var(--color-border)] px-4 py-3 text-left"
+                      onClick={() => {
+                        if (isOverlayEvent(ev) && ev.deepLink) {
+                          router.push(ev.deepLink);
+                          return;
+                        }
+                      }}
+                    >
+                      <div className="flex items-start gap-3">
                       <span
                         className="mt-1 h-3 w-3 shrink-0 rounded-full"
                         style={{ background: ev.color ?? "var(--color-accent)" }}
@@ -203,6 +215,7 @@ export function DashboardMonthCalendar({ compact = false }: { compact?: boolean 
                         </div>
                       )}
                     </div>
+                    </button>
                   </li>
                 );
               })}

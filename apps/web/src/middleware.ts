@@ -8,6 +8,7 @@ const MODULE_ROUTE_PREFIXES: { prefix: string; module: string }[] = [
   { prefix: "/school", module: "school" },
   { prefix: "/calendar", module: "calendar_sync" },
   { prefix: "/drive", module: "drive" },
+  { prefix: "/health", module: "health" },
 ];
 
 export async function middleware(request: NextRequest) {
@@ -71,6 +72,8 @@ export const config = {
     "/notes/:path*",
     "/drive",
     "/drive/:path*",
+    "/health",
+    "/health/:path*",
     "/expenses",
     "/expenses/:path*",
     "/profile",

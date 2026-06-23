@@ -10,6 +10,7 @@ import { calendarRoutes } from "./routes/calendar.js";
 import { coreRoutes } from "./routes/core.js";
 import { googleCalendarAuthRoutes } from "./routes/google-calendar-auth.js";
 import { healthRoutes } from "./routes/health.js";
+import { householdHealthRoutes } from "./routes/household-health.js";
 import { schoolRoutes } from "./routes/school.js";
 import { schoolUploadRoutes } from "./routes/school-upload.js";
 import { browserUploadRoutes } from "./routes/browser-upload.js";
@@ -59,6 +60,7 @@ app.route("/api/core/drive", driveRoutes(db, env));
 app.route("/s", drivePublicRoutes(db, env));
 app.route("/api/school", schoolRoutes(db, env));
 app.route("/api/school/upload", schoolUploadRoutes(db, env));
+app.route("/api/health", householdHealthRoutes(db, env));
 
 app.get("/api/modules", (c) =>
   c.json({
@@ -66,6 +68,7 @@ app.get("/api/modules", (c) =>
     calendarSync: isModuleEnabled(env, "calendar_sync"),
     school: isModuleEnabled(env, "school"),
     drive: isModuleEnabled(env, "drive"),
+    health: isModuleEnabled(env, "health"),
     core: isModuleEnabled(env, "core"),
   }),
 );

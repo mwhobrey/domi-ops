@@ -88,6 +88,8 @@ export function computeEventPolicy(
   };
 }
 
+export type CalendarOverlayKind = "school" | "health_event" | "health_med";
+
 export type CalendarEventDto = {
   id: string;
   householdId: string;
@@ -112,6 +114,32 @@ export type CalendarEventDto = {
   updatedAt: Date;
   editable: boolean;
   pushable: boolean;
+};
+
+/** JSON shape for GET /calendar/events (native rows + virtual overlays). */
+export type CalendarListEvent = {
+  id: string;
+  calendarId: string;
+  title: string;
+  description?: string | null;
+  categoryKey?: string | null;
+  categoryLabel?: string | null;
+  color: string | null;
+  startDate: string;
+  endDate?: string | null;
+  startTime: string | null;
+  endTime: string | null;
+  timeZone?: string | null;
+  allDay: boolean;
+  source?: "local" | "google" | "school" | "health_event" | "health_med";
+  syncStatus?: "synced" | "pending" | "conflict" | "error";
+  googleEventId?: string | null;
+  recurringRuleId?: string | null;
+  editable?: boolean;
+  pushable?: boolean;
+  reminderOffsets?: number[];
+  overlayKind?: CalendarOverlayKind;
+  deepLink?: string;
 };
 
 export function toEventDto(row: CalendarEventRow, policy: EventPolicy): CalendarEventDto {

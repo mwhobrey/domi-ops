@@ -1,4 +1,6 @@
-export type CalendarEventSource = "local" | "google";
+export type CalendarEventSource = "local" | "google" | "school" | "health_event" | "health_med";
+
+export type CalendarOverlayKind = "school" | "health_event" | "health_med";
 
 export type CalendarEventSyncStatus = "synced" | "pending" | "conflict" | "error";
 
@@ -26,6 +28,8 @@ export interface CalendarEventView {
   syncStatus?: CalendarEventSyncStatus;
   recurringRuleId?: string | null;
   reminderOffsets?: number[];
+  overlayKind?: CalendarOverlayKind;
+  deepLink?: string;
 }
 
 export type RepeatFreq = "none" | "daily" | "weekly" | "monthly";
@@ -37,8 +41,13 @@ export type RepeatRuleInput = {
   count?: number;
 };
 
+export function isOverlayEvent(ev: CalendarEventView): boolean {
+  return Boolean(ev.overlayKind || ev.deepLink || ev.id.startsWith("overlay:"));
+}
+
 /** Events the user may drag on the week/day grid (timed or all-day). Prefer API `editable` when present. */
 export function isEventEditable(ev: CalendarEventView): boolean {
+  if (isOverlayEvent(ev)) return false;
   if (ev.editable === false) return false;
   if (ev.editable === true) return true;
   if (ev.syncStatus === "conflict") return false;

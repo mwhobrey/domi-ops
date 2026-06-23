@@ -16,7 +16,8 @@ export type SyncJobName =
   | "expense.budget.scan"
   | "school.reminder.scan"
   | "chore.digest.scan"
-  | "drive.quota.scan";
+  | "drive.quota.scan"
+  | "health.med.reminder.scan";
 
 export interface SyncJobPayload {
   householdId: string;
@@ -35,6 +36,7 @@ export {
   ensureSchoolReminderScheduler,
   ensureChoreDigestScheduler,
   ensureDriveQuotaScheduler,
+  ensureHealthMedReminderScheduler,
 } from "./queue.js";
 export { runCalendarSyncJob, syncConnection, pullLinkedCalendar } from "./sync.js";
 export { eventToFields, eventToGoogleBody, inferSourceCategory } from "./mapper.js";
@@ -46,6 +48,7 @@ export { scanChoreDigest, CHORE_DIGEST_HOUR } from "./chore-digest-scan.js";
 export { scanDriveQuotaWarnings } from "./drive-quota-scan.js";
 export { deliverUserNotification, persistUserNotifications } from "./user-notify.js";
 export { scanSchoolReminders } from "./school-reminder-scan.js";
+export { scanHealthMedReminders } from "./health-med-reminder-scan.js";
 export { checkHouseholdBudgetAlerts, scanBudgetAlerts } from "./budget-alert-scan.js";
 export {
   inferGoogleCategories,
@@ -84,12 +87,16 @@ export {
   addDaysIso,
   classifyDueReminder,
   localHourInTz,
+  localTimeHhmm,
+  isMidnightInTz,
+  formatTimeLabelInTz,
   OVERDUE_REMINDER_COOLDOWN_MS,
   monFriWeekRange,
   mondayOfWeekIso,
   isoDateInRange,
   isoWeekday,
   localDateOfInstant,
+  zonedLocalToUtc,
   weeksOverlappingRange,
   MAX_WEEKS_IN_RANGE,
   type DueReminderKind,

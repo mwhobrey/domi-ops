@@ -111,3 +111,18 @@ export async function ensureDriveQuotaScheduler(redisUrl: string): Promise<void>
     },
   );
 }
+
+/** Health medication dose reminders (every 5 minutes). */
+export async function ensureHealthMedReminderScheduler(redisUrl: string): Promise<void> {
+  const q = getSyncQueue(redisUrl);
+  await q.add(
+    "health.med.reminder.scan",
+    { name: "health.med.reminder.scan", payload: { householdId: "scan" } },
+    {
+      repeat: { every: 5 * 60 * 1000 },
+      jobId: "health-med-reminder-scan",
+      removeOnComplete: 20,
+      removeOnFail: 20,
+    },
+  );
+}

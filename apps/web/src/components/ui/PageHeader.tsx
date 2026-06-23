@@ -10,7 +10,7 @@ export function PageHeader({
   size?: "default" | "lg";
 }) {
   return (
-    <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+    <div className="mb-6 flex flex-wrap items-start justify-between gap-4 no-print">
       <div>
         <h1
           className={

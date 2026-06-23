@@ -1,0 +1,260 @@
+import type { Env } from "@whome/config";
+import type { Database } from "@whome/db";
+import type {
+  healthEvents,
+  healthMedicationLogs,
+  healthMedications,
+} from "@whome/db";
+import { households } from "@whome/db";
+import {
+  isMidnightInTz,
+  localDateOfInstant,
+  localTimeHhmm,
+  zonedLocalToUtc,
+} from "@whome/calendar-sync";
+import { eq } from "drizzle-orm";
+import {
+  decryptHealthFieldOrPassthrough,
+  encryptHealthField,
+  HealthEncryptionError,
+} from "./health-crypto.js";
+import { loadHealthEventShareMap, loadHealthMedicationShareMap } from "./health-access.js";
+
+type HealthEventRow = typeof healthEvents.$inferSelect;
+type HealthMedicationRow = typeof healthMedications.$inferSelect;
+type HealthLogRow = typeof healthMedicationLogs.$inferSelect;
+
+export function serializeHealthEvent(
+  row: HealthEventRow,
+  env: Env,
+  extras?: { sharedMemberIds?: string[]; isOwnedByMe?: boolean; sharedWithMe?: boolean },
+  timeZone?: string,
+) {
+  const base = {
+    id: row.id,
+    memberId: row.memberId,
+    medicationId: row.medicationId,
+    type: row.type,
+    title: decryptHealthFieldOrPassthrough(row.title, env) ?? "",
+    notes: decryptHealthFieldOrPassthrough(row.notes, env),
+    startedAt: row.startedAt?.toISOString() ?? null,
+    endedAt: row.endedAt?.toISOString() ?? null,
+    durationKind: row.durationKind,
+    visibility: row.visibility,
+    createdByUserId: row.createdByUserId,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+    sharedMemberIds: extras?.sharedMemberIds,
+    isOwnedByMe: extras?.isOwnedByMe,
+    sharedWithMe: extras?.sharedWithMe,
+    startDate: null as string | null,
+    startTime: null as string | null,
+    endDate: null as string | null,
+    endTime: null as string | null,
+  };
+
+  if (timeZone && row.startedAt) {
+    base.startDate = localDateOfInstant(row.startedAt, timeZone);
+    base.startTime = isMidnightInTz(row.startedAt, timeZone)
+      ? null
+      : localTimeHhmm(row.startedAt, timeZone);
+  }
+  if (timeZone && row.endedAt) {
+    base.endDate = localDateOfInstant(row.endedAt, timeZone);
+    base.endTime = isMidnightInTz(row.endedAt, timeZone)
+      ? null
+      : localTimeHhmm(row.endedAt, timeZone);
+  }
+
+  return base;
+}
+
+export function resolveEventInstant(
+  body: {
+    startedAt?: string | null;
+    startDate?: string | null;
+    startTime?: string | null;
+  },
+  timeZone: string,
+): Date | null | undefined {
+  if (body.startDate !== undefined) {
+    const date = body.startDate?.trim();
+    if (!date) return null;
+    const time = body.startTime?.trim() || "00:00";
+    return zonedLocalToUtc(date, time.slice(0, 5), timeZone);
+  }
+  if (body.startedAt !== undefined) {
+    return body.startedAt ? new Date(body.startedAt) : null;
+  }
+  return undefined;
+}
+
+export function serializeHealthMedication(
+  row: HealthMedicationRow,
+  env: Env,
+  extras?: { sharedMemberIds?: string[]; isOwnedByMe?: boolean; sharedWithMe?: boolean },
+) {
+  return {
+    id: row.id,
+    memberId: row.memberId,
+    name: decryptHealthFieldOrPassthrough(row.name, env) ?? "",
+    dosage: decryptHealthFieldOrPassthrough(row.dosage, env),
+    instructions: decryptHealthFieldOrPassthrough(row.instructions, env),
+    scheduleKind: row.scheduleKind,
+    schedule: parseJsonObject(row.scheduleJson),
+    reminderOffsets: parseJsonNumberArray(row.reminderOffsetsJson),
+    startDate: row.startDate,
+    endDate: row.endDate,
+    enabled: row.enabled,
+    visibility: row.visibility,
+    createdByUserId: row.createdByUserId,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+    sharedMemberIds: extras?.sharedMemberIds,
+    isOwnedByMe: extras?.isOwnedByMe,
+    sharedWithMe: extras?.sharedWithMe,
+  };
+}
+
+export function serializeHealthLog(row: HealthLogRow, env: Env) {
+  return {
+    id: row.id,
+    medicationId: row.medicationId,
+    scheduledAt: row.scheduledAt?.toISOString() ?? null,
+    status: row.status,
+    loggedAt: row.loggedAt.toISOString(),
+    loggedByUserId: row.loggedByUserId,
+    notes: decryptHealthFieldOrPassthrough(row.notes, env),
+    healthEventId: row.healthEventId,
+  };
+}
+
+export async function enrichHealthEvents(
+  db: Database,
+  env: Env,
+  auth: { userId: string; memberId: string; householdId: string },
+  rows: HealthEventRow[],
+  timeZone?: string,
+) {
+  let tz = timeZone;
+  if (!tz) {
+    const [household] = await db
+      .select({ timezone: households.timezone })
+      .from(households)
+      .where(eq(households.id, auth.householdId))
+      .limit(1);
+    tz = household?.timezone ?? "UTC";
+  }
+  const privateIds = rows.filter((r) => r.visibility === "private").map((r) => r.id);
+  const shareMap = await loadHealthEventShareMap(db, privateIds);
+  return rows.map((row) => {
+    const sharedMemberIds = shareMap.get(row.id) ?? [];
+    const isOwnedByMe = row.createdByUserId === auth.userId;
+    const sharedWithMe =
+      row.visibility === "private" && !isOwnedByMe && sharedMemberIds.includes(auth.memberId);
+    return serializeHealthEvent(row, env, {
+      sharedMemberIds: isOwnedByMe ? sharedMemberIds : undefined,
+      isOwnedByMe,
+      sharedWithMe,
+    }, tz);
+  });
+}
+
+export async function enrichHealthMedications(
+  db: Database,
+  env: Env,
+  auth: { userId: string; memberId: string },
+  rows: HealthMedicationRow[],
+) {
+  const privateIds = rows.filter((r) => r.visibility === "private").map((r) => r.id);
+  const shareMap = await loadHealthMedicationShareMap(db, privateIds);
+  return rows.map((row) => {
+    const sharedMemberIds = shareMap.get(row.id) ?? [];
+    const isOwnedByMe = row.createdByUserId === auth.userId;
+    const sharedWithMe =
+      row.visibility === "private" && !isOwnedByMe && sharedMemberIds.includes(auth.memberId);
+    return serializeHealthMedication(row, env, {
+      sharedMemberIds: isOwnedByMe ? sharedMemberIds : undefined,
+      isOwnedByMe,
+      sharedWithMe,
+    });
+  });
+}
+
+export function encryptHealthTextFields(
+  env: Env,
+  fields: { title?: string; notes?: string | null; name?: string; dosage?: string | null; instructions?: string | null },
+) {
+  try {
+    const out: Record<string, string | null | undefined> = {};
+    if (fields.title !== undefined) out.title = encryptHealthField(fields.title, env) ?? "";
+    if (fields.notes !== undefined) out.notes = encryptHealthField(fields.notes, env);
+    if (fields.name !== undefined) out.name = encryptHealthField(fields.name, env) ?? "";
+    if (fields.dosage !== undefined) out.dosage = encryptHealthField(fields.dosage, env);
+    if (fields.instructions !== undefined) {
+      out.instructions = encryptHealthField(fields.instructions, env);
+    }
+    return out;
+  } catch (e) {
+    if (e instanceof HealthEncryptionError) throw e;
+    throw e;
+  }
+}
+
+function parseJsonObject(raw: string | null | undefined): Record<string, unknown> {
+  if (!raw) return {};
+  try {
+    const v = JSON.parse(raw) as unknown;
+    return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function parseJsonNumberArray(raw: string | null | undefined): number[] {
+  if (!raw) return [0];
+  try {
+    const v = JSON.parse(raw) as unknown;
+    if (Array.isArray(v)) return v.filter((n): n is number => typeof n === "number");
+  } catch {
+    // ignore
+  }
+  return [0];
+}
+
+export function parseMedSchedule(raw: string | null | undefined): {
+  times?: string[];
+  daysOfWeek?: number[];
+} {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as { times?: string[]; daysOfWeek?: number[] };
+    return {
+      times: Array.isArray(parsed.times)
+        ? parsed.times.filter((t): t is string => typeof t === "string")
+        : [],
+      daysOfWeek: Array.isArray(parsed.daysOfWeek)
+        ? parsed.daysOfWeek.filter((d): d is number => typeof d === "number")
+        : undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
+export function normalizeMedSchedule(body: {
+  scheduleKind?: string;
+  schedule?: { times?: string[]; daysOfWeek?: number[] };
+}) {
+  const kind = body.scheduleKind === "prn" ? ("prn" as const) : ("scheduled" as const);
+  if (kind === "prn") {
+    return { scheduleKind: kind, scheduleJson: "{}" };
+  }
+  const times = (body.schedule?.times ?? []).filter((t) => typeof t === "string" && t.includes(":"));
+  if (times.length === 0) {
+    throw new Error("scheduled_meds_require_times");
+  }
+  const daysOfWeek = body.schedule?.daysOfWeek?.filter((d) => typeof d === "number" && d >= 0 && d <= 6);
+  const schedule = daysOfWeek?.length ? { times, daysOfWeek } : { times };
+  return { scheduleKind: kind, scheduleJson: JSON.stringify(schedule) };
+}

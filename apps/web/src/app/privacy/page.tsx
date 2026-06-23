@@ -24,7 +24,7 @@ export default function PrivacyPage() {
           <h2>Information we store</h2>
           <ul className="list-disc space-y-1 pl-5">
             <li>Account identifiers (email, username, display name, profile photo)</li>
-            <li>Household content you create (calendar events, lists, notes, expenses, school work, drive files)</li>
+            <li>Household content you create (calendar events, lists, notes, expenses, school work, drive files, optional health records)</li>
             <li>Session and authentication tokens (HTTP-only cookies on your domain)</li>
             <li>Optional push notification subscription endpoints if you enable Web Push</li>
           </ul>
@@ -64,6 +64,20 @@ export default function PrivacyPage() {
               notifications when enabled; subscription keys are stored on your server.
             </li>
           </ul>
+        </section>
+
+        <section>
+          <h2>Health module (optional)</h2>
+          <p>
+            If your operator enables the health module, members can log symptoms, appointments,
+            and medications. Sensitive health fields (titles, notes, medication names, dosage, and
+            instructions) are encrypted in the database using your server&apos;s{" "}
+            <code className="text-xs">ENCRYPTION_KEY</code>. Metadata such as dates, member
+            assignment, and schedule times remain queryable in plaintext. Health data is visible
+            per record as household-wide or private with explicit shares (same pattern as notes).
+            whome is household self-host software, not a healthcare provider — operators are
+            responsible for HTTPS, disk encryption, and who may access the instance.
+          </p>
         </section>
 
         <section>

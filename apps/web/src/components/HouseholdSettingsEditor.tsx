@@ -47,6 +47,10 @@ const MODULE_META: Record<string, { label: string; description: string; locked?:
     label: "Drive",
     description: "Household file and link storage (MinIO-backed)",
   },
+  health: {
+    label: "Health",
+    description: "Symptoms, medications, and household health tracking",
+  },
 };
 
 export function HouseholdSettingsEditor({ initial }: { initial: HouseholdSettings }) {

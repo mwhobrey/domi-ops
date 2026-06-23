@@ -48,9 +48,9 @@ Copy `.env.example` and set at minimum:
 | `ENCRYPTION_KEY` | OAuth token encryption |
 | `AUTH_REQUIRED` | Must be `true` in production |
 | `S3_*` | MinIO locally; S3-compatible in prod |
-| `MODULES_ENABLED` | Comma list: `core,school,calendar_sync,drive` |
+| `MODULES_ENABLED` | Comma list: `core,school,calendar_sync,drive,health` |
 
-Production boot **fails** if `SESSION_SECRET` is too short, `ENCRYPTION_KEY` is missing, `AUTH_REQUIRED` is off, or `calendar_sync` is enabled without Google OAuth credentials.
+Production boot **fails** if `SESSION_SECRET` is too short, `ENCRYPTION_KEY` is missing, `AUTH_REQUIRED` is off, or `calendar_sync` is enabled without Google OAuth credentials. With `health` in `MODULES_ENABLED`, `ENCRYPTION_KEY` is also required in production (field encryption for health records).
 
 See `.env.example` for Drive quotas, VAPID Web Push, SMTP email verification, and weather defaults.
 
@@ -121,8 +121,18 @@ Controlled by `MODULES_ENABLED` at deploy time and per-household toggles in **Se
 | Homeschool LMS | `school` | — |
 | Google Calendar sync | `calendar_sync` | `GOOGLE_OAUTH_*`, worker |
 | Household Drive | `drive` | `S3_*` configured |
+| Health tracker | `health` | `ENCRYPTION_KEY` in production |
 
 `core` cannot be disabled. Other modules can be turned off per household without redeploying.
+
+### Sensitive modules (health)
+
+whome is **not** a HIPAA-covered entity and does not claim HIPAA compliance. When the `health` module is enabled:
+
+- **In transit:** use HTTPS in production (Caddy or your reverse proxy). Plain HTTP dev is not suitable for real health data.
+- **At rest (application):** titles, notes, medication names/dosage/instructions, and dose log notes are encrypted in PostgreSQL via `@whome/crypto` (`ENCRYPTION_KEY` — same key as Google OAuth tokens).
+- **At rest (operator):** encrypt your Postgres volume or enable full-disk encryption on the host. whome does not manage disk-level encryption.
+- **Key rotation:** rotating `ENCRYPTION_KEY` requires re-encrypting stored health fields (same limitation as OAuth tokens today; no migration tooling in v1).
 
 ## Google OAuth
 

@@ -14,6 +14,8 @@ export function NoteSharePicker({
   onChange,
   disabled,
   namePrefix,
+  hint,
+  legend,
 }: {
   members: NoteShareMember[];
   currentMemberId?: string;
@@ -21,9 +23,15 @@ export function NoteSharePicker({
   onChange: (memberIds: string[]) => void;
   disabled?: boolean;
   namePrefix: string;
+  hint?: string;
+  legend?: string;
 }) {
   const shareable = members.filter((m) => m.memberId !== currentMemberId);
   if (shareable.length === 0) return null;
+
+  const hintText =
+    hint ?? "Optional. Selected members can read this private note. You always have access.";
+  const legendText = legend ?? "Share with household members";
 
   function toggle(memberId: string, checked: boolean) {
     if (checked) {
@@ -35,12 +43,8 @@ export function NoteSharePicker({
 
   return (
     <fieldset className="space-y-2" disabled={disabled}>
-      <legend className="text-sm font-medium text-[var(--color-text)]">
-        Share with household members
-      </legend>
-      <p className="text-xs text-[var(--color-text-muted)]">
-        Optional. Selected members can read this private note.
-      </p>
+      <legend className="text-sm font-medium text-[var(--color-text)]">{legendText}</legend>
+      <p className="text-xs text-[var(--color-text-muted)]">{hintText}</p>
       <ul className="space-y-2" aria-label="Share with household members">
         {shareable.map((m) => {
           const id = `${namePrefix}-share-${m.memberId}`;

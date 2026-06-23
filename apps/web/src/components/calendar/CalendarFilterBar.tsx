@@ -3,7 +3,7 @@
 import { SlidersHorizontal } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { cn } from "../../lib/cn";
-import type { CalendarLaneGroup, EventCategoryMeta } from "../../lib/calendar-filters";
+import type { CalendarLaneGroup, EventCategoryMeta, OverlayFilterMeta } from "../../lib/calendar-filters";
 import { Badge, Button, Input, Select, Sheet } from "../ui";
 
 function FilterPill({
@@ -56,9 +56,12 @@ export function CalendarFilterBar({
   hiddenIds,
   categoryGroups,
   hiddenCategoryKeys,
+  overlayGroups,
+  hiddenOverlayKinds,
   defaultCalendarId,
   onToggleLaneGroup,
   onToggleCategory,
+  onToggleOverlay,
   onDefaultCalendarChange,
   onShowAllFilters,
 }: {
@@ -69,9 +72,12 @@ export function CalendarFilterBar({
   hiddenIds: Set<string>;
   categoryGroups?: EventCategoryMeta[];
   hiddenCategoryKeys?: Set<string>;
+  overlayGroups?: OverlayFilterMeta[];
+  hiddenOverlayKinds?: Set<string>;
   defaultCalendarId: string | null;
   onToggleLaneGroup: (group: CalendarLaneGroup) => void;
   onToggleCategory?: (key: string) => void;
+  onToggleOverlay?: (kind: string) => void;
   onDefaultCalendarChange: (id: string) => void;
   onShowAllFilters?: () => void;
 }) {
@@ -94,7 +100,11 @@ export function CalendarFilterBar({
     categoryGroups && hiddenCategoryKeys
       ? categoryGroups.filter((c) => hiddenCategoryKeys.has(c.id)).length
       : 0;
-  const activeFilterCount = hiddenLaneCount + hiddenCategoryCount;
+  const hiddenOverlayCount =
+    overlayGroups && hiddenOverlayKinds
+      ? overlayGroups.filter((o) => hiddenOverlayKinds.has(o.id)).length
+      : 0;
+  const activeFilterCount = hiddenLaneCount + hiddenCategoryCount + hiddenOverlayCount;
 
   const visibleLaneGroups = laneGroups.filter(
     (g) => !g.calendarIds.every((id) => hiddenIds.has(id)),
@@ -313,6 +323,31 @@ export function CalendarFilterBar({
                     );
                   })
                 )}
+              </div>
+            </section>
+          ) : null}
+
+          {overlayGroups && overlayGroups.length > 0 && onToggleOverlay && hiddenOverlayKinds ? (
+            <section aria-labelledby="calendar-filter-overlays-heading">
+              <h3
+                id="calendar-filter-overlays-heading"
+                className="mb-2 text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]"
+              >
+                Module overlays
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {overlayGroups.map((overlay) => {
+                  const off = hiddenOverlayKinds.has(overlay.id);
+                  return (
+                    <FilterPill
+                      key={overlay.id}
+                      label={overlay.label}
+                      color={overlay.color}
+                      pressed={!off}
+                      onClick={() => onToggleOverlay(overlay.id)}
+                    />
+                  );
+                })}
               </div>
             </section>
           ) : null}

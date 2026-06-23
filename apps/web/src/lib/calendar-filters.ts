@@ -191,3 +191,62 @@ export function filterEventsByCategories<T extends { calendarId: string; categor
     return !hiddenIds.has(eventCategoryId(e.calendarId, key));
   });
 }
+
+const HIDDEN_OVERLAYS_KEY = "whome:calendar-hidden-overlays";
+
+export type OverlayFilterMeta = {
+  id: string;
+  label: string;
+  color: string;
+};
+
+export const OVERLAY_FILTER_META: OverlayFilterMeta[] = [
+  { id: "school", label: "School", color: "#d97706" },
+  { id: "health_event", label: "Health events", color: "#e11d48" },
+  { id: "health_med", label: "Medications", color: "#0d9488" },
+];
+
+export function readHiddenOverlayKinds(): Set<string> {
+  if (typeof localStorage === "undefined") return new Set();
+  try {
+    const raw = localStorage.getItem(HIDDEN_OVERLAYS_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw) as string[];
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch {
+    return new Set();
+  }
+}
+
+export function writeHiddenOverlayKinds(kinds: Set<string>): void {
+  if (typeof localStorage === "undefined") return;
+  localStorage.setItem(HIDDEN_OVERLAYS_KEY, JSON.stringify([...kinds]));
+}
+
+export function toggleHiddenOverlay(kind: string): Set<string> {
+  const next = readHiddenOverlayKinds();
+  if (next.has(kind)) next.delete(kind);
+  else next.add(kind);
+  writeHiddenOverlayKinds(next);
+  return next;
+}
+
+export function overlayKindsFromEvents(
+  events: { overlayKind?: string | null }[],
+): OverlayFilterMeta[] {
+  const kinds = new Set(
+    events.map((e) => e.overlayKind).filter((k): k is string => Boolean(k)),
+  );
+  return OVERLAY_FILTER_META.filter((m) => kinds.has(m.id));
+}
+
+export function filterEventsByOverlays<T extends { overlayKind?: string | null }>(
+  events: T[],
+  hiddenKinds: Set<string>,
+): T[] {
+  if (hiddenKinds.size === 0) return events;
+  return events.filter((e) => {
+    if (!e.overlayKind) return true;
+    return !hiddenKinds.has(e.overlayKind);
+  });
+}

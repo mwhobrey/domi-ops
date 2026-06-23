@@ -12,6 +12,7 @@ import {
   ensureSchoolReminderScheduler,
   ensureChoreDigestScheduler,
   ensureDriveQuotaScheduler,
+  ensureHealthMedReminderScheduler,
 } from "@whome/calendar-sync";
 
 const env = loadEnv();
@@ -56,6 +57,10 @@ void ensureChoreDigestScheduler(redisUrl).catch((err) => {
 
 void ensureDriveQuotaScheduler(redisUrl).catch((err) => {
   console.error("Failed to schedule drive quota scan", err);
+});
+
+void ensureHealthMedReminderScheduler(redisUrl).catch((err) => {
+  console.error("Failed to schedule health med reminder scan", err);
 });
 
 console.log(`whome worker listening on queue ${SYNC_QUEUE}`);

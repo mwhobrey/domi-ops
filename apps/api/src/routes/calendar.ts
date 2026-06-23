@@ -57,6 +57,12 @@ import {
   setHouseholdDefaultCalendar,
 } from "../lib/calendar-lanes.js";
 import { enrichEventDto } from "../lib/calendar-event-enrich.js";
+import type { CalendarListEvent } from "../lib/calendar-event-policy.js";
+import {
+  buildAllCalendarOverlays,
+  loadCalendarOverlayPrefs,
+  mergeCalendarEvents,
+} from "../lib/calendar-overlays.js";
 import {
   listReminderOffsetsForEvent,
   normalizeReminderOffsets,
@@ -383,30 +389,84 @@ export function calendarRoutes(db: Database, env: Env) {
     const q = c.req.query("q")?.trim();
 
     const visible = await listVisibleCalendars(db, auth.householdId, auth.userId);
-    const visibleIds = visible.map((c) => c.id);
-    if (visibleIds.length === 0) return c.json({ events: [] });
+    const visibleIds = visible.map((cal) => cal.id);
 
-    const conditions = [
-      eq(calendarEvents.householdId, auth.householdId),
-      inArray(calendarEvents.calendarId, visibleIds),
-      lte(calendarEvents.startDate, to),
-      gte(
-        sql`COALESCE(${calendarEvents.endDate}, ${calendarEvents.startDate})`,
-        from,
-      ),
-    ];
-    if (q) conditions.push(ilike(calendarEvents.title, `%${q}%`));
+    let nativeList: CalendarListEvent[] = [];
+    if (visibleIds.length > 0) {
+      const conditions = [
+        eq(calendarEvents.householdId, auth.householdId),
+        inArray(calendarEvents.calendarId, visibleIds),
+        lte(calendarEvents.startDate, to),
+        gte(
+          sql`COALESCE(${calendarEvents.endDate}, ${calendarEvents.startDate})`,
+          from,
+        ),
+      ];
+      if (q) conditions.push(ilike(calendarEvents.title, `%${q}%`));
 
-    const rows = await db
-      .select()
-      .from(calendarEvents)
-      .where(and(...conditions))
-      .orderBy(asc(calendarEvents.startDate), asc(calendarEvents.startTime));
+      const rows = await db
+        .select()
+        .from(calendarEvents)
+        .where(and(...conditions))
+        .orderBy(asc(calendarEvents.startDate), asc(calendarEvents.startTime));
 
-    const policyCtx = await loadEventPolicyContext(db, auth.householdId, auth.userId);
-    const events = await Promise.all(
-      rows.map((row) => enrichEventDto(db, auth.householdId, row, computeEventPolicy(row, policyCtx))),
+      const policyCtx = await loadEventPolicyContext(db, auth.householdId, auth.userId);
+      const enriched = await Promise.all(
+        rows.map((row) =>
+          enrichEventDto(db, auth.householdId, row, computeEventPolicy(row, policyCtx)),
+        ),
+      );
+      nativeList = enriched.map((e) => ({
+        id: e.id,
+        calendarId: e.calendarId,
+        title: e.title,
+        description: e.description,
+        categoryKey: e.categoryKey,
+        categoryLabel: e.categoryLabel,
+        color: e.color,
+        startDate: e.startDate,
+        endDate: e.endDate,
+        startTime: e.startTime,
+        endTime: e.endTime,
+        timeZone: e.timeZone,
+        allDay: e.allDay,
+        source: e.source,
+        syncStatus: e.syncStatus,
+        googleEventId: e.googleEventId,
+        recurringRuleId: e.recurringRuleId,
+        editable: e.editable,
+        pushable: e.pushable,
+        reminderOffsets: e.reminderOffsets,
+      }));
+    }
+
+    const prefs = await loadCalendarOverlayPrefs(db, auth.userId);
+    const [schoolOn, healthOn] = await Promise.all([
+      isHouseholdModuleEnabled(db, env, auth.householdId, "school"),
+      isHouseholdModuleEnabled(db, env, auth.householdId, "health"),
+    ]);
+
+    let overlays = await buildAllCalendarOverlays(
+      db,
+      env,
+      {
+        householdId: auth.householdId,
+        userId: auth.userId,
+        memberId: auth.memberId,
+        role: auth.role,
+      },
+      from,
+      to,
+      { school: schoolOn, health: healthOn },
+      prefs,
     );
+
+    if (q) {
+      const needle = q.toLowerCase();
+      overlays = overlays.filter((e) => e.title.toLowerCase().includes(needle));
+    }
+
+    const events = mergeCalendarEvents(nativeList, overlays);
     return c.json({ events });
   });
 

@@ -234,10 +234,24 @@
       "breakpoints": true
     },
     {
-      "idx": 33,
+      "idx": 34,
       "version": "7",
-      "when": 1780495007000,
-      "tag": "0033_google_docs_connections",
+      "when": 1780495008000,
+      "tag": "0034_calendar_overlay_prefs",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1780495009000,
+      "tag": "0035_health_module",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1780495010000,
+      "tag": "0036_health_event_duration",
       "breakpoints": true
     }
   ]

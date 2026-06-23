@@ -17,6 +17,7 @@ type PushPrefs = {
   pushExpenseBudgetAlertsEnabled: boolean;
   pushSchoolRemindersEnabled: boolean;
   pushShoppingRemindersEnabled: boolean;
+  pushHealthRemindersEnabled: boolean;
   pushSubscribed: boolean;
   pushAvailable: boolean;
 };
@@ -34,6 +35,7 @@ type TypeToggle = {
     | "pushExpenseBudgetAlertsEnabled"
     | "pushSchoolRemindersEnabled"
     | "pushShoppingRemindersEnabled"
+    | "pushHealthRemindersEnabled"
   >;
   show: boolean;
 };
@@ -167,6 +169,14 @@ export function NotificationSettingsPanel({
       field: "pushShoppingRemindersEnabled",
       show: true,
     },
+    {
+      id: "health",
+      legend: "Health medications",
+      label: "Send push before scheduled medication doses",
+      hint: "Opens the health module when tapped.",
+      field: "pushHealthRemindersEnabled",
+      show: modulesEnabled.includes("health"),
+    },
   ];
 
   if (!initial.pushAvailable) {
@@ -202,7 +212,8 @@ export function NotificationSettingsPanel({
     prefs.pushChoresRemindersEnabled ||
     prefs.pushExpenseBudgetAlertsEnabled ||
     prefs.pushSchoolRemindersEnabled ||
-    prefs.pushShoppingRemindersEnabled;
+    prefs.pushShoppingRemindersEnabled ||
+    prefs.pushHealthRemindersEnabled;
 
   return (
     <div className="space-y-6">
