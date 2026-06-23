@@ -21,11 +21,14 @@ export function CalendarAgendaView({
   loading,
   categoryColorByKey,
   onEventClick,
+  dayHeaderStickyTop,
 }: {
   events: CalendarEventView[];
   loading?: boolean;
   categoryColorByKey?: Map<string, string | null>;
   onEventClick: (ev: CalendarEventView) => void;
+  /** Sticky offset for day section headers (e.g. below calendar toolbar on /calendar). */
+  dayHeaderStickyTop?: string;
 }) {
   const today = formatDateLocal(new Date());
 
@@ -69,11 +72,13 @@ export function CalendarAgendaView({
           <section key={date}>
             <h3
               className={cn(
-                "sticky top-[var(--header-height)] z-10 mb-2 py-2 text-sm font-medium backdrop-blur-sm",
+                "sticky z-10 mb-2 py-2 text-sm font-medium backdrop-blur-sm",
+                !dayHeaderStickyTop && "top-[var(--header-height)]",
                 isToday
                   ? "text-[var(--color-accent)]"
                   : "text-[var(--color-text-muted)]",
               )}
+              style={dayHeaderStickyTop ? { top: dayHeaderStickyTop } : undefined}
             >
               {isToday ? "Today · " : ""}
               {new Date(date + "T12:00:00").toLocaleDateString("en-US", {

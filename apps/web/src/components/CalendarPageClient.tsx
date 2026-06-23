@@ -24,6 +24,7 @@ import {
   weekRange,
 } from "../lib/calendar-utils";
 import { useIsDesktop } from "../lib/use-media-query";
+import { useMeasuredCssVar } from "../lib/use-measured-css-var";
 import { CalendarAgendaView } from "./CalendarAgendaView";
 import { CalendarEventSheet } from "./CalendarEventSheet";
 import { CalendarFilterBar } from "./calendar/CalendarFilterBar";
@@ -160,6 +161,12 @@ export function CalendarPageClient({
   const { status: syncStatus, refresh: refreshSyncStatus, isActive: syncActive } =
     useCalendarSyncStatus(connected);
   const syncWasActive = useRef(false);
+  const stickyChromeRef = useRef<HTMLDivElement>(null);
+
+  useMeasuredCssVar(stickyChromeRef, "--calendar-chrome-height", { fallback: "10rem" });
+
+  const agendaDayHeaderStickyTop =
+    "calc(var(--header-height) + var(--calendar-chrome-height))";
 
   const clearEventDeepLink = useCallback(() => {
     const next = new URLSearchParams(searchParams.toString());
@@ -621,6 +628,7 @@ export function CalendarPageClient({
       )}
 
       <div
+        ref={stickyChromeRef}
         className="sticky top-[var(--header-height)] z-30 -mx-4 shrink-0 border-b border-[var(--color-border)] bg-[var(--color-surface-inset)]/95 px-4 py-2 backdrop-blur-sm"
         role="region"
         aria-label="Calendar controls"
@@ -763,6 +771,7 @@ export function CalendarPageClient({
           events={dayAgendaEvents}
           loading={loading}
           categoryColorByKey={categoryColorByKey}
+          dayHeaderStickyTop={agendaDayHeaderStickyTop}
           onEventClick={openEventFromGrid}
         />
       )}
@@ -772,6 +781,7 @@ export function CalendarPageClient({
           events={visibleEvents}
           loading={loading}
           categoryColorByKey={categoryColorByKey}
+          dayHeaderStickyTop={agendaDayHeaderStickyTop}
           onEventClick={openEventFromGrid}
         />
       )}

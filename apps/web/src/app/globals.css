@@ -29,8 +29,8 @@
   --ring-focus: #60a5fa;
   /* AppChrome: py-3 row + safe-area top (sticky calendar/agenda offsets). */
   --header-height: calc(3.5rem + env(safe-area-inset-top, 0px));
-  /* Page header + sticky calendar toolbar (compact filter row + nav). */
-  --calendar-chrome-height: 13rem;
+  /* Page header + sticky calendar toolbar (compact filter row + nav; measured at runtime). */
+  --calendar-chrome-height: 10rem;
 }
 
 @utility text-label {

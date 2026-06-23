@@ -170,6 +170,17 @@ MinIO-backed household file/link storage — replaces HomeHub Shared Cloud. Spik
 | M5 — HomeHub import | [WHO-120](https://linear.app/mikewhob-whome/issue/WHO-120) |
 | M6 — Phase 2 product-ready | [WHO-121](https://linear.app/mikewhob-whome/issue/WHO-121)–[WHO-125](https://linear.app/mikewhob-whome/issue/WHO-125) |
 
+### [UI & shell polish](https://linear.app/mikewhob-whome/project/ui-and-shell-polish-b8aaaea1a670)
+
+Cross-cutting app chrome, nav density, page headers, and layout polish (June 2026 audit).
+
+| Milestone | Issues |
+|-----------|--------|
+| M1 — Shell & nav (critical) | [WHO-156](https://linear.app/mikewhob-whome/issue/WHO-156), [WHO-157](https://linear.app/mikewhob-whome/issue/WHO-157), [WHO-158](https://linear.app/mikewhob-whome/issue/WHO-158), [WHO-159](https://linear.app/mikewhob-whome/issue/WHO-159) |
+| M2 — Page chrome & density (high) | [WHO-160](https://linear.app/mikewhob-whome/issue/WHO-160)–[WHO-162](https://linear.app/mikewhob-whome/issue/WHO-162) |
+| M3 — Module layout polish (medium) | [WHO-163](https://linear.app/mikewhob-whome/issue/WHO-163)–[WHO-165](https://linear.app/mikewhob-whome/issue/WHO-165) |
+| M4 — A11y & micro-polish (low) | [WHO-166](https://linear.app/mikewhob-whome/issue/WHO-166)–[WHO-168](https://linear.app/mikewhob-whome/issue/WHO-168) |
+
 ## Suggested work order
 
 1. [DevEx](https://linear.app/mikewhob-whome/project/devex-and-platform-2b8c7de9daa6) **WHO-14** (ports) — unblocks calendar OAuth.
