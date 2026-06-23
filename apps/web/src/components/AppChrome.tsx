@@ -66,26 +66,30 @@ function NavLink({
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   onClick?: () => void;
-  /** compact = icon-only until lg (header); always = text + icon (mobile drawer) */
+  /** compact = icon-only (header bar); always = text + icon (mobile drawer) */
   showLabel?: "compact" | "always";
 }) {
   const pathname = usePathname();
   const active = pathname === href || pathname.startsWith(`${href}/`);
+  const iconOnly = showLabel === "compact";
   return (
     <Link
       href={href}
       onClick={onClick}
       aria-current={active ? "page" : undefined}
-      title={showLabel === "compact" ? label : undefined}
+      aria-label={iconOnly ? label : undefined}
+      title={iconOnly ? label : undefined}
       className={cn(
-        "flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition",
+        "flex items-center gap-2 rounded-lg py-2 text-sm transition",
+        iconOnly ? "px-2.5" : "px-3",
         active
-          ? "border-l-2 border-[var(--color-accent)] bg-[var(--color-accent-subtle)] pl-[calc(0.75rem-2px)] font-medium text-[var(--color-text)]"
+          ? "border-l-2 border-[var(--color-accent)] bg-[var(--color-accent-subtle)] font-medium text-[var(--color-text)]"
           : "border-l-2 border-transparent text-[var(--color-text-muted)] hover:bg-[var(--color-border)]/40 hover:text-[var(--color-text)]",
+        active && (iconOnly ? "pl-[calc(0.625rem-2px)]" : "pl-[calc(0.75rem-2px)]"),
       )}
     >
       <Icon className="h-4 w-4 shrink-0" aria-hidden />
-      <span className={showLabel === "always" ? "inline" : "hidden lg:inline"}>{label}</span>
+      {!iconOnly && <span>{label}</span>}
     </Link>
   );
 }
@@ -190,7 +194,7 @@ export function AppChrome({
             </Link>
           </div>
 
-          <nav className="hidden flex-wrap items-center gap-0.5 lg:flex" aria-label="Main">
+          <nav className="hidden min-w-0 flex-1 items-center justify-center gap-0.5 lg:flex" aria-label="Main">
             {visibleNav.map((item) => (
               <NavLink key={item.href} {...item} />
             ))}
