@@ -2,7 +2,6 @@
 
 import {
   AlertTriangle,
-  BarChart3,
   BookOpen,
   ChevronDown,
   ChevronRight,
@@ -18,16 +17,17 @@ import { useMemo, useState } from "react";
 import { formatGradebookPercent } from "../lib/school-gradebook";
 import {
   downloadAllTranscriptsCsv,
-  downloadMissingDigestCsv,
-  downloadReportsSummaryCsv,
   downloadTranscriptCsv,
 } from "../lib/school-report-export";
+import type { ReportKind } from "../lib/reports";
 import {
   reportsUrl,
   type SchoolReportsData,
   type SchoolReportView,
 } from "../lib/school-reports";
-import { Badge, Button, EmptyState, LinkButton, Select } from "./ui";
+import { ReportExportSheet } from "./reports/ReportExportSheet";
+import { ModuleReportsLink } from "./reports/ModuleReportsLink";
+import { Badge, Button, EmptyState, Select } from "./ui";
 import { WeeklyReportPanel } from "./WeeklyReportPanel";
 
 function SummaryStat({
@@ -409,15 +409,36 @@ function TranscriptView({ reports }: { reports: SchoolReportsData }) {
   );
 }
 
-export function SchoolReports({ reports }: { reports: SchoolReportsData }) {
+export function SchoolReports({
+  reports,
+  driveEnabled = true,
+  initialView = "by-class",
+}: {
+  reports: SchoolReportsData;
+  driveEnabled?: boolean;
+  initialView?: SchoolReportView;
+}) {
   const isStudent = reports.viewMode === "student";
-  const [view, setView] = useState<SchoolReportView>("by-class");
+  const [view, setView] = useState<SchoolReportView>(initialView);
+  const [exportOpen, setExportOpen] = useState(false);
 
-  const exportActions = useMemo(() => {
-    if (view === "weekly" || view === "transcript") return null;
-    if (view === "missing") return { label: "Export open work CSV", action: () => downloadMissingDigestCsv(reports) };
-    return { label: "Export summary CSV", action: () => downloadReportsSummaryCsv(reports) };
-  }, [view, reports]);
+  const exportKind: ReportKind | null = useMemo(() => {
+    if (view === "weekly") return null;
+    if (view === "missing") return "school-open-work";
+    if (view === "transcript") return "school-transcript";
+    return "school-grades";
+  }, [view]);
+
+  const exportParams = useMemo(() => {
+    if (!exportKind) return null;
+    return {
+      module: "school" as const,
+      kind: exportKind,
+      term: reports.selectedTerm,
+      studentMemberId:
+        exportKind === "school-transcript" ? reports.transcripts[0]?.memberId : undefined,
+    };
+  }, [exportKind, reports.selectedTerm, reports.transcripts]);
 
   return (
     <div className="space-y-6">
@@ -430,12 +451,12 @@ export function SchoolReports({ reports }: { reports: SchoolReportsData }) {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <TermFilter availableTerms={reports.availableTerms} selectedTerm={reports.selectedTerm} />
-        {exportActions && (
-          <Button type="button" variant="ghost" size="sm" onClick={exportActions.action}>
+        {exportKind && exportParams ? (
+          <Button type="button" variant="ghost" size="sm" onClick={() => setExportOpen(true)}>
             <Download className="h-4 w-4" aria-hidden />
-            {exportActions.label}
+            Export…
           </Button>
-        )}
+        ) : null}
       </div>
 
       <ViewTabs view={view} onChange={setView} reports={reports} />
@@ -460,15 +481,20 @@ export function SchoolReports({ reports }: { reports: SchoolReportsData }) {
           {reports.summary.missingTotal} missing · {reports.summary.overdueTotal} overdue — check Open work
         </p>
       )}
+
+      {exportParams ? (
+        <ReportExportSheet
+          open={exportOpen}
+          onClose={() => setExportOpen(false)}
+          exportParams={exportParams}
+          reportTitle={`School ${exportKind?.replace("school-", "") ?? "report"}`}
+          driveEnabled={driveEnabled}
+        />
+      ) : null}
     </div>
   );
 }
 
 export function SchoolReportsLink() {
-  return (
-    <LinkButton href="/school/reports" variant="secondary" size="sm">
-      <BarChart3 className="h-4 w-4" aria-hidden />
-      Grade reports
-    </LinkButton>
-  );
+  return <ModuleReportsLink module="school" label="Grade reports" />;
 }

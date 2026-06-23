@@ -1,3 +1,5 @@
+import { stringify as stringifyYaml } from "yaml";
+import type { CanonicalReport, CanonicalReportSection } from "./reports/types.js";
 import type { ReportRenderFormat, WeeklyReportGroup } from "./weekly-reports/types.js";
 import type { WeeklyReportData } from "./weekly-reports/types.js";
 
@@ -254,4 +256,221 @@ export function renderReportsForExport(
     return { plainText, html, mimeType: "text/plain;charset=utf-8", extension: "txt" };
   }
   return { plainText, html, mimeType: "text/html;charset=utf-8", extension: "html" };
+}
+
+function renderSectionPlain(section: CanonicalReportSection, indent: string): string[] {
+  const lines: string[] = [indent + section.label];
+  if (section.emptyMessage) {
+    lines.push(indent + "  " + section.emptyMessage);
+    lines.push("");
+    return lines;
+  }
+  if (section.stats?.length) {
+    for (const stat of section.stats) {
+      lines.push(`${indent}  ${stat.label}: ${stat.value}`);
+    }
+    lines.push("");
+  }
+  for (const table of section.tables ?? []) {
+    lines.push(`${indent}  ${table.label}`);
+    lines.push(`${indent}    ${table.columns.join(" | ")}`);
+    for (const row of table.rows) {
+      lines.push(`${indent}    ${row.map((c) => String(c ?? "—")).join(" | ")}`);
+    }
+    lines.push("");
+  }
+  if (section.groups?.length) {
+    const dayGrouped = false;
+    for (const group of section.groups) {
+      lines.push(...renderGroupPlain(group, dayGrouped, indent + "  "));
+    }
+  }
+  return lines;
+}
+
+function renderSectionStyled(section: CanonicalReportSection, headingTag: "h2" | "h3"): string {
+  const rows: string[] = [];
+  rows.push(`<${headingTag}>${escapeHtml(section.label)}</${headingTag}>`);
+  if (section.emptyMessage) {
+    rows.push(`<p class="empty">${escapeHtml(section.emptyMessage)}</p>`);
+    return rows.join("");
+  }
+  if (section.stats?.length) {
+    rows.push('<div class="stats">');
+    for (const stat of section.stats) {
+      rows.push(
+        `<p><strong>${escapeHtml(stat.label)}:</strong> ${escapeHtml(stat.value)}</p>`,
+      );
+    }
+    rows.push("</div>");
+  }
+  for (const table of section.tables ?? []) {
+    rows.push(`<h4>${escapeHtml(table.label)}</h4>`);
+    rows.push(
+      `<table><thead><tr>${table.columns.map((c) => `<th>${escapeHtml(c)}</th>`).join("")}</tr></thead><tbody>`,
+    );
+    for (const row of table.rows) {
+      rows.push(
+        `<tr>${row.map((c) => `<td>${escapeHtml(String(c ?? "—"))}</td>`).join("")}</tr>`,
+      );
+    }
+    rows.push("</tbody></table>");
+  }
+  if (section.groups?.length) {
+    for (const group of section.groups) {
+      rows.push(renderGroupStyled(group, group.items.some((i) => i.dueLabel?.startsWith("$")), "h4"));
+    }
+  }
+  return rows.join("");
+}
+
+export function renderCanonicalReportPlain(report: CanonicalReport): string {
+  const lines: string[] = [report.title, ""];
+  if (report.timezone) lines.push(`Timezone: ${report.timezone}`, "");
+  for (const section of report.sections) {
+    lines.push(...renderSectionPlain(section, ""));
+  }
+  return lines.join("\n").trimEnd();
+}
+
+const CANONICAL_HTML_STYLES = [
+  "body{font-family:system-ui,sans-serif;color:#111827;margin:2rem;line-height:1.5}",
+  "h1{font-size:1.5rem;margin:0 0 .25rem}",
+  ".meta{color:#6b7280;margin:0 0 1.5rem}",
+  "h2{font-size:1.1rem;margin:1.5rem 0 .5rem;border-bottom:1px solid #e5e7eb;padding-bottom:.25rem}",
+  "h3{font-size:1rem;margin:1rem 0 .5rem}",
+  "h4{font-size:.95rem;margin:.75rem 0 .35rem}",
+  ".stats p{margin:.25rem 0}",
+  "table{border-collapse:collapse;width:100%;margin-bottom:1rem}",
+  "th,td{border:1px solid #e5e7eb;padding:.5rem .75rem;text-align:left}",
+  "th{background:#f9fafb;font-weight:600}",
+  "tr:nth-child(even) td{background:#fcfcfd}",
+  ".empty{color:#6b7280;font-style:italic}",
+].join("");
+
+export function renderCanonicalReportStyledHtml(report: CanonicalReport): string {
+  const rows: string[] = [];
+  rows.push("<!DOCTYPE html><html><head><meta charset=\"utf-8\">");
+  rows.push(`<style>${CANONICAL_HTML_STYLES}</style></head><body>`);
+  rows.push(`<h1>${escapeHtml(report.title)}</h1>`);
+  if (report.timezone) {
+    rows.push(`<p class="meta">${escapeHtml(report.timezone)}</p>`);
+  }
+  for (const section of report.sections) {
+    rows.push(renderSectionStyled(section, "h2"));
+  }
+  rows.push("</body></html>");
+  return rows.join("");
+}
+
+export function renderCanonicalReportCsv(report: CanonicalReport): string {
+  const lines: string[] = [];
+  lines.push(csvEscape(report.title));
+  if (report.timezone) lines.push(`Timezone,${csvEscape(report.timezone)}`);
+  lines.push("");
+
+  for (const section of report.sections) {
+    if (section.stats?.length) {
+      lines.push(csvEscape(section.label));
+      lines.push("Metric,Value");
+      for (const stat of section.stats) {
+        lines.push(`${csvEscape(stat.label)},${csvEscape(stat.value)}`);
+      }
+      lines.push("");
+    }
+    for (const table of section.tables ?? []) {
+      lines.push(csvEscape(table.label));
+      lines.push(table.columns.map((c) => csvEscape(c)).join(","));
+      for (const row of table.rows) {
+        lines.push(row.map((c) => csvEscape(String(c ?? ""))).join(","));
+      }
+      lines.push("");
+    }
+    if (section.groups?.length) {
+      lines.push(csvEscape(section.label));
+      lines.push(["Group", "Item", "Details", "Due"].map((c) => csvEscape(c)).join(","));
+      for (const group of section.groups) {
+        for (const item of group.items) {
+          lines.push(
+            [
+              csvEscape(group.label),
+              csvEscape(item.title),
+              csvEscape(item.subtitle ?? ""),
+              csvEscape(item.dueLabel ?? item.dueDate ?? ""),
+            ].join(","),
+          );
+        }
+      }
+      lines.push("");
+    }
+  }
+  return lines.join("\n").trimEnd();
+}
+
+export function renderCanonicalReportJson(report: CanonicalReport): string {
+  return JSON.stringify(report, null, 2);
+}
+
+export function renderCanonicalReportYaml(report: CanonicalReport): string {
+  return stringifyYaml(report);
+}
+
+export function reportFilenameBase(report: CanonicalReport): string {
+  return (
+    report.title
+      .toLowerCase()
+      .replace(/[^\w.-]+/g, "-")
+      .replace(/-+/g, "-")
+      .slice(0, 80) || "report"
+  );
+}
+
+export function renderReportDownloadArtifacts(report: CanonicalReport): {
+  csv: string;
+  json: string;
+  yaml: string;
+  filenameBase: string;
+} {
+  return {
+    csv: renderCanonicalReportCsv(report),
+    json: renderCanonicalReportJson(report),
+    yaml: renderCanonicalReportYaml(report),
+    filenameBase: reportFilenameBase(report),
+  };
+}
+
+export function renderCanonicalReport(
+  report: CanonicalReport,
+  format: ReportRenderFormat,
+): { plainText: string; html: string; csv: string; mimeType: string; extension: string } {
+  const plainText = renderCanonicalReportPlain(report);
+  const html = renderCanonicalReportStyledHtml(report);
+  const csv = renderCanonicalReportCsv(report);
+  if (format === "plain") {
+    return { plainText, html, csv, mimeType: "text/plain;charset=utf-8", extension: "txt" };
+  }
+  return { plainText, html, csv, mimeType: "text/html;charset=utf-8", extension: "html" };
+}
+
+export function canonicalReportFilename(report: CanonicalReport, format: ReportRenderFormat): string {
+  const slug = report.title
+    .toLowerCase()
+    .replace(/[^\w.-]+/g, "-")
+    .replace(/-+/g, "-")
+    .slice(0, 80);
+  const rendered = renderCanonicalReport(report, format);
+  return `${slug || "report"}.${rendered.extension}`;
+}
+
+export function renderCanonicalForExport(
+  report: CanonicalReport,
+  format: ReportRenderFormat,
+): { plainText: string; html: string; mimeType: string; extension: string } {
+  const rendered = renderCanonicalReport(report, format);
+  return {
+    plainText: rendered.plainText,
+    html: rendered.html,
+    mimeType: rendered.mimeType,
+    extension: rendered.extension,
+  };
 }

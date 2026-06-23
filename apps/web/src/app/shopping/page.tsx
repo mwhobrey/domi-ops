@@ -1,7 +1,8 @@
 import { AppShell } from "../../components/AppShell";
 import { ShoppingList } from "../../components/ShoppingList";
+import { ModuleReportsLink } from "../../components/reports/ModuleReportsLink";
 import { apiFetch } from "../../lib/api";
-import { Alert, LinkButton } from "../../components/ui";
+import { Alert } from "../../components/ui";
 
 interface ShoppingItem {
   id: string;
@@ -32,11 +33,7 @@ export default async function ShoppingPage() {
     <AppShell
       title="Shopping list"
       description="Shared household shopping"
-      actions={
-        <LinkButton href="/shopping/reports" variant="ghost" size="sm">
-          Reports
-        </LinkButton>
-      }
+      actions={<ModuleReportsLink module="shopping" />}
     >
       {loadError ? (
         <Alert variant="error">

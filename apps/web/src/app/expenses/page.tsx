@@ -1,7 +1,8 @@
 import { AppShell } from "../../components/AppShell";
 import { ExpensesList } from "../../components/ExpensesList";
+import { ModuleReportsLink } from "../../components/reports/ModuleReportsLink";
 import { apiFetch } from "../../lib/api";
-import { Alert, LinkButton } from "../../components/ui";
+import { Alert } from "../../components/ui";
 
 export default async function ExpensesPage() {
   let expenses: {
@@ -23,11 +24,7 @@ export default async function ExpensesPage() {
     <AppShell
       title="Expenses"
       description="Track household spending"
-      actions={
-        <LinkButton href="/expenses/reports" variant="ghost" size="sm">
-          Reports
-        </LinkButton>
-      }
+      actions={<ModuleReportsLink module="expenses" />}
     >
       {loadError ? (
         <Alert variant="error">

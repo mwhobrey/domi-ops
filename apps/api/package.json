@@ -23,7 +23,8 @@
     "hono": "^4.7.11",
     "ioredis": "^5.6.1",
     "sharp": "^0.34.2",
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "yaml": "^2.8.0"
   },
   "devDependencies": {
     "@types/node": "^22.15.30",

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ApiError, apiClient } from "../lib/client-api";
 import type { NoteShareMember } from "./NoteSharePicker";
 import { NoteSharePicker } from "./NoteSharePicker";
+import { ModuleReportsLink } from "./reports/ModuleReportsLink";
 import {
   Alert,
   Badge,
@@ -292,9 +293,7 @@ export function HealthPageClient({
           </Button>
         ))}
         </div>
-        <LinkButton href="/health/reports" variant="secondary" size="sm">
-          Reports
-        </LinkButton>
+        <ModuleReportsLink module="health" />
       </div>
 
       {tab === "today" ? (

@@ -6,6 +6,7 @@ import { cn } from "../lib/cn";
 import { ApiError, apiClient } from "../lib/client-api";
 import { ChoreEditSheet } from "./ChoreEditSheet";
 import { ChoreKarmaBar, type MemberKarma } from "./ChoreKarmaBar";
+import { ModuleReportsLink } from "./reports/ModuleReportsLink";
 import {
   Badge,
   Button,
@@ -556,9 +557,7 @@ export function ChoresList({
                   {groupByListEnabled ? "Ungroup" : "Group by list"}
                 </Button>
               ) : null}
-              <LinkButton href="/chores/reports" variant="ghost" size="sm">
-                Reports
-              </LinkButton>
+              <ModuleReportsLink module="chores" />
             </div>
           </div>
           <ListFilterBar lists={listFilterOptions} value={listFilter} onChange={setListFilter} />

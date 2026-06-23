@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   BookOpen,
+  BarChart3,
   Calendar,
   ClipboardList,
   FolderOpen,
@@ -25,6 +26,7 @@ import { ProfileOnboardingBanner } from "./ProfileOnboardingBanner";
 
 const nav = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/reports", label: "Reports", icon: BarChart3 },
   { href: "/calendar", label: "Calendar", icon: Calendar, module: "calendar_sync" },
   { href: "/school", label: "School", icon: BookOpen, module: "school" },
   { href: "/shopping", label: "Shopping", icon: ShoppingCart },

@@ -18,6 +18,7 @@ import { driveRoutes } from "./routes/drive.js";
 import { drivePublicRoutes } from "./routes/drive-public.js";
 import { googleDocsAuthRoutes } from "./routes/google-docs-auth.js";
 import { weeklyReportRoutes } from "./routes/weekly-reports.js";
+import { reportRoutes } from "./routes/reports.js";
 import { ensureS3ReadyOnce } from "./lib/s3.js";
 
 const env = loadEnv();
@@ -55,6 +56,7 @@ app.route("/", healthRoutes(db));
 app.route("/api/calendar", calendarRoutes(db, env));
 app.route("/api/core", coreRoutes(db, env));
 app.route("/api/core", weeklyReportRoutes(db, env));
+app.route("/api/core", reportRoutes(db, env));
 app.route("/api/core/upload", browserUploadRoutes(env));
 app.route("/api/core/drive", driveRoutes(db, env));
 app.route("/s", drivePublicRoutes(db, env));

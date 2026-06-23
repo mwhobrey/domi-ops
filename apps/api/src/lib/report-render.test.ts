@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
+import type { CanonicalReport } from "./reports/types.js";
 import {
+  renderCanonicalReportPlain,
+  renderCanonicalReportStyledHtml,
+  renderReportDownloadArtifacts,
   renderWeeklyReportPlain,
   renderWeeklyReportStyledHtml,
   renderWeeklyReportsCombinedPlain,
@@ -83,5 +87,45 @@ describe("report-render", () => {
 
     const html = renderWeeklyReportStyledHtml(byDay);
     expect(html).not.toContain("<th>Due</th>");
+  });
+
+  it("renders canonical health-style overview", () => {
+    const report: CanonicalReport = {
+      title: "Health report",
+      module: "health",
+      kind: "overview",
+      generatedAt: new Date().toISOString(),
+      timezone: "America/Chicago",
+      sections: [
+        {
+          key: "summary",
+          label: "Summary",
+          stats: [{ label: "Health events", value: "3" }],
+        },
+        {
+          key: "types",
+          label: "Events by type",
+          tables: [
+            {
+              key: "types",
+              label: "Events by type",
+              columns: ["Type", "Count"],
+              rows: [["Appointment", 2]],
+            },
+          ],
+        },
+      ],
+    };
+    const text = renderCanonicalReportPlain(report);
+    expect(text).toContain("Health events");
+    expect(text).toContain("Appointment");
+    const html = renderCanonicalReportStyledHtml(report);
+    expect(html).toContain("<table");
+
+    const artifacts = renderReportDownloadArtifacts(report);
+    expect(artifacts.filenameBase).toBeTruthy();
+    expect(artifacts.csv).toContain("Health events");
+    expect(artifacts.json).toContain('"module": "health"');
+    expect(artifacts.yaml).toContain("module: health");
   });
 });

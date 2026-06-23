@@ -42,7 +42,11 @@ whome/
 | `src/app/profile/page.tsx` | Profile editor (identity, presence, prefs, integrations, notifications) |
 | `src/components/ProfileCalendarConnect.tsx` | Slim Google Calendar connect status for profile |
 | `src/components/ProfileGoogleDocsConnect.tsx` | Google Docs/Drive export OAuth connect on profile |
-| `src/components/WeeklyReportPanel.tsx` | Shared weekly schedule UI (week/range, group-by, export preview) |
+| `src/app/reports/page.tsx` | Central reports hub (`ReportsHubClient`) |
+| `src/app/*/reports/page.tsx` | Per-module report pages (contextual entry; same section components as hub) |
+| `src/components/reports/ReportExportSheet.tsx` | Shared export sheet (Drive, Google Docs/Drive, download CSV/JSON/YAML, print) |
+| `src/components/reports/ReportsHubClient.tsx` | Module/kind picker + inline report runners |
+| `src/lib/reports.ts` | Report module/kind types + hub URL helpers |
 | `src/app/settings/page.tsx` | Household settings (owner/admin): name, timezone, slug, module toggles, members, integrations |
 | `src/components/HouseholdSettingsEditor.tsx` | Household name/slug/timezone + module toggle checkboxes |
 | `src/components/HouseholdMembersPanel.tsx` | Member list, role dropdown, username provisioning |
@@ -69,7 +73,8 @@ whome/
 | `next.config.ts` | `standalone` output; rewrites `/api`, `/health` |
 | `Dockerfile` | Build arg `API_URL` for server-side fetch |
 
-**Routing:** App Router file-based routes only — no separate `routes.ts`.
+**Report kinds (WHO-155):** `GET /api/core/reports/catalog` lists enabled modules. Kinds: `weekly`, `overview`, `school-grades`, `school-open-work`, `school-transcript`. Export: `POST /api/core/reports/export` with `destination`: `preview` | `whome-drive` | `google-docs` | `google-drive`; preview includes `downloads` (`csv`, `json`, `yaml`). Legacy `/api/core/weekly-reports/*` unchanged.
+
 
 **State:** No Redux/Zustand. Server Components fetch via `apiFetch`; client components minimal. Session lives in HTTP-only cookie on API side.
 
@@ -82,9 +87,11 @@ whome/
 | `src/routes/auth.ts` | Session, Google login/callback, logout |
 | `src/routes/google-calendar-auth.ts` | Calendar OAuth + enqueue import |
 | `src/routes/google-docs-auth.ts` | Google Docs/Drive export OAuth (`/auth/google/docs/*`) |
-| `src/routes/weekly-reports.ts` | Weekly schedule reports + export (`/api/core/weekly-reports`) |
+| `src/routes/weekly-reports.ts` | Weekly schedule reports + export (`/api/core/weekly-reports`; legacy alias) |
+| `src/routes/reports.ts` | Unified reports catalog + export (`/api/core/reports`) |
 | `src/lib/weekly-reports/` | Per-module Mon–Fri report builders (school, chores, shopping, expenses) |
-| `src/lib/report-render.ts` | Plain/styled HTML render for weekly exports |
+| `src/lib/reports/` | Canonical report types, module overview adapters, shared export dispatch |
+| `src/lib/report-render.ts` | Plain/styled HTML + CSV render for weekly + canonical reports |
 | `src/lib/google-docs-export.ts` | Google Docs/Drive API + token refresh |
 | `src/routes/calendar.ts` | Connections, events, sync trigger; `GET /events` merges overlays |
 | `src/lib/calendar-overlays.ts` | School due-date + health virtual events for calendar |
