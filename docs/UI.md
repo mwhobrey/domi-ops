@@ -51,6 +51,8 @@ Typography: **Inter** via `next/font` on `layout.tsx`.
 - **`PageHeader`** — `descriptionVisibility`: `desktop` (default when `description` set) hides subtitle below `lg`; list modules omit `description`.
 - **`PageHeaderActions`** — when `actions` has 2+ children, below `md` shows an overflow menu instead of a wrapping row.
 - **Notices** — `NoticeBoardActions` lives in `AppChrome` header, not `PageHeader`.
+- **Desktop nav (coarse pointer)** — icon-only `NavLink` rows use `min-h-11` / `min-w-11` under `@media (pointer: coarse)` at `lg+`.
+- **Profile onboarding** — `ProfileOnboardingBanner` when display name unset; dismiss stored per member in `localStorage`.
 - **Reports hub** — `/reports` title only; mobile module/kind pill picker card; desktop sidebar nav at `lg+`.
 
 ## Dashboard widgets

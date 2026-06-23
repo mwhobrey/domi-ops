@@ -49,7 +49,7 @@ function NavLink({
       title={iconOnly ? label : undefined}
       className={cn(
         "flex items-center gap-2 rounded-lg py-2 text-sm transition",
-        iconOnly ? "px-2.5" : "px-3",
+        iconOnly ? "px-2.5 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11 [@media(pointer:coarse)]:justify-center [@media(pointer:coarse)]:px-2" : "px-3",
         active
           ? "border-l-2 border-[var(--color-accent)] bg-[var(--color-accent-subtle)] font-medium text-[var(--color-text)]"
           : "border-l-2 border-transparent text-[var(--color-text-muted)] hover:bg-[var(--color-border)]/40 hover:text-[var(--color-text)]",
@@ -338,7 +338,7 @@ export function AppChrome({
       </Drawer>
 
       <main className="mx-auto max-w-6xl px-4 py-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
-        {user && <ProfileOnboardingBanner name={user.name} />}
+        {user && <ProfileOnboardingBanner name={user.name} memberId={user.memberId} />}
         {children}
       </main>
     </div>
