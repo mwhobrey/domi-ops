@@ -32,7 +32,6 @@ export default async function ShoppingPage() {
   return (
     <AppShell
       title="Shopping list"
-      description="Shared household shopping"
       actions={<ModuleReportsLink module="shopping" />}
     >
       {loadError ? (

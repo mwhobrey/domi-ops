@@ -1,20 +1,20 @@
 import { apiFetch } from "../lib/api";
 import { memberShownLabel } from "../lib/member-label";
-import { Suspense } from "react";
 import { AppChrome, type ShellUser } from "./AppChrome";
-import { NoticeBoardActions } from "./NoticeBoard";
 import { Breadcrumb, type BreadcrumbItem, PageHeader } from "./ui";
 
 export async function AppShell({
   children,
   title,
   description,
+  descriptionVisibility,
   actions,
   breadcrumb,
 }: {
   children: React.ReactNode;
   title: string;
   description?: string;
+  descriptionVisibility?: "always" | "desktop" | "never";
   actions?: React.ReactNode;
   breadcrumb?: BreadcrumbItem[];
 }) {
@@ -50,20 +50,17 @@ export async function AppShell({
     /* */
   }
 
+  const resolvedDescriptionVisibility =
+    descriptionVisibility ?? (description ? "desktop" : "never");
+
   return (
     <AppChrome user={user} modulesEnabled={modulesEnabled}>
       {breadcrumb && breadcrumb.length > 0 && <Breadcrumb items={breadcrumb} />}
       <PageHeader
         title={title}
         description={description}
-        actions={
-          <>
-            <Suspense fallback={null}>
-              <NoticeBoardActions />
-            </Suspense>
-            {actions}
-          </>
-        }
+        descriptionVisibility={resolvedDescriptionVisibility}
+        actions={actions}
       />
       {children}
     </AppChrome>

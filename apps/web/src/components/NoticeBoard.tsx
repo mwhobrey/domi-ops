@@ -56,7 +56,13 @@ function formatWhen(iso: string): string {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-export function NoticeBoardActions({ className }: { className?: string }) {
+export function NoticeBoardActions({
+  className,
+  onOpenChange,
+}: {
+  className?: string;
+  onOpenChange?: (open: boolean) => void;
+}) {
   const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<PanelTab>("notices");
@@ -153,6 +159,10 @@ export function NoticeBoardActions({ className }: { className?: string }) {
       .then((s) => setDriveEnabled(s.modulesEnabled?.includes("drive") ?? false))
       .catch(() => setDriveEnabled(false));
   }, []);
+
+  useEffect(() => {
+    onOpenChange?.(open);
+  }, [open, onOpenChange]);
 
   useEffect(() => {
     if (open) void loadPanel();

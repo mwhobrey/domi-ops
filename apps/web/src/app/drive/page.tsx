@@ -61,7 +61,6 @@ export default async function DrivePage() {
   return (
     <AppShell
       title="Drive"
-      description="Household files and links"
       breadcrumb={[{ label: "Drive" }]}
     >
       <Suspense fallback={<p className="text-sm text-[var(--color-text-muted)]">Loading Drive…</p>}>

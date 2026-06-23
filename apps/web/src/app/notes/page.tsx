@@ -74,7 +74,7 @@ export default async function NotesPage() {
 
   return (
 
-    <AppShell title="Notes" description="Household and private notes">
+    <AppShell title="Notes">
 
       {loadError ? (
 

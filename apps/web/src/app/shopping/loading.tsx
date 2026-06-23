@@ -3,7 +3,7 @@ import { PageLoading } from "../../components/PageLoading";
 
 export default function Loading() {
   return (
-    <AppShell title="Shopping list" description="Shared household shopping">
+    <AppShell title="Shopping list">
       <PageLoading />
     </AppShell>
   );

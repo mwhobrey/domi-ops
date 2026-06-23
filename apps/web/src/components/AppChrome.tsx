@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Home, LayoutGrid, Menu } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { filterVisibleNav } from "../lib/app-nav";
 import { cn } from "../lib/cn";
 import { authClient } from "../lib/auth-client";
+import { NoticeBoardActions } from "./NoticeBoard";
 import { Avatar } from "./ui/Avatar";
 import { Drawer } from "./ui/Drawer";
 import { IconButton } from "./ui/IconButton";
@@ -92,6 +93,14 @@ export function AppChrome({
     setMenuOpen(false);
     setUserOpen(false);
     setModulesOpen(true);
+  }, []);
+
+  const handleNoticeOpenChange = useCallback((open: boolean) => {
+    if (open) {
+      setUserOpen(false);
+      setModulesOpen(false);
+      setMenuOpen(false);
+    }
   }, []);
 
   async function onSignOut() {
@@ -191,6 +200,15 @@ export function AppChrome({
             >
               <LayoutGrid className="h-5 w-5" />
             </IconButton>
+
+            {user && (
+              <Suspense fallback={null}>
+                <NoticeBoardActions
+                  className="shrink-0"
+                  onOpenChange={handleNoticeOpenChange}
+                />
+              </Suspense>
+            )}
 
             <div className="relative" ref={userRef}>
               <button

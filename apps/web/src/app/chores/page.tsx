@@ -37,7 +37,7 @@ export default async function ChoresPage() {
   }
 
   return (
-    <AppShell title="Chores" description="Household tasks, karma, and due dates">
+    <AppShell title="Chores">
       {loadError ? (
         <Alert variant="error">
           {loadError}. <a href="/chores">Retry</a>

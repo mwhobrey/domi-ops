@@ -30,10 +30,7 @@ export default async function CalendarPage({
   }
 
   return (
-    <AppShell
-      title="Calendar"
-      description="Household calendar — local events and Google sync"
-    >
+    <AppShell title="Calendar">
       {loadError && (
         <Alert variant="info" className="mb-4">
           {loadError}. Connection settings may be incomplete — events still load below.

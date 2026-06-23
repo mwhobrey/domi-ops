@@ -41,7 +41,7 @@ export default async function DashboardPage() {
   }
 
   return (
-    <AppShell title="Dashboard" description="Household command center">
+    <AppShell title="Dashboard">
       {loadError ? (
         <Alert variant="error">
           {loadError}. <a href="/dashboard">Retry</a>

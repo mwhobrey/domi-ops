@@ -23,7 +23,6 @@ export default async function ExpensesPage() {
   return (
     <AppShell
       title="Expenses"
-      description="Track household spending"
       actions={<ModuleReportsLink module="expenses" />}
     >
       {loadError ? (

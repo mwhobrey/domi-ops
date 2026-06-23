@@ -32,7 +32,7 @@ Typography: **Inter** via `next/font` on `layout.tsx`.
 |-----------|---------|
 | `Button` / `LinkButton` / `AnchorButton` | Actions and CTAs |
 | `Card`, `ListItem` | Containers and rows |
-| `SectionHeader`, `PageHeader`, `Breadcrumb` | Hierarchy |
+| `SectionHeader`, `PageHeader`, `PageHeaderActions`, `Breadcrumb` | Hierarchy |
 | `StatTile` | Dashboard metrics |
 | `Avatar`, `Badge`, `Checkbox`, `RadioGroup` | People and forms |
 | `Modal`, `Sheet`, `Drawer`, `ConfirmDialog` | Overlays |
@@ -40,11 +40,17 @@ Typography: **Inter** via `next/font` on `layout.tsx`.
 
 ## Adding a module page
 
-1. Create `apps/web/src/app/<module>/page.tsx` — wrap in `AppShell` with `title`, optional `description`, `breadcrumb`, `actions`.
+1. Create `apps/web/src/app/<module>/page.tsx` — wrap in `AppShell` with `title`, optional `description` (`descriptionVisibility`: `desktop` default, `always`, or `never`), `breadcrumb`, `actions`.
 2. Fetch with `apiFetch` on the server; pass props to client components for mutations.
 3. Use `apiClient` in client components for POST/PATCH/DELETE.
 4. Use `ListPage` + `ListItem` + `EmptyState` for list modules.
 5. Calendar: agenda-only below `lg`; week grid on desktop (`useIsDesktop`).
+
+## Page chrome
+
+- **`PageHeader`** — `descriptionVisibility`: `desktop` (default when `description` set) hides subtitle below `lg`; list modules omit `description`.
+- **`PageHeaderActions`** — when `actions` has 2+ children, below `md` shows an overflow menu instead of a wrapping row.
+- **Notices** — `NoticeBoardActions` lives in `AppChrome` header, not `PageHeader`.
 
 ## Dashboard widgets
 
