@@ -16,6 +16,8 @@
     "db:generate": "npm run generate -w @whome/db",
     "db:migrate": "npm run build -w @whome/db && npm run migrate:run -w @whome/db",
     "dev:reset": "node scripts/dev-reset.mjs",
+    "db:seed-demo": "npm run build -w @whome/db && npm run seed:demo -w @whome/db",
+    "marketing:capture-screenshots": "node scripts/capture-demo-screenshots.mjs",
     "db:studio": "npm run studio -w @whome/db",
     "import:homehub": "node packages/import-homehub/dist/cli.js",
     "import:validate": "npm run build -w @whome/import-homehub && node packages/import-homehub/scripts/validate-import.mjs",
@@ -24,6 +26,7 @@
     "fixture:homehub": "node packages/import-homehub/scripts/create-fixture.mjs"
   },
   "devDependencies": {
+    "playwright": "^1.51.1",
     "node-gyp": "^11.5.0",
     "turbo": "^2.5.4",
     "typescript": "^5.8.3",

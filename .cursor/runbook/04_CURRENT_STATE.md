@@ -9,6 +9,8 @@
 - Monorepo builds via Turbo (`npm run build`).
 - Drizzle schema + SQL migrations (`packages/db/drizzle/`), including `school_submission_artifacts` (`0002`); `0017` drops `household_members.nickname` / `public_label`.
 - `npm run db:migrate` and API Docker entrypoint apply migrations. New SQL must be registered in `packages/db/drizzle/meta/_journal.json` (see `03_RULES_AND_STANDARDS.md` â†’ Database migrations).
+- **Demo seed (WHO-190 Phase 1):** `npm run db:seed-demo` — wipes/recreates `rivera-demo` household (Maria owner `demo@domi-ops.com`, default password `DemoRivera2026!`); Chicago-relative dates for calendar/school/chores; safety gate (`DEMO_MODE` / non-production / `--force`). Spec: `docs/marketing/demo-household-spec.md`.
+- **Marketing screenshots (WHO-190 Phase 2):** `npm run marketing:capture-screenshots` — Playwright light+dark PNGs → `docs/marketing/screenshots/` + `apps/web/public/marketing/screenshots/`; landing `ThemeAwareScreenshot` (`<picture>` + `prefers-color-scheme`). Preview: `MARKETING_LANDING=true` → unauthenticated `/` shows `LandingPage`.
 - Zod env validation with production guards (`@whome/config`).
 - Docker Compose dev stack: postgres, redis, minio, api, worker, web.
 - Native `npm run dev` (default): `.env.example` / `WHOME_DEV_PROFILE=native` / `PORT=3000` / `PUBLIC_APP_URL=http://localhost:3000`; dev boot warns on OAuth port mismatch; `.env.docker.example` for compose web on :3001.
@@ -24,7 +26,7 @@
 
 - **Better Auth** (`packages/auth/src/better-auth.ts`): email/password + **username plugin** + optional Google OAuth; Drizzle `ba_*` tables (`0015`); `users.username` / nullable `users.email` (`0016`). Drizzle adapter `schema` keys must match `modelName` (`users`, `ba_sessions`, â€¦); `user.fields` maps BA `name`/`image` â†’ Drizzle props `displayName`/`imageUrl` (not SQL column names).
 - Login UI: `/login` — email or username sign-in; optional Google; public owner sign-up gated by `ALLOW_PUBLIC_SIGNUP` (default **off** in production, API blocks `/auth/sign-up/*`); dev default on. Dogfood: import + Google claim + username provision in settings. Login card: brand lockup, 44px inputs/tabs, join callout when signup disabled.
-- **Landing (`/`):** redirects to `/login` (unauthenticated) or `/dashboard` (session) for dogfood; marketing page deferred (Linear backlog).
+- **Landing (`/`):** redirects to `/login` (unauthenticated) or `/dashboard` (session) for dogfood; `MARKETING_LANDING=true` shows `LandingPage` with theme-matched screenshots (WHO-134).
 - **Household provisioning:** `POST /api/core/household/members/provision` (owner/admin) creates username-only members (`provision-member.ts`, no synthetic email).
 - **Email verification:** Better Auth `emailVerification` + optional SMTP (`SMTP_*`, `EMAIL_VERIFICATION_REQUIRED`); dev logs link when SMTP unset (`packages/auth/src/mail.ts`).
 - **Post-import join:** session hook moves users onto the **import marker** household; stubs claimed via **`users.import_claim_email`** + `import_records` (`homehub_claim_email`) from HomeHub **`config.yml`**, then Google display name / username fallback. Optional deprecated env: `HOUSEHOLD_MEMBER_EMAIL_MAP`. **Single-tenant:** live import targets the **oldest** household when one already exists.

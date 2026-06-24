@@ -47,7 +47,40 @@
 }
 
 html {
-  color-scheme: dark;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --color-surface: #f8fafc;
+    --color-surface-elevated: #ffffff;
+    --color-surface-subtle: #f1f5f9;
+    --color-surface-muted: #e2e8f0;
+    --color-surface-inset: #eef2f7;
+    --color-border: #cbd5e1;
+    --color-accent: #2563eb;
+    --color-accent-muted: #1d4ed8;
+    --color-accent-subtle: rgb(37 99 235 / 0.1);
+    --color-text: #0f172a;
+    --color-text-muted: #64748b;
+    --color-danger: #dc2626;
+    --color-danger-muted: #fecaca;
+    --color-success: #059669;
+    --color-success-muted: #a7f3d0;
+    --color-warning: #d97706;
+    --color-warning-muted: #fde68a;
+    --shadow-card: 0 1px 3px rgb(15 23 42 / 0.08);
+    --shadow-elevated: 0 8px 32px rgb(15 23 42 / 0.1);
+    --ring-focus: #2563eb;
+  }
+
+  dialog::backdrop {
+    background: rgb(15 23 42 / 0.35);
+  }
+
+  dialog.dialog-sheet::backdrop {
+    background: rgb(15 23 42 / 0.3);
+  }
 }
 
 body {

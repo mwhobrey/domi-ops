@@ -19,9 +19,13 @@
     "generate": "drizzle-kit generate",
     "migrate": "drizzle-kit migrate",
     "migrate:run": "node dist/migrate.js",
+    "seed:demo": "node dist/seed-demo.js",
     "studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "@whome/config": "*",
+    "@whome/crypto": "*",
+    "better-auth": "^1.6.14",
     "drizzle-orm": "^0.45.2",
     "postgres": "^3.4.7"
   },

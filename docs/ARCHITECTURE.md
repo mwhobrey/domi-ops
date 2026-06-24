@@ -1,5 +1,7 @@
 # whome architecture
 
+> **Public launch (OSS + hosted):** see [ADR 001 — Public launch scope](./adr/001-public-launch-scope.md) (brand: **Domi Ops**, `domi-ops.com` / `app.domi-ops.com`). This file describes the current codebase; the ADR is the launch source of truth.
+
 ## Product tiers
 
 whome is designed for **two ways to run the same product**: self-host (OSS) or whome-hosted (managed). **Public launch targets both at once** — open source and hosted tiers ship together when stability, security, and hosted operations are ready. Until then, development focuses on self-host dogfood.

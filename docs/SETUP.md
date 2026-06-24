@@ -90,6 +90,37 @@ npm run dev:reset
 npm run dev
 ```
 
+### Demo household (marketing screenshots)
+
+After migrations, seed the **Rivera Family** demo household for landing-page screenshots and local QA:
+
+```bash
+npm run db:seed-demo
+```
+
+| | |
+|---|---|
+| **Login** | `demo@domi-ops.com` |
+| **Password** | `DemoRivera2026!` (or set `DEMO_OWNER_PASSWORD` in `.env`) |
+| **Slug** | `rivera-demo` |
+| **Best views** | `/calendar` (week view), `/dashboard`, `/school` |
+
+Re-running the command wipes and recreates the demo household (idempotent by slug). Safety gate: runs when `NODE_ENV` is not `production`, or `DEMO_MODE=true`, or with `--force`.
+
+Capture marketing PNGs (Playwright; requires `npm run dev`). Captures **light and dark** variants (`-{theme}.png`) into `docs/marketing/screenshots/` and `apps/web/public/marketing/screenshots/`:
+
+```bash
+npx playwright install chromium   # once per machine
+npm run marketing:capture-screenshots
+npm run marketing:capture-screenshots -- --theme light   # single theme pass
+```
+
+Preview landing with theme-matched screenshots: set `MARKETING_LANDING=true` in `.env`, restart dev, open `/`.
+
+Output filenames: `p0-calendar-week-desktop-1280x800-light.png` (and `-dark.png`).
+
+Full spec: [marketing/demo-household-spec.md](./marketing/demo-household-spec.md).
+
 ---
 
 ## Path B: Production on a server
