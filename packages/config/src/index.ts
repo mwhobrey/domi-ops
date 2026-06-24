@@ -109,6 +109,15 @@ export const envSchema = z
     VAPID_PUBLIC_KEY: z.string().optional(),
     VAPID_PRIVATE_KEY: z.string().optional(),
     VAPID_SUBJECT: z.string().optional(),
+    DEMO_MODE: z
+      .string()
+      .optional()
+      .transform((v) => v === "true" || v === "1"),
+    DEMO_HOUSEHOLD_SLUG: z.string().default("rivera-demo"),
+    DEMO_RESET_ENABLED: z
+      .string()
+      .optional()
+      .transform((v) => v === "true" || v === "1"),
   })
   .superRefine((data, ctx) => {
     if (data.NODE_ENV === "production") {

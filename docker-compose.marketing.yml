@@ -1,0 +1,56 @@
+# Marketing + demo overlay for Domi Ops public launch (WHO-183 / WHO-190).
+#
+# Usage with prod stack:
+#   docker compose -f docker-compose.prod.yml -f docker-compose.marketing.yml up -d --build
+#
+# Demo profile (separate web container + nightly reset cron on host):
+#   docker compose -f docker-compose.prod.yml -f docker-compose.marketing.yml \
+#     --profile demo up -d --build
+
+services:
+  www:
+    container_name: domiops-www
+    image: ghcr.io/mwhobrey/whome-www:${WHO_IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: apps/www/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-https://app.domi-ops.com}
+      NEXT_PUBLIC_DEMO_URL: ${NEXT_PUBLIC_DEMO_URL:-https://demo.domi-ops.com}
+    networks:
+      - proxy
+
+  web:
+    container_name: domiops-web
+    environment:
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-https://app.domi-ops.com}
+      ALLOW_PUBLIC_SIGNUP: ${ALLOW_PUBLIC_SIGNUP:-false}
+      DEMO_MODE: "false"
+
+  demo-web:
+    container_name: domiops-demo-web
+    profiles:
+      - demo
+    image: ghcr.io/mwhobrey/whome-web:${WHO_IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        API_URL: http://api:4000
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      API_URL: http://api:4000
+      PUBLIC_APP_URL: ${DEMO_PUBLIC_APP_URL:-https://demo.domi-ops.com}
+      ALLOW_PUBLIC_SIGNUP: "false"
+      DEMO_MODE: "true"
+      DEMO_HOUSEHOLD_SLUG: ${DEMO_HOUSEHOLD_SLUG:-rivera-demo}
+      DEMO_RESET_ENABLED: ${DEMO_RESET_ENABLED:-true}
+    depends_on:
+      api:
+        condition: service_started
+    networks:
+      - proxy

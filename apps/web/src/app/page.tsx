@@ -1,6 +1,5 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { LandingPage } from "../components/marketing/LandingPage";
 
 async function hasSession(): Promise<boolean> {
   const cookieStore = await cookies();
@@ -22,16 +21,9 @@ async function hasSession(): Promise<boolean> {
   }
 }
 
-function marketingLandingEnabled(): boolean {
-  return process.env.MARKETING_LANDING === "true" || process.env.MARKETING_LANDING === "1";
-}
-
 export default async function HomePage() {
   if (await hasSession()) {
     redirect("/dashboard");
-  }
-  if (marketingLandingEnabled()) {
-    return <LandingPage />;
   }
   redirect("/login");
 }

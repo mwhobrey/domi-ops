@@ -12,6 +12,7 @@ import { Avatar } from "./ui/Avatar";
 import { Drawer } from "./ui/Drawer";
 import { IconButton } from "./ui/IconButton";
 import { ProfileOnboardingBanner } from "./ProfileOnboardingBanner";
+import { DemoModeBanner } from "./DemoModeBanner";
 
 export type ShellUser = {
   email: string | null;
@@ -338,6 +339,7 @@ export function AppChrome({
       </Drawer>
 
       <main className="mx-auto max-w-6xl px-4 py-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
+        <DemoModeBanner />
         {user && <ProfileOnboardingBanner name={user.name} memberId={user.memberId} />}
         {children}
       </main>

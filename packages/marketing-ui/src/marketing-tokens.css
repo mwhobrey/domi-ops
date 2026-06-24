@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-inter, "Segoe UI"), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-inter, "Segoe UI"), ui-sans-serif, system-ui, sans-serif;
+  --color-surface: #0c0f14;
+  --color-surface-elevated: #141a24;
+  --color-surface-subtle: #101620;
+  --color-border: #1f2937;
+  --color-accent: #3b82f6;
+  --color-accent-muted: #1d4ed8;
+  --color-text: #f1f5f9;
+  --color-text-muted: #94a3b8;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+  --shadow-card: 0 1px 3px rgb(0 0 0 / 0.35);
+  --shadow-elevated: 0 4px 24px rgb(0 0 0 / 0.4);
+}
+
+html {
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --color-surface: #f8fafc;
+    --color-surface-elevated: #ffffff;
+    --color-surface-subtle: #f1f5f9;
+    --color-border: #cbd5e1;
+    --color-accent: #2563eb;
+    --color-accent-muted: #1d4ed8;
+    --color-text: #0f172a;
+    --color-text-muted: #64748b;
+    --shadow-card: 0 1px 3px rgb(15 23 42 / 0.08);
+    --shadow-elevated: 0 8px 32px rgb(15 23 42 / 0.1);
+  }
+}
+
+body {
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  min-height: 100dvh;
+}
+
+.bg-page-gradient {
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -20%, var(--color-accent) 0%, transparent 50%),
+    radial-gradient(ellipse 60% 40% at 100% 100%, var(--color-accent-muted) 0%, transparent 40%);
+}
+
+.text-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}

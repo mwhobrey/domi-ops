@@ -21,7 +21,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "..");
 const OUT_DIRS = [
   path.join(REPO_ROOT, "docs/marketing/screenshots"),
-  path.join(REPO_ROOT, "apps/web/public/marketing/screenshots"),
+  path.join(REPO_ROOT, "apps/www/public/marketing/screenshots"),
 ];
 
 const DESKTOP = { width: 1280, height: 800 };

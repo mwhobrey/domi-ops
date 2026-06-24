@@ -38,6 +38,9 @@ export default async function LoginPage({
   );
 
   const allowPublicSignup = isPublicSignupAllowed();
+  const isDemoMode = process.env.DEMO_MODE === "true" || process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+  const demoEmail = process.env.DEMO_OWNER_EMAIL ?? "demo@domi-ops.com";
+  const demoPassword = process.env.DEMO_OWNER_PASSWORD ?? "DemoRivera2026!";
 
   return (
     <main className="relative flex min-h-dvh flex-col items-center justify-center px-4 py-8 pb-[max(2rem,env(safe-area-inset-bottom))] sm:px-6">
@@ -57,10 +60,24 @@ export default async function LoginPage({
           </p>
         )}
 
-        {!allowPublicSignup && (
+        {!allowPublicSignup && !isDemoMode && (
           <p className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm leading-relaxed text-[var(--color-text-muted)]">
             Members join after HomeHub import (Google claim) or via a username from Household
             settings.
+          </p>
+        )}
+
+        {isDemoMode && (
+          <p
+            className="rounded-[var(--radius-lg)] border border-[var(--color-accent)]/40 bg-[var(--color-accent-subtle)] px-3 py-2.5 text-sm leading-relaxed text-[var(--color-text)]"
+            role="status"
+          >
+            <strong className="font-medium">Demo login</strong>
+            <span className="block mt-1 font-mono text-xs text-[var(--color-text-muted)]">
+              {demoEmail}
+              <br />
+              {demoPassword}
+            </span>
           </p>
         )}
 

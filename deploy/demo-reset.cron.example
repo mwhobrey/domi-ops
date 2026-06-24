@@ -1,0 +1,13 @@
+# Nightly Rivera demo household reset (WHO-190 Phase 3).
+# 4:00 AM US Central ≈ 09:00 UTC during CDT; 10:00 UTC during CST (DST caveat).
+#
+# Install on the host running the demo stack:
+#   crontab -e
+#   # paste the line below (adjust REPO path and compose files)
+#
+# Requires DEMO_RESET_ENABLED=true in .env and demo profile running.
+
+0 9 * * * cd /opt/whome && docker compose -f docker-compose.prod.yml -f docker-compose.marketing.yml --profile demo exec -T api sh -c 'npm run seed:demo -w @whome/db' >> /var/log/whome-demo-reset.log 2>&1
+
+# Alternative: run seed from host (needs node + built packages on host):
+# 0 9 * * * cd /opt/whome && DEMO_MODE=true npm run db:seed-demo >> /var/log/whome-demo-reset.log 2>&1

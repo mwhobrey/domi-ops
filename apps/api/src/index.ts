@@ -43,10 +43,13 @@ app.route("/auth/google/docs", googleDocsAuthRoutes(db, env));
 app.route("/auth", whomeSessionRoutes(db, betterAuth));
 
 app.on(["POST", "GET"], "/auth/*", (c) => {
-  if (!env.ALLOW_PUBLIC_SIGNUP) {
+  if (!env.ALLOW_PUBLIC_SIGNUP || env.DEMO_MODE) {
     const path = new URL(c.req.url).pathname;
     if (path.includes("/sign-up")) {
-      return c.json({ message: "Public sign-up is disabled on this instance" }, 403);
+      const message = env.DEMO_MODE
+        ? "Sign-up is disabled on the demo instance"
+        : "Public sign-up is disabled on this instance";
+      return c.json({ message }, 403);
     }
   }
   return betterAuth.handler(c.req.raw);

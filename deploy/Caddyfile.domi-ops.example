@@ -1,0 +1,48 @@
+# Domi Ops public launch — marketing apex + app + demo subdomains.
+# Join Caddy to the compose proxy network (see docker-compose.proxy-external.yml).
+#
+#   docker compose -f docker-compose.prod.yml -f docker-compose.marketing.yml \
+#     -f docker-compose.proxy-external.yml up -d --build
+
+domi-ops.com {
+    encode gzip zstd
+    reverse_proxy domiops-www:3000
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
+    }
+}
+
+app.domi-ops.com {
+    encode gzip zstd
+
+    handle_path /s3/* {
+        reverse_proxy minio:9000
+    }
+
+    reverse_proxy domiops-web:3000
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
+    }
+}
+
+demo.domi-ops.com {
+    encode gzip zstd
+
+    handle_path /s3/* {
+        reverse_proxy minio:9000
+    }
+
+    reverse_proxy domiops-demo-web:3000
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
+    }
+}

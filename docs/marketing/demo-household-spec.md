@@ -186,8 +186,8 @@ Capture at **1280×800** and **390×844**; capture **light and dark** (`-{theme}
 ### Phase 2 — Screenshot capture
 
 - [x] Playwright script: `npm run marketing:capture-screenshots` → `docs/marketing/screenshots/` + `apps/web/public/marketing/screenshots/`
-- [x] Light + dark variants; `ThemeAwareScreenshot` on landing (`MARKETING_LANDING=true`)
-- [ ] Wire landing into launch deploy (`MARKETING_LANDING` on `domi-ops.com`)
+- [x] Light + dark variants; `ThemeAwareScreenshot` on `apps/www` landing
+- [x] Wire landing into launch deploy (`apps/www` on `domi-ops.com` per ADR 002)
 
 ### Phase 3 — Public demo playground
 

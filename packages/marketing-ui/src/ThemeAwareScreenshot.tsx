@@ -1,4 +1,4 @@
-import { marketingScreenshotPath, type MarketingScreenshot } from "../../lib/marketing-screenshots";
+import { marketingScreenshotPath, type MarketingScreenshot } from "./marketing-screenshots";
 
 type ThemeAwareScreenshotProps = MarketingScreenshot & {
   alt: string;
@@ -7,10 +7,6 @@ type ThemeAwareScreenshotProps = MarketingScreenshot & {
   preload?: boolean;
 };
 
-/**
- * Shows the light or dark marketing capture based on the visitor's system theme.
- * Pair with `npm run marketing:capture-screenshots` (`-{light|dark}.png` assets).
- */
 export function ThemeAwareScreenshot({
   alt,
   className,

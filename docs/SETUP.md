@@ -107,7 +107,7 @@ npm run db:seed-demo
 
 Re-running the command wipes and recreates the demo household (idempotent by slug). Safety gate: runs when `NODE_ENV` is not `production`, or `DEMO_MODE=true`, or with `--force`.
 
-Capture marketing PNGs (Playwright; requires `npm run dev`). Captures **light and dark** variants (`-{theme}.png`) into `docs/marketing/screenshots/` and `apps/web/public/marketing/screenshots/`:
+Capture marketing PNGs (Playwright; requires `npm run dev`). Captures **light and dark** variants (`-{theme}.png`) into `docs/marketing/screenshots/` and `apps/www/public/marketing/screenshots/`:
 
 ```bash
 npx playwright install chromium   # once per machine
@@ -115,7 +115,7 @@ npm run marketing:capture-screenshots
 npm run marketing:capture-screenshots -- --theme light   # single theme pass
 ```
 
-Preview landing with theme-matched screenshots: set `MARKETING_LANDING=true` in `.env`, restart dev, open `/`.
+Preview the marketing landing: `npm run dev:www` → `http://localhost:3002`.
 
 Output filenames: `p0-calendar-week-desktop-1280x800-light.png` (and `-dark.png`).
 
