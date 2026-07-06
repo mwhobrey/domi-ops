@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { AppShell } from "../../../../components/AppShell";
 import { SchoolClassDetail } from "../../../../components/SchoolClassDetail";
 import { apiFetch } from "../../../../lib/api";

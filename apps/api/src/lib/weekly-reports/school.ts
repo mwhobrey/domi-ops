@@ -7,6 +7,7 @@ import {
   schoolContextForAuth,
 } from "../school-auth-context.js";
 import { visibleClassIdsForMember } from "../school-access.js";
+import { publishedAssignmentVisibilities } from "../school-assignment-visibility.js";
 import {
   countReportItems,
   dueDateLabel,
@@ -93,7 +94,7 @@ export async function buildSchoolWeeklyReport(params: {
     .where(
       and(
         inArray(schoolClasses.id, visibleIds),
-        eq(schoolAssignments.visibility, "assigned"),
+        inArray(schoolAssignments.visibility, publishedAssignmentVisibilities()),
         isNotNull(schoolAssignments.dueAt),
       ),
     );

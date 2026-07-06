@@ -22,6 +22,7 @@ import {
   visibleClassIdsForMember,
   type MemberEnrollmentRow,
 } from "../lib/school-access.js";
+import { publishedAssignmentVisibilities } from "../lib/school-assignment-visibility.js";
 import { buildClassGradebook } from "../lib/school-gradebook.js";
 import { buildSchoolReports, canViewSchoolReports } from "../lib/school-reports.js";
 import { canSubmitPastDue, isSubmissionLate } from "../lib/school-submission.js";
@@ -205,7 +206,7 @@ export function schoolRoutes(db: Database, env: Env) {
             eq(schoolClasses.householdId, auth.householdId),
             inArray(schoolClasses.id, visibleIds),
             isNotNull(schoolAssignments.dueAt),
-            eq(schoolAssignments.visibility, "assigned"),
+            inArray(schoolAssignments.visibility, publishedAssignmentVisibilities()),
           )
         : and(eq(schoolClasses.householdId, auth.householdId), eq(schoolClasses.id, "00000000-0000-0000-0000-000000000000"));
 
@@ -1014,6 +1015,59 @@ export function schoolRoutes(db: Database, env: Env) {
     if (!access.canEditAssignments) return c.json({ error: "forbidden" }, 403);
     await db.delete(schoolAssignments).where(eq(schoolAssignments.id, id));
     return c.json({ ok: true });
+  });
+
+  app.post("/assignments/:id/duplicate", async (c) => {
+    const auth = c.get("auth")!;
+    const id = c.req.param("id");
+    const [assignmentRow] = await db
+      .select()
+      .from(schoolAssignments)
+      .where(eq(schoolAssignments.id, id))
+      .limit(1);
+    if (!assignmentRow) return c.json({ error: "not_found" }, 404);
+    const [cls] = await db
+      .select()
+      .from(schoolClasses)
+      .where(
+        and(eq(schoolClasses.id, assignmentRow.classId), eq(schoolClasses.householdId, auth.householdId)),
+      )
+      .limit(1);
+    if (!cls) return c.json({ error: "not_found" }, 404);
+    const context = await schoolContextForAuth(db, auth);
+    if (!context) return c.json({ error: "not_a_member" }, 403);
+    const [myEnrollment] = await db
+      .select()
+      .from(schoolEnrollments)
+      .where(
+        and(
+          eq(schoolEnrollments.classId, cls.id),
+          eq(schoolEnrollments.memberId, context.memberId),
+        ),
+      )
+      .limit(1);
+    const access = resolveClassAccess({
+      memberId: context.memberId,
+      householdRole: context.householdRole,
+      teacherMemberId: cls.teacherMemberId,
+      enrollment: myEnrollment ?? null,
+    });
+    if (!access.canEditAssignments) return c.json({ error: "forbidden" }, 403);
+    const [row] = await db
+      .insert(schoolAssignments)
+      .values({
+        classId: assignmentRow.classId,
+        categoryId: assignmentRow.categoryId,
+        title: `${assignmentRow.title} (copy)`.slice(0, 256),
+        instructionsHtml: assignmentRow.instructionsHtml ?? "",
+        dueAt: assignmentRow.dueAt,
+        pointsPossible: assignmentRow.pointsPossible,
+        allowLate: assignmentRow.allowLate,
+        visibility: "draft",
+        createdByUserId: auth.userId,
+      })
+      .returning();
+    return c.json({ assignment: row }, 201);
   });
 
   app.get("/assignments/:id/submissions", async (c) => {

@@ -47,6 +47,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     ...init,
     credentials: "include",
     headers,
+    cache: typeof window === "undefined" ? "no-store" : init?.cache,
   });
   if (!res.ok) {
     const body = await res.text();

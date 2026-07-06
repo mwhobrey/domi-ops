@@ -24,6 +24,7 @@ import {
 } from "./health-access.js";
 import { memberEnrollmentsForHousehold } from "./school-auth-context.js";
 import { visibleClassIdsForMember } from "./school-access.js";
+import { publishedAssignmentVisibilities } from "./school-assignment-visibility.js";
 
 export const OVERLAY_CALENDAR_SCHOOL = "__overlay_school__";
 export const OVERLAY_CALENDAR_HEALTH_EVENT = "__overlay_health_event__";
@@ -156,7 +157,7 @@ export async function buildSchoolAssignmentOverlays(
       and(
         eq(schoolClasses.householdId, auth.householdId),
         inArray(schoolClasses.id, visibleIds),
-        eq(schoolAssignments.visibility, "assigned"),
+        inArray(schoolAssignments.visibility, publishedAssignmentVisibilities()),
         isNotNull(schoolAssignments.dueAt),
         gte(schoolAssignments.dueAt, rangeStart),
         lte(schoolAssignments.dueAt, rangeEnd),

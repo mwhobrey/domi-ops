@@ -126,6 +126,7 @@ export async function buildSchoolReports(params: {
   }
 
   const isStudentView = viewMode === "student";
+  // Staff/admin: all non-draft assignments per visible class (class-scoped, not per-student).
   const classIds = visibleClasses.map((c) => c.id);
 
   const categoryRows =

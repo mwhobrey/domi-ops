@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
 import { Alert, Button, Checkbox, Input, Select, Sheet, Textarea } from "./ui";
 
@@ -78,6 +78,10 @@ export function SchoolAssignmentSheet({
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) resetForm(assignment ?? null);
+  }, [open, assignment]);
 
   function resetForm(next?: AssignmentRecord | null) {
     if (next) {
