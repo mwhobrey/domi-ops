@@ -2,8 +2,9 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | Accepted (pending Mike sign-off on launch-day tier scope) |
+| **Status** | Accepted |
 | **Date** | 2026-07-08 |
+| **Signed off** | Mike — 2026-07-08 (Starter-only launch; provider: hybrid below) |
 | **Linear** | [WHO-177](https://linear.app/mikewhob-whome/issue/WHO-177) · Epic [WHO-193](https://linear.app/mikewhob-whome/issue/WHO-193) |
 | **Related** | [ADR 001](./001-public-launch-scope.md), [WHO-178](https://linear.app/mikewhob-whome/issue/WHO-178), [WHO-195](https://linear.app/mikewhob-whome/issue/WHO-195) |
 
@@ -29,11 +30,11 @@ Schema already has `deployment_tier` enum, `dedicated_db_ref`, `storage_quota_by
 
 ## Decision
 
-### 1. Launch-day tier scope: **Starter first**
+### 1. Launch-day tier scope: **Starter first** ✓
 
 Ship **Hosted Starter** (shared Postgres + RLS) at public launch. **Family** (dedicated DB per household) ships as a **paid upgrade path** with schema and routing hooks in place (`dedicated_db_ref`), but Neon provisioning automation can follow in a fast-follow release if schedule is tight.
 
-**Rationale:** RLS on one database is one engineering surface. Per-household Neon projects add provisioning, billing linkage, connection pool explosion, and migration orchestration — high risk for day-one launch.
+**Mike (2026-07-08):** Confirmed — Starter-only at launch; Family fast-follow.
 
 ### 2. Defense in depth: API scoping **and** RLS
 
@@ -89,15 +90,17 @@ When `households.tier = hosted_dedicated` and `dedicated_db_ref` is set:
 
 **Phase 2 implementation** — not required for Starter launch.
 
-### 6. Connection pooling
+### 6. Connection pooling & hosted Postgres provider
 
 | Environment | Recommendation |
 |-------------|----------------|
-| **Starter (shared)** | PgBouncer in transaction mode **or** `postgres.js` `{ max: N }` with `SET LOCAL` inside explicit transactions |
-| **Family** | Neon serverless driver or small pool per active dedicated DB |
+| **Starter (shared)** | **DigitalOcean Managed Postgres** — ~$15/mo flat, 24/7 API+worker keeps DB warm; Neon always-on ~$75+/mo for equivalent |
+| **Family (dedicated)** | **Neon** — one project per household (`dedicated_db_ref`); matches original architecture, branching for staging, programmatic provision API |
 | **Self-host** | Current single `DATABASE_URL` pool unchanged |
 
-Do **not** use session-level `SET` without `LOCAL` — leaks tenant across pooled connections.
+**Mike (2026-07-08):** Originally Neon; open to DO if cheaper. **Decision: hybrid** — DO for Starter (cost at 24/7 production), Neon for Family tier (product fit). Revisit all-Neon if ops simplicity outweighs ~$60/mo at launch scale.
+
+Do **not** use session-level `SET` without `LOCAL` — leaks tenant across pooled connections. PgBouncer in transaction mode for Starter prod ([WHO-198](https://linear.app/mikewhob-whome/issue/WHO-198)).
 
 ### 7. Entitlements schema (companion to isolation)
 
@@ -162,16 +165,24 @@ See [WHO-193](https://linear.app/mikewhob-whome/issue/WHO-193) epic:
 6. **WHO-197** — leak test matrix
 7. **M5** — WHO-185 → WHO-199 → WHO-179 → WHO-184 → WHO-186
 
-## Open questions for Mike
+## Resolved decisions (Mike, 2026-07-08)
 
-| # | Question | Default if no answer |
-|---|----------|----------------------|
+| # | Question | Decision |
+|---|----------|----------|
 | 1 | Starter-only at launch? | **Yes** — Family fast-follow |
-| 2 | Hosted Postgres provider (DO Managed vs Neon for Starter) | DO Managed Postgres (same as self-host ops familiarity) |
+| 2 | Hosted Postgres provider | **Hybrid:** DO Managed for Starter (shared RLS); Neon for Family (per-household projects) |
 | 3 | Disable HomeHub import on hosted? | **Yes** for v1 — import is self-host migration path |
 | 4 | PgBouncer in hosted compose? | Yes for Starter prod; optional in dev compose |
 
+### Provider cost note (early launch, 24/7 API+worker)
+
+| Provider | Starter (always-on) | Notes |
+|----------|-------------------|-------|
+| **DO Managed** | ~$15/mo (1 GiB basic) | Flat, predictable, no I/O surcharges |
+| **Neon Launch** | ~$75–80/mo (1 CU always-on) | Scale-to-zero saves money only if DB idles — our stack won't |
+| **Neon** | Best for **Family** tier | Per-project isolation, API provisioning, branches |
+
 ## Sign-off
 
-- [ ] Mike confirms Starter-only launch scope
-- [ ] Mike confirms hosted Postgres provider
+- [x] Mike confirms Starter-only launch scope
+- [x] Mike confirms hosted Postgres provider (hybrid DO + Neon)
