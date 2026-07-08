@@ -260,6 +260,13 @@
       "when": 1780495011000,
       "tag": "0037_household_subscriptions",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1780495012000,
+      "tag": "0038_rls_household_policies",
+      "breakpoints": true
     }
   ]
 }

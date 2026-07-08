@@ -178,4 +178,4 @@ Before pointing a domain at a fresh self-host:
 - [ ] Google OAuth in Testing mode with explicit test users (if used)
 - [ ] Postgres + MinIO volumes in backup plan
 
-See also: [SETUP.md](./SETUP.md) · [SELF_HOST.md](./SELF_HOST.md) · [TROUBLESHOOTING.md](./TROUBLESHOOTING.md)
+See also: [SETUP.md](./SETUP.md) · [SELF_HOST.md](./SELF_HOST.md) · [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) · [HOSTED_RLS.md](./HOSTED_RLS.md) (shared-mode policies)

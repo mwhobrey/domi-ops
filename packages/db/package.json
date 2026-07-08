@@ -20,6 +20,7 @@
     "migrate": "drizzle-kit migrate",
     "migrate:run": "node dist/migrate.js",
     "seed:demo": "node dist/seed-demo.js",
+    "generate:rls": "node scripts/generate-rls-policies.mjs",
     "studio": "drizzle-kit studio"
   },
   "dependencies": {
