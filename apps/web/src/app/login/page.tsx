@@ -42,6 +42,18 @@ export default async function LoginPage({
   const demoEmail = process.env.DEMO_OWNER_EMAIL ?? "demo@domi-ops.com";
   const demoPassword = process.env.DEMO_OWNER_PASSWORD ?? "DemoRivera2026!";
 
+  let needsSetup = false;
+  try {
+    const sessionBase = process.env.API_URL ?? "http://localhost:4000";
+    const setupRes = await fetch(`${sessionBase}/api/core/setup/status`, { cache: "no-store" });
+    if (setupRes.ok) {
+      const data = (await setupRes.json()) as { needsSetup?: boolean };
+      needsSetup = Boolean(data.needsSetup);
+    }
+  } catch {
+    /* API not up */
+  }
+
   return (
     <main className="relative flex min-h-dvh flex-col items-center justify-center px-4 py-8 pb-[max(2rem,env(safe-area-inset-bottom))] sm:px-6">
       <div className="bg-page-gradient pointer-events-none absolute inset-0 opacity-40" aria-hidden />
@@ -60,7 +72,17 @@ export default async function LoginPage({
           </p>
         )}
 
-        {!allowPublicSignup && !isDemoMode && (
+        {!allowPublicSignup && !isDemoMode && needsSetup && (
+          <p className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm leading-relaxed text-[var(--color-text-muted)]">
+            First household on this server?{" "}
+            <Link href="/setup" className="font-medium text-[var(--color-accent)] underline-offset-2 hover:underline">
+              Run setup
+            </Link>{" "}
+            with your <code className="font-mono text-xs">SETUP_TOKEN</code>.
+          </p>
+        )}
+
+        {!allowPublicSignup && !isDemoMode && !needsSetup && (
           <p className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm leading-relaxed text-[var(--color-text-muted)]">
             Members join after HomeHub import (Google claim) or via a username from Household
             settings.

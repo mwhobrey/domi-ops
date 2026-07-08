@@ -12,7 +12,8 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch --preserveWatchOutput",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "bootstrap:owner": "node dist/bootstrap-owner-cli.js"
   },
   "dependencies": {
     "@domi-ops/config": "*",

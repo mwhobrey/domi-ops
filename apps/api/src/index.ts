@@ -19,7 +19,14 @@ import { drivePublicRoutes } from "./routes/drive-public.js";
 import { googleDocsAuthRoutes } from "./routes/google-docs-auth.js";
 import { weeklyReportRoutes } from "./routes/weekly-reports.js";
 import { reportRoutes } from "./routes/reports.js";
+import { setupRoutes } from "./routes/setup.js";
 import { ensureS3ReadyOnce } from "./lib/s3.js";
+import {
+  hasSetupAccess,
+  needsGreenfieldSetup,
+  SETUP_GRANT_COOKIE,
+} from "@domi-ops/auth";
+import { getCookie } from "hono/cookie";
 
 const env = loadEnv();
 const db = createDb(env.DATABASE_URL);
@@ -42,22 +49,49 @@ app.route("/auth/google/calendar", googleCalendarAuthRoutes(db, env));
 app.route("/auth/google/docs", googleDocsAuthRoutes(db, env));
 app.route("/auth", whomeSessionRoutes(db, betterAuth));
 
-app.on(["POST", "GET"], "/auth/*", (c) => {
-  if (!env.ALLOW_PUBLIC_SIGNUP || env.DEMO_MODE) {
-    const path = new URL(c.req.url).pathname;
-    if (path.includes("/sign-up")) {
-      const message = env.DEMO_MODE
-        ? "Sign-up is disabled on the demo instance"
-        : "Public sign-up is disabled on this instance";
-      return c.json({ message }, 403);
+app.on(["POST", "GET"], "/auth/*", async (c) => {
+  const path = new URL(c.req.url).pathname;
+  const grantCookie = getCookie(c, SETUP_GRANT_COOKIE);
+  const headerToken = c.req.header("x-setup-token");
+  const setupAccess = hasSetupAccess(env, { headerToken, grantCookie });
+  const needsSetup = await needsGreenfieldSetup(db, env);
+
+  if (path.includes("/sign-up")) {
+    if (env.DEMO_MODE) {
+      return c.json({ message: "Sign-up is disabled on the demo instance" }, 403);
+    }
+    if (env.ALLOW_PUBLIC_SIGNUP) {
+      return betterAuth.handler(c.req.raw);
+    }
+    if (needsSetup && setupAccess) {
+      return betterAuth.handler(c.req.raw);
+    }
+    const message = needsSetup
+      ? "Initial setup requires a valid setup token. Open /setup on this server."
+      : "Public sign-up is disabled on this instance";
+    return c.json({ message }, 403);
+  }
+
+  if (
+    needsSetup &&
+    !env.ALLOW_PUBLIC_SIGNUP &&
+    !env.DEMO_MODE &&
+    (path.includes("/callback/google") || path.includes("/sign-in/social"))
+  ) {
+    if (!setupAccess) {
+      const setupUrl = new URL("/setup", env.PUBLIC_APP_URL);
+      setupUrl.searchParams.set("error", "token");
+      return c.redirect(setupUrl.toString());
     }
   }
+
   return betterAuth.handler(c.req.raw);
 });
 
 app.route("/", healthRoutes(db));
 app.route("/api/calendar", calendarRoutes(db, env));
 app.route("/api/core", coreRoutes(db, env));
+app.route("/api/core/setup", setupRoutes(db, env));
 app.route("/api/core", weeklyReportRoutes(db, env));
 app.route("/api/core", reportRoutes(db, env));
 app.route("/api/core/upload", browserUploadRoutes(env));

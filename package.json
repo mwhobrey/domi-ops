@@ -18,6 +18,7 @@
     "db:migrate": "npm run build -w @domi-ops/db && npm run migrate:run -w @domi-ops/db",
     "dev:reset": "node scripts/dev-reset.mjs",
     "db:seed-demo": "npm run build -w @domi-ops/db && npm run seed:demo -w @domi-ops/db",
+    "bootstrap:owner": "npm run build -w @domi-ops/auth && npm run bootstrap:owner -w @domi-ops/auth",
     "marketing:capture-screenshots": "node scripts/capture-demo-screenshots.mjs",
     "db:studio": "npm run studio -w @domi-ops/db",
     "import:homehub": "node packages/import-homehub/dist/cli.js",

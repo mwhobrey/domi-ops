@@ -118,6 +118,8 @@ export const envSchema = z
       .string()
       .optional()
       .transform((v) => v === "true" || v === "1"),
+    /** One-time greenfield owner bootstrap (min 16 chars). See /setup and bootstrap:owner CLI. */
+    SETUP_TOKEN: z.string().min(16).optional(),
   })
   .superRefine((data, ctx) => {
     if (data.NODE_ENV === "production") {

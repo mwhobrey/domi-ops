@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { devCanonicalHostRedirect } from "./lib/canonical-dev-host";
 
-const PUBLIC_PATHS = ["/", "/login"];
+const PUBLIC_PATHS = ["/", "/login", "/setup", "/privacy"];
 
 const MODULE_ROUTE_PREFIXES: { prefix: string; module: string }[] = [
   { prefix: "/school", module: "school" },
@@ -57,7 +57,8 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     "/login",
-    "/",
+    "/setup",
+    "/privacy",
     "/dashboard",
     "/dashboard/:path*",
     "/calendar",

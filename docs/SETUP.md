@@ -248,11 +248,38 @@ docker network inspect your_proxy_network --format '{{range .Containers}}{{.Name
 
 ## First login and household setup
 
-1. Open `https://home.example.com` (or your URL).
-2. **Sign up** is disabled in production by default (`ALLOW_PUBLIC_SIGNUP=false`). The first account is created during initial setup or via import — for a greenfield install, temporarily set `ALLOW_PUBLIC_SIGNUP=true`, create the owner account, then set it back to `false` and restart the API.
-3. Go to **Settings** (owner/admin) → set household name, timezone, and **which modules** are on.
-4. **Members:** provision username-only accounts for kids, or invite adults to sign in with email/Google.
-5. **Profile** (each person): display name, avatar, notification preferences, optional PWA install.
+Greenfield installs (`ALLOW_PUBLIC_SIGNUP=false`, no HomeHub import) use a **one-time setup token** — not a temporary public sign-up flip.
+
+### Option 1 — Web wizard (recommended)
+
+1. Generate a long random secret and add to `.env`:
+
+```env
+SETUP_TOKEN=your-long-random-setup-token-min-16-chars
+```
+
+2. Restart the API (and web if env is baked in).
+3. Open **`https://home.example.com/setup`** (or `http://localhost:3000/setup` in dev).
+4. Enter the setup token, owner email, and password (or use Google after unlocking with the token).
+5. After the first household exists, setup is closed automatically — remove or rotate `SETUP_TOKEN` in `.env` if you like.
+
+### Option 2 — Headless CLI (SSH / no browser)
+
+On the server with `DATABASE_URL` and `SETUP_TOKEN` in the environment:
+
+```bash
+npm run bootstrap:owner -- --email owner@example.com --password 'YourSecurePassword123'
+```
+
+Optional: `--name "Alex"` `--household "Rivera Home"`.
+
+Then sign in at `/login`.
+
+### After the owner exists
+
+1. Go to **Settings** (owner/admin) → household name, timezone, **module toggles**.
+2. **Members:** provision username-only accounts for kids, or invite adults via email/Google.
+3. **Profile:** display name, avatar, notifications, optional PWA install.
 
 Recommended next steps:
 
