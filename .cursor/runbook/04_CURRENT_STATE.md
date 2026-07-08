@@ -8,6 +8,10 @@
 
 - Monorepo builds via Turbo (`npm run build`).
 - Drizzle schema + SQL migrations (`packages/db/drizzle/`), including `school_submission_artifacts` (`0002`); `0017` drops `household_members.nickname` / `public_label`.
+- **Hosted RLS (WHO-195/196):** `0038_rls_household_policies` + `0039_rls_context_policies`; `@domi-ops/db` `withHouseholdContext` / scoped db proxy; API `createTenantMiddleware`; worker sets context per job (`withWorkerScanContext` for cross-tenant scans). Docs: `docs/HOSTED_RLS.md`, ADR `003`.
+- **Hosted entitlements (WHO-178):** `householdModuleCeiling` / `filterActiveHouseholdModules` in `@domi-ops/config`; settings PATCH capped by `household_subscriptions.modules_entitled`; session DTO filters nav modules; drive quota enforced when `DEPLOYMENT_MODE=shared|dedicated`; tenant middleware fails closed without `householdId` on hosted.
+- **Hosted QA (WHO-198/197):** `docker-compose.hosted.yml`, `npm run dev:hosted`, `npm run db:seed-hosted-qa`, `npm run test:hosted`; matrix `docs/HOSTED_TENANT_TESTS.md`.
+- **Hosted ops (WHO-180):** `deploy/HOSTED_OPS.md` — monitoring, backups, incidents, capacity.
 - `npm run db:migrate` and API Docker entrypoint apply migrations. New SQL must be registered in `packages/db/drizzle/meta/_journal.json` (see `03_RULES_AND_STANDARDS.md` â†’ Database migrations).
 - **Demo seed (WHO-190 Phase 1):** `npm run db:seed-demo` — wipes/recreates `rivera-demo` household (Maria owner `demo@domi-ops.com`, default password `DemoRivera2026!`); Chicago-relative dates for calendar/school/chores; safety gate (`DEMO_MODE` / non-production / `--force`). Spec: `docs/marketing/demo-household-spec.md`.
 - **Marketing screenshots (WHO-190 Phase 2):** `npm run marketing:capture-screenshots` — Playwright light+dark PNGs → `docs/marketing/screenshots/` + `apps/www/public/marketing/screenshots/`; landing on `apps/www` uses `@domi-ops/marketing-ui` `ThemeAwareScreenshot` (`<picture>` + `prefers-color-scheme`). Preview: `npm run dev:www` → `http://localhost:3002`.
@@ -127,7 +131,7 @@
 | Area | Evidence | Impact |
 |------|----------|--------|
 | Recurring (advanced) | DAILY/WEEKLY/MONTHLY materialize + HomeHub `recurring_reminder` import; partial RRULE subset | Full RRULE edge cases + exotic recurrence rules |
-| Hosted multi-tenant | docs only | RLS not in code |
+| Hosted multi-tenant | WHO-195–198, WHO-178 shipped | RLS + tenant context + entitlements + hosted compose/seed + leak tests (`npm run test:hosted`); Stripe provisioning still M5 |
 | `/api/core/files` legacy route | superseded by Drive | Use `/api/core/drive/*`; import blobs still under `imports/` until WHO-120 |
 | **Production cutover on droplet** | **Live** at `https://whome.whobrey.me` (GHCR images, Caddy → `domi-ops-web`); HomeHub parallel on `home.whobrey.me` | Full import soak + HomeHub retirement still operator-run |
 | Real `app.db` import counts | validated on **extended fixture** + **local dogfood `data/app.db`** | Droplet staging/prod import still operator-run |

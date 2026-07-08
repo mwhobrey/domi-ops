@@ -13,7 +13,7 @@ Domi Ops is designed for **two ways to run the same product**: self-host (OSS) o
 | **Hosted Family** | Domi Ops cloud | Dedicated Neon project per household |
 | **Add-ons** | Either | `school`, `calendar_sync`, `media` (future) |
 
-**Current code:** self-host `DEPLOYMENT_MODE=single` only. Hosted tiers are designed here but not implemented yet.
+**Current code:** self-host `DEPLOYMENT_MODE=single` is the default dogfood path. **Hosted Starter foundation** (`DEPLOYMENT_MODE=shared`) is implemented — RLS (`0038`/`0039`), tenant context, entitlements, `docker-compose.hosted.yml` — but billing/provisioning (M5) is not wired yet.
 
 ## v1 modules (Mike's household)
 

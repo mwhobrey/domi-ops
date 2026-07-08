@@ -20,7 +20,7 @@
 
 - **Modular monolith (logical modules, physical monorepo):** Feature flags via `MODULES_ENABLED` (`core`, `school`, `calendar_sync`). Routes call `isModuleEnabled()` from `@domi-ops/config` — not separate deployables.
 - **BFF-style web layer:** Next.js rewrites `/api/*` to Hono; `/auth/*` uses a dedicated Route Handler so `Set-Cookie` lands on the browser origin (critical for Docker port 3001).
-- **Single-tenant self-host (v1 default):** `DEPLOYMENT_MODE=single` — one household per Postgres instance. `households` table is the tenant root (`packages/db/src/schema/household.ts`). Hosted `shared` (RLS) / `dedicated` are documented in `docs/ARCHITECTURE.md` but **RLS is not implemented in migrations**.
+- **Single-tenant self-host (v1 default):** `DEPLOYMENT_MODE=single` — one household per Postgres instance. `households` table is the tenant root (`packages/db/src/schema/household.ts`). **Hosted Starter** (`DEPLOYMENT_MODE=shared`): RLS in migrations `0038`/`0039`, tenant middleware, entitlements — see `docs/HOSTED_RLS.md`, `deploy/HOSTED_OPS.md`.
 - **Async calendar work:** API enqueues BullMQ jobs; worker calls `runCalendarSyncJob()` — no in-process long sync on request thread.
 - **Idempotent migration:** HomeHub import writes `import_records` for re-runs (`packages/db/src/schema/import.ts`).
 
@@ -115,4 +115,4 @@ Global: CORS to `PUBLIC_APP_URL` with credentials; auth middleware on all routes
 
 ## Product tiers (design vs code)
 
-`docs/ARCHITECTURE.md` describes OSS self-host, Hosted Starter (shared Postgres + RLS), Hosted Family (Neon per household). **v1 code path is OSS `DEPLOYMENT_MODE=single` only** — no RLS policies, no `HOSTED_TIER` in Zod schema (commented in `.env.example` only).
+`docs/ARCHITECTURE.md` describes OSS self-host, Hosted Starter (shared Postgres + RLS), Hosted Family (Neon per household). **Default dogfood path:** `DEPLOYMENT_MODE=single`. **Hosted Starter foundation** shipped (RLS, tenant context, entitlements, QA compose) — `HOSTED_TIER` optional in `@domi-ops/config`; Stripe provisioning is M5.

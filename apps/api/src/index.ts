@@ -3,8 +3,9 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { createBetterAuth } from "@domi-ops/auth";
 import { loadEnv, isModuleEnabled } from "@domi-ops/config";
-import { createDb } from "@domi-ops/db";
+import { createDb, createScopedDb } from "@domi-ops/db";
 import { createAuthMiddleware, type AppVariables } from "./middleware/auth.js";
+import { createTenantMiddleware } from "./middleware/tenant.js";
 import { whomeSessionRoutes } from "./routes/auth.js";
 import { calendarRoutes } from "./routes/calendar.js";
 import { coreRoutes } from "./routes/core.js";
@@ -29,8 +30,9 @@ import {
 import { getCookie } from "hono/cookie";
 
 const env = loadEnv();
-const db = createDb(env.DATABASE_URL);
-const betterAuth = createBetterAuth(db, env);
+const baseDb = createDb(env.DATABASE_URL);
+const db = createScopedDb(baseDb);
+const betterAuth = createBetterAuth(baseDb, env);
 
 const app = new Hono<{ Variables: AppVariables }>();
 
@@ -43,18 +45,19 @@ app.use(
 );
 
 // Session → auth context must run before calendar OAuth (reads c.get("auth") on /start).
-app.use("*", createAuthMiddleware(db, env, betterAuth));
+app.use("*", createAuthMiddleware(baseDb, env, betterAuth));
+app.use("*", createTenantMiddleware(db, env));
 
 app.route("/auth/google/calendar", googleCalendarAuthRoutes(db, env));
 app.route("/auth/google/docs", googleDocsAuthRoutes(db, env));
-app.route("/auth", whomeSessionRoutes(db, betterAuth));
+app.route("/auth", whomeSessionRoutes(db, env, betterAuth));
 
 app.on(["POST", "GET"], "/auth/*", async (c) => {
   const path = new URL(c.req.url).pathname;
   const grantCookie = getCookie(c, SETUP_GRANT_COOKIE);
   const headerToken = c.req.header("x-setup-token");
   const setupAccess = hasSetupAccess(env, { headerToken, grantCookie });
-  const needsSetup = await needsGreenfieldSetup(db, env);
+  const needsSetup = await needsGreenfieldSetup(baseDb, env);
 
   if (path.includes("/sign-up")) {
     if (env.DEMO_MODE) {

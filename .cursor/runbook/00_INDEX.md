@@ -37,6 +37,9 @@
 - `docs/ARCHITECTURE.md` — product tiers, cutover checklist
 - `docs/GOOGLE_OAUTH_SETUP.md` — Google Cloud Console redirect URIs
 - `docs/SECURITY_REVIEW.md` — pre-launch security checklist (WHO-172)
+- `docs/HOSTED_RLS.md` — hosted tenant context + RLS policies
+- `docs/HOSTED_TENANT_TESTS.md` — cross-tenant leak test matrix (WHO-197)
+- `deploy/HOSTED_OPS.md` — hosted monitoring, backups, incidents (WHO-180)
 - `docs/TROUBLESHOOTING.md` — self-host failure index (WHO-175)
 
 ## Repo facts (grounded)
@@ -54,6 +57,7 @@ cp .env.example .env
 docker compose up -d postgres redis minio
 npm install && npm run build && npm run db:migrate
 npm run dev   # web :3000 local; Docker web maps host :3001
+# Hosted QA (shared mode): npm run dev:hosted && npm run db:migrate && npm run db:seed-hosted-qa
 ```
 
 - Web (Docker): `http://localhost:3001`

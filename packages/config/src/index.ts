@@ -15,6 +15,7 @@ export {
 } from "./dev-url.js";
 
 const deploymentMode = z.enum(["single", "shared", "dedicated"]);
+const hostedTier = z.enum(["starter", "family", "family_school", "dedicated"]);
 const syncMode = z.enum(["import_only", "manual", "bidirectional"]);
 
 export const envSchema = z
@@ -39,6 +40,8 @@ export const envSchema = z
     ENCRYPTION_KEY: z.string().min(16).optional(),
     DATABASE_URL: z.string().url(),
     DEPLOYMENT_MODE: deploymentMode.default("single"),
+    /** Hosted product tier — optional until Family launch; Starter is default shared mode. */
+    HOSTED_TIER: hostedTier.optional(),
     REDIS_URL: z.string().url().optional(),
     S3_ENDPOINT: z.string().url().optional(),
     S3_REGION: z.string().default("us-east-1"),
@@ -166,6 +169,27 @@ export function deployAvailableModules(envModules: readonly string[]): string[] 
   return KNOWN_HOUSEHOLD_MODULES.filter((m) => envModules.includes(m));
 }
 
+export function isHostedDeployment(env: Pick<Env, "DEPLOYMENT_MODE">): boolean {
+  return env.DEPLOYMENT_MODE === "shared" || env.DEPLOYMENT_MODE === "dedicated";
+}
+
+/** Settings toggle ceiling: deploy catalog ∩ subscription entitlements (hosted) or deploy only (self-host). */
+export function householdModuleCeiling(
+  env: Env,
+  modulesEntitled: readonly string[] | null | undefined,
+): string[] {
+  const deploy = deployAvailableModules(env.MODULES_ENABLED);
+  if (!isHostedDeployment(env) || !modulesEntitled?.length) {
+    return deploy;
+  }
+  const entitled = new Set(modulesEntitled);
+  return deploy.filter((m) => m === "core" || entitled.has(m));
+}
+
+export function isDriveQuotaEnforced(env: Env): boolean {
+  return env.DRIVE_QUOTA_ENFORCE || isHostedDeployment(env);
+}
+
 /** In development, include all known modules so stale `.env` catalogs still list new modules. */
 function ensureDevModuleCatalog(nodeEnv: string, modulesEnabled: string[]): string[] {
   if (nodeEnv !== "development") return modulesEnabled;
@@ -239,15 +263,47 @@ export function isModuleEnabled(env: Env, module: string): boolean {
   return env.MODULES_ENABLED.includes(module);
 }
 
-/** Env cap intersected with household `modules_enabled` JSON. Core is always on. */
+/** Env cap ∩ entitlements ∩ household `modules_enabled`. Core is always on. */
 export function isModuleEnabledForHousehold(
   env: Env,
   householdModules: string[],
   module: string,
+  modulesEntitled?: readonly string[] | null,
 ): boolean {
   if (module === "core") return true;
   if (!isModuleEnabled(env, module)) return false;
-  return householdModules.includes(module);
+  if (!householdModules.includes(module)) return false;
+  if (isHostedDeployment(env) && modulesEntitled?.length && !modulesEntitled.includes(module)) {
+    return false;
+  }
+  return true;
+}
+
+export function filterActiveHouseholdModules(
+  env: Env,
+  householdModules: string[],
+  modulesEntitled?: readonly string[] | null,
+): string[] {
+  return householdModules.filter((m) =>
+    isModuleEnabledForHousehold(env, householdModules, m, modulesEntitled),
+  );
+}
+
+/** Normalize settings PATCH selection against deploy + entitlement ceiling. */
+export function normalizeHouseholdModulesSelection(
+  requested: string[] | undefined,
+  ceiling: readonly string[],
+): string[] | null {
+  if (!requested) return null;
+  const allowed = new Set(ceiling);
+  allowed.add("core");
+  const selected = new Set<string>(["core"]);
+  for (const module of requested) {
+    if (!(KNOWN_HOUSEHOLD_MODULES as readonly string[]).includes(module)) continue;
+    if (!allowed.has(module)) return null;
+    selected.add(module);
+  }
+  return [...selected];
 }
 
 export {

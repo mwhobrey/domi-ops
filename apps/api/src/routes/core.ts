@@ -13,9 +13,9 @@ import {
 } from "@domi-ops/auth";
 import type { Env } from "@domi-ops/config";
 import {
-  deployAvailableModules,
+  householdModuleCeiling,
   isModuleEnabled,
-  KNOWN_HOUSEHOLD_MODULES,
+  normalizeHouseholdModulesSelection,
 } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
 import { checkHouseholdBudgetAlerts } from "@domi-ops/calendar-sync";
@@ -118,6 +118,7 @@ import {
   parseDriveEmbedIds,
   type DriveEmbedDto,
 } from "../lib/drive-embeds.js";
+import { getHouseholdModuleContext } from "../lib/household-entitlements.js";
 import { driveVisibleWhere, filenameFromDriveKey } from "../lib/drive.js";
 import { isHouseholdModuleEnabled } from "../lib/household-modules.js";
 import { notifyShoppingRecurringMaterialized } from "../lib/push-shopping.js";
@@ -2116,31 +2117,26 @@ export function coreRoutes(db: Database, env: Env) {
 
   function normalizeModulesEnabledSelection(
     requested: string[] | undefined,
-    envModules: string[],
+    modulesEntitled: string[] | null,
   ): string[] | null {
-    if (!requested) return null;
-    const ceiling = new Set(
-      envModules.filter((m) => (KNOWN_HOUSEHOLD_MODULES as readonly string[]).includes(m)),
+    return normalizeHouseholdModulesSelection(
+      requested,
+      householdModuleCeiling(env, modulesEntitled),
     );
-    ceiling.add("core");
-    const selected = new Set<string>(["core"]);
-    for (const module of requested) {
-      if (!(KNOWN_HOUSEHOLD_MODULES as readonly string[]).includes(module)) continue;
-      if (!ceiling.has(module)) return null;
-      selected.add(module);
-    }
-    return [...selected];
   }
 
-  function serializeHouseholdSettings(row: {
-    name: string;
-    slug: string | null;
-    timezone: string;
-    modulesEnabled: string;
-    drivePermissionsJson?: string | null;
-    storageQuotaBytes?: number | null;
-    storageUsedBytes?: number;
-  }) {
+  function serializeHouseholdSettings(
+    row: {
+      name: string;
+      slug: string | null;
+      timezone: string;
+      modulesEnabled: string;
+      drivePermissionsJson?: string | null;
+      storageQuotaBytes?: number | null;
+      storageUsedBytes?: number;
+    },
+    modulesEntitled: string[] | null,
+  ) {
     const modulesEnabled = parseModulesEnabled(row.modulesEnabled);
     const driveEnabled = modulesEnabled.includes("drive");
     return {
@@ -2148,7 +2144,8 @@ export function coreRoutes(db: Database, env: Env) {
       slug: row.slug,
       timezone: row.timezone,
       modulesEnabled,
-      availableModules: deployAvailableModules(env.MODULES_ENABLED),
+      modulesEntitled,
+      availableModules: householdModuleCeiling(env, modulesEntitled),
       drivePermissions: parseDrivePermissionsJson(row.drivePermissionsJson),
       drivePermissionDefaults: DEFAULT_DRIVE_ROLE_PERMISSIONS,
       driveStorage:
@@ -2190,7 +2187,8 @@ export function coreRoutes(db: Database, env: Env) {
       .where(eq(households.id, auth.householdId))
       .limit(1);
     if (!row) return c.json({ error: "not_found" }, 404);
-    return c.json(serializeHouseholdSettings(row));
+    const { modulesEntitled } = await getHouseholdModuleContext(db, auth.householdId);
+    return c.json(serializeHouseholdSettings(row, modulesEntitled));
   });
 
   app.patch("/household/settings", async (c) => {
@@ -2235,7 +2233,8 @@ export function coreRoutes(db: Database, env: Env) {
       patch.timezone = timezone;
     }
     if (body.modulesEnabled !== undefined) {
-      const modulesEnabled = normalizeModulesEnabledSelection(body.modulesEnabled, env.MODULES_ENABLED);
+      const { modulesEntitled } = await getHouseholdModuleContext(db, auth.householdId);
+      const modulesEnabled = normalizeModulesEnabledSelection(body.modulesEnabled, modulesEntitled);
       if (!modulesEnabled) {
         return c.json({ error: "invalid_modules" }, 400);
       }
@@ -2275,7 +2274,8 @@ export function coreRoutes(db: Database, env: Env) {
         storageUsedBytes: households.storageUsedBytes,
       });
     if (!row) return c.json({ error: "not_found" }, 404);
-    return c.json({ ok: true, household: serializeHouseholdSettings(row) });
+    const { modulesEntitled } = await getHouseholdModuleContext(db, auth.householdId);
+    return c.json({ ok: true, household: serializeHouseholdSettings(row, modulesEntitled) });
   });
 
   app.get("/household/integrations", async (c) => {

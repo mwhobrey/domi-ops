@@ -1,5 +1,5 @@
 import type { AuthContext } from "@domi-ops/auth";
-import type { Env } from "@domi-ops/config";
+import { isDriveQuotaEnforced, type Env } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
 import { driveObjects, driveShares, households, type driveObjects as driveObjectsTable } from "@domi-ops/db";
 import { and, eq, exists, or } from "drizzle-orm";
@@ -188,7 +188,7 @@ export async function checkDriveUploadQuota(
   householdId: string,
   additionalBytes: number,
 ): Promise<"ok" | "quota_exceeded"> {
-  if (!env.DRIVE_QUOTA_ENFORCE || additionalBytes <= 0) return "ok";
+  if (!isDriveQuotaEnforced(env) || additionalBytes <= 0) return "ok";
   const [row] = await db
     .select({
       storageQuotaBytes: households.storageQuotaBytes,

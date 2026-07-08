@@ -1,8 +1,8 @@
 # Pre-launch security review
 
 **Issue:** [WHO-172](https://linear.app/mikewhob-whome/issue/WHO-172)  
-**Scope:** Self-host OSS launch gate (`DEPLOYMENT_MODE=single`). Hosted multi-tenant (`shared` / RLS) is **not implemented** — marked N/A where relevant.  
-**Reviewed:** 2026-07-08 · commit after WHO-176  
+**Scope:** Self-host OSS launch gate (`DEPLOYMENT_MODE=single`). Hosted multi-tenant (`shared` / RLS) foundation shipped in M3 (WHO-195–198) — section 8 updated; Stripe provisioning still M5.  
+**Reviewed:** 2026-07-08 · commit after WHO-176; hosted section refreshed after M3  
 **Method:** Code + config audit, `npm audit`, Docker/compose review. No penetration test.
 
 ## Summary
@@ -16,7 +16,7 @@
 | Health module | **Pass** | Field encryption + visibility/shares; prod requires `ENCRYPTION_KEY` |
 | Dependencies | **Partial** | 1 high (`nodemailer`), 6 moderate (esbuild chain, postcss via Next) |
 | Docker hardening | **Partial** | Internal network, no host DB ports; **containers run as root** |
-| Hosted tenant isolation | **N/A** | RLS not in code (WHO-177+) |
+| Hosted tenant isolation | **Partial** | RLS + tenant context shipped (M3); run `npm run test:hosted` after seed |
 
 **Verdict:** Acceptable for **private self-host OSS** launch with documented gaps. Address **Partial** items before public repo flip (WHO-174) or any hosted multi-tenant work.
 
@@ -129,15 +129,17 @@ CI runs `npm audit` implicitly via install; consider explicit `npm audit --audit
 
 ---
 
-## 8. Hosted multi-tenant (future)
+## 8. Hosted multi-tenant (M3 foundation)
 
 | Check | Status | Evidence |
 |-------|--------|----------|
-| Row-level security | **N/A** | `DEPLOYMENT_MODE=shared` in config only; no RLS policies in migrations |
-| Cross-tenant IDOR tests | **N/A** | Blocked on WHO-177+ |
-| Stripe / provisioning | **N/A** | WHO-178/179 |
+| Row-level security | **Pass** | Migrations `0038`/`0039`; `docs/HOSTED_RLS.md` |
+| Per-request tenant context | **Pass** | `withHouseholdContext`, API tenant middleware, worker contexts (WHO-196) |
+| Cross-tenant IDOR tests | **Partial** | `npm run test:hosted` + `docs/HOSTED_TENANT_TESTS.md` (requires Postgres seed) |
+| Entitlements ceiling | **Pass** | `household_subscriptions.modules_entitled` enforced in settings + session (WHO-178) |
+| Stripe / provisioning | **N/A** | M5 (WHO-185/199) |
 
-Re-run this checklist with a **tenant isolation test matrix** when hosted M3 lands.
+Re-run full matrix on staging with `DEPLOYMENT_MODE=shared` before hosted launch (WHO-187).
 
 ---
 
@@ -161,7 +163,7 @@ Re-run this checklist with a **tenant isolation test matrix** when hosted M3 lan
 | `nodemailer` CVE | High (low exposure) | Bump dependency | Yes before public repo |
 | Upload MIME policy | Low–Medium | Drive hardening | No |
 | E2E / IDOR tests | Medium | Test engineering | No |
-| Hosted RLS | Critical (hosted only) | WHO-177 | Yes for SaaS only |
+| Hosted RLS | Critical (hosted only) | WHO-177–198 | Shipped M3; Stripe still blocks SaaS launch |
 
 ---
 

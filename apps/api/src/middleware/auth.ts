@@ -1,7 +1,7 @@
 import type { Context, Next } from "hono";
 import { resolveAuthContext, type AuthContext, type WhomeBetterAuth } from "@domi-ops/auth";
 import type { Env } from "@domi-ops/config";
-import type { Database } from "@domi-ops/db";
+import { withUserLookupContext, type Database } from "@domi-ops/db";
 
 export type { AuthContext };
 
@@ -16,7 +16,9 @@ export function createAuthMiddleware(db: Database, env: Env, auth: WhomeBetterAu
     const userId = session?.user?.id ?? null;
     c.set("userId", userId);
     if (userId) {
-      const ctx = await resolveAuthContext(db, userId);
+      const ctx = await withUserLookupContext(db, userId, (tx) =>
+        resolveAuthContext(tx, userId),
+      );
       c.set("auth", ctx);
     } else {
       c.set("auth", null);

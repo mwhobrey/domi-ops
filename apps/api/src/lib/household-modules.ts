@@ -1,26 +1,19 @@
 import {
   isModuleEnabled,
   isModuleEnabledForHousehold,
-  parseHouseholdModulesJson,
   type Env,
 } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
-import { households } from "@domi-ops/db";
-import { eq } from "drizzle-orm";
 import type { Context, Next } from "hono";
 import type { AppVariables } from "../middleware/auth.js";
+import { getHouseholdModuleContext } from "./household-entitlements.js";
 
 export async function getHouseholdModules(
   db: Database,
   householdId: string,
 ): Promise<string[]> {
-  const [row] = await db
-    .select({ modulesEnabled: households.modulesEnabled })
-    .from(households)
-    .where(eq(households.id, householdId))
-    .limit(1);
-  if (!row) return ["core"];
-  return parseHouseholdModulesJson(row.modulesEnabled);
+  const { modules } = await getHouseholdModuleContext(db, householdId);
+  return modules;
 }
 
 export async function isHouseholdModuleEnabled(
@@ -29,8 +22,8 @@ export async function isHouseholdModuleEnabled(
   householdId: string,
   module: string,
 ): Promise<boolean> {
-  const modules = await getHouseholdModules(db, householdId);
-  return isModuleEnabledForHousehold(env, modules, module);
+  const { modules, modulesEntitled } = await getHouseholdModuleContext(db, householdId);
+  return isModuleEnabledForHousehold(env, modules, module, modulesEntitled);
 }
 
 export function requireHouseholdModule(db: Database, env: Env, module: string) {

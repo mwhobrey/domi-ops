@@ -1,14 +1,16 @@
 import { Hono } from "hono";
 import { resolveAuthContext, type WhomeBetterAuth } from "@domi-ops/auth";
-import { parseHouseholdModulesJson } from "@domi-ops/config";
+import { filterActiveHouseholdModules } from "@domi-ops/config";
+import type { Env } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
-import { householdMembers, households } from "@domi-ops/db";
+import { householdMembers } from "@domi-ops/db";
 import { eq } from "drizzle-orm";
 import { memberAvatarUrl } from "../lib/avatar-url.js";
+import { getHouseholdModuleContext } from "../lib/household-entitlements.js";
 import type { AppVariables } from "../middleware/auth.js";
 
 /** Whome session DTO — household member context on top of Better Auth user. */
-export function whomeSessionRoutes(db: Database, auth: WhomeBetterAuth) {
+export function whomeSessionRoutes(db: Database, env: Env, auth: WhomeBetterAuth) {
   const app = new Hono<{ Variables: AppVariables }>();
 
   app.get("/session", async (c) => {
@@ -28,15 +30,12 @@ export function whomeSessionRoutes(db: Database, auth: WhomeBetterAuth) {
       .where(eq(householdMembers.id, authCtx.memberId))
       .limit(1);
 
-    const [householdRow] = await db
-      .select({ modulesEnabled: households.modulesEnabled })
-      .from(households)
-      .where(eq(households.id, authCtx.householdId))
-      .limit(1);
+    const { modules, modulesEntitled } = await getHouseholdModuleContext(db, authCtx.householdId);
 
     return c.json({
       authenticated: true,
-      modulesEnabled: parseHouseholdModulesJson(householdRow?.modulesEnabled ?? "[]"),
+      modulesEnabled: filterActiveHouseholdModules(env, modules, modulesEntitled),
+      modulesEntitled,
       user: {
         id: authCtx.userId,
         email: authCtx.email,

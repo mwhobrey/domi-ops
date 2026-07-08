@@ -20,7 +20,9 @@
     "migrate": "drizzle-kit migrate",
     "migrate:run": "node dist/migrate.js",
     "seed:demo": "node dist/seed-demo.js",
+    "seed:hosted-qa": "node dist/seed-hosted-qa.js",
     "generate:rls": "node scripts/generate-rls-policies.mjs",
+    "generate:rls-context": "node scripts/generate-rls-context-policies.mjs",
     "studio": "drizzle-kit studio"
   },
   "dependencies": {

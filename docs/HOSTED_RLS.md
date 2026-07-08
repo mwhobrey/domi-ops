@@ -16,7 +16,18 @@ Each transaction must set:
 SET LOCAL app.current_household_id = '<household-uuid>';
 ```
 
-Implemented in application code by WHO-196 (`withHouseholdContext`).
+Implemented in `@domi-ops/db`:
+
+| Helper | GUC | Use |
+|--------|-----|-----|
+| `withHouseholdContext` | `app.current_household_id` | API (tenant middleware) + household-scoped worker jobs |
+| `withUserLookupContext` | `app.current_user_id` | Auth middleware membership lookup |
+| `withSystemContext` | `app.system_access` | Greenfield bootstrap CLI |
+| `withWorkerScanContext` | `app.worker_scan` | Cross-tenant reminder/budget/digest scans |
+
+API: `createScopedDb` + `createTenantMiddleware` — authenticated requests run inside one transaction with tenant context; route handlers use the scoped db proxy unchanged.
+
+Migration `0039_rls_context_policies.sql` adds supplemental policies (auth lookup, bootstrap, worker scan). Regenerate: `npm run generate:rls-context -w @domi-ops/db`.
 
 Helper function: `app.tenant_household_id()` reads the same setting.
 

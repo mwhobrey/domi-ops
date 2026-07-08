@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { Env } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
-import { baAccounts, householdMembers, households, users } from "@domi-ops/db";
+import { baAccounts, householdMembers, households, users, withSystemContext } from "@domi-ops/db";
 import { hashPassword } from "better-auth/crypto";
 import { eq } from "drizzle-orm";
 import { hasImportRecords } from "./import-records.js";
@@ -81,52 +81,54 @@ export async function bootstrapGreenfieldOwner(
   env: Env,
   input: GreenfieldOwnerInput,
 ): Promise<{ userId: string; householdId: string }> {
-  if (!(await needsGreenfieldSetup(db, env))) {
-    throw new Error("Greenfield setup is not available (import or household already exists)");
-  }
+  return withSystemContext(db, async (sysDb) => {
+    if (!(await needsGreenfieldSetup(sysDb, env))) {
+      throw new Error("Greenfield setup is not available (import or household already exists)");
+    }
 
-  const email = input.email.trim().toLowerCase();
-  if (!email.includes("@")) throw new Error("A valid owner email is required");
+    const email = input.email.trim().toLowerCase();
+    if (!email.includes("@")) throw new Error("A valid owner email is required");
 
-  const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
-  if (existing) throw new Error(`User already exists for ${email}`);
+    const [existing] = await sysDb.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
+    if (existing) throw new Error(`User already exists for ${email}`);
 
-  const displayName = (input.name?.trim() || email.split("@")[0] || "Owner").slice(0, 128);
-  const passwordHash = await hashPassword(input.password);
+    const displayName = (input.name?.trim() || email.split("@")[0] || "Owner").slice(0, 128);
+    const passwordHash = await hashPassword(input.password);
 
-  const [household] = await db
-    .insert(households)
-    .values({
-      name: (input.householdName?.trim() || "Our Household").slice(0, 128),
-      tier: "self_host",
-      modulesEnabled: JSON.stringify(env.MODULES_ENABLED),
-      storageQuotaBytes: env.DRIVE_DEFAULT_QUOTA_BYTES ?? null,
-      timezone: "America/Chicago",
-    })
-    .returning();
+    const [household] = await sysDb
+      .insert(households)
+      .values({
+        name: (input.householdName?.trim() || "Our Household").slice(0, 128),
+        tier: "self_host",
+        modulesEnabled: JSON.stringify(env.MODULES_ENABLED),
+        storageQuotaBytes: env.DRIVE_DEFAULT_QUOTA_BYTES ?? null,
+        timezone: "America/Chicago",
+      })
+      .returning();
 
-  const [createdUser] = await db
-    .insert(users)
-    .values({
-      email,
-      displayName,
-      emailVerified: env.EMAIL_VERIFICATION_REQUIRED ? false : true,
-    })
-    .returning({ id: users.id });
+    const [createdUser] = await sysDb
+      .insert(users)
+      .values({
+        email,
+        displayName,
+        emailVerified: env.EMAIL_VERIFICATION_REQUIRED ? false : true,
+      })
+      .returning({ id: users.id });
 
-  await db.insert(baAccounts).values({
-    userId: createdUser.id,
-    providerId: "credential",
-    accountId: email,
-    password: passwordHash,
+    await sysDb.insert(baAccounts).values({
+      userId: createdUser.id,
+      providerId: "credential",
+      accountId: email,
+      password: passwordHash,
+    });
+
+    await sysDb.insert(householdMembers).values({
+      householdId: household.id,
+      userId: createdUser.id,
+      role: "owner",
+      name: displayName,
+    });
+
+    return { userId: createdUser.id, householdId: household.id };
   });
-
-  await db.insert(householdMembers).values({
-    householdId: household.id,
-    userId: createdUser.id,
-    role: "owner",
-    name: displayName,
-  });
-
-  return { userId: createdUser.id, householdId: household.id };
 }

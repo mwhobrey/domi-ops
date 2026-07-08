@@ -1,6 +1,6 @@
 import { Worker } from "bullmq";
 import { loadEnv } from "@domi-ops/config";
-import { createDb } from "@domi-ops/db";
+import { createDb, withHouseholdContext, withWorkerScanContext } from "@domi-ops/db";
 import {
   SYNC_QUEUE,
   type SyncJobName,
@@ -19,10 +19,35 @@ const env = loadEnv();
 const db = createDb(env.DATABASE_URL);
 const redisUrl = env.REDIS_URL ?? "redis://localhost:6379";
 
+const CROSS_TENANT_SCAN_JOBS = new Set<SyncJobName>([
+  "calendar.reminder.scan",
+  "chore.reminder.scan",
+  "expense.budget.scan",
+  "school.reminder.scan",
+  "chore.digest.scan",
+  "drive.quota.scan",
+  "health.med.reminder.scan",
+]);
+
 const worker = new Worker<{ name: SyncJobName; payload: SyncJobPayload }>(
   SYNC_QUEUE,
   async (job) => {
-    await runCalendarSyncJob(db, env, job.data.name, job.data.payload);
+    const { name, payload } = job.data;
+
+    if (CROSS_TENANT_SCAN_JOBS.has(name)) {
+      return withWorkerScanContext(db, (scanDb) =>
+        runCalendarSyncJob(scanDb, env, name, payload),
+      );
+    }
+
+    const householdId = payload.householdId;
+    if (!householdId || householdId === "scan") {
+      throw new Error(`householdId required for job ${name}`);
+    }
+
+    return withHouseholdContext(db, householdId, (tx) =>
+      runCalendarSyncJob(tx, env, name, payload),
+    );
   },
   { connection: { url: redisUrl } },
 );

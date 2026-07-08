@@ -196,14 +196,14 @@ Project: [OSS & public launch](https://linear.app/mikewhob-whome/project/oss-and
 
 ### M3 execution order (hosted platform)
 
-1. [WHO-177](https://linear.app/mikewhob-whome/issue/WHO-177) — ADR 003 hosted DB architecture (**In Progress**)
-2. [WHO-194](https://linear.app/mikewhob-whome/issue/WHO-194) — `household_subscriptions` + `modules_entitled` schema
-3. [WHO-195](https://linear.app/mikewhob-whome/issue/WHO-195) — RLS policies (Starter)
-4. [WHO-196](https://linear.app/mikewhob-whome/issue/WHO-196) — API `SET LOCAL app.current_household_id`
-5. [WHO-178](https://linear.app/mikewhob-whome/issue/WHO-178) — Wire `DEPLOYMENT_MODE` + entitlements
-6. [WHO-198](https://linear.app/mikewhob-whome/issue/WHO-198) — `docker-compose.hosted.yml` dev overlay
-7. [WHO-197](https://linear.app/mikewhob-whome/issue/WHO-197) — Tenant leak integration tests
-8. [WHO-180](https://linear.app/mikewhob-whome/issue/WHO-180) — Hosted ops runbook
+1. [WHO-177](https://linear.app/mikewhob-whome/issue/WHO-177) — ADR 003 hosted DB architecture **Done**
+2. [WHO-194](https://linear.app/mikewhob-whome/issue/WHO-194) — `household_subscriptions` + `modules_entitled` schema **Done**
+3. [WHO-195](https://linear.app/mikewhob-whome/issue/WHO-195) — RLS policies (Starter) **Done**
+4. [WHO-196](https://linear.app/mikewhob-whome/issue/WHO-196) — API `SET LOCAL app.current_household_id` **Done**
+5. [WHO-178](https://linear.app/mikewhob-whome/issue/WHO-178) — Wire `DEPLOYMENT_MODE` + entitlements **Done**
+6. [WHO-198](https://linear.app/mikewhob-whome/issue/WHO-198) — `docker-compose.hosted.yml` dev overlay **Done**
+7. [WHO-197](https://linear.app/mikewhob-whome/issue/WHO-197) — Tenant leak integration tests **Done** (run `npm run test:hosted` after seed)
+8. [WHO-180](https://linear.app/mikewhob-whome/issue/WHO-180) — Hosted ops runbook **Done** (`deploy/HOSTED_OPS.md`)
 
 ADR: `docs/adr/003-hosted-db-architecture.md`
 

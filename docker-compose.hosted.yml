@@ -1,0 +1,32 @@
+# Hosted QA overlay — multi-tenant `DEPLOYMENT_MODE=shared` on local Docker.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.hosted.yml up -d --build
+#   npm run db:migrate && npm run db:seed-hosted-qa
+#   npm run test:hosted   # tenant isolation matrix (requires Postgres up)
+#
+# Separate Postgres volume from default dogfood so RLS QA does not clobber dev data.
+
+services:
+  postgres:
+    volumes:
+      - domi_ops_pg_hosted:/var/lib/postgresql/data
+
+  api:
+    environment:
+      DEPLOYMENT_MODE: shared
+      HOSTED_TIER: starter
+      DRIVE_QUOTA_ENFORCE: "true"
+
+  worker:
+    environment:
+      DEPLOYMENT_MODE: shared
+      HOSTED_TIER: starter
+      DRIVE_QUOTA_ENFORCE: "true"
+
+  web:
+    environment:
+      DEPLOYMENT_MODE: shared
+
+volumes:
+  domi_ops_pg_hosted:
