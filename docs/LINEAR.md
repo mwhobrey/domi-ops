@@ -181,6 +181,32 @@ Cross-cutting app chrome, nav density, page headers, and layout polish (June 202
 | M3 — Module layout polish (medium) | [WHO-163](https://linear.app/mikewhob-whome/issue/WHO-163)–[WHO-165](https://linear.app/mikewhob-whome/issue/WHO-165), [WHO-169](https://linear.app/mikewhob-whome/issue/WHO-169) **Done** |
 | M4 — A11y & micro-polish (low) | [WHO-166](https://linear.app/mikewhob-whome/issue/WHO-166), [WHO-167](https://linear.app/mikewhob-whome/issue/WHO-167) **Done** · [WHO-168](https://linear.app/mikewhob-whome/issue/WHO-168) duplicate of WHO-162 |
 
+## OSS & public launch — milestones
+
+Project: [OSS & public launch](https://linear.app/mikewhob-whome/project/oss-and-public-launch-0db260f7).
+
+| Milestone | Focus | Anchor issues |
+|-----------|--------|----------------|
+| M1 — Strategy | ADRs, security, versioning | [WHO-171](https://linear.app/mikewhob-whome/issue/WHO-171) Done, [WHO-172](https://linear.app/mikewhob-whome/issue/WHO-172) Done |
+| M2 — OSS self-host | Stranger docs, bootstrap | [WHO-176](https://linear.app/mikewhob-whome/issue/WHO-176) Done, [WHO-175](https://linear.app/mikewhob-whome/issue/WHO-175) Done |
+| **M3 — Hosted platform** | Tenant isolation, ops | **[WHO-193](https://linear.app/mikewhob-whome/issue/WHO-193) epic** → [WHO-177](https://linear.app/mikewhob-whome/issue/WHO-177)–[WHO-198](https://linear.app/mikewhob-whome/issue/WHO-198) |
+| M4 — Public web | Landing, pricing | [WHO-134](https://linear.app/mikewhob-whome/issue/WHO-134) Done, [WHO-181](https://linear.app/mikewhob-whome/issue/WHO-181) Done |
+| M5 — Hosted billing | Stripe, wizard, quotas | [WHO-185](https://linear.app/mikewhob-whome/issue/WHO-185)–[WHO-199](https://linear.app/mikewhob-whome/issue/WHO-199), [WHO-186](https://linear.app/mikewhob-whome/issue/WHO-186) |
+| M6 — Launch | Go/no-go, community | [WHO-187](https://linear.app/mikewhob-whome/issue/WHO-187), [WHO-174](https://linear.app/mikewhob-whome/issue/WHO-174) |
+
+### M3 execution order (hosted platform)
+
+1. [WHO-177](https://linear.app/mikewhob-whome/issue/WHO-177) — ADR 003 hosted DB architecture (**In Progress**)
+2. [WHO-194](https://linear.app/mikewhob-whome/issue/WHO-194) — `household_subscriptions` + `modules_entitled` schema
+3. [WHO-195](https://linear.app/mikewhob-whome/issue/WHO-195) — RLS policies (Starter)
+4. [WHO-196](https://linear.app/mikewhob-whome/issue/WHO-196) — API `SET LOCAL app.current_household_id`
+5. [WHO-178](https://linear.app/mikewhob-whome/issue/WHO-178) — Wire `DEPLOYMENT_MODE` + entitlements
+6. [WHO-198](https://linear.app/mikewhob-whome/issue/WHO-198) — `docker-compose.hosted.yml` dev overlay
+7. [WHO-197](https://linear.app/mikewhob-whome/issue/WHO-197) — Tenant leak integration tests
+8. [WHO-180](https://linear.app/mikewhob-whome/issue/WHO-180) — Hosted ops runbook
+
+ADR: `docs/adr/003-hosted-db-architecture.md`
+
 ## Suggested work order
 
 1. [DevEx](https://linear.app/mikewhob-whome/project/devex-and-platform-2b8c7de9daa6) **WHO-14** (ports) — unblocks calendar OAuth.

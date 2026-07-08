@@ -253,6 +253,13 @@
       "when": 1780495010000,
       "tag": "0036_health_event_duration",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1780495011000,
+      "tag": "0037_household_subscriptions",
+      "breakpoints": true
     }
   ]
 }
