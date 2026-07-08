@@ -1,5 +1,5 @@
 {
-  "name": "@whome/calendar-sync",
+  "name": "@domi-ops/calendar-sync",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -15,10 +15,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@whome/auth": "*",
-    "@whome/config": "*",
-    "@whome/crypto": "*",
-    "@whome/db": "*",
+    "@domi-ops/auth": "*",
+    "@domi-ops/config": "*",
+    "@domi-ops/crypto": "*",
+    "@domi-ops/db": "*",
     "bullmq": "^5.53.2",
     "drizzle-orm": "^0.45.2",
     "web-push": "^3.6.7"

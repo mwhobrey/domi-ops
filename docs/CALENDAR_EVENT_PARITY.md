@@ -1,8 +1,8 @@
-# Calendar event parity (HomeHub → whome)
+# Calendar event parity (HomeHub → Domi Ops)
 
-## HomeHub SQLite → whome Postgres
+## HomeHub SQLite → Domi Ops Postgres
 
-| HomeHub | whome | UI |
+| HomeHub | Domi Ops | UI |
 |---------|-------|-----|
 | `personal_calendar` | `calendars` | Lane filter + sheet lane select |
 | `reminder.title` | `calendar_events.title` | Event sheet |

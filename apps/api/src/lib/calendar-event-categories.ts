@@ -1,5 +1,5 @@
-import type { Database } from "@whome/db";
-import { calendarEvents, calendars, eventCategories } from "@whome/db";
+import type { Database } from "@domi-ops/db";
+import { calendarEvents, calendars, eventCategories } from "@domi-ops/db";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { normalizeHexColor } from "./calendar-import.js";
 

@@ -27,7 +27,7 @@ describe("dev-url", () => {
       publicAppUrl: "http://localhost:3001",
       devProfile: "native",
     });
-    expect(warnings.some((w) => w.includes("WHOME_DEV_PROFILE=native"))).toBe(true);
+    expect(warnings.some((w) => w.includes("DOMI_OPS_DEV_PROFILE=native"))).toBe(true);
   });
 
   it("skips validation outside development", () => {

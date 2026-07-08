@@ -4,7 +4,7 @@ export type SavedWeatherLocation = {
   label: string;
 };
 
-const STORAGE_KEY = "whome:weather-location";
+const STORAGE_KEY = "domi-ops:weather-location";
 
 export function loadWeatherLocation(): SavedWeatherLocation | null {
   if (typeof window === "undefined") return null;

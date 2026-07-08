@@ -1,7 +1,7 @@
 import { formatDriveEmbed } from "./drive-embeds";
 
 /** MIME type for dragging Drive attachments into note editors. */
-export const DRIVE_EMBED_DRAG_TYPE = "application/x-whome-drive-embed";
+export const DRIVE_EMBED_DRAG_TYPE = "application/x-domi-ops-drive-embed";
 
 export interface DriveEmbedDragPayload {
   id: string;

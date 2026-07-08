@@ -1,8 +1,8 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { hashPassword, type AuthContext } from "@whome/auth";
-import type { Env } from "@whome/config";
-import type { Database } from "@whome/db";
+import { hashPassword, type AuthContext } from "@domi-ops/auth";
+import type { Env } from "@domi-ops/config";
+import type { Database } from "@domi-ops/db";
 import {
   driveFolders,
   driveObjects,
@@ -11,7 +11,7 @@ import {
   driveShareTokens,
   households,
   householdMembers,
-} from "@whome/db";
+} from "@domi-ops/db";
 import { and, desc, eq, exists, ilike, inArray, isNull, or, sql } from "drizzle-orm";
 import { loadDriveEmbedObjects } from "../lib/drive-embeds.js";
 import { normalizeFolderName } from "../lib/drive-folders.js";

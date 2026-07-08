@@ -79,7 +79,7 @@ export function eventInteractionTitle(ev: CalendarEventView): string | undefined
   if (ev.source === "google" || ev.googleEventId) {
     if (ev.pushable) return "Drag or resize — changes sync to Google";
     if (ev.syncStatus === "pending") return "Syncing to Google…";
-    return "Saved in whome only (enable bidirectional sync to update Google)";
+    return "Saved in Domi Ops only (enable bidirectional sync to update Google)";
   }
   return undefined;
 }
@@ -140,7 +140,7 @@ export function parseLocalDate(iso: string): Date {
 
 export type CalendarViewMode = "month" | "week" | "day" | "agenda";
 
-export const CALENDAR_VIEW_STORAGE_KEY = "whome:calendar-view";
+export const CALENDAR_VIEW_STORAGE_KEY = "domi-ops:calendar-view";
 
 export function readStoredCalendarView(): CalendarViewMode {
   if (typeof sessionStorage === "undefined") return "week";

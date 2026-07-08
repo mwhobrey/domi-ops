@@ -1,5 +1,5 @@
 import type Database from "better-sqlite3";
-import type { createDb } from "@whome/db";
+import type { createDb } from "@domi-ops/db";
 import type { HomeHubConfig } from "../lib/homehub-config.js";
 import type { DirectoryMember } from "../lib/member-directory.js";
 import type { ImportRecordIndex } from "../lib/import-record-index.js";

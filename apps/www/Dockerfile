@@ -6,7 +6,7 @@ COPY package.json package-lock.json turbo.json ./
 COPY apps ./apps
 COPY packages ./packages
 RUN npm ci
-RUN npm run build -w @whome/www
+RUN npm run build -w @domi-ops/www
 
 FROM node:22-alpine
 WORKDIR /app

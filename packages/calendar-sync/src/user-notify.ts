@@ -1,6 +1,6 @@
-import type { Env } from "@whome/config";
-import type { Database } from "@whome/db";
-import { pushSubscriptions, userNotifications } from "@whome/db";
+import type { Env } from "@domi-ops/config";
+import type { Database } from "@domi-ops/db";
+import { pushSubscriptions, userNotifications } from "@domi-ops/db";
 import { inArray } from "drizzle-orm";
 import webpush from "web-push";
 import { deliverWebPush, type WebPushPayload } from "./push-delivery.js";

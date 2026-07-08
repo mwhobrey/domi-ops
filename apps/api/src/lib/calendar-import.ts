@@ -1,5 +1,5 @@
-import type { Database } from "@whome/db";
-import { calendars } from "@whome/db";
+import type { Database } from "@domi-ops/db";
+import { calendars } from "@domi-ops/db";
 import { and, eq } from "drizzle-orm";
 
 const HEX_RE = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;

@@ -1,5 +1,5 @@
-import type { Database } from "@whome/db";
-import { calendarEventReminders } from "@whome/db";
+import type { Database } from "@domi-ops/db";
+import { calendarEventReminders } from "@domi-ops/db";
 import { eq } from "drizzle-orm";
 
 /** Preset offsets shown in the calendar event sheet (minutes before start). */

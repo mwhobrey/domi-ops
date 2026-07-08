@@ -1,6 +1,6 @@
 # Google OAuth for whome
 
-Your error (`invalid_request` / OAuth 2.0 policy) is almost always **Google Cloud Console config**, not whome code. The client named **Whobrey HomeHub** was likely set up for Flask on port **5000**; whome uses different URLs.
+Your error (`invalid_request` / OAuth 2.0 policy) is almost always **Google Cloud Console config**, not Domi Ops code. The client named **Whobrey HomeHub** was likely set up for Flask on port **5000**; Domi Ops uses different URLs.
 
 ## 1. OAuth client type
 
@@ -10,8 +10,8 @@ Google Cloud → **APIs & Services** → **Credentials** → your OAuth 2.0 Clie
 
 | Path | Browser URL | `.env` |
 |------|-------------|--------|
-| **Default — native** | `http://localhost:3000` | `cp .env.example .env` (`WHOME_DEV_PROFILE=native`) |
-| Docker compose `web` | `http://localhost:3001` | `cp .env.docker.example .env` (`WHOME_DEV_PROFILE=docker`) |
+| **Default — native** | `http://localhost:3000` | `cp .env.example .env` (`DOMI_OPS_DEV_PROFILE=native`) |
+| Docker compose `web` | `http://localhost:3001` | `cp .env.docker.example .env` (`DOMI_OPS_DEV_PROFILE=docker`) |
 
 Do not flip `PUBLIC_APP_URL` between 3000 and 3001 without updating Google Cloud redirect URIs. API startup logs OAuth callback URLs in development; `GET /health` returns `dev.oauthRedirects` when `NODE_ENV=development`.
 
@@ -90,4 +90,4 @@ Use HTTPS everywhere:
 - Redirects: `https://home.yourdomain.com/auth/callback/google` and `.../auth/google/calendar/callback`
 - `PUBLIC_APP_URL=https://home.yourdomain.com`
 
-Add the production domain under **Firebase-style** authorized domains only if you use Firebase; whome does not require Firebase.
+Add the production domain under **Firebase-style** authorized domains only if you use Firebase; Domi Ops does not require Firebase.

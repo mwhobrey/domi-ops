@@ -5,7 +5,7 @@ set -euo pipefail
 BASE_URL="${SMOKE_BASE_URL:-http://localhost:3001}"
 API_URL="${SMOKE_API_URL:-http://localhost:4000}"
 
-echo "== whome cutover smoke =="
+echo "== Domi Ops cutover smoke =="
 echo "WEB: $BASE_URL"
 echo "API: $API_URL"
 

@@ -1,18 +1,18 @@
-import type { Env } from "@whome/config";
-import type { Database } from "@whome/db";
+import type { Env } from "@domi-ops/config";
+import type { Database } from "@domi-ops/db";
 import {
   healthEvents,
   healthMedicationLogs,
   healthMedications,
   households,
-} from "@whome/db";
+} from "@domi-ops/db";
 import {
   isoDateInRange,
   localDateOfInstant,
   todayIsoDateInTz,
-} from "@whome/calendar-sync";
+} from "@domi-ops/calendar-sync";
 import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
-import { listHouseholdMembersWithAuth, memberShownLabel } from "@whome/auth";
+import { listHouseholdMembersWithAuth, memberShownLabel } from "@domi-ops/auth";
 import { healthEventVisibleWhere, healthMedicationVisibleWhere } from "./health-access.js";
 import { decryptHealthFieldOrPassthrough } from "./health-crypto.js";
 

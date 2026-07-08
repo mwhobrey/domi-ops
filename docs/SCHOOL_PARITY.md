@@ -1,8 +1,8 @@
-# School LMS parity (HomeHub → whome)
+# School LMS parity (HomeHub → Domi Ops)
 
-## HomeHub SQLite → whome Postgres
+## HomeHub SQLite → Domi Ops Postgres
 
-| HomeHub table | whome table | Import | UI (whome) |
+| HomeHub table | Domi Ops table | Import | UI (Domi Ops) |
 |---------------|-------------|--------|------------|
 | `school_class` | `school_classes` | ✅ `importSchool` | `/school` cards; detail metadata (term, teacher, schedule) |
 | `school_enrollment` | `school_enrollments` | ✅ | Class roster — role badges, active dates, enroll/unenroll |
@@ -15,7 +15,7 @@
 
 ## Field-level: `school_class`
 
-| HomeHub column | whome column | Create UI | Edit UI | Notes |
+| HomeHub column | Domi Ops column | Create UI | Edit UI | Notes |
 |----------------|--------------|-----------|---------|-------|
 | `name` | `name` | ✅ | ✅ PATCH | |
 | `subject` | `subject` | ✅ | ✅ PATCH | |
@@ -26,7 +26,7 @@
 
 ## Field-level: `school_enrollment`
 
-| HomeHub column | whome column | Enroll UI | Roster UI | Notes |
+| HomeHub column | Domi Ops column | Enroll UI | Roster UI | Notes |
 |----------------|--------------|-----------|-----------|-------|
 | `student_id` | `member_id` | ✅ select | ✅ avatar + label | |
 | `role` | `role` | ✅ picker | ✅ badge | student, teacher, parent, aide, observer |

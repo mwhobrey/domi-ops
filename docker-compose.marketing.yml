@@ -10,7 +10,7 @@
 services:
   www:
     container_name: domiops-www
-    image: ghcr.io/mwhobrey/whome-www:${WHO_IMAGE_TAG:-latest}
+    image: ghcr.io/mwhobrey/domi-ops-www:${DOMI_OPS_IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: apps/www/Dockerfile
@@ -33,7 +33,7 @@ services:
     container_name: domiops-demo-web
     profiles:
       - demo
-    image: ghcr.io/mwhobrey/whome-web:${WHO_IMAGE_TAG:-latest}
+    image: ghcr.io/mwhobrey/domi-ops-web:${DOMI_OPS_IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: apps/web/Dockerfile

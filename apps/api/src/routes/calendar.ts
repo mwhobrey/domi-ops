@@ -1,8 +1,8 @@
 import { Hono } from "hono";
-import type { Env } from "@whome/config";
-import { isModuleEnabled } from "@whome/config";
+import type { Env } from "@domi-ops/config";
+import { isModuleEnabled } from "@domi-ops/config";
 import { isHouseholdModuleEnabled, requireHouseholdModule } from "../lib/household-modules.js";
-import type { Database } from "@whome/db";
+import type { Database } from "@domi-ops/db";
 import {
   calendarCategoryImportMappings,
   calendarConnections,
@@ -15,7 +15,7 @@ import {
   linkedGoogleCalendars,
   recurringRules,
   users,
-} from "@whome/db";
+} from "@domi-ops/db";
 import {
   CalendarCredentialsError,
   dedupeHouseholdGoogleEvents,
@@ -25,7 +25,7 @@ import {
   listGoogleCalendars,
   materializeRecurringForHousehold,
   normalizeCategorySourceKey,
-} from "@whome/calendar-sync";
+} from "@domi-ops/calendar-sync";
 import { and, asc, eq, gte, ilike, inArray, lte, sql } from "drizzle-orm";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -782,7 +782,7 @@ export function calendarRoutes(db: Database, env: Env) {
             {
               error: "target_calendar_required",
               message:
-                "Choose or name a destination whome calendar for each imported Google source.",
+                "Choose or name a destination Domi Ops calendar for each imported Google source.",
               linkedCalendarId: linkedId,
             },
             400,

@@ -1,17 +1,17 @@
-import type { Env } from "@whome/config";
-import type { Database } from "@whome/db";
+import type { Env } from "@domi-ops/config";
+import type { Database } from "@domi-ops/db";
 import type {
   healthEvents,
   healthMedicationLogs,
   healthMedications,
-} from "@whome/db";
-import { households } from "@whome/db";
+} from "@domi-ops/db";
+import { households } from "@domi-ops/db";
 import {
   isMidnightInTz,
   localDateOfInstant,
   localTimeHhmm,
   zonedLocalToUtc,
-} from "@whome/calendar-sync";
+} from "@domi-ops/calendar-sync";
 import { eq } from "drizzle-orm";
 import {
   decryptHealthFieldOrPassthrough,

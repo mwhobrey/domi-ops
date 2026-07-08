@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import type { Env } from "@whome/config";
+import type { Env } from "@domi-ops/config";
 
 export function randomOAuthState(): string {
   return randomBytes(24).toString("base64url");

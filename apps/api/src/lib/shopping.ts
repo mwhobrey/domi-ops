@@ -1,4 +1,4 @@
-import type { Database } from "@whome/db";
+import type { Database } from "@domi-ops/db";
 import {
   shoppingItems,
   shoppingRecurring,
@@ -7,7 +7,7 @@ import {
   type shoppingItems as shoppingItemsTable,
   type shoppingRecurring as shoppingRecurringTable,
   type shoppingTrips as shoppingTripsTable,
-} from "@whome/db";
+} from "@domi-ops/db";
 import { and, eq, gte, inArray, lte } from "drizzle-orm";
 
 const AISLE_PREFIX = "aisle:";

@@ -1,5 +1,5 @@
-import type { Database } from "@whome/db";
-import { calendarShares, calendars } from "@whome/db";
+import type { Database } from "@domi-ops/db";
+import { calendarShares, calendars } from "@domi-ops/db";
 import { and, eq } from "drizzle-orm";
 
 export type CalendarRow = typeof calendars.$inferSelect;

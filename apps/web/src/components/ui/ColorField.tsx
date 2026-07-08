@@ -556,7 +556,7 @@ export function ColorField({
 
             <HexColorPicker
 
-              className={cn("whome-color-picker", compact && "whome-color-picker--compact")}
+              className={cn("domi-ops-color-picker", compact && "domi-ops-color-picker--compact")}
 
               color={safeValue}
 

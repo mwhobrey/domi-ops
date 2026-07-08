@@ -1,6 +1,6 @@
-import type { AuthContext } from "@whome/auth";
-import type { Database } from "@whome/db";
-import { driveObjects } from "@whome/db";
+import type { AuthContext } from "@domi-ops/auth";
+import type { Database } from "@domi-ops/db";
+import { driveObjects } from "@domi-ops/db";
 import { and, inArray } from "drizzle-orm";
 import { driveVisibleWhere, filenameFromDriveKey } from "./drive.js";
 

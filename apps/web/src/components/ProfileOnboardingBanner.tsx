@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Alert, LinkButton } from "./ui";
 
-const DISMISS_KEY_PREFIX = "whome:profile-onboarding-dismissed:";
+const DISMISS_KEY_PREFIX = "domi-ops:profile-onboarding-dismissed:";
 
 function dismissKey(memberId: string) {
   return `${DISMISS_KEY_PREFIX}${memberId}`;

@@ -1,5 +1,5 @@
-import type { Database } from "@whome/db";
-import { pushSubscriptions } from "@whome/db";
+import type { Database } from "@domi-ops/db";
+import { pushSubscriptions } from "@domi-ops/db";
 import { eq } from "drizzle-orm";
 import webpush from "web-push";
 
@@ -34,7 +34,7 @@ export async function deliverWebPush(
         const status = (err as { statusCode?: number; body?: string }).statusCode;
         const body = (err as { body?: string }).body;
         if (process.env.NODE_ENV === "development") {
-          console.warn("[whome push] delivery failed", { status, body: body?.slice(0, 200) });
+          console.warn("[domi-ops push] delivery failed", { status, body: body?.slice(0, 200) });
         }
         if (status === 404 || status === 410) {
           await db.delete(pushSubscriptions).where(eq(pushSubscriptions.id, sub.id));

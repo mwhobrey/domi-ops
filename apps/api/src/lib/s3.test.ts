@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { Env } from "@whome/config";
+import type { Env } from "@domi-ops/config";
 import { resolveS3PresignEndpoint } from "./s3.js";
 
 describe("resolveS3PresignEndpoint", () => {
   const base = {
-    S3_BUCKET: "whome",
+    S3_BUCKET: "domi-ops",
     S3_ENDPOINT: "http://minio:9000",
   } as Env;
 
@@ -12,7 +12,7 @@ describe("resolveS3PresignEndpoint", () => {
     expect(
       resolveS3PresignEndpoint({
         ...base,
-        S3_PUBLIC_URL: "https://whome.whobrey.me/s3/whome",
+        S3_PUBLIC_URL: "https://whome.whobrey.me/s3/domi-ops",
       }),
     ).toBe("https://whome.whobrey.me/s3");
   });
@@ -21,7 +21,7 @@ describe("resolveS3PresignEndpoint", () => {
     expect(
       resolveS3PresignEndpoint({
         ...base,
-        S3_PUBLIC_URL: "http://localhost:9000/whome",
+        S3_PUBLIC_URL: "http://localhost:9000/domi-ops",
       }),
     ).toBe("http://localhost:9000");
   });
@@ -30,7 +30,7 @@ describe("resolveS3PresignEndpoint", () => {
     expect(
       resolveS3PresignEndpoint({
         ...base,
-        S3_PUBLIC_URL: "https://whome.whobrey.me/s3/whome",
+        S3_PUBLIC_URL: "https://whome.whobrey.me/s3/domi-ops",
         S3_PUBLIC_ENDPOINT: "https://s3.whome.whobrey.me",
       }),
     ).toBe("https://s3.whome.whobrey.me");

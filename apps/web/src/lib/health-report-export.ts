@@ -125,7 +125,7 @@ export function downloadHealthReportCsv(report: HealthReportExport) {
     }
   }
 
-  const filename = `whome-health-report-${report.from}-${report.to}.csv`;
+  const filename = `domi-ops-health-report-${report.from}-${report.to}.csv`;
   downloadBlob(filename, lines.join("\n"), "text/csv;charset=utf-8");
 }
 

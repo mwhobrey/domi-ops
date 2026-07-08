@@ -1,10 +1,10 @@
 # HomeHub chores parity matrix
 
-Comparison of HomeHub todo/chore features vs whome (Jun 2026). **Tracking:** [Chores project](https://linear.app/mikewhob-whome/project/chores-7d0e44ca44bc) WHO-53–WHO-57.
+Comparison of HomeHub todo/chore features vs Domi Ops (Jun 2026). **Tracking:** [Chores project](https://linear.app/mikewhob-whome/project/chores-7d0e44ca44bc) WHO-53–WHO-57.
 
 ## Source tables (HomeHub)
 
-| HomeHub table | whome target | Notes |
+| HomeHub table | Domi Ops target | Notes |
 |---------------|--------------|-------|
 | `chore` | `chores` | Standalone household chores |
 | `todo_item` | `chores` | Imported into same table (list grouping not preserved) |
@@ -12,7 +12,7 @@ Comparison of HomeHub todo/chore features vs whome (Jun 2026). **Tracking:** [Ch
 
 ## Feature matrix
 
-| Feature | HomeHub | whome | Gap / notes |
+| Feature | HomeHub | Domi Ops | Gap / notes |
 |---------|---------|-------|-------------|
 | Description + done toggle | Yes | Yes | Parity |
 | Due date | Yes | Yes | Inline edit on `/chores` |

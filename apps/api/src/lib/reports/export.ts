@@ -1,5 +1,5 @@
-import type { Env } from "@whome/config";
-import type { Database } from "@whome/db";
+import type { Env } from "@domi-ops/config";
+import type { Database } from "@domi-ops/db";
 import {
   exportToGoogleDocs,
   exportToGoogleDriveFile,
@@ -94,7 +94,7 @@ export async function executeReportExport(params: {
   const exportParts: CanonicalReport[] =
     report.multiPart && report.parts?.length ? report.parts : [report];
 
-  if (destination === "whome-drive") {
+  if (destination === "domi-ops-drive") {
     const driveEnabled = await isHouseholdModuleEnabled(db, env, auth.householdId, "drive");
     if (!driveEnabled) return { error: "drive_disabled" as const };
 

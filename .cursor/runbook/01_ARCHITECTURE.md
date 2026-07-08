@@ -18,7 +18,7 @@
 
 ## System design patterns
 
-- **Modular monolith (logical modules, physical monorepo):** Feature flags via `MODULES_ENABLED` (`core`, `school`, `calendar_sync`). Routes call `isModuleEnabled()` from `@whome/config` — not separate deployables.
+- **Modular monolith (logical modules, physical monorepo):** Feature flags via `MODULES_ENABLED` (`core`, `school`, `calendar_sync`). Routes call `isModuleEnabled()` from `@domi-ops/config` — not separate deployables.
 - **BFF-style web layer:** Next.js rewrites `/api/*` to Hono; `/auth/*` uses a dedicated Route Handler so `Set-Cookie` lands on the browser origin (critical for Docker port 3001).
 - **Single-tenant self-host (v1 default):** `DEPLOYMENT_MODE=single` — one household per Postgres instance. `households` table is the tenant root (`packages/db/src/schema/household.ts`). Hosted `shared` (RLS) / `dedicated` are documented in `docs/ARCHITECTURE.md` but **RLS is not implemented in migrations**.
 - **Async calendar work:** API enqueues BullMQ jobs; worker calls `runCalendarSyncJob()` — no in-process long sync on request thread.
@@ -61,11 +61,11 @@ Prod adds external `proxy` network for Caddy (`docker-compose.prod.yml`).
 
 ### 3. Google Calendar
 
-1. Separate OAuth flow: `/auth/google/calendar/start` → callback encrypts tokens (`@whome/crypto`, HomeHub-compatible Fernet-style).
+1. Separate OAuth flow: `/auth/google/calendar/start` → callback encrypts tokens (`@domi-ops/crypto`, HomeHub-compatible Fernet-style).
 2. Links calendars in `calendar_connections`, `linked_google_calendars`.
 3. `POST /api/calendar/sync` or post-connect callback enqueues `google.calendar.full_import` or `google.calendar.pull`.
 4. Worker runs `pullLinkedCalendar` / `syncConnection` (`packages/calendar-sync/src/sync.ts`).
-5. Default mode `import_only` from `GOOGLE_CALENDAR_DEFAULT_SYNC_MODE` (env + Zod in `@whome/config`).
+5. Default mode `import_only` from `GOOGLE_CALENDAR_DEFAULT_SYNC_MODE` (env + Zod in `@domi-ops/config`).
 
 **Implemented:** `google.calendar.push` (bidirectional outbox), `recurring.materialize` (worker job + API enqueue). Advanced RRULE edge cases remain partial — see `docs/CALENDAR_EVENT_PARITY.md`.
 

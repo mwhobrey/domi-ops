@@ -1,5 +1,5 @@
-import type { Database } from "@whome/db";
-import { householdMembers, schoolClasses, schoolEnrollments } from "@whome/db";
+import type { Database } from "@domi-ops/db";
+import { householdMembers, schoolClasses, schoolEnrollments } from "@domi-ops/db";
 import { and, eq } from "drizzle-orm";
 import { resolveSchoolContext, type MemberEnrollmentRow } from "./school-access.js";
 

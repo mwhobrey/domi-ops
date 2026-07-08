@@ -44,7 +44,7 @@ export const envSchema = z
     S3_REGION: z.string().default("us-east-1"),
     S3_ACCESS_KEY: z.string().optional(),
     S3_SECRET_KEY: z.string().optional(),
-    S3_BUCKET: z.string().default("whome"),
+    S3_BUCKET: z.string().default("domi-ops"),
     S3_FORCE_PATH_STYLE: z
       .string()
       .optional()
@@ -100,7 +100,7 @@ export const envSchema = z
       .optional()
       .transform((v) => v === "true" || v === "1"),
     /** Local dev: native (npm run dev :3000) or docker (compose web :3001) — validates PUBLIC_APP_URL in development */
-    WHOME_DEV_PROFILE: z.enum(["native", "docker"]).optional(),
+    DOMI_OPS_DEV_PROFILE: z.enum(["native", "docker"]).optional(),
     /** Open-Meteo forecast (optional dashboard weather widget) */
     WEATHER_LATITUDE: z.string().optional(),
     WEATHER_LONGITUDE: z.string().optional(),
@@ -170,7 +170,7 @@ function ensureDevModuleCatalog(nodeEnv: string, modulesEnabled: string[]): stri
   const missing = KNOWN_HOUSEHOLD_MODULES.filter((m) => !modulesEnabled.includes(m));
   if (missing.length === 0) return modulesEnabled;
   console.warn(
-    `[whome config] MODULES_ENABLED missing known modules (${missing.join(", ")}); including them in development catalog`,
+    `[domi-ops config] MODULES_ENABLED missing known modules (${missing.join(", ")}); including them in development catalog`,
   );
   return [...new Set([...modulesEnabled, ...KNOWN_HOUSEHOLD_MODULES])];
 }
@@ -205,16 +205,16 @@ export function loadEnv(raw?: NodeJS.ProcessEnv): Env {
     const devWarnings = validateDevPublicAppUrl({
       nodeEnv: cached.NODE_ENV,
       publicAppUrl: cached.PUBLIC_APP_URL,
-      devProfile: cached.WHOME_DEV_PROFILE,
+      devProfile: cached.DOMI_OPS_DEV_PROFILE,
       googleOAuthRedirectUri: cached.GOOGLE_OAUTH_REDIRECT_URI,
     });
     for (const msg of devWarnings) {
-      console.warn(`[whome config] ${msg}`);
+      console.warn(`[domi-ops config] ${msg}`);
     }
-    const profile = cached.WHOME_DEV_PROFILE ?? inferDevWebProfile(cached.PUBLIC_APP_URL);
+    const profile = cached.DOMI_OPS_DEV_PROFILE ?? inferDevWebProfile(cached.PUBLIC_APP_URL);
     const redirects = oauthRedirectUris(cached.PUBLIC_APP_URL);
     console.log(
-      `[whome config] dev web profile=${profile ?? "custom"} · PUBLIC_APP_URL=${cached.PUBLIC_APP_URL} · OAuth redirects: ${redirects.login} | ${redirects.calendar}`,
+      `[domi-ops config] dev web profile=${profile ?? "custom"} · PUBLIC_APP_URL=${cached.PUBLIC_APP_URL} · OAuth redirects: ${redirects.login} | ${redirects.calendar}`,
     );
   }
 

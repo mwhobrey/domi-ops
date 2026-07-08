@@ -70,17 +70,17 @@ export function validateDevPublicAppUrl(opts: {
 
   if (explicitProfile === "native" && port !== DEV_WEB_PORT_NATIVE) {
     warnings.push(
-      `WHOME_DEV_PROFILE=native expects PUBLIC_APP_URL on :${DEV_WEB_PORT_NATIVE} (got port ${port ?? "unknown"}). OAuth redirects will not match http://localhost:${DEV_WEB_PORT_NATIVE}.`,
+      `DOMI_OPS_DEV_PROFILE=native expects PUBLIC_APP_URL on :${DEV_WEB_PORT_NATIVE} (got port ${port ?? "unknown"}). OAuth redirects will not match http://localhost:${DEV_WEB_PORT_NATIVE}.`,
     );
   }
   if (explicitProfile === "docker" && port !== DEV_WEB_PORT_DOCKER) {
     warnings.push(
-      `WHOME_DEV_PROFILE=docker expects PUBLIC_APP_URL on :${DEV_WEB_PORT_DOCKER} (got port ${port ?? "unknown"}). Use http://localhost:${DEV_WEB_PORT_DOCKER} when using docker compose web.`,
+      `DOMI_OPS_DEV_PROFILE=docker expects PUBLIC_APP_URL on :${DEV_WEB_PORT_DOCKER} (got port ${port ?? "unknown"}). Use http://localhost:${DEV_WEB_PORT_DOCKER} when using docker compose web.`,
     );
   }
   if (!explicitProfile && inferred === null && port != null && port !== 80 && port !== 443) {
     warnings.push(
-      `PUBLIC_APP_URL uses port ${port}. Local dev expects :${DEV_WEB_PORT_NATIVE} (npm run dev) or :${DEV_WEB_PORT_DOCKER} (docker compose web). Set WHOME_DEV_PROFILE=native|docker to silence after fixing .env.`,
+      `PUBLIC_APP_URL uses port ${port}. Local dev expects :${DEV_WEB_PORT_NATIVE} (npm run dev) or :${DEV_WEB_PORT_DOCKER} (docker compose web). Set DOMI_OPS_DEV_PROFILE=native|docker to silence after fixing .env.`,
     );
   }
 

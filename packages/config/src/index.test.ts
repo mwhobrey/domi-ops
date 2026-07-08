@@ -31,7 +31,7 @@ describe("loadEnv", () => {
       NODE_ENV: "development",
       PUBLIC_APP_URL: "http://localhost:3001",
       API_URL: "http://localhost:4000",
-      DATABASE_URL: "postgresql://whome:whome@localhost:5432/whome",
+      DATABASE_URL: "postgresql://domi_ops:domi_ops@localhost:5432/domi_ops",
     });
     expect(env.MODULES_ENABLED).toContain("core");
     expect(env.GOOGLE_CALENDAR_DEFAULT_SYNC_MODE).toBe("import_only");
@@ -43,7 +43,7 @@ describe("loadEnv", () => {
       NODE_ENV: "development",
       PUBLIC_APP_URL: "http://localhost:3001",
       API_URL: "http://localhost:4000",
-      DATABASE_URL: "postgresql://whome:whome@localhost:5432/whome",
+      DATABASE_URL: "postgresql://domi_ops:domi_ops@localhost:5432/domi_ops",
       MODULES_ENABLED: "core,school,calendar_sync",
     });
     expect(env.MODULES_ENABLED).toContain("drive");
@@ -68,7 +68,7 @@ describe("loadEnv", () => {
       NODE_ENV: "development",
       PUBLIC_APP_URL: "http://localhost:3000",
       API_URL: "http://localhost:4000",
-      DATABASE_URL: "postgresql://whome:whome@localhost:5432/whome",
+      DATABASE_URL: "postgresql://domi_ops:domi_ops@localhost:5432/domi_ops",
     });
     expect(dev.ALLOW_PUBLIC_SIGNUP).toBe(true);
   });

@@ -1,8 +1,8 @@
 import { Hono } from "hono";
-import { memberShownLabel } from "@whome/auth";
-import type { Env } from "@whome/config";
+import { memberShownLabel } from "@domi-ops/auth";
+import type { Env } from "@domi-ops/config";
 import { isHouseholdModuleEnabled } from "../lib/household-modules.js";
-import type { Database } from "@whome/db";
+import type { Database } from "@domi-ops/db";
 import {
   householdMembers,
   schoolAssignmentCategories,
@@ -13,7 +13,7 @@ import {
   schoolSubmissionArtifacts,
   schoolSubmissions,
   users,
-} from "@whome/db";
+} from "@domi-ops/db";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import {
   isEnrollmentActiveNow,

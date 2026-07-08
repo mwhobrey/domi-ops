@@ -1,6 +1,6 @@
-import { normalizeCategorySourceKey } from "@whome/calendar-sync";
-import type { Database } from "@whome/db";
-import { calendarCategoryImportMappings } from "@whome/db";
+import { normalizeCategorySourceKey } from "@domi-ops/calendar-sync";
+import type { Database } from "@domi-ops/db";
+import { calendarCategoryImportMappings } from "@domi-ops/db";
 import { and, eq } from "drizzle-orm";
 import { slugCategoryKey } from "./calendar-event-categories.js";
 import { normalizeHexColor } from "./calendar-import.js";

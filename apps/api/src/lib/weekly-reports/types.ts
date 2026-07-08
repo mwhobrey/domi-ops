@@ -33,7 +33,7 @@ export type ReportRenderFormat = "plain" | "styled";
 
 export type ReportExportDestination =
   | "preview"
-  | "whome-drive"
+  | "domi-ops-drive"
   | "google-docs"
   | "google-drive";
 

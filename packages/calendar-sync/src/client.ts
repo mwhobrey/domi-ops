@@ -1,8 +1,8 @@
-import { decryptSensitive, encryptSensitive, SensitiveDecryptError } from "@whome/crypto";
-import type { Env } from "@whome/config";
-import { refreshGoogleAccessToken, GoogleOAuthTokenError } from "@whome/auth";
-import type { Database } from "@whome/db";
-import { calendarConnections } from "@whome/db";
+import { decryptSensitive, encryptSensitive, SensitiveDecryptError } from "@domi-ops/crypto";
+import type { Env } from "@domi-ops/config";
+import { refreshGoogleAccessToken, GoogleOAuthTokenError } from "@domi-ops/auth";
+import type { Database } from "@domi-ops/db";
+import { calendarConnections } from "@domi-ops/db";
 import { eq } from "drizzle-orm";
 
 export class CalendarCredentialsError extends Error {

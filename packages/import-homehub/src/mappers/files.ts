@@ -1,5 +1,5 @@
 import { requireDb } from "../lib/require-db.js";
-import { driveFolders, driveObjects, importRecords } from "@whome/db";
+import { driveFolders, driveObjects, importRecords } from "@domi-ops/db";
 import { and, eq } from "drizzle-orm";
 import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";

@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
-const LOADED_FLAG = "WHOME_DOTENV_LOADED";
+const LOADED_FLAG = "DOMI_OPS_DOTENV_LOADED";
 
 function parseLine(line: string): { key: string; value: string } | null {
   const trimmed = line.trim();

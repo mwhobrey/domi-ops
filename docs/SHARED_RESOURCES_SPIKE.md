@@ -4,9 +4,9 @@
 
 ## Question
 
-Should whome replace HomeHub **Shared Cloud** with a household-scoped **Drive** — web-native object storage on MinIO with folders, discoverability (pin/tags/search), and cross-module file links — architected for quotas and public share links in Phase 2?
+Should Domi Ops replace HomeHub **Shared Cloud** with a household-scoped **Drive** — web-native object storage on MinIO with folders, discoverability (pin/tags/search), and cross-module file links — architected for quotas and public share links in Phase 2?
 
-## whome today
+## Domi Ops today
 
 - **S3/MinIO** wired (`ensureS3ReadyOnce`, presigned PUT, object buffer) — avatars, school submission artifacts, shopping receipts.
 - **HomeHub file import** → `imports/{householdId}/files/…` via `packages/import-homehub/src/mappers/files.ts` — **no product UI**.
@@ -30,13 +30,13 @@ Should whome replace HomeHub **Shared Cloud** with a household-scoped **Drive** 
 
 ## Principles
 
-| HomeHub weakness | whome approach |
+| HomeHub weakness | Domi Ops approach |
 |------------------|----------------|
 | Flat list | **Folder tree** (Phase 2 UI; schema in v1) |
 | No findability | **Pin + tags + search in v1** — non-negotiable |
 | Siloed uploads per feature | **Cross-module links** — one file, many surfaces |
 | Site password | Better Auth + household roles + **public share tokens (Phase 2)** |
-| LAN dropbox | MinIO backend; whome owns metadata, ACL, quotas |
+| LAN dropbox | MinIO backend; Domi Ops owns metadata, ACL, quotas |
 
 **Explicit non-goals:** block-level sync, version history, Office co-editing, Nextcloud parity, exposing raw MinIO URLs to browsers.
 
@@ -239,4 +239,4 @@ drive_share_tokens (
 
 ## Decision
 
-**Household Drive (Option C).** Phase 1: flat root, **pin/tags/search required**, cross-module `drive_references`, link items, HomeHub import. **Architect** folders, quotas, and public tokens in schema; ship folder UI, quota enforcement, and share links in Phase 2. **Not** a Dropbox clone — web-native MinIO-backed household storage with whome ACL and discoverability.
+**Household Drive (Option C).** Phase 1: flat root, **pin/tags/search required**, cross-module `drive_references`, link items, HomeHub import. **Architect** folders, quotas, and public tokens in schema; ship folder UI, quota enforcement, and share links in Phase 2. **Not** a Dropbox clone — web-native MinIO-backed household storage with Domi Ops ACL and discoverability.

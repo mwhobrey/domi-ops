@@ -1,8 +1,8 @@
-import type { Env } from "@whome/config";
-import type { Database } from "@whome/db";
-import { householdMembers, pushSubscriptions, users } from "@whome/db";
+import type { Env } from "@domi-ops/config";
+import type { Database } from "@domi-ops/db";
+import { householdMembers, pushSubscriptions, users } from "@domi-ops/db";
 import { and, eq, inArray, ne } from "drizzle-orm";
-import { deliverUserNotification } from "@whome/calendar-sync";
+import { deliverUserNotification } from "@domi-ops/calendar-sync";
 
 export type PushSubscriptionPayload = {
   endpoint: string;

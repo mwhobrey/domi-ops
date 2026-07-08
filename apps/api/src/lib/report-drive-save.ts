@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import type { Env } from "@whome/config";
-import type { Database } from "@whome/db";
-import { driveFolders, driveObjects, households } from "@whome/db";
+import type { Env } from "@domi-ops/config";
+import type { Database } from "@domi-ops/db";
+import { driveFolders, driveObjects, households } from "@domi-ops/db";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { normalizeFolderName } from "./drive-folders.js";
 import { checkDriveUploadQuota, driveObjectKey } from "./drive.js";

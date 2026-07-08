@@ -1,5 +1,5 @@
 import { requireDb } from "../lib/require-db.js";
-import { expenses, importRecords } from "@whome/db";
+import { expenses, importRecords } from "@domi-ops/db";
 import { and, eq } from "drizzle-orm";
 import type { ImportContext, MapperResult } from "./types.js";
 

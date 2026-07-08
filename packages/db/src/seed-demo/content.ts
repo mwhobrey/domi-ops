@@ -1,4 +1,4 @@
-import { encryptSensitive } from "@whome/crypto";
+import { encryptSensitive } from "@domi-ops/crypto";
 import type { Database } from "../client.js";
 import {
   calendars,

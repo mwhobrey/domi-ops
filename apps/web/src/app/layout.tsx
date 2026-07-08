@@ -10,9 +10,9 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "whome",
+  title: "Domi Ops",
   description: "Household operations — calendar, school, and daily life in one place.",
-  applicationName: "whome",
+  applicationName: "Domi Ops",
   icons: {
     icon: [
       { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
@@ -23,7 +23,7 @@ export const metadata: Metadata = {
   },
   appleWebApp: {
     capable: true,
-    title: "whome",
+    title: "Domi Ops",
     statusBarStyle: "black-translucent",
   },
   formatDetection: {

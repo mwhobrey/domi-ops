@@ -1,10 +1,10 @@
-import type { Database } from "@whome/db";
+import type { Database } from "@domi-ops/db";
 import {
   schoolAssignments,
   schoolEnrollments,
   schoolGrades,
   schoolSubmissions,
-} from "@whome/db";
+} from "@domi-ops/db";
 import { and, eq, inArray } from "drizzle-orm";
 import { isEnrollmentActiveNow } from "./school-access.js";
 

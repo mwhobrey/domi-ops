@@ -21,7 +21,7 @@ export function s3ConfigFromEnv(): S3ImportConfig | null {
     region: process.env.S3_REGION ?? "us-east-1",
     accessKey,
     secretKey,
-    bucket: process.env.S3_BUCKET ?? "whome",
+    bucket: process.env.S3_BUCKET ?? "domi-ops",
     forcePathStyle: process.env.S3_FORCE_PATH_STYLE === "true" || process.env.S3_FORCE_PATH_STYLE === "1",
   };
 }

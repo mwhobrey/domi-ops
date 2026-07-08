@@ -15,7 +15,7 @@ export type ReportDownloadFormat = "csv" | "json" | "yaml";
 
 export type ReportExportDestination =
   | "preview"
-  | "whome-drive"
+  | "domi-ops-drive"
   | "google-docs"
   | "google-drive";
 

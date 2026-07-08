@@ -1,5 +1,5 @@
-import type { Database } from "@whome/db";
-import { households } from "@whome/db";
+import type { Database } from "@domi-ops/db";
+import { households } from "@domi-ops/db";
 import { eq } from "drizzle-orm";
 
 export type DrivePermissionLevel = "none" | "read" | "write";

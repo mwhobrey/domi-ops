@@ -1,5 +1,5 @@
-import type { Database } from "@whome/db";
-import { notes, type notes as notesTable } from "@whome/db";
+import type { Database } from "@domi-ops/db";
+import { notes, type notes as notesTable } from "@domi-ops/db";
 import { and, eq } from "drizzle-orm";
 
 const NOTE_TITLE_MAX_LEN = 256;

@@ -7,7 +7,7 @@
 #
 # Requires DEMO_RESET_ENABLED=true in .env and demo profile running.
 
-0 9 * * * cd /opt/whome && docker compose -f docker-compose.prod.yml -f docker-compose.marketing.yml --profile demo exec -T api sh -c 'npm run seed:demo -w @whome/db' >> /var/log/whome-demo-reset.log 2>&1
+0 9 * * * cd /opt/domi-ops && docker compose -f docker-compose.prod.yml -f docker-compose.marketing.yml --profile demo exec -T api sh -c 'npm run seed:demo -w @domi-ops/db' >> /var/log/domi-ops-demo-reset.log 2>&1
 
 # Alternative: run seed from host (needs node + built packages on host):
-# 0 9 * * * cd /opt/whome && DEMO_MODE=true npm run db:seed-demo >> /var/log/whome-demo-reset.log 2>&1
+# 0 9 * * * cd /opt/domi-ops && DEMO_MODE=true npm run db:seed-demo >> /var/log/domi-ops-demo-reset.log 2>&1

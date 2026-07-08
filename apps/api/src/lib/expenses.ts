@@ -1,5 +1,5 @@
-import type { Database } from "@whome/db";
-import { expenseBudgets, expenses, type expenses as expensesTable } from "@whome/db";
+import type { Database } from "@domi-ops/db";
+import { expenseBudgets, expenses, type expenses as expensesTable } from "@domi-ops/db";
 import { and, eq, sql } from "drizzle-orm";
 
 export const BUDGET_WARNING_RATIO = 0.8;

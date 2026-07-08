@@ -1,4 +1,4 @@
-import { householdMembers, users } from "@whome/db";
+import { householdMembers, users } from "@domi-ops/db";
 import { eq, and } from "drizzle-orm";
 import { requireDb } from "../lib/require-db.js";
 import { sqliteTableExists } from "../lib/sqlite.js";

@@ -6,8 +6,8 @@
 
 - **TypeScript strict** — root `tsconfig.json`: `strict`, `ES2022`, `moduleResolution: bundler`.
 - **ESM in API/worker/packages** — import paths use `.js` extensions in emitted/import specifiers (e.g. `./middleware/auth.js`).
-- **Workspace package names:** `@whome/<name>`; apps `@whome/web`, `@whome/api`, `@whome/worker`.
-- **Internal deps:** `"@whome/db": "*"` workspace protocol in package.json files.
+- **Workspace package names:** `@domi-ops/<name>`; apps `@domi-ops/web`, `@domi-ops/api`, `@domi-ops/worker`.
+- **Internal deps:** `"@domi-ops/db": "*"` workspace protocol in package.json files.
 
 ### Naming
 
@@ -64,7 +64,7 @@
 |-------|-------|------|
 | Session | Better Auth `ba_sessions` + HTTP-only cookie | API is source of truth; web never stores tokens in localStorage |
 | OAuth CSRF state | Redis keys `oauth:login:*`, `oauth:calendar:*` (10m TTL) | Requires `REDIS_URL`; API uses `ioredis` |
-| Google tokens | `oauth_accounts` encrypted | Use `@whome/crypto`; never log decrypted tokens |
+| Google tokens | `oauth_accounts` encrypted | Use `@domi-ops/crypto`; never log decrypted tokens |
 | UI data | Server fetch per request | No shared client store; refetch on navigation |
 | Calendar sync | Redis queue + DB rows | Trigger via API only; worker idempotent pull per linked calendar |
 | Module flags | Env at boot | Changing `MODULES_ENABLED` requires restart |
@@ -86,7 +86,7 @@
 5. Calendar connect + `POST /api/calendar/sync` → worker logs pull
 6. `npm run import:homehub -- --dry-run` against HomeHub SQLite
 
-When adding tests, prefer: `@whome/config` parsing, `@whome/crypto` round-trip, mapper dry-runs with fixture SQLite, API auth middleware with test DB.
+When adding tests, prefer: `@domi-ops/config` parsing, `@domi-ops/crypto` round-trip, mapper dry-runs with fixture SQLite, API auth middleware with test DB.
 
 ## Deployment pipelines
 
@@ -100,9 +100,9 @@ npm run dev
 
 - **Fresh dev DB:** `npm run dev:reset` — `docker compose down -v`, `up -d postgres redis minio --wait`, `redis-cli FLUSHALL`, `npm run db:migrate` (see `scripts/dev-reset.mjs`).
 
-- **Default dev path:** native `npm run dev` → browser `http://localhost:3000`, `.env.example` (`WHOME_DEV_PROFILE=native`, `PORT=3000`, `PUBLIC_APP_URL=http://localhost:3000`).
-- **Alternate:** full Docker stack → host `http://localhost:3001`, use `.env.docker.example` (`WHOME_DEV_PROFILE=docker`). Do not mix profiles without updating Google OAuth redirect URIs.
-- Root `.env` is loaded by `@whome/config` `loadEnv()` (api/worker) and `apps/web/next.config.ts` (Next). Development boot warns on `PUBLIC_APP_URL` / profile mismatch; `GET /health` includes `dev.oauthRedirects`.
+- **Default dev path:** native `npm run dev` → browser `http://localhost:3000`, `.env.example` (`DOMI_OPS_DEV_PROFILE=native`, `PORT=3000`, `PUBLIC_APP_URL=http://localhost:3000`).
+- **Alternate:** full Docker stack → host `http://localhost:3001`, use `.env.docker.example` (`DOMI_OPS_DEV_PROFILE=docker`). Do not mix profiles without updating Google OAuth redirect URIs.
+- Root `.env` is loaded by `@domi-ops/config` `loadEnv()` (api/worker) and `apps/web/next.config.ts` (Next). Development boot warns on `PUBLIC_APP_URL` / profile mismatch; `GET /health` includes `dev.oauthRedirects`.
 - If `EADDRINUSE :3000`, stop a stale `next dev` or run only infra: `docker compose up -d postgres redis minio` (omit `web`/`api` when using native dev).
 
 ### Docker full stack
@@ -133,7 +133,7 @@ Migrations live in `packages/db/drizzle/*.sql`. The runner (`packages/db/src/mig
 
 | Path | Use when |
 |------|----------|
-| `npm run generate -w @whome/db` (`drizzle-kit generate`) | Schema changed in `packages/db/src/schema/*.ts`; Kit emits SQL + journal + snapshot under `drizzle/meta/`. Review diff, then commit all three. |
+| `npm run generate -w @domi-ops/db` (`drizzle-kit generate`) | Schema changed in `packages/db/src/schema/*.ts`; Kit emits SQL + journal + snapshot under `drizzle/meta/`. Review diff, then commit all three. |
 | Hand-written `NNNN_name.sql` | Small, explicit DDL (column add, index, data fix) when you already know the SQL and want full control. **You must register the file in `_journal.json` yourself.** |
 
 This repo often uses hand-written numbered migrations (`0007_home_status_presence.sql`, etc.) after updating the TypeScript schema in the same change.
@@ -152,7 +152,7 @@ This repo often uses hand-written numbered migrations (`0007_home_status_presenc
    ```bash
    npm run db:migrate
    ```
-   (builds `@whome/db` then runs `dist/migrate.js`.)
+   (builds `@domi-ops/db` then runs `dist/migrate.js`.)
 6. **Verify** — console prints `Running migrations from .../drizzle` and `Migrations complete`; no error. Re-run is idempotent. In DB, `drizzle.__drizzle_migrations` lists applied tags; spot-check new columns/tables.
 
 ### Commands reference
@@ -160,9 +160,9 @@ This repo often uses hand-written numbered migrations (`0007_home_status_presenc
 | Command | Purpose |
 |---------|---------|
 | `npm run db:migrate` (root) | Local / CI: build + apply pending journal migrations |
-| `npm run migrate:run -w @whome/db` | Apply only (after `build -w @whome/db`) |
-| `npm run migrate -w @whome/db` | `drizzle-kit migrate` (Kit CLI; prefer root `db:migrate` for this repo) |
-| `npm run generate -w @whome/db` | Generate SQL + journal from schema diff |
+| `npm run migrate:run -w @domi-ops/db` | Apply only (after `build -w @domi-ops/db`) |
+| `npm run migrate -w @domi-ops/db` | `drizzle-kit migrate` (Kit CLI; prefer root `db:migrate` for this repo) |
+| `npm run generate -w @domi-ops/db` | Generate SQL + journal from schema diff |
 | API Docker entrypoint | `packages/db/dist/migrate.js` before API start |
 
 ### Common failures
@@ -190,7 +190,7 @@ This repo often uses hand-written numbered migrations (`0007_home_status_presenc
 12. **LICENSE** — MIT in repo root.
 13. **`packages/db/dist/`** — May be committed or built locally; migrations run from `dist/migrate.js` in Docker.
 14. **Drizzle journal** — Unlisted `.sql` files are not applied; see **Database migrations (Drizzle)** above.
-15. **better-sqlite3** — Rebuild after Node version change: `npm rebuild better-sqlite3 -w @whome/import-homehub`.
+15. **better-sqlite3** — Rebuild after Node version change: `npm rebuild better-sqlite3 -w @domi-ops/import-homehub`.
 16. **API Docker `node_modules`** — `apps/api/Dockerfile` must copy `apps/api/node_modules`; npm workspaces nest `better-auth` there (not hoisted to root).
 17. **Browser file uploads** — Presign returns same-origin `PUT /api/core/upload/:id?token=…`; API streams to MinIO. No public MinIO/Caddy `/s3` route required. `S3_PUBLIC_URL` optional for direct object URLs.
 

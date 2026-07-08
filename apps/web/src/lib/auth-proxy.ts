@@ -39,7 +39,7 @@ export async function proxyAuthToApi(
     upstream = await fetch(target, init);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Auth proxy fetch failed";
-    console.error(`[whome auth-proxy] ${request.method} ${target}:`, message);
+    console.error(`[domi-ops auth-proxy] ${request.method} ${target}:`, message);
     return NextResponse.json({ error: "auth_proxy_fetch_failed", message }, { status: 502 });
   }
 
@@ -47,7 +47,7 @@ export async function proxyAuthToApi(
 
   if (process.env.NODE_ENV === "development" && upstream.status >= 500) {
     console.error(
-      `[whome auth-proxy] ${request.method} ${target} → ${upstream.status}`,
+      `[domi-ops auth-proxy] ${request.method} ${target} → ${upstream.status}`,
       responseBody.slice(0, 500) || "(empty body)",
     );
   }

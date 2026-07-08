@@ -16,10 +16,10 @@ describe("parseDriveEmbedDragPayload", () => {
   it("reads structured drag payload", () => {
     const dt = {
       getData: (type: string) =>
-        type === "application/x-whome-drive-embed"
+        type === "application/x-domi-ops-drive-embed"
           ? encodeDriveEmbedDragPayload({ id: "uuid-1", label: "photo.png" })
           : "",
-      types: ["application/x-whome-drive-embed"],
+      types: ["application/x-domi-ops-drive-embed"],
     } as unknown as DataTransfer;
 
     expect(parseDriveEmbedDragPayload(dt)).toEqual({ id: "uuid-1", label: "photo.png" });

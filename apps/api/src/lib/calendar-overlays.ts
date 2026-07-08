@@ -1,5 +1,5 @@
-import type { Env } from "@whome/config";
-import type { Database } from "@whome/db";
+import type { Env } from "@domi-ops/config";
+import type { Database } from "@domi-ops/db";
 import {
   healthEvents,
   healthMedications,
@@ -7,13 +7,13 @@ import {
   schoolAssignments,
   schoolClasses,
   users,
-} from "@whome/db";
+} from "@domi-ops/db";
 import {
   localDateOfInstant,
   localHourInTz,
   todayIsoDateInTz,
   zonedLocalToUtc,
-} from "@whome/calendar-sync";
+} from "@domi-ops/calendar-sync";
 import { and, eq, gte, inArray, isNotNull, lte } from "drizzle-orm";
 import type { CalendarListEvent, CalendarOverlayKind } from "./calendar-event-policy.js";
 import { parseMedSchedule } from "./health-serialize.js";

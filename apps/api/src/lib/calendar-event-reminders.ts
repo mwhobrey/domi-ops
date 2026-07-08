@@ -2,4 +2,4 @@ export {
   normalizeReminderOffsets,
   replaceEventReminders,
   listReminderOffsetsForEvent,
-} from "@whome/calendar-sync";
+} from "@domi-ops/calendar-sync";

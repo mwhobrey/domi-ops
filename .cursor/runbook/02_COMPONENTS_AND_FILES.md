@@ -3,7 +3,7 @@
 ## Top-level layout
 
 ```
-whome/
+domi-ops/
 ├── apps/
 │   ├── web/          # Next.js UI
 │   ├── api/          # Hono REST + OAuth callbacks
@@ -59,7 +59,7 @@ whome/
 | `src/lib/auth-links.ts` | OAuth URL helpers (client-safe import) |
 | `src/lib/load-error.ts` | SSR `loadErrorMessage()` helper |
 | `src/components/HealthPageClient.tsx` | Health events + medications UI |
-| `src/lib/calendar-filters.ts` | Calendar lane/category + overlay filter pills (`whome:calendar-hidden-overlays`) |
+| `src/lib/calendar-filters.ts` | Calendar lane/category + overlay filter pills (`domi-ops:calendar-hidden-overlays`) |
 | `src/lib/calendar-utils.ts` | Calendar DTO helpers; `isOverlayEvent`, overlay `source`/`deepLink` |
 | `src/lib/color-contrast.ts` | WCAG text color for event chips |
 | `src/lib/member-color.ts` | Deterministic avatar hues |
@@ -73,7 +73,7 @@ whome/
 | `next.config.ts` | `standalone` output; rewrites `/api`, `/health` |
 | `Dockerfile` | Build arg `API_URL` for server-side fetch |
 
-**Report kinds (WHO-155):** `GET /api/core/reports/catalog` lists enabled modules. Kinds: `weekly`, `overview`, `school-grades`, `school-open-work`, `school-transcript`. Export: `POST /api/core/reports/export` with `destination`: `preview` | `whome-drive` | `google-docs` | `google-drive`; preview includes `downloads` (`csv`, `json`, `yaml`). Legacy `/api/core/weekly-reports/*` unchanged.
+**Report kinds (WHO-155):** `GET /api/core/reports/catalog` lists enabled modules. Kinds: `weekly`, `overview`, `school-grades`, `school-open-work`, `school-transcript`. Export: `POST /api/core/reports/export` with `destination`: `preview` | `domi-ops-drive` | `google-docs` | `google-drive`; preview includes `downloads` (`csv`, `json`, `yaml`). Legacy `/api/core/weekly-reports/*` unchanged.
 
 
 **State:** No Redux/Zustand. Server Components fetch via `apiFetch`; client components minimal. Session lives in HTTP-only cookie on API side.
@@ -109,16 +109,16 @@ whome/
 
 | Path | Responsibility |
 |------|----------------|
-| `src/index.ts` | BullMQ `Worker` on queue `whome-calendar-sync`, delegates to `runCalendarSyncJob` |
+| `src/index.ts` | BullMQ `Worker` on queue `domi-ops-calendar-sync`, delegates to `runCalendarSyncJob` |
 
 ## Packages
 
-### `@whome/config` (`packages/config`)
+### `@domi-ops/config` (`packages/config`)
 
 - `src/index.ts`: `envSchema`, `loadEnv()` (cached singleton), `isModuleEnabled()`.
 - **Single source of truth** for env — API and worker call `loadEnv()` at startup.
 
-### `@whome/db` (`packages/db`)
+### `@domi-ops/db` (`packages/db`)
 
 | Path | Responsibility |
 |------|----------------|
@@ -138,9 +138,9 @@ whome/
 | `src/schema/google-docs.ts` | `google_docs_connections` (encrypted OAuth tokens for report export) |
 | `drizzle.config.ts` | Drizzle Kit config |
 
-Exports: `@whome/db`, `@whome/db/schema` (package.json `exports`).
+Exports: `@domi-ops/db`, `@domi-ops/db/schema` (package.json `exports`).
 
-### `@whome/auth` (`packages/auth`)
+### `@domi-ops/auth` (`packages/auth`)
 
 - `session.ts` — cookie name, create/destroy session, `getSessionUserId`, `resolveAuthContext`.
 - `google.ts` — OAuth URLs, token exchange.
@@ -149,17 +149,17 @@ Exports: `@whome/db`, `@whome/db/schema` (package.json `exports`).
 - `member-label.ts` — `memberShownLabel()` from name/nickname/publicLabel.
 - `claim.ts` — legacy claim path; prefer join-imported for post-import users.
 
-### `@whome/crypto` (`packages/crypto`)
+### `@domi-ops/crypto` (`packages/crypto`)
 
 - `encryptSensitive` / `decryptSensitive` for stored Google refresh tokens.
 
-### `@whome/calendar-sync` (`packages/calendar-sync`)
+### `@domi-ops/calendar-sync` (`packages/calendar-sync`)
 
 - `queue.ts` — `SYNC_QUEUE`, `enqueueSyncJob`.
 - `sync.ts` — pull logic, `runCalendarSyncJob` switch (includes v1 stubs).
 - `index.ts` — public exports; `registerSyncHandler` Map exists but **worker does not use it**.
 
-### `@whome/import-homehub` (`packages/import-homehub`)
+### `@domi-ops/import-homehub` (`packages/import-homehub`)
 
 - `src/importer.ts` — `runImport` orchestration.
 - `src/mappers/*.ts` — per-domain SQLite → Postgres (varying completeness).

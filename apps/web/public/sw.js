@@ -1,6 +1,6 @@
 /* Minimal service worker — installable PWA; network-first for app routes.
  * Bump CACHE when shell assets change so activate purges stale caches. */
-const CACHE = "whome-shell-v4";
+const CACHE = "domi-ops-shell-v1";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -28,7 +28,7 @@ function normalizePushPayload(raw) {
   const url = raw.data?.url ?? raw.url ?? "/dashboard?notices=1";
   const tag = raw.tag ?? "notice";
   return {
-    title: raw.title ?? "whome",
+    title: raw.title ?? "Domi Ops",
     body: raw.body ?? "",
     tag,
     data: { ...(raw.data ?? {}), url },
@@ -36,7 +36,7 @@ function normalizePushPayload(raw) {
 }
 
 self.addEventListener("push", (event) => {
-  let raw = { title: "whome", body: "", tag: "notice", data: { url: "/dashboard?notices=1" } };
+  let raw = { title: "Domi Ops", body: "", tag: "notice", data: { url: "/dashboard?notices=1" } };
   try {
     if (event.data) raw = { ...raw, ...event.data.json() };
   } catch {
@@ -53,7 +53,7 @@ self.addEventListener("push", (event) => {
       });
       const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
       for (const client of clients) {
-        client.postMessage({ type: "whome:notification" });
+        client.postMessage({ type: "domi-ops:notification" });
       }
     })(),
   );

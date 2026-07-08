@@ -1,4 +1,4 @@
-# Attach whome web/api to an existing Docker network (e.g. HomeHub + Caddy).
+# Attach Domi Ops web/api to an existing Docker network (e.g. HomeHub + Caddy).
 # Caddy must share this network to reverse_proxy web:3000.
 #
 #   PROXY_NETWORK=headscale_default docker compose \

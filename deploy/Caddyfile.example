@@ -1,4 +1,4 @@
-# Replace homehub upstream with whome web container.
+# Replace homehub upstream with Domi Ops web container.
 # Prod compose includes postgres, redis, minio, api, worker, web.
 # Join Caddy's Docker network via docker-compose.proxy-external.yml:
 #
@@ -15,7 +15,7 @@ whome.whobrey.me {
         reverse_proxy minio:9000
     }
 
-    reverse_proxy whome-web:3000
+    reverse_proxy domi-ops-web:3000
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
         X-Content-Type-Options nosniff
@@ -24,8 +24,8 @@ whome.whobrey.me {
     }
 }
 
-# Generic template (set WHOME_DOMAIN env when using caddy adapt):
-{$WHOME_DOMAIN} {
+# Generic template (set DOMI_OPS_DOMAIN env when using caddy adapt):
+{$DOMI_OPS_DOMAIN} {
     encode gzip zstd
 
     reverse_proxy web:3000
@@ -39,6 +39,6 @@ whome.whobrey.me {
 }
 
 # Optional: direct API subdomain (usually not needed — Next rewrites /api to api:4000)
-# api.{$WHOME_DOMAIN} {
+# api.{$DOMI_OPS_DOMAIN} {
 #     reverse_proxy api:4000
 # }

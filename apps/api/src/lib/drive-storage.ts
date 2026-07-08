@@ -1,4 +1,4 @@
-import type { Env } from "@whome/config";
+import type { Env } from "@domi-ops/config";
 
 export type DriveStorageStats = {
   usedBytes: number;

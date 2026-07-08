@@ -1,5 +1,5 @@
-import type { Database } from "@whome/db";
-import { homeStatus } from "@whome/db";
+import type { Database } from "@domi-ops/db";
+import { homeStatus } from "@domi-ops/db";
 import { and, eq } from "drizzle-orm";
 
 export async function ensureHomeStatusRow(

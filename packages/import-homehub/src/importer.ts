@@ -2,7 +2,7 @@ import type { ImportOptions, ImportReport } from "./importer-types.js";
 export type { ImportOptions, ImportReport } from "./importer-types.js";
 
 import Database from "better-sqlite3";
-import { closeDb, createDb, type Database as PgDatabase } from "@whome/db";
+import { closeDb, createDb, type Database as PgDatabase } from "@domi-ops/db";
 import { importCalendar } from "./mappers/calendar.js";
 import { importExpenses } from "./mappers/expenses.js";
 import { importFiles } from "./mappers/files.js";

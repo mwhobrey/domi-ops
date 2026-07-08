@@ -1,4 +1,4 @@
-import { MarketingShell, resolveMarketingUrls } from "@whome/marketing-ui";
+import { MarketingShell, resolveMarketingUrls } from "@domi-ops/marketing-ui";
 
 export const metadata = {
   title: "Terms of Service — Domi Ops",

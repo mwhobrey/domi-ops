@@ -1,4 +1,4 @@
-import type { Env } from "@whome/config";
+import type { Env } from "@domi-ops/config";
 import { fetchNwsForecast, isLikelyUsLocation } from "./nws-weather.js";
 import { fetchOpenMeteoForecast, type WeatherPayload } from "./open-meteo.js";
 import { getCachedWeather, setCachedWeather, type CachedWeatherEntry } from "./weather-cache.js";

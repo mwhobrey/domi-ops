@@ -1,10 +1,10 @@
 {
-  "name": "@whome/import-homehub",
+  "name": "@domi-ops/import-homehub",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "bin": {
-    "whome-import": "./dist/cli.js"
+    "domi-ops-import": "./dist/cli.js"
   },
   "scripts": {
     "build": "tsc",
@@ -14,8 +14,8 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.826.0",
-    "@whome/config": "*",
-    "@whome/db": "*",
+    "@domi-ops/config": "*",
+    "@domi-ops/db": "*",
     "better-sqlite3": "^11.10.0",
     "commander": "^14.0.0",
     "drizzle-orm": "^0.45.2",

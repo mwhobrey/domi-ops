@@ -1,6 +1,6 @@
-import type { Env } from "@whome/config";
-import type { Database } from "@whome/db";
-import { calendarEventReminders, calendarEvents, households } from "@whome/db";
+import type { Env } from "@domi-ops/config";
+import type { Database } from "@domi-ops/db";
+import { calendarEventReminders, calendarEvents, households } from "@domi-ops/db";
 import { and, eq, isNull } from "drizzle-orm";
 import { eventStartInstant } from "./household-time.js";
 import { notifyHouseholdOfCalendarReminder } from "./push-calendar.js";

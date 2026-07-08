@@ -1,6 +1,6 @@
 import type { WeatherPayload } from "./open-meteo.js";
 
-const NWS_USER_AGENT = "whome/1.0 (household app; local dev)";
+const NWS_USER_AGENT = "domi-ops/1.0 (household app; local dev)";
 
 function nwsHeaders(): Record<string, string> {
   return {

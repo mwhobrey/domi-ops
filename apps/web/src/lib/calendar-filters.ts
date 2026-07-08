@@ -1,5 +1,5 @@
-const HIDDEN_KEY = "whome:calendar-hidden-lanes";
-const DEFAULT_CALENDAR_KEY = "whome:default-calendar-id";
+const HIDDEN_KEY = "domi-ops:calendar-hidden-lanes";
+const DEFAULT_CALENDAR_KEY = "domi-ops:default-calendar-id";
 
 export type CalendarLaneMeta = {
   id: string;
@@ -116,7 +116,7 @@ export function filterEventsByLanes<T extends { calendarId: string }>(
   return events.filter((e) => !hiddenIds.has(e.calendarId));
 }
 
-const HIDDEN_CATEGORIES_KEY = "whome:calendar-hidden-categories";
+const HIDDEN_CATEGORIES_KEY = "domi-ops:calendar-hidden-categories";
 
 export type EventCategoryMeta = {
   id: string;
@@ -192,7 +192,7 @@ export function filterEventsByCategories<T extends { calendarId: string; categor
   });
 }
 
-const HIDDEN_OVERLAYS_KEY = "whome:calendar-hidden-overlays";
+const HIDDEN_OVERLAYS_KEY = "domi-ops:calendar-hidden-overlays";
 
 export type OverlayFilterMeta = {
   id: string;

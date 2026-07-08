@@ -1,7 +1,7 @@
-import type { AuthContext } from "@whome/auth";
-import type { Env } from "@whome/config";
-import type { Database } from "@whome/db";
-import { driveObjects, driveShares, households, type driveObjects as driveObjectsTable } from "@whome/db";
+import type { AuthContext } from "@domi-ops/auth";
+import type { Env } from "@domi-ops/config";
+import type { Database } from "@domi-ops/db";
+import { driveObjects, driveShares, households, type driveObjects as driveObjectsTable } from "@domi-ops/db";
 import { and, eq, exists, or } from "drizzle-orm";
 
 export const DRIVE_TITLE_MAX_LEN = 256;

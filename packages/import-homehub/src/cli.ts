@@ -1,13 +1,13 @@
 #!/usr/bin/env node
-import { loadRootDotenv } from "@whome/config";
+import { loadRootDotenv } from "@domi-ops/config";
 import { Command } from "commander";
 import { runImport } from "./importer.js";
 
 loadRootDotenv();
 
 const program = new Command()
-  .name("whome-import")
-  .description("Migrate data from HomeHub (SQLite) into whome (PostgreSQL)")
+  .name("domi-ops-import")
+  .description("Migrate data from HomeHub (SQLite) into Domi Ops (PostgreSQL)")
   .requiredOption("--sqlite <path>", "Path to HomeHub data/app.db")
   .option(
     "--config <path>",
@@ -21,7 +21,7 @@ const program = new Command()
     const databaseUrl = process.env.DATABASE_URL;
     if (!opts.dryRun && !databaseUrl) {
       console.error(
-        "DATABASE_URL is required for live import. Copy .env.example to .env or run: export DATABASE_URL=postgresql://whome:whome@localhost:5432/whome",
+        "DATABASE_URL is required for live import. Copy .env.example to .env or run: export DATABASE_URL=postgresql://domi_ops:domi_ops@localhost:5432/domi_ops",
       );
       process.exit(1);
     }

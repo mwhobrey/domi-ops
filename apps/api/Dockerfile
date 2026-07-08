@@ -13,7 +13,7 @@ COPY apps/web/package.json apps/web/
 COPY apps/worker/package.json apps/worker/
 RUN npm ci
 COPY . .
-RUN npx turbo run build --filter=@whome/api...
+RUN npx turbo run build --filter=@domi-ops/api...
 
 FROM node:22-alpine
 WORKDIR /app

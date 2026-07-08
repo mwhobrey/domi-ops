@@ -115,10 +115,10 @@ async function applyDemoPrefs(page, { calendarView } = {}) {
 
   await page.evaluate(
     ({ memberId, view }) => {
-      if (view) localStorage.setItem("whome:calendar-view", view);
-      localStorage.setItem("whome:calendar-setup-dismissed", "1");
+      if (view) localStorage.setItem("domi-ops:calendar-view", view);
+      localStorage.setItem("domi-ops:calendar-setup-dismissed", "1");
       if (memberId) {
-        localStorage.setItem(`whome:profile-onboarding-dismissed:${memberId}`, "1");
+        localStorage.setItem(`domi-ops:profile-onboarding-dismissed:${memberId}`, "1");
       }
     },
     { memberId: session?.user?.memberId ?? null, view: calendarView ?? "week" },

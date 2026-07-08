@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import type { Env } from "@whome/config";
-import type { Database } from "@whome/db";
+import type { Env } from "@domi-ops/config";
+import type { Database } from "@domi-ops/db";
 import { createS3Client, ensureS3ReadyOnce, publicObjectUrl } from "../lib/s3.js";
 import { browserUploadPutUrl } from "../lib/upload-token.js";
 import type { AppVariables } from "../middleware/auth.js";

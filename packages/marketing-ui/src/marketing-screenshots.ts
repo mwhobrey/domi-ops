@@ -77,8 +77,8 @@ export const DEFAULT_MARKETING_URLS: MarketingUrls = {
   appLogin: "https://app.domi-ops.com/login",
   appPrivacy: "https://app.domi-ops.com/privacy",
   demo: "https://demo.domi-ops.com",
-  github: "https://github.com/mwhobrey/whome",
-  setupDocs: "https://github.com/mwhobrey/whome/blob/master/docs/SETUP.md",
+  github: "https://github.com/mwhobrey/domi-ops",
+  setupDocs: "https://github.com/mwhobrey/domi-ops/blob/master/docs/SETUP.md",
 };
 
 export function resolveMarketingUrls(): MarketingUrls {

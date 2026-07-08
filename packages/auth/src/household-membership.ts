@@ -1,6 +1,6 @@
-import type { Env } from "@whome/config";
-import type { Database } from "@whome/db";
-import { users } from "@whome/db";
+import type { Env } from "@domi-ops/config";
+import type { Database } from "@domi-ops/db";
+import { users } from "@domi-ops/db";
 import { eq } from "drizzle-orm";
 import { bootstrapHouseholdOnLogin, resolveAuthContext } from "./bootstrap.js";
 import { getImportedHouseholdId, hasImportRecords } from "./import-records.js";

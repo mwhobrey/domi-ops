@@ -47,7 +47,7 @@ export default async function LoginPage({
       <div className="bg-page-gradient pointer-events-none absolute inset-0 opacity-40" aria-hidden />
       <div className="relative w-full max-w-[26rem] space-y-6 rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-surface-elevated)] p-6 shadow-[var(--shadow-card)] sm:p-8">
         <header className="space-y-1 text-center">
-          <p className="font-display text-3xl font-semibold tracking-tight">whome</p>
+          <p className="font-display text-3xl font-semibold tracking-tight">Domi Ops</p>
           <h1 className="text-base font-medium text-[var(--color-text-muted)]">Sign in</h1>
         </header>
 

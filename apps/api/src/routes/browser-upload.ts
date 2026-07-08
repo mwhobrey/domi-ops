@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import type { Env } from "@whome/config";
+import type { Env } from "@domi-ops/config";
 import { putObject } from "../lib/s3.js";
 import { verifyBrowserUploadToken } from "../lib/upload-token.js";
 

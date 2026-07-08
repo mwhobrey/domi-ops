@@ -1,6 +1,6 @@
-import type { Env } from "@whome/config";
-import type { Database } from "@whome/db";
-import { chores, householdMembers, households, users } from "@whome/db";
+import type { Env } from "@domi-ops/config";
+import type { Database } from "@domi-ops/db";
+import { chores, householdMembers, households, users } from "@domi-ops/db";
 import { and, eq } from "drizzle-orm";
 import { deliverUserNotification } from "./user-notify.js";
 import { localHourInTz, todayIsoDateInTz } from "./household-time.js";

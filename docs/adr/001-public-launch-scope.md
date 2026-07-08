@@ -9,7 +9,7 @@
 
 ## Context
 
-The product (internal repo name **whome**) is dogfooded on self-host at a private deployment. `/` redirects unauthenticated visitors to `/login`; public sign-up is disabled in production (`ALLOW_PUBLIC_SIGNUP=false`). Private GHCR images ship via CI ([WHO-133](https://linear.app/mikewhob-whome/issue/WHO-133)).
+The product (internal repo name **Domi Ops**) is dogfooded on self-host at a private deployment. `/` redirects unauthenticated visitors to `/login`; public sign-up is disabled in production (`ALLOW_PUBLIC_SIGNUP=false`). Private GHCR images ship via CI ([WHO-133](https://linear.app/mikewhob-whome/issue/WHO-133)).
 
 **Public launch** means releasing **open source self-host and Domi Ops hosted tiers on the same day** — not a staged “OSS first, cloud later” rollout. Until launch, the GitHub repo and container images stay **private**.
 
@@ -26,7 +26,7 @@ The codebase already has household module toggles (`modulesEnabled`), a deploy c
 7. **Onboarding:** Self-host uses deliberate bootstrap ([WHO-176](https://linear.app/mikewhob-whome/issue/WHO-176)); hosted uses **Stripe checkout → webhook provision → setup wizard** ([WHO-179](https://linear.app/mikewhob-whome/issue/WHO-179), [WHO-184](https://linear.app/mikewhob-whome/issue/WHO-184)).
 8. **Payments:** **Stripe** (existing account). SKU matrix, trials, and pricing deferred until pre-test ([WHO-185](https://linear.app/mikewhob-whome/issue/WHO-185)).
 9. **Legal:** Privacy / terms revisited immediately pre-launch ([WHO-182](https://linear.app/mikewhob-whome/issue/WHO-182)).
-10. **Internal rename:** npm scope `@whome/*`, GHCR `whome-*`, and repo name may stay until launch; **customer-facing** surfaces use Domi Ops.
+10. **Internal identifiers:** npm scope `@domi-ops/*`, GHCR `domi-ops-*`, repo target `domi-ops` — renamed pre-launch ([WHO-192](https://linear.app/mikewhob-whome/issue/WHO-192)). Customer-facing brand: **Domi Ops**.
 
 ---
 
@@ -62,7 +62,7 @@ Maps to existing `DEPLOYMENT_MODE` env and `households.tier` enum.
 
 ## Module catalog
 
-Authoritative list: `KNOWN_HOUSEHOLD_MODULES` in `@whome/config`:
+Authoritative list: `KNOWN_HOUSEHOLD_MODULES` in `@domi-ops/config`:
 
 | Module | Scope |
 |--------|--------|
@@ -175,7 +175,7 @@ Both tracks must pass [WHO-187](https://linear.app/mikewhob-whome/issue/WHO-187)
 
 - Stripe SKU matrix, trial length, card-up-front policy ([WHO-185](https://linear.app/mikewhob-whome/issue/WHO-185))
 - Final legal copy ([WHO-182](https://linear.app/mikewhob-whome/issue/WHO-182))
-- Package/repo rename `@whome` → `@domiops` (optional; cosmetic for v1)
+- Package/repo rename `@whome` → `@domi-ops` — **done** (WHO-192); GitHub repo `domi-ops` (private until WHO-174 public flip)
 - Community Discord (decide in [WHO-188](https://linear.app/mikewhob-whome/issue/WHO-188))
 - Trademark filing (optional quick screen only)
 
@@ -205,7 +205,7 @@ Both tracks must pass [WHO-187](https://linear.app/mikewhob-whome/issue/WHO-187)
 ### Negative / cost
 
 - Launch blocked on **both** OSS polish and hosted platform (longer calendar).
-- Brand transition: internal `whome` vs external Domi Ops until rename.
+- Internal identifiers aligned with Domi Ops brand (WHO-192); no remaining `whome` npm/GHCR names.
 - RLS or multi-DB routing is significant engineering ([WHO-178](https://linear.app/mikewhob-whome/issue/WHO-178)).
 
 ### Follow-up ADRs / docs

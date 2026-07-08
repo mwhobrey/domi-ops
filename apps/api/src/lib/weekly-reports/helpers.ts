@@ -1,6 +1,6 @@
-import { monFriWeekRange, type MonFriWeekRange } from "@whome/calendar-sync";
-import { households } from "@whome/db";
-import type { Database } from "@whome/db";
+import { monFriWeekRange, type MonFriWeekRange } from "@domi-ops/calendar-sync";
+import { households } from "@domi-ops/db";
+import type { Database } from "@domi-ops/db";
 import { eq } from "drizzle-orm";
 import type { WeeklyReportGroup, WeeklyReportItem } from "./types.js";
 

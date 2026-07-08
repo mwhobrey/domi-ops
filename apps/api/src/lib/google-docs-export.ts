@@ -1,8 +1,8 @@
-import { decryptSensitive, encryptSensitive, SensitiveDecryptError } from "@whome/crypto";
-import { refreshGoogleAccessToken, GoogleOAuthTokenError } from "@whome/auth";
-import type { Env } from "@whome/config";
-import type { Database } from "@whome/db";
-import { googleDocsConnections } from "@whome/db";
+import { decryptSensitive, encryptSensitive, SensitiveDecryptError } from "@domi-ops/crypto";
+import { refreshGoogleAccessToken, GoogleOAuthTokenError } from "@domi-ops/auth";
+import type { Env } from "@domi-ops/config";
+import type { Database } from "@domi-ops/db";
+import { googleDocsConnections } from "@domi-ops/db";
 import { and, eq } from "drizzle-orm";
 
 export class GoogleDocsCredentialsError extends Error {
@@ -100,7 +100,7 @@ async function googleDriveUpload(params: {
     metadata.mimeType = params.mimeType;
   }
 
-  const boundary = "-------whome-report-boundary";
+  const boundary = "-------domi-ops-report-boundary";
   const metaPart = JSON.stringify(metadata);
   const multipartBody = Buffer.concat([
     Buffer.from(

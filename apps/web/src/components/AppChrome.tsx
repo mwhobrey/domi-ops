@@ -113,7 +113,7 @@ export function AppChrome({
     try {
       const res = await authClient.signOut();
       if (res.error) {
-        console.error("[whome] sign out failed:", res.error.message);
+        console.error("[domi-ops] sign out failed:", res.error.message);
         return;
       }
       router.push("/login");
@@ -182,7 +182,7 @@ export function AppChrome({
               className="flex items-center gap-1.5 font-display text-base font-semibold tracking-tight"
             >
               <Home className="h-4 w-4 text-[var(--color-accent)]" aria-hidden />
-              whome
+              Domi Ops
             </Link>
           </div>
 

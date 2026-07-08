@@ -74,7 +74,7 @@ describe("preprocessDriveEmbedsForMarkdown", () => {
 
   it("preprocesses missing objects without resolutions map entry", () => {
     const result = preprocessDriveEmbedsForMarkdown("[[drive:missing-id|Gone]]", {});
-    expect(result).toContain("whome-drive-missing://missing-id");
+    expect(result).toContain("domi-ops-drive-missing://missing-id");
   });
 
   it("treats gif label as image before resolve completes", () => {

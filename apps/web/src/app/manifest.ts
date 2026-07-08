@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "whome — household ops",
-    short_name: "whome",
+    name: "Domi Ops — household ops",
+    short_name: "Domi Ops",
     description: "Calendar, chores, shopping, and daily life for your household.",
     start_url: "/dashboard",
     scope: "/",

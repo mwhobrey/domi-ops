@@ -1,4 +1,4 @@
-import type { Database } from "@whome/db";
+import type { Database } from "@domi-ops/db";
 import {
   importRecords,
   schoolAssignmentCategories,
@@ -9,7 +9,7 @@ import {
   schoolGrades,
   schoolSubmissionArtifacts,
   schoolSubmissions,
-} from "@whome/db";
+} from "@domi-ops/db";
 import { and, eq } from "drizzle-orm";
 import { requireDb } from "../lib/require-db.js";
 import { defaultTeacherMemberId, resolveMemberId, resolveOrCreateSchoolStudent } from "../lib/member-resolve.js";

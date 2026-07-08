@@ -1,5 +1,5 @@
 import Database from "better-sqlite3";
-import { createDb } from "@whome/db";
+import { createDb } from "@domi-ops/db";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,7 +16,7 @@ import type { ImportContext } from "./mappers/types.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixturePath =
-  process.env.WHOME_FIXTURE_DB ?? join(__dirname, "..", "fixtures", "minimal-homehub.db");
+  process.env.DOMI_OPS_FIXTURE_DB ?? join(__dirname, "..", "fixtures", "minimal-homehub.db");
 const fixtureConfigPath = join(__dirname, "..", "fixtures", "config.yml");
 
 function ensureFixture() {
@@ -57,7 +57,7 @@ function ensureFixture() {
   }
 }
 
-const testDb = createDb("postgresql://whome:whome@127.0.0.1:5432/whome_unused");
+const testDb = createDb("postgresql://domi_ops:domi_ops@127.0.0.1:5432/domi_ops_unused");
 const homeHubConfig = loadHomeHubConfig(fixtureConfigPath);
 
 function testContext(sqlite: Database.Database, overrides: Partial<ImportContext> = {}): ImportContext {
@@ -66,7 +66,7 @@ function testContext(sqlite: Database.Database, overrides: Partial<ImportContext
     sqlite,
     dryRun: true,
     householdId: "00000000-0000-0000-0000-000000000001",
-    databaseUrl: "postgresql://whome:whome@127.0.0.1:5432/whome_unused",
+    databaseUrl: "postgresql://domi_ops:domi_ops@127.0.0.1:5432/domi_ops_unused",
     idMap: new Map(),
     db: testDb,
     homeHubConfig,

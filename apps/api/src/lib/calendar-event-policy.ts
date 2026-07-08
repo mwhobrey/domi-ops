@@ -1,9 +1,9 @@
-import type { Database } from "@whome/db";
+import type { Database } from "@domi-ops/db";
 import {
   calendarConnections,
   calendarEvents,
   linkedGoogleCalendars,
-} from "@whome/db";
+} from "@domi-ops/db";
 import { eq } from "drizzle-orm";
 
 export type CalendarEventRow = typeof calendarEvents.$inferSelect;

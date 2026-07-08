@@ -1,5 +1,5 @@
-import type { Database } from "@whome/db";
-import { calendars, calendarEvents, calendarEventReminders, importRecords, recurringRules } from "@whome/db";
+import type { Database } from "@domi-ops/db";
+import { calendars, calendarEvents, calendarEventReminders, importRecords, recurringRules } from "@domi-ops/db";
 import { eq, and } from "drizzle-orm";
 import { sqliteTableExists, sqliteSelectExisting, sqliteColumns } from "../lib/sqlite.js";
 import { requireDb } from "../lib/require-db.js";

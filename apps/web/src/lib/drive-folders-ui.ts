@@ -82,7 +82,7 @@ export function folderSelectOptions(
   return out;
 }
 
-export const DRIVE_OBJECT_DRAG_TYPE = "application/x-whome-drive-object";
+export const DRIVE_OBJECT_DRAG_TYPE = "application/x-domi-ops-drive-object";
 
 export function isExternalFileDrag(e: React.DragEvent | DragEvent): boolean {
   const types = e.dataTransfer?.types;

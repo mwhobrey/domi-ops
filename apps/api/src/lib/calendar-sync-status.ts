@@ -1,9 +1,9 @@
-import type { Database } from "@whome/db";
+import type { Database } from "@domi-ops/db";
 import {
   calendarConnections,
   linkedGoogleCalendars,
-} from "@whome/db";
-import { parseSyncRunProgress } from "@whome/calendar-sync";
+} from "@domi-ops/db";
+import { parseSyncRunProgress } from "@domi-ops/calendar-sync";
 import { and, asc, eq } from "drizzle-orm";
 
 export async function buildCalendarSyncStatus(

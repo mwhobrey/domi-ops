@@ -1,5 +1,5 @@
-import type { Database } from "@whome/db";
-import { calendarEvents } from "@whome/db";
+import type { Database } from "@domi-ops/db";
+import { calendarEvents } from "@domi-ops/db";
 import { and, desc, eq, isNotNull, isNull, or } from "drizzle-orm";
 import type { MappedEventFields } from "./mapper.js";
 

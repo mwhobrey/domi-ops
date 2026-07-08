@@ -1,4 +1,4 @@
-# HomeHub → whome mappers
+# HomeHub → Domi Ops mappers
 
 Implement one file per domain. Each mapper:
 

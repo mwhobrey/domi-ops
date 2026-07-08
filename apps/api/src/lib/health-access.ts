@@ -1,11 +1,11 @@
-import type { Database } from "@whome/db";
+import type { Database } from "@domi-ops/db";
 import {
   healthEventShares,
   healthEvents,
   healthMedicationShares,
   healthMedications,
   householdMembers,
-} from "@whome/db";
+} from "@domi-ops/db";
 import { and, eq, exists, inArray, or } from "drizzle-orm";
 import { isHouseholdAdmin } from "./school-access.js";
 

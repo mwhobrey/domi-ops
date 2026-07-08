@@ -9,8 +9,8 @@ import {
   Receipt,
   ShoppingCart,
 } from "lucide-react";
-import type { MarketingScreenshot } from "@whome/marketing-ui";
-import { MARKETING_SCREENSHOTS } from "@whome/marketing-ui";
+import type { MarketingScreenshot } from "@domi-ops/marketing-ui";
+import { MARKETING_SCREENSHOTS } from "@domi-ops/marketing-ui";
 
 export type ModuleTile =
   | {

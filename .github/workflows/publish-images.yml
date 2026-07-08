@@ -38,6 +38,8 @@ jobs:
             build_args: API_URL=http://api:4000
           - name: import
             dockerfile: Dockerfile.import
+          - name: www
+            dockerfile: apps/www/Dockerfile
 
     steps:
       - uses: actions/checkout@v4
@@ -53,7 +55,7 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/whome-${{ matrix.name }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/domi-ops-${{ matrix.name }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,prefix=

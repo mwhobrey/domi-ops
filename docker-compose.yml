@@ -3,15 +3,15 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: whome
-      POSTGRES_PASSWORD: whome
-      POSTGRES_DB: whome
+      POSTGRES_USER: domi_ops
+      POSTGRES_PASSWORD: domi_ops
+      POSTGRES_DB: domi_ops
     ports:
       - "5432:5432"
     volumes:
-      - whome_pg:/var/lib/postgresql/data
+      - domi_ops_pg:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U whome"]
+      test: ["CMD-SHELL", "pg_isready -U domi_ops"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -30,13 +30,13 @@ services:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: whome
-      MINIO_ROOT_PASSWORD: whome-dev-secret
+      MINIO_ROOT_USER: domi_ops
+      MINIO_ROOT_PASSWORD: domi-ops-dev-secret
     ports:
       - "9000:9000"
       - "9001:9001"
     volumes:
-      - whome_minio:/data
+      - domi_ops_minio:/data
 
   api:
     build:
@@ -45,7 +45,7 @@ services:
     env_file: .env
     # Migrations run automatically on API container start (apps/api/Dockerfile ENTRYPOINT)
     environment:
-      DATABASE_URL: postgresql://whome:whome@postgres:5432/whome
+      DATABASE_URL: postgresql://domi_ops:domi_ops@postgres:5432/domi_ops
       REDIS_URL: redis://redis:6379
       S3_ENDPOINT: http://minio:9000
       # Browser-facing URL comes from .env (PUBLIC_APP_URL, e.g. http://localhost:3001)
@@ -64,7 +64,7 @@ services:
       dockerfile: apps/worker/Dockerfile
     env_file: .env
     environment:
-      DATABASE_URL: postgresql://whome:whome@postgres:5432/whome
+      DATABASE_URL: postgresql://domi_ops:domi_ops@postgres:5432/domi_ops
       REDIS_URL: redis://redis:6379
     depends_on:
       postgres:
@@ -88,5 +88,5 @@ services:
       - api
 
 volumes:
-  whome_pg:
-  whome_minio:
+  domi_ops_pg:
+  domi_ops_minio:

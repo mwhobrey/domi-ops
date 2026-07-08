@@ -1,6 +1,6 @@
 # Module audit (Jun 2026)
 
-Quick-pass evaluation from dogfooding whome vs HomeHub expectations. **Source of truth for work tracking:** Linear projects (see [`docs/LINEAR.md`](LINEAR.md)).
+Quick-pass evaluation from dogfooding Domi Ops vs HomeHub expectations. **Source of truth for work tracking:** Linear projects (see [`docs/LINEAR.md`](LINEAR.md)).
 
 ## Projects created (WHO-14 … WHO-75)
 

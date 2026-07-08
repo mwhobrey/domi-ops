@@ -195,7 +195,7 @@ export function ReportExportSheet({
 
         {!driveEnabled ? (
           <Alert variant="info">
-            Enable the Drive module in household settings to save reports to whome Drive.
+            Enable the Drive module in household settings to save reports to Domi Ops Drive.
           </Alert>
         ) : null}
 
@@ -234,7 +234,7 @@ export function ReportExportSheet({
             <Button
               type="button"
               variant="ghost"
-              onClick={() => void runExport("whome-drive")}
+              onClick={() => void runExport("domi-ops-drive")}
               disabled={exporting || !driveEnabled}
               title={driveEnabled ? undefined : "Drive module is not enabled"}
             >

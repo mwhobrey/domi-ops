@@ -1,9 +1,9 @@
-import type { Env } from "@whome/config";
-import type { Database } from "@whome/db";
-import { householdMembers, users } from "@whome/db";
-import { MAX_WEEKS_IN_RANGE } from "@whome/calendar-sync";
+import type { Env } from "@domi-ops/config";
+import type { Database } from "@domi-ops/db";
+import { householdMembers, users } from "@domi-ops/db";
+import { MAX_WEEKS_IN_RANGE } from "@domi-ops/calendar-sync";
 import { eq, and } from "drizzle-orm";
-import { memberShownLabel } from "@whome/auth";
+import { memberShownLabel } from "@domi-ops/auth";
 import { buildChoreReports } from "../chores-karma.js";
 import { buildExpenseReports } from "../expenses.js";
 import { buildHealthReports } from "../health-reports.js";

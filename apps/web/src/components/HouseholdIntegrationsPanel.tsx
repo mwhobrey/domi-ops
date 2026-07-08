@@ -165,7 +165,7 @@ export function HouseholdIntegrationsPanel({ status }: { status: HouseholdIntegr
             }
             detail={
               status.storage.configured
-                ? `Bucket: ${status.storage.bucket ?? "whome"} — avatars, school uploads, receipts.`
+                ? `Bucket: ${status.storage.bucket ?? "domi-ops"} — avatars, school uploads, receipts.`
                 : "S3/MinIO env vars missing — avatars and file uploads will fail."
             }
           />

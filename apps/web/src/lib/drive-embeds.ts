@@ -3,8 +3,8 @@ import type { DriveEmbedObject } from "./drive-types";
 /** Matches `[[drive:uuid]]` or `[[drive:uuid|label]]` (label optional). */
 export const DRIVE_EMBED_PATTERN = /\[\[drive:([^\]|]+)(?:\|([^\]]*))?\]\]/gi;
 
-export const DRIVE_EMBED_LINK_PREFIX = "whome-drive://";
-export const DRIVE_EMBED_MISSING_PREFIX = "whome-drive-missing://";
+export const DRIVE_EMBED_LINK_PREFIX = "domi-ops-drive://";
+export const DRIVE_EMBED_MISSING_PREFIX = "domi-ops-drive-missing://";
 
 const IMAGE_FILENAME_PATTERN = /\.(gif|jpe?g|png|webp|svg)$/i;
 

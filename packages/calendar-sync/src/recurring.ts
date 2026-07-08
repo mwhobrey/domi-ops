@@ -1,5 +1,5 @@
-import type { Database } from "@whome/db";
-import { calendarEvents, recurringRules } from "@whome/db";
+import type { Database } from "@domi-ops/db";
+import { calendarEvents, recurringRules } from "@domi-ops/db";
 import { and, eq, gte, lte } from "drizzle-orm";
 import {
   parseRuleReminderOffsets,

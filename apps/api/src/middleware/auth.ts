@@ -1,7 +1,7 @@
 import type { Context, Next } from "hono";
-import { resolveAuthContext, type AuthContext, type WhomeBetterAuth } from "@whome/auth";
-import type { Env } from "@whome/config";
-import type { Database } from "@whome/db";
+import { resolveAuthContext, type AuthContext, type WhomeBetterAuth } from "@domi-ops/auth";
+import type { Env } from "@domi-ops/config";
+import type { Database } from "@domi-ops/db";
 
 export type { AuthContext };
 

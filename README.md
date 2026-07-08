@@ -1,6 +1,6 @@
-# whome
+# Domi Ops
 
-**whome** is an open-source household operations platform — calendar, chores, shopping, notes, expenses, homeschool, and shared files in one place. It is built for families who want a modern, polished experience without running a pile of separate apps, with **minimal self-host setup** (Docker Compose, one Postgres, sensible defaults). **Self-host and whome-hosted** (managed cloud) are planned to **launch together** as open source once the product is stable, security-reviewed, and hosted operations are ready — not as a staged “OSS first, cloud later” rollout.
+**Domi Ops** is an open-source household operations platform — calendar, chores, shopping, notes, expenses, homeschool, and shared files in one place. It is built for families who want a modern, polished experience without running a pile of separate apps, with **minimal self-host setup** (Docker Compose, one Postgres, sensible defaults). **Self-host and Domi Ops hosted** (managed cloud) are planned to **launch together** as open source once the product is stable, security-reviewed, and hosted operations are ready — not as a staged “OSS first, cloud later” rollout.
 
 ## What you get
 
@@ -64,14 +64,14 @@ docker compose -f docker-compose.prod.yml up -d --build
 #   -f docker-compose.prod.yml -f docker-compose.proxy-external.yml up -d --build
 ```
 
-Pre-built images are published to GHCR on `main` and version tags — see `docker-compose.prod.yml` and `WHO_IMAGE_TAG` for pull-only deploys.
+Pre-built images are published to GHCR on `main` and version tags — see `docker-compose.prod.yml` and `DOMI_OPS_IMAGE_TAG` for pull-only deploys.
 
 ## Migrating from HomeHub
 
-If you are coming from [HomeHub](https://github.com/surajverma/homehub), whome includes an import path for SQLite data and uploads. This is **optional**; you can also start fresh.
+If you are coming from [HomeHub](https://github.com/surajverma/homehub), Domi Ops includes an import path for SQLite data and uploads. This is **optional**; you can also start fresh.
 
 ```bash
-npm rebuild better-sqlite3 -w @whome/import-homehub   # if Node version changed
+npm rebuild better-sqlite3 -w @domi-ops/import-homehub   # if Node version changed
 npm run import:homehub -- --sqlite /path/to/app.db --uploads /path/to/uploads --dry-run
 ```
 
@@ -89,7 +89,7 @@ npm run test
 | Phase | Focus |
 |-------|--------|
 | **Now** | Dogfood on self-host; harden security, fix bugs, finish hosted ops |
-| **Public launch** | **Open source + whome-hosted together** — same codebase, your server or ours |
+| **Public launch** | **Open source + Domi Ops hosted together** — same codebase, your server or ours |
 | **Ongoing** | Self-host docs, community, and hosted tiers per [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 
 Hosted multi-tenant code is not live yet; launch waits until self-host and hosted are both ready to ship.

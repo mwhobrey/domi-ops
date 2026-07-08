@@ -1,10 +1,10 @@
-import type { Env } from "@whome/config";
-import type { Database } from "@whome/db";
+import type { Env } from "@domi-ops/config";
+import type { Database } from "@domi-ops/db";
 import {
   householdMembers,
   households,
   users,
-} from "@whome/db";
+} from "@domi-ops/db";
 import { eq } from "drizzle-orm";
 import { hasImportRecords } from "./import-records.js";
 import {

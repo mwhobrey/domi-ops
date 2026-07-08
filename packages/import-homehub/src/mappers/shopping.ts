@@ -1,5 +1,5 @@
 import { requireDb } from "../lib/require-db.js";
-import { shoppingItems, importRecords } from "@whome/db";
+import { shoppingItems, importRecords } from "@domi-ops/db";
 import { and, eq } from "drizzle-orm";
 import { sqliteTableExists } from "../lib/sqlite.js";
 import type { ImportContext, MapperResult } from "./types.js";

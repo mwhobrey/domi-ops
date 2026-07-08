@@ -2,9 +2,9 @@
 
 ## Question
 
-Should whome track **running balances** per account (checking, cash, credit card) in addition to categorized expenses?
+Should Domi Ops track **running balances** per account (checking, cash, credit card) in addition to categorized expenses?
 
-## HomeHub / whome today
+## HomeHub / Domi Ops today
 
 - `expenses` rows are **category + amount + date** — no account dimension.
 - Shopping clear can auto-create a **Groceries** expense; no ledger link.

@@ -1,5 +1,5 @@
-import type { Env } from "@whome/config";
-import { encryptSensitive, decryptSensitive, SensitiveDecryptError } from "@whome/crypto";
+import type { Env } from "@domi-ops/config";
+import { encryptSensitive, decryptSensitive, SensitiveDecryptError } from "@domi-ops/crypto";
 
 export class HealthEncryptionError extends Error {
   constructor(message: string) {

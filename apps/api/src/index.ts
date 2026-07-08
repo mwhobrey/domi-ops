@@ -1,9 +1,9 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { createBetterAuth } from "@whome/auth";
-import { loadEnv, isModuleEnabled } from "@whome/config";
-import { createDb } from "@whome/db";
+import { createBetterAuth } from "@domi-ops/auth";
+import { loadEnv, isModuleEnabled } from "@domi-ops/config";
+import { createDb } from "@domi-ops/db";
 import { createAuthMiddleware, type AppVariables } from "./middleware/auth.js";
 import { whomeSessionRoutes } from "./routes/auth.js";
 import { calendarRoutes } from "./routes/calendar.js";
@@ -81,8 +81,8 @@ app.get("/api/modules", (c) =>
 const port = Number(process.env.PORT ?? 4000);
 if (env.S3_ENDPOINT) {
   void ensureS3ReadyOnce(env).catch((err) => {
-    console.warn("[whome s3] bucket/CORS setup failed:", err instanceof Error ? err.message : err);
+    console.warn("[domi-ops s3] bucket/CORS setup failed:", err instanceof Error ? err.message : err);
   });
 }
-console.log(`whome api listening on :${port} (${env.DEPLOYMENT_MODE})`);
+console.log(`domi-ops api listening on :${port} (${env.DEPLOYMENT_MODE})`);
 serve({ fetch: app.fetch, port });

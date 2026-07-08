@@ -1,21 +1,21 @@
 import nodemailer from "nodemailer";
-import type { Env } from "@whome/config";
-import { isSmtpConfigured } from "@whome/config";
+import type { Env } from "@domi-ops/config";
+import { isSmtpConfigured } from "@domi-ops/config";
 
 export async function sendVerificationEmail(
   env: Env,
   input: { to: string; url: string; name?: string | null },
 ): Promise<void> {
-  const subject = "Verify your whome account";
+  const subject = "Verify your Domi Ops account";
   const greeting = input.name?.trim() ? `Hi ${input.name.trim()},` : "Hi,";
-  const text = `${greeting}\n\nVerify your email to finish setting up whome:\n\n${input.url}\n\nIf you did not sign up, you can ignore this message.`;
-  const html = `<p>${greeting}</p><p>Verify your email to finish setting up whome:</p><p><a href="${input.url}">${input.url}</a></p><p>If you did not sign up, you can ignore this message.</p>`;
+  const text = `${greeting}\n\nVerify your email to finish setting up Domi Ops:\n\n${input.url}\n\nIf you did not sign up, you can ignore this message.`;
+  const html = `<p>${greeting}</p><p>Verify your email to finish setting up Domi Ops:</p><p><a href="${input.url}">${input.url}</a></p><p>If you did not sign up, you can ignore this message.</p>`;
 
   if (!isSmtpConfigured(env)) {
     if (env.NODE_ENV === "production") {
       throw new Error("SMTP is not configured — cannot send verification email");
     }
-    console.warn(`[whome auth] SMTP not configured — verification link for ${input.to}:\n${input.url}`);
+    console.warn(`[domi-ops auth] SMTP not configured — verification link for ${input.to}:\n${input.url}`);
     return;
   }
 

@@ -11,7 +11,7 @@ export async function showBrowserNotification(
   if (!reg) return;
   await reg.showNotification(title, {
     body,
-    tag: tag ?? "whome-alert",
+    tag: tag ?? "domi-ops-alert",
     icon: "/icons/icon-192.png",
     data: { url },
   });

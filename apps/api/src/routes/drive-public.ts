@@ -1,8 +1,8 @@
 import { Hono } from "hono";
-import { hashPassword, verifyPassword } from "@whome/auth";
-import type { Env } from "@whome/config";
-import type { Database } from "@whome/db";
-import { driveObjects, driveShareTokens } from "@whome/db";
+import { hashPassword, verifyPassword } from "@domi-ops/auth";
+import type { Env } from "@domi-ops/config";
+import type { Database } from "@domi-ops/db";
+import { driveObjects, driveShareTokens } from "@domi-ops/db";
 import { eq } from "drizzle-orm";
 import { filenameFromDriveKey } from "../lib/drive.js";
 import { contentTypeFromKey, getObjectBuffer } from "../lib/s3.js";

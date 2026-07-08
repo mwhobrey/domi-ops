@@ -2,7 +2,7 @@
 
 > **Household admins:** start with **[SETUP.md](./SETUP.md)** for step-by-step paths, configuration in plain language, optional Google setup, and best practices. This document is the technical reference.
 
-whome is designed for a single household per PostgreSQL instance (`DEPLOYMENT_MODE=single`). This guide consolidates local dev, production Docker, migrations, optional modules, and common troubleshooting.
+Domi Ops is designed for a single household per PostgreSQL instance (`DEPLOYMENT_MODE=single`). This guide consolidates local dev, production Docker, migrations, optional modules, and common troubleshooting.
 
 ## Prerequisites
 
@@ -106,7 +106,7 @@ Production one-shot import container:
 
 ```bash
 docker compose -f docker-compose.prod.yml run --rm \
-  -e DATABASE_URL=postgresql://whome:$POSTGRES_PASSWORD@postgres:5432/whome \
+  -e DATABASE_URL=postgresql://domi_ops:$POSTGRES_PASSWORD@postgres:5432/domi_ops \
   -v /path/to/homehub/data:/import:ro \
   import --sqlite /import/app.db --uploads /import/uploads
 ```
@@ -130,8 +130,8 @@ Controlled by `MODULES_ENABLED` at deploy time and per-household toggles in **Se
 whome is **not** a HIPAA-covered entity and does not claim HIPAA compliance. When the `health` module is enabled:
 
 - **In transit:** use HTTPS in production (Caddy or your reverse proxy). Plain HTTP dev is not suitable for real health data.
-- **At rest (application):** titles, notes, medication names/dosage/instructions, and dose log notes are encrypted in PostgreSQL via `@whome/crypto` (`ENCRYPTION_KEY` — same key as Google OAuth tokens).
-- **At rest (operator):** encrypt your Postgres volume or enable full-disk encryption on the host. whome does not manage disk-level encryption.
+- **At rest (application):** titles, notes, medication names/dosage/instructions, and dose log notes are encrypted in PostgreSQL via `@domi-ops/crypto` (`ENCRYPTION_KEY` — same key as Google OAuth tokens).
+- **At rest (operator):** encrypt your Postgres volume or enable full-disk encryption on the host. Domi Ops does not manage disk-level encryption.
 - **Key rotation:** rotating `ENCRYPTION_KEY` requires re-encrypting stored health fields (same limitation as OAuth tokens today; no migration tooling in v1).
 
 ## Google OAuth

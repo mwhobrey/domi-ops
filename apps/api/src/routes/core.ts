@@ -10,15 +10,15 @@ import {
   UpdateMemberRoleError,
   updateHouseholdMemberRole,
   isHouseholdMemberRole,
-} from "@whome/auth";
-import type { Env } from "@whome/config";
+} from "@domi-ops/auth";
+import type { Env } from "@domi-ops/config";
 import {
   deployAvailableModules,
   isModuleEnabled,
   KNOWN_HOUSEHOLD_MODULES,
-} from "@whome/config";
-import type { Database } from "@whome/db";
-import { checkHouseholdBudgetAlerts } from "@whome/calendar-sync";
+} from "@domi-ops/config";
+import type { Database } from "@domi-ops/db";
+import { checkHouseholdBudgetAlerts } from "@domi-ops/calendar-sync";
 import {
   chores,
   choresRecurring,
@@ -41,7 +41,7 @@ import {
   pushSubscriptions,
   userNotifications,
   users,
-} from "@whome/db";
+} from "@domi-ops/db";
 import { and, desc, eq, exists, ilike, inArray, or, sql } from "drizzle-orm";
 import {
   buildShoppingReports,
@@ -57,7 +57,7 @@ import {
   isReceiptKeyForHousehold,
   todayIsoDate,
 } from "../lib/shopping.js";
-import type { AuthContext } from "@whome/auth";
+import type { AuthContext } from "@domi-ops/auth";
 import {
   normalizePresence,
   normalizeStatusMessage,
@@ -632,7 +632,7 @@ export function coreRoutes(db: Database, env: Env) {
       posterDisplayName: label,
     }).catch((err) => {
       if (env.NODE_ENV === "development") {
-        console.error("[whome] notice push failed", err);
+        console.error("[domi-ops] notice push failed", err);
       }
     });
     return c.json({ notice: mapped }, 201);

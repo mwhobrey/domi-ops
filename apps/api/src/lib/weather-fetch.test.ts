@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import type { Env } from "@whome/config";
+import type { Env } from "@domi-ops/config";
 
 vi.mock("./open-meteo.js", () => ({
   fetchOpenMeteoForecast: vi.fn(),

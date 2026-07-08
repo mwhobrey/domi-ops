@@ -1,5 +1,5 @@
-import type { Database } from "@whome/db";
-import { weeksOverlappingRange } from "@whome/calendar-sync";
+import type { Database } from "@domi-ops/db";
+import { weeksOverlappingRange } from "@domi-ops/calendar-sync";
 import { buildChoresWeeklyReport, buildShoppingWeeklyReport } from "./chores-shopping.js";
 import { buildExpensesWeeklyReport } from "./expenses.js";
 import { resolveMonFriWeek } from "./helpers.js";

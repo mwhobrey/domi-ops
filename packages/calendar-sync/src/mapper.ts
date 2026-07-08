@@ -119,7 +119,7 @@ export type WhomeEventForGoogle = {
   reminderOffsets?: number[];
 };
 
-/** Build Google Calendar API event body from a whome event row. */
+/** Build Google Calendar API event body from a Domi Ops event row. */
 export function eventToGoogleBody(
   event: WhomeEventForGoogle,
   tzName: string,

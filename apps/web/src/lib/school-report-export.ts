@@ -38,7 +38,7 @@ export function downloadReportsSummaryCsv(reports: SchoolReportsData) {
       ].join(","),
     ),
   ];
-  downloadBlob("whome-grade-summary.csv", lines.join("\n"), "text/csv;charset=utf-8");
+  downloadBlob("domi-ops-grade-summary.csv", lines.join("\n"), "text/csv;charset=utf-8");
 }
 
 export function downloadMissingDigestCsv(reports: SchoolReportsData) {
@@ -54,7 +54,7 @@ export function downloadMissingDigestCsv(reports: SchoolReportsData) {
       ].join(","),
     ),
   ];
-  downloadBlob("whome-open-work.csv", lines.join("\n"), "text/csv;charset=utf-8");
+  downloadBlob("domi-ops-open-work.csv", lines.join("\n"), "text/csv;charset=utf-8");
 }
 
 export function downloadTranscriptCsv(transcript: TranscriptStudentRow) {
@@ -84,7 +84,7 @@ export function downloadTranscriptCsv(transcript: TranscriptStudentRow) {
   }
 
   const slug = transcript.label.replace(/[^\w.-]+/g, "-").toLowerCase() || "student";
-  downloadBlob(`whome-transcript-${slug}.csv`, lines.join("\n"), "text/csv;charset=utf-8");
+  downloadBlob(`domi-ops-transcript-${slug}.csv`, lines.join("\n"), "text/csv;charset=utf-8");
 }
 
 export function downloadAllTranscriptsCsv(reports: SchoolReportsData) {

@@ -1,12 +1,12 @@
-# whome — Master Runbook Index
+# Domi Ops — Master Runbook Index
 
 ## Executive summary
 
-**whome** is an open-source household operations platform (calendar, homeschool LMS, shopping, chores, notes, expenses). It is a TypeScript monorepo: Next.js UI, Hono REST API, BullMQ worker, Drizzle/PostgreSQL, Redis queues, MinIO/S3 files. Primary deployment target today is self-hosted Docker; **public launch plans open source and whome-hosted together** once stability, security, and hosted ops are ready (hosted multi-tenant is designed but not implemented in code yet).
+**Domi Ops** is an open-source household operations platform (calendar, homeschool LMS, shopping, chores, notes, expenses). It is a TypeScript monorepo: Next.js UI, Hono REST API, BullMQ worker, Drizzle/PostgreSQL, Redis queues, MinIO/S3 files. Primary deployment target today is self-hosted Docker; **public launch plans open source and Domi Ops hosted together** once stability, security, and hosted ops are ready (hosted multi-tenant is designed but not implemented in code yet).
 
 ## North Star
 
-**One household runs daily life in whome** — calendar, homeschool, and core modules on a single Postgres instance — with enterprise-grade UX. Self-host and managed hosted tiers share one codebase; both ship at public OSS launch when ready.
+**One household runs daily life in Domi Ops** — calendar, homeschool, and core modules on a single Postgres instance — with enterprise-grade UX. Self-host and managed hosted tiers share one codebase; both ship at public OSS launch when ready.
 
 ## When to read what
 
@@ -40,7 +40,7 @@
 ## Repo facts (grounded)
 
 - **Node:** `>=20` (`package.json` `engines`)
-- **Package manager:** npm 10.9.2 workspaces + Turborepo
+- **Package manager:** npm 10.9.2 workspaces + Turborepo (`@domi-ops/*` scope)
 - **Commits on `master`:** `a96a368` (cutover baseline), `4b67280` (initial platform)
 - **CI:** GitHub Actions on push/PR (`typecheck`, `build`, `test`)
 - **Tests:** Vitest — `npm run test`

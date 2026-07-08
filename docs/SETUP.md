@@ -1,4 +1,4 @@
-# whome setup guide
+# Domi Ops setup guide
 
 This guide is for **household admins** who are comfortable with servers, SSH, and editing config files — but who are not necessarily software developers. It walks through every common setup path, what each setting does, and what we recommend for a typical family deployment.
 
@@ -26,12 +26,12 @@ This guide is for **household admins** who are comfortable with servers, SSH, an
 | Dashboard, notices, chores, shopping, notes, expenses | Yes |
 | School (classes, assignments, gradebook) | Yes |
 | Household Drive (files, folders, sharing) | Yes |
-| Calendar (create and manage events in whome) | Yes |
+| Calendar (create and manage events in Domi Ops) | Yes |
 | Email/password login + household members | Yes |
 | Web Push notifications (with VAPID keys) | Yes |
 | PWA install on phones | Yes |
 | **Sign in with Google** | No — use email/password or provision usernames |
-| **Import/sync Google Calendar** | No — use whome’s calendar only, or import once if you set Google up later |
+| **Import/sync Google Calendar** | No — use Domi Ops's calendar only, or import once if you set Google up later |
 
 ---
 
@@ -39,7 +39,7 @@ This guide is for **household admins** who are comfortable with servers, SSH, an
 
 | Path | Best for | Complexity |
 |------|----------|------------|
-| **[A] Try on your computer](#path-a-try-on-your-computer)** | Evaluating whome before committing a server | Low |
+| **[A] Try on your computer](#path-a-try-on-your-computer)** | Evaluating Domi Ops before committing a server | Low |
 | **[B] Production on a server (build on box)](#path-b-production-on-a-server)** | First install, full control | Medium |
 | **[C] Production with pre-built images](#path-c-production-with-pre-built-images)** | Updates without compiling on the server | Medium |
 | **[D] Behind an existing reverse proxy](#path-d-behind-caddy-or-another-reverse-proxy)** | You already run Caddy, Traefik, or nginx | Medium |
@@ -55,8 +55,8 @@ Use this to click around before pointing a domain at a server.
 ### Option A1 — App on your machine, database in Docker (default)
 
 ```bash
-git clone https://github.com/mwhobrey/whome.git
-cd whome
+git clone https://github.com/mwhobrey/domi-ops.git
+cd domi-ops
 cp .env.example .env
 ```
 
@@ -134,8 +134,8 @@ Full spec: [marketing/demo-household-spec.md](./marketing/demo-household-spec.md
 ### 2. Clone and configure
 
 ```bash
-git clone https://github.com/mwhobrey/whome.git
-cd whome
+git clone https://github.com/mwhobrey/domi-ops.git
+cd domi-ops
 cp .env.example .env
 ```
 
@@ -177,7 +177,7 @@ docker compose -f docker-compose.prod.yml logs api --tail 30
 
 ### 4. Put HTTPS in front
 
-whome’s web container listens on port 3000 **inside Docker**. Browsers should hit **HTTPS** on your domain via a reverse proxy.
+Domi Ops's web container listens on port 3000 **inside Docker**. Browsers should hit **HTTPS** on your domain via a reverse proxy.
 
 See [Path D](#path-d-behind-caddy-or-another-reverse-proxy) for Caddy. Until then you can smoke-test with an SSH tunnel:
 
@@ -203,11 +203,11 @@ echo "$GHCR_PAT" | docker login ghcr.io -u YOUR_GITHUB_USER --password-stdin
 **Each update:**
 
 ```bash
-cd ~/whome
+cd ~/domi-ops
 git pull
 set -a && source .env && set +a
 
-export WHO_IMAGE_TAG=latest   # or pin to a version tag, e.g. 0.1.0
+export DOMI_OPS_IMAGE_TAG=latest   # or pin to a version tag, e.g. 0.1.0
 
 docker compose -f docker-compose.prod.yml pull api worker web
 docker compose -f docker-compose.prod.yml up -d --no-build
@@ -234,11 +234,11 @@ Add a site block (see `deploy/Caddyfile.example`):
 ```caddy
 home.example.com {
     encode gzip zstd
-    reverse_proxy whome-web:3000
+    reverse_proxy domi-ops-web:3000
 }
 ```
 
-Reload Caddy. Confirm the `whome-web` container appears on the proxy network:
+Reload Caddy. Confirm the `domi-ops-web` container appears on the proxy network:
 
 ```bash
 docker network inspect your_proxy_network --format '{{range .Containers}}{{.Name}} {{end}}'
@@ -300,9 +300,9 @@ Set in `.env` — default is safest for migration:
 
 | Value | Behavior |
 |-------|----------|
-| `import_only` | **Recommended default.** One-time import from Google; whome is source of truth after. |
+| `import_only` | **Recommended default.** One-time import from Google; Domi Ops is source of truth after. |
 | `manual` | Import available; ongoing sync only when you trigger it. |
-| `bidirectional` | Changes in whome push back to Google (advanced). |
+| `bidirectional` | Changes in Domi Ops push back to Google (advanced). |
 
 Per-connection mode can also be changed in the app under Calendar settings.
 
@@ -310,7 +310,7 @@ Per-connection mode can also be changed in the app under Calendar settings.
 
 Redirect URIs must use the **exact origin** you open in the browser:
 
-| How you run whome | `PUBLIC_APP_URL` | Origins + redirects in GCP |
+| How you run Domi Ops | `PUBLIC_APP_URL` | Origins + redirects in GCP |
 |-------------------|------------------|----------------------------|
 | `npm run dev` | `http://localhost:3000` | `http://localhost:3000/...` |
 | Docker compose dev | `http://localhost:3001` | `http://localhost:3001/...` |
@@ -423,7 +423,7 @@ MODULES_ENABLED=core,school,drive
 ALLOW_PUBLIC_SIGNUP=false
 ```
 
-Use email/password or provisioned usernames. Calendar lives entirely in whome.
+Use email/password or provisioned usernames. Calendar lives entirely in Domi Ops.
 
 ### Typical family — Google sign-in + calendar import
 
@@ -434,7 +434,7 @@ GOOGLE_OAUTH_CLIENT_ID=...
 GOOGLE_OAUTH_CLIENT_SECRET=...
 ```
 
-Connect Google once per adult under Profile / Calendar settings. Import household calendar, then run day-to-day in whome.
+Connect Google once per adult under Profile / Calendar settings. Import household calendar, then run day-to-day in Domi Ops.
 
 ### Full experience — notifications + mobile
 
@@ -474,16 +474,16 @@ Back up Postgres regularly (household data lives there; files live in MinIO volu
 
 ```bash
 docker compose -f docker-compose.prod.yml exec -T postgres \
-  pg_dump -U whome whome | gzip > ~/backups/whome-$(date +%Y%m%d).sql.gz
+  pg_dump -U domi_ops domi_ops | gzip > ~/backups/domi-ops-$(date +%Y%m%d).sql.gz
 ```
 
-Include Docker volumes `whome_pg` and `whome_minio` in volume-level backups if you snapshot the whole machine.
+Include Docker volumes `domi_ops_pg` and `domi_ops_minio` in volume-level backups if you snapshot the whole machine.
 
 ### Updates
 
 1. Back up Postgres.
 2. `git pull` on the server.
-3. Pull new images (`WHO_IMAGE_TAG`) or `--build` if you compile locally.
+3. Pull new images (`DOMI_OPS_IMAGE_TAG`) or `--build` if you compile locally.
 4. `docker compose … up -d` — migrations run on API start.
 5. Smoke-test login, dashboard, one module you use daily.
 
@@ -533,7 +533,7 @@ These do not require editing `.env`:
 
 ## Migrating from HomeHub (optional)
 
-If you previously ran [HomeHub](https://github.com/surajverma/homehub), whome can import SQLite data and uploads. This is not required for new households.
+If you previously ran [HomeHub](https://github.com/surajverma/homehub), Domi Ops can import SQLite data and uploads. This is not required for new households.
 
 See [HOMEHUB_IMPORT.md](./HOMEHUB_IMPORT.md). Always run `--dry-run` first.
 

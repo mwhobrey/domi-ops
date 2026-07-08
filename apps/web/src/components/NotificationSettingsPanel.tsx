@@ -199,7 +199,7 @@ export function NotificationSettingsPanel({
   if (!supported) {
     return (
       <p className="text-sm text-[var(--color-text-muted)]">
-        This browser does not support Web Push. Install the whome app (PWA) or use Chrome, Edge, or
+        This browser does not support Web Push. Install the Domi Ops app (PWA) or use Chrome, Edge, or
         Firefox.
       </p>
     );

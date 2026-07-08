@@ -2,10 +2,10 @@ import { randomUUID } from "node:crypto";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { username } from "better-auth/plugins";
-import type { Env } from "@whome/config";
-import { devLoopbackOrigins } from "@whome/config";
-import type { Database } from "@whome/db";
-import { baAccounts, baSessions, baVerifications, users } from "@whome/db";
+import type { Env } from "@domi-ops/config";
+import { devLoopbackOrigins } from "@domi-ops/config";
+import type { Database } from "@domi-ops/db";
+import { baAccounts, baSessions, baVerifications, users } from "@domi-ops/db";
 import { ensureHouseholdMembership } from "./household-membership.js";
 import { sendVerificationEmail } from "./mail.js";
 import { USERNAME_MAX_LENGTH, USERNAME_MIN_LENGTH, USERNAME_PATTERN } from "./username.js";
@@ -52,7 +52,7 @@ export function createBetterAuth(db: Database, env: Env): WhomeBetterAuth {
     }),
     user: {
       modelName: "users",
-      // Drizzle property names — SQL columns stay snake_case in @whome/db schema.
+      // Drizzle property names — SQL columns stay snake_case in @domi-ops/db schema.
       fields: {
         name: "displayName",
         image: "imageUrl",
@@ -148,7 +148,7 @@ export function createBetterAuth(db: Database, env: Env): WhomeBetterAuth {
             try {
               await ensureHouseholdMembership(db, env, session.userId);
             } catch (err) {
-              console.error("[whome auth] ensureHouseholdMembership failed:", err);
+              console.error("[domi-ops auth] ensureHouseholdMembership failed:", err);
               throw err;
             }
           },

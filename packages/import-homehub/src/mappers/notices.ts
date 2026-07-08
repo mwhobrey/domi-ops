@@ -1,4 +1,4 @@
-import { importRecords, notices } from "@whome/db";
+import { importRecords, notices } from "@domi-ops/db";
 import { and, eq } from "drizzle-orm";
 import { requireDb } from "../lib/require-db.js";
 import { sqliteTableExists } from "../lib/sqlite.js";

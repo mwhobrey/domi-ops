@@ -1,5 +1,5 @@
 {
-  "name": "@whome/auth",
+  "name": "@domi-ops/auth",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -15,9 +15,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@whome/config": "*",
-    "@whome/crypto": "*",
-    "@whome/db": "*",
+    "@domi-ops/config": "*",
+    "@domi-ops/crypto": "*",
+    "@domi-ops/db": "*",
     "better-auth": "^1.6.14",
     "drizzle-orm": "^0.45.2",
     "nodemailer": "^8.0.10"

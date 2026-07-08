@@ -1,4 +1,4 @@
-/** Calendar helpers for weekly report UI (mirrors @whome/calendar-sync/household-time). */
+/** Calendar helpers for weekly report UI (mirrors @domi-ops/calendar-sync/household-time). */
 
 export function addDaysIso(iso: string, n: number): string {
   const d = new Date(`${iso}T12:00:00`);

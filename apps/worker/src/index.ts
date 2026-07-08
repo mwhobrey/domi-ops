@@ -1,6 +1,6 @@
 import { Worker } from "bullmq";
-import { loadEnv } from "@whome/config";
-import { createDb } from "@whome/db";
+import { loadEnv } from "@domi-ops/config";
+import { createDb } from "@domi-ops/db";
 import {
   SYNC_QUEUE,
   type SyncJobName,
@@ -13,7 +13,7 @@ import {
   ensureChoreDigestScheduler,
   ensureDriveQuotaScheduler,
   ensureHealthMedReminderScheduler,
-} from "@whome/calendar-sync";
+} from "@domi-ops/calendar-sync";
 
 const env = loadEnv();
 const db = createDb(env.DATABASE_URL);
@@ -63,4 +63,4 @@ void ensureHealthMedReminderScheduler(redisUrl).catch((err) => {
   console.error("Failed to schedule health med reminder scan", err);
 });
 
-console.log(`whome worker listening on queue ${SYNC_QUEUE}`);
+console.log(`domi-ops worker listening on queue ${SYNC_QUEUE}`);

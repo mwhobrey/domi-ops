@@ -1,11 +1,11 @@
-import type { Database } from "@whome/db";
+import type { Database } from "@domi-ops/db";
 import {
   choreCompletions,
   choreMemberKarma,
   householdMembers,
   users,
   type chores as choresTable,
-} from "@whome/db";
+} from "@domi-ops/db";
 import { and, eq, gte, lte, sql } from "drizzle-orm";
 import type { ChorePriority } from "./chores.js";
 import { todayIsoDate } from "./shopping.js";

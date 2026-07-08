@@ -77,7 +77,7 @@ npm run dev         # web :3000, API :4000
 
 **Owner email used:** me@mikewhob.com (email/password owner sign-up + Google sign-in verified)
 
-**Notes:** Sign-up fixes [WHO-91]: Drizzle adapter schema/fields, auth client `basePath: "/auth"`. Bootstrap copies display name to member row. Removed nickname/public_label (`0017`). Sign-out uses `authClient.signOut()` (form POST → 415). GCP redirect: `{PUBLIC_APP_URL}/auth/callback/google`. Rebuild `@whome/auth` + restart API after auth package changes.
+**Notes:** Sign-up fixes [WHO-91]: Drizzle adapter schema/fields, auth client `basePath: "/auth"`. Bootstrap copies display name to member row. Removed nickname/public_label (`0017`). Sign-out uses `authClient.signOut()` (form POST → 415). GCP redirect: `{PUBLIC_APP_URL}/auth/callback/google`. Rebuild `@domi-ops/auth` + restart API after auth package changes.
 
 ---
 
@@ -285,7 +285,7 @@ Next step: staging cutover / prod import per deploy/CUTOVER.md
 | 2026-06-05 | 2 | Assignment turn-in UX / artifact merge on save | enhancement | `SchoolAssignmentDetail.tsx`, `SchoolSubmissionArtifacts.tsx`, artifact file route |
 | 2026-06-05 | 4 | Dogfood-then-import → two households / wrong HH for calendar+school | blocker | import-first reconcile in `household-membership.ts`; orphan cleanup on claim |
 | 2026-06-05 | 4 | Riley missing from Who's Home after import | blocker | config-only stub + `ensureMemberHomeStatus` in import |
-| 2026-06-05 | 4 | Re-import appeared hung after JSON | minor | `closeDb()` in `@whome/db`; bulk `import_records` index |
+| 2026-06-05 | 4 | Re-import appeared hung after JSON | minor | `closeDb()` in `@domi-ops/db`; bulk `import_records` index |
 | 2026-06-05 | 5 | Connect Google → login redirect loop | blocker | [WHO-84](https://linear.app/mikewhob-whome/issue/WHO-84) — auth middleware before calendar routes |
 
 

@@ -3,7 +3,7 @@ import {
   LinkButton,
   MarketingShell,
   resolveMarketingUrls,
-} from "@whome/marketing-ui";
+} from "@domi-ops/marketing-ui";
 import { PRICING_DISPLAY } from "@/lib/pricing-display";
 
 export const metadata = {
@@ -25,9 +25,8 @@ export default function PricingPage() {
           </p>
           {!PRICING_DISPLAY.hostedCheckoutEnabled && (
             <p className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-elevated)] px-4 py-3 text-sm text-[var(--color-text-muted)]">
-              Hosted checkout is coming soon. Fill{" "}
-              <code className="text-xs">docs/marketing/PRICING_TIERS.md</code> to enable live
-              pricing and Stripe.
+              Hosted checkout opens soon — $12/mo or $120/yr after a 14-day trial. See{" "}
+              <code className="text-xs">docs/marketing/PRICING_TIERS.md</code> for Stripe setup.
             </p>
           )}
         </div>

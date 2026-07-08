@@ -1,4 +1,4 @@
-import type { Database } from "@whome/db";
+import type { Database } from "@domi-ops/db";
 import type { CalendarEventRow } from "./calendar-event-policy.js";
 import {
   type CalendarEventDto,

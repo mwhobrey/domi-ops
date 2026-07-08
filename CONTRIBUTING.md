@@ -1,6 +1,6 @@
-# Contributing to whome
+# Contributing to Domi Ops
 
-Thanks for helping improve whome. This is a household operations monorepo — keep changes focused and match existing patterns.
+Thanks for helping improve Domi Ops. This is a household operations monorepo — keep changes focused and match existing patterns.
 
 ## Repository map
 
@@ -55,7 +55,7 @@ New SQL migrations must be registered in `packages/db/drizzle/meta/_journal.json
 ## Conventions
 
 - TypeScript strict; ESM with `.js` extensions in API/worker import paths.
-- Workspace packages: `@whome/<name>`.
+- Workspace packages: `@domi-ops/<name>`.
 - API routes scoped by household after `requireAuth`.
 - Web fetches session per request — no client-side token storage.
 - UI components live in `apps/web/src/components/ui/`; page-specific logic in feature components.

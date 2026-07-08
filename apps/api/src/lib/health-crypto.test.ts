@@ -1,5 +1,5 @@
-import type { Env } from "@whome/config";
-import { encryptSensitive, decryptSensitive } from "@whome/crypto";
+import type { Env } from "@domi-ops/config";
+import { encryptSensitive, decryptSensitive } from "@domi-ops/crypto";
 import { describe, expect, it } from "vitest";
 import {
   decryptHealthField,
@@ -7,7 +7,7 @@ import {
   HealthEncryptionError,
 } from "./health-crypto.js";
 
-const env = { ENCRYPTION_KEY: "test-health-encryption-key-32chars!!" } as import("@whome/config").Env;
+const env = { ENCRYPTION_KEY: "test-health-encryption-key-32chars!!" } as import("@domi-ops/config").Env;
 
 describe("health-crypto", () => {
   it("round-trips encrypted health fields", () => {
@@ -22,7 +22,7 @@ describe("health-crypto", () => {
   });
 
   it("throws when ENCRYPTION_KEY missing", () => {
-    expect(() => encryptHealthField("x", {} as import("@whome/config").Env)).toThrow(
+    expect(() => encryptHealthField("x", {} as import("@domi-ops/config").Env)).toThrow(
       HealthEncryptionError,
     );
   });

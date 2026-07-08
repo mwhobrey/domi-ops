@@ -1,7 +1,7 @@
 import { Hono } from "hono";
-import type { Env } from "@whome/config";
-import type { Database } from "@whome/db";
-import { MAX_WEEKS_IN_RANGE } from "@whome/calendar-sync";
+import type { Env } from "@domi-ops/config";
+import type { Database } from "@domi-ops/db";
+import { MAX_WEEKS_IN_RANGE } from "@domi-ops/calendar-sync";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 import { isHouseholdModuleEnabled } from "../lib/household-modules.js";
@@ -240,7 +240,7 @@ export function weeklyReportRoutes(db: Database, env: Env) {
       });
     }
 
-    if (destination === "whome-drive") {
+    if (destination === "domi-ops-drive") {
       const driveEnabled = await isHouseholdModuleEnabled(db, env, auth.householdId, "drive");
       if (!driveEnabled) return c.json({ error: "drive_disabled" }, 403);
 

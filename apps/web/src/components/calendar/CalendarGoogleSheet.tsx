@@ -26,7 +26,7 @@ const SYNC_MODE_SHORT: Record<CalendarConnectionSummary["syncMode"], string> = {
 };
 
 const SYNC_MODE_HELP: Record<CalendarConnectionSummary["syncMode"], string> = {
-  import_only: "Edits stay in whome; Google is the source on sync.",
+  import_only: "Edits stay in Domi Ops; Google is the source on sync.",
   manual: "Pull from Google when you tap Sync now.",
   bidirectional: "Grid edits push back to Google (requires worker).",
 };

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
-import { encryptSensitive } from "@whome/crypto";
-import type { Env } from "@whome/config";
-import { isModuleEnabled } from "@whome/config";
+import { encryptSensitive } from "@domi-ops/crypto";
+import type { Env } from "@domi-ops/config";
+import { isModuleEnabled } from "@domi-ops/config";
 import { isHouseholdModuleEnabled } from "../lib/household-modules.js";
 import {
   exchangeGoogleCode,
@@ -9,11 +9,11 @@ import {
   googleOAuthRedirectUri,
   GOOGLE_CALENDAR_SCOPES,
   randomOAuthState,
-} from "@whome/auth";
-import type { Database } from "@whome/db";
-import { calendarConnections, linkedGoogleCalendars } from "@whome/db";
-import { listGoogleCalendars } from "@whome/calendar-sync";
-import { ensureAccessToken } from "@whome/calendar-sync";
+} from "@domi-ops/auth";
+import type { Database } from "@domi-ops/db";
+import { calendarConnections, linkedGoogleCalendars } from "@domi-ops/db";
+import { listGoogleCalendars } from "@domi-ops/calendar-sync";
+import { ensureAccessToken } from "@domi-ops/calendar-sync";
 import { and, eq } from "drizzle-orm";
 import type { AppVariables } from "../middleware/auth.js";
 import { consumeOAuthState, setOAuthState } from "../lib/oauth-state.js";

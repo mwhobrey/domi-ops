@@ -1,11 +1,13 @@
-import { loadRootDotenv } from "@whome/config";
+import { loadRootDotenv } from "@domi-ops/config";
 import { requireDb } from "../lib/require-db.js";
-import { households, importRecords } from "@whome/db";
-import { asc, eq } from "drizzle-orm";
+import {
+  IMPORT_MARKER_ID,
+  IMPORT_MARKER_SOURCE,
+  IMPORT_MARKER_SOURCES,
+} from "../lib/import-marker.js";
+import { households, importRecords } from "@domi-ops/db";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import type { ImportContext, MapperResult } from "./types.js";
-
-const IMPORT_MARKER_SOURCE = "whome";
-const IMPORT_MARKER_ID = "household";
 
 export async function importHousehold(
   ctx: ImportContext,
@@ -25,10 +27,15 @@ export async function importHousehold(
   const [existingImport] = await db
     .select()
     .from(importRecords)
-    .where(eq(importRecords.sourceTable, IMPORT_MARKER_SOURCE))
+    .where(
+      and(
+        inArray(importRecords.sourceTable, [...IMPORT_MARKER_SOURCES]),
+        eq(importRecords.sourceId, IMPORT_MARKER_ID),
+      ),
+    )
     .limit(1);
 
-  if (existingImport?.sourceId === IMPORT_MARKER_ID) {
+  if (existingImport) {
     result.skipped = 1;
     result.warnings.push(`reusing household ${existingImport.householdId} from prior import`);
     return { householdId: existingImport.householdId, result };

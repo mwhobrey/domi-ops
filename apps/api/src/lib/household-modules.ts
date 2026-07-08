@@ -3,9 +3,9 @@ import {
   isModuleEnabledForHousehold,
   parseHouseholdModulesJson,
   type Env,
-} from "@whome/config";
-import type { Database } from "@whome/db";
-import { households } from "@whome/db";
+} from "@domi-ops/config";
+import type { Database } from "@domi-ops/db";
+import { households } from "@domi-ops/db";
 import { eq } from "drizzle-orm";
 import type { Context, Next } from "hono";
 import type { AppVariables } from "../middleware/auth.js";

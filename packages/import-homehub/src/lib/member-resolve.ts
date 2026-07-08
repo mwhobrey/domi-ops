@@ -1,6 +1,6 @@
-import { slugLegacyName } from "@whome/config";
-import type { createDb } from "@whome/db";
-import { householdMembers, importRecords, users } from "@whome/db";
+import { slugLegacyName } from "@domi-ops/config";
+import type { createDb } from "@domi-ops/db";
+import { householdMembers, importRecords, users } from "@domi-ops/db";
 import { and, eq } from "drizzle-orm";
 import type { DirectoryMember } from "./member-directory.js";
 import { createStubMember } from "./stub-member.js";

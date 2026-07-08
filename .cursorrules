@@ -1,4 +1,4 @@
-# whome — agent instructions
+# Domi Ops — agent instructions
 
 ## Runbook (required)
 
@@ -40,6 +40,6 @@ Full protocol: `.cursor/rules/linear-workflow.mdc` · workspace map: `docs/LINEA
 ## Repo quick anchors
 
 - Monorepo: `apps/web`, `apps/api`, `apps/worker`, `packages/*`
-- Env: `@whome/config` + `.env.example`
+- Env: `@domi-ops/config` + `.env.example`
 - Auth cookies: `/auth/*` via web Route Handler, not Next rewrites
 - Supplementary: `README.md`, `docs/ARCHITECTURE.md`

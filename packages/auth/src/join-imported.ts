@@ -1,6 +1,6 @@
-import type { Env } from "@whome/config";
-import type { Database } from "@whome/db";
-import { homeStatus, householdMembers, households } from "@whome/db";
+import type { Env } from "@domi-ops/config";
+import type { Database } from "@domi-ops/db";
+import { homeStatus, householdMembers, households } from "@domi-ops/db";
 import { and, eq, ne } from "drizzle-orm";
 import { tryClaimImportedStubMember, type LoginProfile } from "./claim-imported-stub.js";
 import { findOrCreateUser } from "./bootstrap.js";

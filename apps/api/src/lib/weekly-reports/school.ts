@@ -1,6 +1,6 @@
-import type { Database } from "@whome/db";
-import { schoolAssignments, schoolClasses } from "@whome/db";
-import { localDateOfInstant } from "@whome/calendar-sync";
+import type { Database } from "@domi-ops/db";
+import { schoolAssignments, schoolClasses } from "@domi-ops/db";
+import { localDateOfInstant } from "@domi-ops/calendar-sync";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import {
   memberEnrollmentsForHousehold,

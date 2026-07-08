@@ -8,7 +8,7 @@
 #
 # Pull pre-built GHCR images (WHO-133) instead of on-box build:
 #   echo "$GHCR_PAT" | docker login ghcr.io -u YOUR_GITHUB_USER --password-stdin
-#   export WHO_IMAGE_TAG=latest   # or git sha from Actions
+#   export DOMI_OPS_IMAGE_TAG=latest   # or git sha from Actions
 #   docker compose -f docker-compose.prod.yml pull api worker web
 #   docker compose -f docker-compose.prod.yml up -d --no-build
 #
@@ -19,32 +19,32 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-whome}
+      POSTGRES_USER: ${POSTGRES_USER:-domi_ops}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB:-whome}
+      POSTGRES_DB: ${POSTGRES_DB:-domi_ops}
     volumes:
-      - whome_pg:/var/lib/postgresql/data
+      - domi_ops_pg:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-whome}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-domi_ops}"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      - whome_internal
+      - domi_ops_internal
 
   redis:
     image: redis:7-alpine
     restart: unless-stopped
     command: redis-server --appendonly yes
     volumes:
-      - whome_redis:/data
+      - domi_ops_redis:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
     networks:
-      - whome_internal
+      - domi_ops_internal
 
   minio:
     image: minio/minio:latest
@@ -54,12 +54,12 @@ services:
       MINIO_ROOT_USER: ${S3_ACCESS_KEY:?set S3_ACCESS_KEY}
       MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:?set S3_SECRET_KEY}
     volumes:
-      - whome_minio:/data
+      - domi_ops_minio:/data
     networks:
-      - whome_internal
+      - domi_ops_internal
 
   api:
-    image: ghcr.io/mwhobrey/whome-api:${WHO_IMAGE_TAG:-latest}
+    image: ghcr.io/mwhobrey/domi-ops-api:${DOMI_OPS_IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: apps/api/Dockerfile
@@ -67,7 +67,7 @@ services:
     env_file: .env
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER:-whome}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-whome}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-domi_ops}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-domi_ops}
       REDIS_URL: redis://redis:6379
       S3_ENDPOINT: http://minio:9000
     depends_on:
@@ -78,11 +78,11 @@ services:
       minio:
         condition: service_started
     networks:
-      - whome_internal
+      - domi_ops_internal
       - proxy
 
   worker:
-    image: ghcr.io/mwhobrey/whome-worker:${WHO_IMAGE_TAG:-latest}
+    image: ghcr.io/mwhobrey/domi-ops-worker:${DOMI_OPS_IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: apps/worker/Dockerfile
@@ -90,7 +90,7 @@ services:
     env_file: .env
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER:-whome}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-whome}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-domi_ops}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-domi_ops}
       REDIS_URL: redis://redis:6379
       S3_ENDPOINT: http://minio:9000
     depends_on:
@@ -101,11 +101,11 @@ services:
       minio:
         condition: service_started
     networks:
-      - whome_internal
+      - domi_ops_internal
 
   web:
-    container_name: whome-web
-    image: ghcr.io/mwhobrey/whome-web:${WHO_IMAGE_TAG:-latest}
+    container_name: domi-ops-web
+    image: ghcr.io/mwhobrey/domi-ops-web:${DOMI_OPS_IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: apps/web/Dockerfile
@@ -123,7 +123,7 @@ services:
       - proxy
 
   import:
-    image: ghcr.io/mwhobrey/whome-import:${WHO_IMAGE_TAG:-latest}
+    image: ghcr.io/mwhobrey/domi-ops-import:${DOMI_OPS_IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: Dockerfile.import
@@ -131,7 +131,7 @@ services:
       - tools
     env_file: .env
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-whome}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-whome}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-domi_ops}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-domi_ops}
       REDIS_URL: redis://redis:6379
       S3_ENDPOINT: http://minio:9000
     depends_on:
@@ -140,16 +140,16 @@ services:
       minio:
         condition: service_started
     networks:
-      - whome_internal
+      - domi_ops_internal
 
 networks:
-  whome_internal:
+  domi_ops_internal:
     driver: bridge
   proxy:
-    name: whome_proxy
+    name: domi_ops_proxy
     driver: bridge
 
 volumes:
-  whome_pg:
-  whome_redis:
-  whome_minio:
+  domi_ops_pg:
+  domi_ops_redis:
+  domi_ops_minio:

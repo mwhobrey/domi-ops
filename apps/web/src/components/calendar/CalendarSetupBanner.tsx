@@ -6,7 +6,7 @@ import { googleCalendarConnectUrl } from "../../lib/auth-links";
 import { cn } from "../../lib/cn";
 import { Alert, AnchorButton, Button } from "../ui";
 
-const DISMISS_KEY = "whome:calendar-setup-dismissed";
+const DISMISS_KEY = "domi-ops:calendar-setup-dismissed";
 
 const STEPS = [
   { id: "connect" as const, label: "Connect Google" },

@@ -1,5 +1,5 @@
-import type { Database } from "@whome/db";
-import { calendarShares, calendars, householdMembers } from "@whome/db";
+import type { Database } from "@domi-ops/db";
+import { calendarShares, calendars, householdMembers } from "@domi-ops/db";
 import { and, eq } from "drizzle-orm";
 
 /** User ids who should receive push for an event on this calendar lane. */

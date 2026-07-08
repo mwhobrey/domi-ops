@@ -1,8 +1,8 @@
 import { Hono } from "hono";
-import { resolveAuthContext, type WhomeBetterAuth } from "@whome/auth";
-import { parseHouseholdModulesJson } from "@whome/config";
-import type { Database } from "@whome/db";
-import { householdMembers, households } from "@whome/db";
+import { resolveAuthContext, type WhomeBetterAuth } from "@domi-ops/auth";
+import { parseHouseholdModulesJson } from "@domi-ops/config";
+import type { Database } from "@domi-ops/db";
+import { householdMembers, households } from "@domi-ops/db";
 import { eq } from "drizzle-orm";
 import { memberAvatarUrl } from "../lib/avatar-url.js";
 import type { AppVariables } from "../middleware/auth.js";

@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
-import type { createDb } from "@whome/db";
-import { importRecords } from "@whome/db";
+import type { createDb } from "@domi-ops/db";
+import { importRecords } from "@domi-ops/db";
 
 type Db = ReturnType<typeof createDb>;
 

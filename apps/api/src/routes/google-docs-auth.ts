@@ -5,11 +5,11 @@ import {
   googleOAuthRedirectUri,
   GOOGLE_DOCS_SCOPES,
   randomOAuthState,
-} from "@whome/auth";
-import type { Env } from "@whome/config";
-import { encryptSensitive } from "@whome/crypto";
-import type { Database } from "@whome/db";
-import { googleDocsConnections } from "@whome/db";
+} from "@domi-ops/auth";
+import type { Env } from "@domi-ops/config";
+import { encryptSensitive } from "@domi-ops/crypto";
+import type { Database } from "@domi-ops/db";
+import { googleDocsConnections } from "@domi-ops/db";
 import { and, eq } from "drizzle-orm";
 import type { AppVariables } from "../middleware/auth.js";
 import { consumeOAuthState, setOAuthState } from "../lib/oauth-state.js";

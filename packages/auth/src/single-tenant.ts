@@ -1,6 +1,6 @@
-import type { Env } from "@whome/config";
-import type { Database } from "@whome/db";
-import { homeStatus, householdMembers, households } from "@whome/db";
+import type { Env } from "@domi-ops/config";
+import type { Database } from "@domi-ops/db";
+import { homeStatus, householdMembers, households } from "@domi-ops/db";
 import { asc, eq } from "drizzle-orm";
 import { ensureHomeStatusRow } from "./home-status.js";
 import { hasImportRecords } from "./import-records.js";

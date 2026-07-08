@@ -1,12 +1,12 @@
-import type { Env } from "@whome/config";
+import type { Env } from "@domi-ops/config";
 import {
   collectLegacyNameCandidates,
   isImportedStubEmail,
   legacyDisplayNameMatches,
   parseHouseholdMemberEmailMap,
-} from "@whome/config";
-import type { Database } from "@whome/db";
-import { baAccounts, householdMembers, importRecords, users } from "@whome/db";
+} from "@domi-ops/config";
+import type { Database } from "@domi-ops/db";
+import { baAccounts, householdMembers, importRecords, users } from "@domi-ops/db";
 import { and, eq } from "drizzle-orm";
 
 export type LoginProfile = {

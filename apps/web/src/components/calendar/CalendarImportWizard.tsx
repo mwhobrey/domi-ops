@@ -43,7 +43,7 @@ type MapState = {
 
 const STEPS = [
   { id: 1 as const, label: "Sources", hint: "Pick Google calendars" },
-  { id: 2 as const, label: "Calendars", hint: "Name & color in whome" },
+  { id: 2 as const, label: "Calendars", hint: "Name & color in Domi Ops" },
 ];
 
 function normalizeName(v: string): string {
@@ -523,7 +523,7 @@ export function CalendarImportWizard({
       open={open}
       onClose={onClose}
       title="Import Google calendars"
-      description="Select Google sources and map each to a whome calendar."
+      description="Select Google sources and map each to a Domi Ops calendar."
       panelClassName="max-w-3xl"
       footer={footer}
     >
@@ -635,7 +635,7 @@ export function CalendarImportWizard({
                   >
                     <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[var(--color-border)]/60 px-4 py-4 sm:px-5">
                       <p className="text-xs text-[var(--color-text-muted)]">
-                        Creates a whome calendar with a default &ldquo;General&rdquo; category. Add
+                        Creates a Domi Ops calendar with a default &ldquo;General&rdquo; category. Add
                         more categories in Calendar settings after import.
                       </p>
                       <Checkbox

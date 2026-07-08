@@ -1,5 +1,5 @@
 {
-  "name": "@whome/www",
+  "name": "@domi-ops/www",
   "version": "0.0.0",
   "private": true,
   "scripts": {
@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@whome/marketing-ui": "*",
+    "@domi-ops/marketing-ui": "*",
     "lucide-react": "^1.17.0",
     "next": "^15.3.3",
     "react": "^19.1.0",

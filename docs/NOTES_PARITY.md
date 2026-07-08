@@ -1,10 +1,10 @@
 # HomeHub notes parity matrix
 
-Comparison of HomeHub note features vs whome (Jun 2026). **Tracking:** [Notes project](https://linear.app/mikewhob-whome/project/notes-7c7c0d852010) WHO-58–WHO-64.
+Comparison of HomeHub note features vs Domi Ops (Jun 2026). **Tracking:** [Notes project](https://linear.app/mikewhob-whome/project/notes-7c7c0d852010) WHO-58–WHO-64.
 
 ## Source table (HomeHub)
 
-| HomeHub table | whome target | Notes |
+| HomeHub table | Domi Ops target | Notes |
 |---------------|--------------|-------|
 | `note` | `notes` | Single household notes list |
 
@@ -12,7 +12,7 @@ HomeHub SQLite columns (production `app.db`, Jun 2026): `id`, `content`, `creato
 
 ## Feature matrix
 
-| Feature | HomeHub | whome | Gap / notes |
+| Feature | HomeHub | Domi Ops | Gap / notes |
 |---------|---------|-------|-------------|
 | Create note | Yes | Yes | Parity |
 | Note title | No (content only) | Yes | Required on create; card heading on `/notes` |
@@ -24,10 +24,10 @@ HomeHub SQLite columns (production `app.db`, Jun 2026): `id`, `content`, `creato
 | Expand / collapse preview | Partial | Yes | Plain-text excerpt + expand on long notes |
 | Creator label | `creator` | `created_by_display_name` | Parity via import |
 | Created timestamp | `timestamp` | `created_at` | Parity via import (preserves HomeHub time) |
-| Tags | No | Yes | `tags_json`; chips + comma input; whome-only |
-| Search + tag filter | No | Yes | `GET /notes?q=&tag=` matches **title and content**; whome-only |
-| Visibility (private / household) | No | Yes | `note_visibility` enum; whome-only |
-| Per-member sharing | No | Yes | `note_shares` on private notes; whome-only |
+| Tags | No | Yes | `tags_json`; chips + comma input; domi-ops-only |
+| Search + tag filter | No | Yes | `GET /notes?q=&tag=` matches **title and content**; domi-ops-only |
+| Visibility (private / household) | No | Yes | `note_visibility` enum; domi-ops-only |
+| Per-member sharing | No | Yes | `note_shares` on private notes; domi-ops-only |
 | Author + timestamp footer | Partial | Yes | Card footer on `/notes` |
 
 ## Import behavior
@@ -37,7 +37,7 @@ HomeHub SQLite columns (production `app.db`, Jun 2026): `id`, `content`, `creato
 - **Title on import:** optional SQLite `title` → `notes.title`; when absent, first non-empty content line (or truncated content, else `Untitled`).
 - **Optional columns** (schema drift): if present in SQLite, `tags` → `tags_json`, `visibility` → `visibility` (`private` \| `household`).
 - **Defaults on import:** `visibility` = `household`, `tags_json` = `[]`, `pinned` = `false` when columns absent.
-- **`created_by_user_id`:** not set on import (display name only); private-note ownership applies to notes created in whome after cutover.
+- **`created_by_user_id`:** not set on import (display name only); private-note ownership applies to notes created in Domi Ops after cutover.
 - Idempotent via `import_records` (`source_table` = `note`).
 
 ## Recommended follow-ups

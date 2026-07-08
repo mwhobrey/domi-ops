@@ -1,5 +1,5 @@
-import type { Database } from "@whome/db";
-import { schoolAssignmentCategories, schoolClasses } from "@whome/db";
+import type { Database } from "@domi-ops/db";
+import { schoolAssignmentCategories, schoolClasses } from "@domi-ops/db";
 import { and, eq, inArray } from "drizzle-orm";
 import {
   isHouseholdAdmin,

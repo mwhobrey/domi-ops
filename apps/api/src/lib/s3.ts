@@ -8,7 +8,7 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import type { Env } from "@whome/config";
+import type { Env } from "@domi-ops/config";
 
 export function createS3Client(env: Env, endpoint = env.S3_ENDPOINT): S3Client | null {
   if (!endpoint || !env.S3_ACCESS_KEY || !env.S3_SECRET_KEY) return null;
@@ -25,7 +25,7 @@ export function createS3Client(env: Env, endpoint = env.S3_ENDPOINT): S3Client |
 
 /**
  * Browser-reachable S3 API origin for presigned PUT URLs.
- * `S3_PUBLIC_URL` is the bucket root, e.g. `https://whome.example.com/s3/whome` → `https://whome.example.com/s3`.
+ * `S3_PUBLIC_URL` is the bucket root, e.g. `https://app.domi-ops.com/s3/domi-ops` → `https://app.domi-ops.com/s3`.
  */
 export function resolveS3PresignEndpoint(env: Env): string | null {
   if (env.S3_PUBLIC_ENDPOINT) return env.S3_PUBLIC_ENDPOINT.replace(/\/$/, "");
@@ -95,7 +95,7 @@ export async function ensureS3Bucket(env: Env): Promise<void> {
       );
     } catch (err) {
       console.warn(
-        "[whome s3] bucket CORS update failed:",
+        "[domi-ops s3] bucket CORS update failed:",
         err instanceof Error ? err.message : err,
       );
     }

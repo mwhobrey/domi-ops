@@ -1,4 +1,4 @@
-# Linear workspace — whome (WHO)
+# Linear workspace — Domi Ops (WHO)
 
 **Team:** [Whome](https://linear.app/mikewhob-whome/team/WHO) · key `WHO`  
 **MCP:** Cursor plugin `user-linear-whome` (`set_active_team` → `WHO`)

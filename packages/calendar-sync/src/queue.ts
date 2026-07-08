@@ -2,7 +2,7 @@ import { Queue } from "bullmq";
 import type { SyncJobName, SyncJobPayload } from "./index.js";
 
 /** BullMQ disallows ':' in queue names */
-export const SYNC_QUEUE = "whome-calendar-sync";
+export const SYNC_QUEUE = "domi-ops-calendar-sync";
 
 let queue: Queue<{ name: SyncJobName; payload: SyncJobPayload }> | null = null;
 

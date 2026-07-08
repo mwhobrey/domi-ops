@@ -1,4 +1,4 @@
-# whome — Linear backlog (draft)
+# Domi Ops — Linear backlog (draft)
 
 **Live workspace:** see [`docs/LINEAR.md`](LINEAR.md) for projects, milestones, and issue links (WHO-5 … WHO-11).
 
@@ -333,12 +333,12 @@ Calendar reminder Web Push uses `data.url: /calendar?event={id}` but `CalendarPa
 **Project:** Calendar · M5 — Reminder parity
 
 **Problem**  
-`eventToFields` / Google pull ignore `event.reminders`; bidirectional `eventToGoogleBody` does not push whome offsets to Google.
+`eventToFields` / Google pull ignore `event.reminders`; bidirectional `eventToGoogleBody` does not push Domi Ops offsets to Google.
 
 **Acceptance criteria**
 
 - [ ] On Google pull: map `reminders.overrides` / `useDefault` into `calendar_event_reminders` (normalize to allowed offsets or nearest).
-- [ ] On whome → Google push (bidirectional mode): include `reminders` in API body when event has offsets.
+- [ ] On Domi Ops → Google push (bidirectional mode): include `reminders` in API body when event has offsets.
 - [ ] No duplicate push if user also has Google app notifications (document in SETUP.md).
 - [ ] Parity row in `docs/CALENDAR_EVENT_PARITY.md`.
 
@@ -450,7 +450,7 @@ Import maps `reminder` → `calendar_events` but not `calendar_event_reminders` 
 
 **Acceptance criteria**
 
-- [ ] If HomeHub stores lead time, map to whome offsets; else default none.
+- [ ] If HomeHub stores lead time, map to Domi Ops offsets; else default none.
 - [ ] Fixture test in `import-homehub`.
 
 ---
@@ -607,9 +607,9 @@ Stop on-droplet `docker compose up --build` (~45+ min, high RAM). Private repo s
 **Acceptance**
 
 - [x] GitHub Actions builds `web`, `api`, `worker`, `import` images on push/tag
-- [x] Push to private `ghcr.io/mwhobrey/whome-*` (no public repo required)
+- [x] Push to private `ghcr.io/mwhobrey/domi-ops-*` (no public repo required)
 - [x] Droplet pulls via PAT `read:packages`; document in `deploy/CUTOVER-WHOBBREY.md`
-- [x] Compose image refs + `WHO_IMAGE_TAG` for pull-only deploy
+- [x] Compose image refs + `DOMI_OPS_IMAGE_TAG` for pull-only deploy
 - [x] Document free-tier limits + `docker save`/`load` off-box fallback
 
 ---

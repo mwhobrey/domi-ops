@@ -1,6 +1,6 @@
-import type { Env } from "@whome/config";
-import { decryptSensitive } from "@whome/crypto";
-import type { Database } from "@whome/db";
+import type { Env } from "@domi-ops/config";
+import { decryptSensitive } from "@domi-ops/crypto";
+import type { Database } from "@domi-ops/db";
 import {
   healthMedReminderSent,
   healthMedicationLogs,
@@ -8,7 +8,7 @@ import {
   householdMembers,
   households,
   users,
-} from "@whome/db";
+} from "@domi-ops/db";
 import { and, eq, inArray } from "drizzle-orm";
 import { localDateOfInstant, todayIsoDateInTz, zonedLocalToUtc } from "./household-time.js";
 import { deliverUserNotification } from "./user-notify.js";

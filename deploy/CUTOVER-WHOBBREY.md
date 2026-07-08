@@ -2,19 +2,19 @@
 
 **Target:** `https://whome.whobrey.me` on the existing `services` droplet alongside HomeHub (`home.whobrey.me`).
 
-**Parallel during soak:** HomeHub stays on `home.whobrey.me`; whome gets a new subdomain. No Caddy change to HomeHub until you trust whome.
+**Parallel during soak:** HomeHub stays on `home.whobrey.me`; Domi Ops gets a new subdomain. No Caddy change to HomeHub until you trust Domi Ops.
 
 | Item | Value |
 |------|-------|
 | Droplet user / host | `mike@services` |
-| whome repo | `~/whome` |
+| Domi Ops repo | `~/domi-ops` |
 | HomeHub SQLite | `~/homehub/data/app.db` |
 | HomeHub uploads | `~/homehub/uploads` |
 | HomeHub config | `~/homehub/config.yml` |
 | Caddy container | `caddy` |
 | Caddyfile (host) | `~/headscale/Caddyfile` |
 | **Proxy Docker network** | **`headscale_default`** (Caddy + `homehub` share this) |
-| whome web container | `whome-web` → port `3000` |
+| Domi Ops web container | `domi-ops-web` → port `3000` |
 | Staging (rehearsal) | host `:3002` (no Caddy needed) |
 
 > **Windows:** Edit/commit locally, `git push`, `scp .env` if needed, then **SSH** for all bash/docker commands below.
@@ -24,7 +24,7 @@
 ## Phase 0 — Checklist before you start
 
 - [ ] DNS **A/AAAA** for `whome.whobrey.me` → droplet (same IP as `home.whobrey.me`)
-- [ ] Repo cloned: `~/whome` from `https://github.com/mwhobrey/whome`
+- [ ] Repo cloned: `~/domi-ops` from `https://github.com/mwhobrey/domi-ops`
 - [ ] HomeHub paths exist on droplet (`ls ~/homehub/data/app.db ~/homehub/config.yml`)
 - [ ] Google OAuth client (Web application) — same client as HomeHub is fine if you add new URIs
 - [ ] Google consent screen: **Privacy policy** → `https://whome.whobrey.me/privacy`
@@ -49,9 +49,9 @@ caddy   → headscale_default
 homehub → headscale_default homehub_internal
 ```
 
-Shared network for whome: **`headscale_default`**. (`homehub_internal` is HomeHub-only — do not use for Caddy.)
+Shared network for Domi Ops: **`headscale_default`**. (`homehub_internal` is HomeHub-only — do not use for Caddy.)
 
-whome joins this network via `docker-compose.proxy-external.yml` so Caddy can `reverse_proxy whome-web:3000`.
+whome joins this network via `docker-compose.proxy-external.yml` so Caddy can `reverse_proxy domi-ops-web:3000`.
 
 ---
 
@@ -85,10 +85,10 @@ npx web-push generate-vapid-keys
 
 ---
 
-## Phase 3 — Create `~/whome/.env`
+## Phase 3 — Create `~/domi-ops/.env`
 
 ```bash
-cd ~/whome
+cd ~/domi-ops
 cp .env.example .env
 micro .env   # or nano/vim
 ```
@@ -108,7 +108,7 @@ DEPLOYMENT_MODE=single
 POSTGRES_USER=whome
 POSTGRES_PASSWORD=<from Phase 2>
 POSTGRES_DB=whome
-DATABASE_URL=postgresql://whome:<POSTGRES_PASSWORD>@postgres:5432/whome
+DATABASE_URL=postgresql://domi_ops:<POSTGRES_PASSWORD>@postgres:5432/domi_ops
 
 SESSION_SECRET=<from Phase 2>
 ENCRYPTION_KEY=<from Phase 2>
@@ -138,7 +138,7 @@ PROXY_NETWORK=headscale_default
 Load before compose commands:
 
 ```bash
-cd ~/whome
+cd ~/domi-ops
 set -a && source .env && set +a
 ```
 
@@ -169,7 +169,7 @@ Keep existing `home.whobrey.me` / `:5000` URIs until HomeHub is retired.
 Separate Postgres volume — prod data untouched. **No proxy overlay** (browser hits published port).
 
 ```bash
-cd ~/whome
+cd ~/domi-ops
 set -a && source .env && set +a
 
 docker compose -f docker-compose.prod.yml -f docker-compose.staging.yml up -d --build
@@ -224,7 +224,7 @@ On-box `docker compose up --build` compiles three Node images (~45+ min, RAM-hea
 1. GitHub → Settings → Actions → General → Workflow permissions → **Read and write packages** (for `GITHUB_TOKEN` on push to `main`).
 2. **Create a droplet PAT — classic only** (fine-grained tokens do **not** support Packages/GHCR):
    - GitHub → **Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token (classic)**
-   - Note: e.g. `whome-droplet-ghcr-read`
+   - Note: e.g. `domi-ops-droplet-ghcr-read`
    - Expiration: 90 days or custom (set a calendar reminder to rotate)
    - Scope: **`read:packages`** only (nothing else required for pull)
    - Copy the token once — you will not see it again.
@@ -252,25 +252,25 @@ echo "$GHCR_PAT" | docker login ghcr.io -u mwhobrey --password-stdin
 To verify packages are reachable after login:
 
 ```bash
-docker pull ghcr.io/mwhobrey/whome-api:latest
+docker pull ghcr.io/mwhobrey/domi-ops-api:latest
 ```
 
 **Publish** (automatic): `.github/workflows/publish-images.yml` pushes on every `main`/`master` push and on `v*` tags:
 
 | Image | Tag examples |
 |-------|----------------|
-| `ghcr.io/mwhobrey/whome-api` | `latest`, git sha |
-| `ghcr.io/mwhobrey/whome-worker` | same |
-| `ghcr.io/mwhobrey/whome-web` | same |
-| `ghcr.io/mwhobrey/whome-import` | same |
+| `ghcr.io/mwhobrey/domi-ops-api` | `latest`, git sha |
+| `ghcr.io/mwhobrey/domi-ops-worker` | same |
+| `ghcr.io/mwhobrey/domi-ops-web` | same |
+| `ghcr.io/mwhobrey/domi-ops-import` | same |
 
 **Deploy without building on droplet:**
 
 ```bash
-cd ~/whome
+cd ~/domi-ops
 git pull
 set -a && source .env && set +a
-export WHO_IMAGE_TAG=latest   # or pin to a git sha from Actions
+export DOMI_OPS_IMAGE_TAG=latest   # or pin to a git sha from Actions
 
 docker compose -f docker-compose.prod.yml -f docker-compose.proxy-external.yml pull api worker web
 docker compose -f docker-compose.prod.yml -f docker-compose.proxy-external.yml up -d --no-build
@@ -278,9 +278,9 @@ docker compose -f docker-compose.prod.yml -f docker-compose.proxy-external.yml u
 
 Import profile (when needed): `pull import` then `--profile tools run --rm import …` (no `--build`).
 
-**Free-tier limits:** GHCR storage/bandwidth caps apply; pin `WHO_IMAGE_TAG` to a sha and prune old package versions in GitHub Packages if needed.
+**Free-tier limits:** GHCR storage/bandwidth caps apply; pin `DOMI_OPS_IMAGE_TAG` to a sha and prune old package versions in GitHub Packages if needed.
 
-**Off-box fallback** (no registry): build on a dev machine, `docker save ghcr.io/mwhobrey/whome-api:latest … | gzip`, `scp` to droplet, `docker load`.
+**Off-box fallback** (no registry): build on a dev machine, `docker save ghcr.io/mwhobrey/domi-ops-api:latest … | gzip`, `scp` to droplet, `docker load`.
 
 ---
 
@@ -289,7 +289,7 @@ Import profile (when needed): `pull import` then `--profile tools run --rm impor
 Full stack in one compose: **postgres, redis, minio, api, worker, web**.
 
 ```bash
-cd ~/whome
+cd ~/domi-ops
 set -a && source .env && set +a
 
 docker compose \
@@ -301,11 +301,11 @@ docker compose -f docker-compose.prod.yml -f docker-compose.proxy-external.yml p
 docker compose -f docker-compose.prod.yml -f docker-compose.proxy-external.yml logs api --tail 30
 ```
 
-**Verify whome-web is on Caddy's network:**
+**Verify domi-ops-web is on Caddy's network:**
 
 ```bash
 docker network inspect headscale_default --format '{{range .Containers}}{{.Name}} {{end}}'
-# Should include: caddy homehub whome-web (and possibly whome-api-1)
+# Should include: caddy homehub domi-ops-web (and possibly whome-api-1)
 ```
 
 ---
@@ -336,7 +336,7 @@ Re-import is idempotent. **Before re-import on prod**, backup Postgres:
 
 ```bash
 docker compose -f docker-compose.prod.yml exec -T postgres \
-  pg_dump -U whome whome | gzip > ~/backups/whome-$(date +%Y%m%d-%H%M).sql.gz
+  pg_dump -U domi_ops domi_ops | gzip > ~/backups/domi-ops-$(date +%Y%m%d-%H%M).sql.gz
 ```
 
 ---
@@ -354,7 +354,7 @@ whome.whobrey.me {
         reverse_proxy minio:9000
     }
 
-    reverse_proxy whome-web:3000
+    reverse_proxy domi-ops-web:3000
     header {
         X-Forwarded-For {remote_host}
         X-Forwarded-Proto {scheme}
@@ -404,8 +404,8 @@ docker compose -f docker-compose.prod.yml logs worker --tail 100 -f
 
 ## Phase 10 — Soak & cutover
 
-- Run **24–48h** with both `home.whobrey.me` (HomeHub) and `whome.whobrey.me` (whome) live
-- Family uses whome daily; compare parity with HomeHub
+- Run **24–48h** with both `home.whobrey.me` (HomeHub) and `whome.whobrey.me` (Domi Ops) live
+- Family uses Domi Ops daily; compare parity with HomeHub
 
 **Rollback** (instant):
 
@@ -427,8 +427,8 @@ Optional: redirect `home.whobrey.me` → `whome.whobrey.me` in Caddy later.
 
 | Symptom | Check |
 |---------|--------|
-| `502` from Caddy | `docker ps` — is `whome-web` up? On `headscale_default`? |
-| `web` not found on network | Use `whome-web:3000` not `web:3000`; confirm `container_name: whome-web` |
+| `502` from Caddy | `docker ps` — is `domi-ops-web` up? On `headscale_default`? |
+| `web` not found on network | Use `domi-ops-web:3000` not `web:3000`; confirm `container_name: domi-ops-web` |
 | API boot loop | `docker compose … logs api` — usually missing/short `SESSION_SECRET` or `ENCRYPTION_KEY` |
 | Google `redirect_uri_mismatch` | URIs must exactly match `PUBLIC_APP_URL` paths in GCP |
 | Import fails claim emails | `~/homehub/config.yml` mounted; check `auth.allowed_emails` / display names |
@@ -440,10 +440,10 @@ Optional: redirect `home.whobrey.me` → `whome.whobrey.me` in Caddy later.
 ## Quick reference — copy/paste order
 
 ```bash
-# 1. Secrets → paste into ~/whome/.env (Phase 2–3)
+# 1. Secrets → paste into ~/domi-ops/.env (Phase 2–3)
 # 2. Google Cloud URIs (Phase 4)
 # 3. Staging
-cd ~/whome && set -a && source .env && set +a
+cd ~/domi-ops && set -a && source .env && set +a
 docker compose -f docker-compose.prod.yml -f docker-compose.staging.yml up -d --build
 docker compose -f docker-compose.prod.yml -f docker-compose.staging.yml --profile tools run --rm \
   -v ~/homehub/data:/import/data:ro -v ~/homehub/uploads:/import/uploads:ro -v ~/homehub/config.yml:/import/config.yml:ro \

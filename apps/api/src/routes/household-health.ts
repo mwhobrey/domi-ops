@@ -1,12 +1,12 @@
 import { Hono } from "hono";
-import type { Env } from "@whome/config";
-import type { Database } from "@whome/db";
+import type { Env } from "@domi-ops/config";
+import type { Database } from "@domi-ops/db";
 import {
   healthEvents,
   healthMedicationLogs,
   healthMedications,
   households,
-} from "@whome/db";
+} from "@domi-ops/db";
 import { and, desc, eq } from "drizzle-orm";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -23,7 +23,7 @@ import {
   replaceHealthMedicationShares,
   validateHealthShareMemberIds,
 } from "../lib/health-access.js";
-import { todayIsoDateInTz, zonedLocalToUtc, formatTimeLabelInTz } from "@whome/calendar-sync";
+import { todayIsoDateInTz, zonedLocalToUtc, formatTimeLabelInTz } from "@domi-ops/calendar-sync";
 import {
   encryptHealthTextFields,
   enrichHealthEvents,

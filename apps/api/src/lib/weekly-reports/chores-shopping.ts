@@ -1,11 +1,11 @@
-import type { Database } from "@whome/db";
+import type { Database } from "@domi-ops/db";
 import {
   chores,
   choresRecurring,
   householdMembers,
   shoppingRecurring,
   users,
-} from "@whome/db";
+} from "@domi-ops/db";
 import { and, eq, gte, isNotNull, lte } from "drizzle-orm";
 import { parseChoreTagsJson } from "../chores.js";
 import { parseShoppingTagsJson } from "../shopping.js";

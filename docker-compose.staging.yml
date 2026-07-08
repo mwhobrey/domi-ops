@@ -3,7 +3,7 @@
 services:
   postgres:
     volumes:
-      - whome_pg_staging:/var/lib/postgresql/data
+      - domi_ops_pg_staging:/var/lib/postgresql/data
     ports:
       - "5433:5432"
 
@@ -12,4 +12,4 @@ services:
       - "3002:3000"
 
 volumes:
-  whome_pg_staging:
+  domi_ops_pg_staging:

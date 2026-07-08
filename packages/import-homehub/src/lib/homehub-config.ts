@@ -82,7 +82,7 @@ export function ownerLegacyName(config: HomeHubConfig): string | null {
   return null;
 }
 
-/** Map HomeHub `admin_emails` → whome household role (first admin = owner, rest = admin). */
+/** Map HomeHub `admin_emails` → Domi Ops household role (first admin = owner, rest = admin). */
 export function householdRoleForLegacyName(
   config: HomeHubConfig,
   legacyName: string,

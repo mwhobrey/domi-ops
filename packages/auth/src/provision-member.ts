@@ -1,6 +1,6 @@
 import { hashPassword } from "better-auth/crypto";
-import type { Database } from "@whome/db";
-import { baAccounts, homeStatus, householdMembers, users } from "@whome/db";
+import type { Database } from "@domi-ops/db";
+import { baAccounts, homeStatus, householdMembers, users } from "@domi-ops/db";
 import { and, eq, sql } from "drizzle-orm";
 import { memberShownLabel } from "./member-label.js";
 import { normalizeUsername, validateUsernameFormat } from "./username.js";

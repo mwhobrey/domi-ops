@@ -1,4 +1,4 @@
-# HomeHub → whome import
+# HomeHub → Domi Ops import
 
 ## Copy data from the droplet (prerequisite)
 
@@ -55,7 +55,7 @@ npm run import:homehub -- --sqlite ./fixtures/homehub/app.db --uploads ./fixture
 
 ## Mappers (live)
 
-| HomeHub table | whome target |
+| HomeHub table | Domi Ops target |
 |---------------|--------------|
 | `notice` | `notices` |
 | `todo_item` / `chore` | `chores` |
@@ -71,4 +71,4 @@ Regression baseline: [IMPORT_REPORT.example.json](./IMPORT_REPORT.example.json).
 
 ## Tests
 
-Set `WHOME_FIXTURE_DB` to a copied `app.db` for optional integration tests; the repo includes a minimal generated fixture under `packages/import-homehub/fixtures/`.
+Set `DOMI_OPS_FIXTURE_DB` to a copied `app.db` for optional integration tests; the repo includes a minimal generated fixture under `packages/import-homehub/fixtures/`.

@@ -1,4 +1,4 @@
-import { KNOWN_HOUSEHOLD_MODULES } from "@whome/config";
+import { KNOWN_HOUSEHOLD_MODULES } from "@domi-ops/config";
 
 export const DEMO_SLUG = "rivera-demo";
 export const DEMO_HOUSEHOLD_NAME = "Rivera Family";

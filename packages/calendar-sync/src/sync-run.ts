@@ -1,5 +1,5 @@
-import type { Database } from "@whome/db";
-import { calendarConnections } from "@whome/db";
+import type { Database } from "@domi-ops/db";
+import { calendarConnections } from "@domi-ops/db";
 import { eq } from "drizzle-orm";
 
 export type SyncRunStatus = "idle" | "queued" | "syncing" | "failed";

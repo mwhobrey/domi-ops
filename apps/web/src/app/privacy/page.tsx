@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 export const metadata = {
-  title: "Privacy Policy — whome",
+  title: "Privacy Policy — Domi Ops",
 };
 
 export default function PrivacyPage() {
@@ -14,7 +14,7 @@ export default function PrivacyPage() {
         <section>
           <h2>Overview</h2>
           <p>
-            whome is self-hosted household software. Your operator (typically a family member who
+            Domi Ops is self-hosted household software. Your operator (typically a family member who
             runs the server) controls the instance, data storage, and who may sign in. This policy
             describes what the application stores and how optional third-party services are used.
           </p>
@@ -75,7 +75,7 @@ export default function PrivacyPage() {
             <code className="text-xs">ENCRYPTION_KEY</code>. Metadata such as dates, member
             assignment, and schedule times remain queryable in plaintext. Health data is visible
             per record as household-wide or private with explicit shares (same pattern as notes).
-            whome is household self-host software, not a healthcare provider — operators are
+            Domi Ops is household self-host software, not a healthcare provider — operators are
             responsible for HTTPS, disk encryption, and who may access the instance.
           </p>
         </section>
@@ -85,7 +85,7 @@ export default function PrivacyPage() {
           <p>
             Household members with access to your instance can see household-visible content per
             module permissions. Private notes and drive objects are visible only to owners and
-            members you explicitly share with. The whome project does not operate a central cloud
+            members you explicitly share with. The Domi Ops project does not operate a central cloud
             database for self-hosted deployments.
           </p>
         </section>
@@ -102,7 +102,7 @@ export default function PrivacyPage() {
         <section>
           <h2>Contact</h2>
           <p>
-            For privacy questions about a specific whome instance, contact the person who administers
+            For privacy questions about a specific Domi Ops instance, contact the person who administers
             your household server.
           </p>
         </section>

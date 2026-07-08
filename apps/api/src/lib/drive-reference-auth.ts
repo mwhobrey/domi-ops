@@ -1,6 +1,6 @@
-import type { AuthContext } from "@whome/auth";
-import type { Database } from "@whome/db";
-import { notes, notices, schoolAssignments, schoolClasses, schoolSubmissions } from "@whome/db";
+import type { AuthContext } from "@domi-ops/auth";
+import type { Database } from "@domi-ops/db";
+import { notes, notices, schoolAssignments, schoolClasses, schoolSubmissions } from "@domi-ops/db";
 import { and, eq } from "drizzle-orm";
 import { isHouseholdAdmin } from "./school-access.js";
 

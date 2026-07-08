@@ -1,11 +1,11 @@
 import { useEffect } from "react";
 
 /** Fired when push arrives or other tabs should refresh notification UIs. */
-export const WHOME_NOTIFICATION_REFRESH = "whome:notification-refresh";
+export const DOMI_OPS_NOTIFICATION_REFRESH = "domi-ops:notification-refresh";
 
 export function dispatchNotificationRefresh(): void {
   if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent(WHOME_NOTIFICATION_REFRESH));
+  window.dispatchEvent(new CustomEvent(DOMI_OPS_NOTIFICATION_REFRESH));
 }
 
 /** Poll + focus/visibility + service-worker push while the tab is open. */
@@ -23,10 +23,10 @@ export function useLiveRefresh(
     };
 
     const onSwMessage = (event: MessageEvent) => {
-      if (event.data?.type === "whome:notification") void refresh();
+      if (event.data?.type === "domi-ops:notification") void refresh();
     };
 
-    window.addEventListener(WHOME_NOTIFICATION_REFRESH, run);
+    window.addEventListener(DOMI_OPS_NOTIFICATION_REFRESH, run);
     window.addEventListener("focus", run);
     document.addEventListener("visibilitychange", onVisibility);
     navigator.serviceWorker?.addEventListener("message", onSwMessage);
@@ -37,7 +37,7 @@ export function useLiveRefresh(
     }, intervalMs);
 
     return () => {
-      window.removeEventListener(WHOME_NOTIFICATION_REFRESH, run);
+      window.removeEventListener(DOMI_OPS_NOTIFICATION_REFRESH, run);
       window.removeEventListener("focus", run);
       document.removeEventListener("visibilitychange", onVisibility);
       navigator.serviceWorker?.removeEventListener("message", onSwMessage);

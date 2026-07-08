@@ -1,16 +1,16 @@
-# whome architecture
+# Domi Ops architecture
 
 > **Public launch (OSS + hosted):** see [ADR 001 — Public launch scope](./adr/001-public-launch-scope.md) (brand: **Domi Ops**, `domi-ops.com` / `app.domi-ops.com`). This file describes the current codebase; the ADR is the launch source of truth.
 
 ## Product tiers
 
-whome is designed for **two ways to run the same product**: self-host (OSS) or whome-hosted (managed). **Public launch targets both at once** — open source and hosted tiers ship together when stability, security, and hosted operations are ready. Until then, development focuses on self-host dogfood.
+Domi Ops is designed for **two ways to run the same product**: self-host (OSS) or Domi Ops hosted (managed). **Public launch targets both at once** — open source and hosted tiers ship together when stability, security, and hosted operations are ready. Until then, development focuses on self-host dogfood.
 
 | Tier | Deployment | Database |
 |------|------------|----------|
 | **OSS (free)** | Self-host Docker | Your Postgres (single household) |
-| **Hosted Starter** | whome cloud | Shared Postgres + RLS |
-| **Hosted Family** | whome cloud | Dedicated Neon project per household |
+| **Hosted Starter** | Domi Ops cloud | Shared Postgres + RLS |
+| **Hosted Family** | Domi Ops cloud | Dedicated Neon project per household |
 | **Add-ons** | Either | `school`, `calendar_sync`, `media` (future) |
 
 **Current code:** self-host `DEPLOYMENT_MODE=single` only. Hosted tiers are designed here but not implemented yet.
@@ -34,7 +34,7 @@ whome is designed for **two ways to run the same product**: self-host (OSS) or w
 
 ## Google Calendar (v1)
 
-Wife migration path: connect Google → **full import** → run household on whome → optional ongoing sync until Google is abandoned.
+Wife migration path: connect Google → **full import** → run household on Domi Ops → optional ongoing sync until Google is abandoned.
 
 Default: `GOOGLE_CALENDAR_DEFAULT_SYNC_MODE=import_only`
 
@@ -54,6 +54,6 @@ Writes `import_records` for idempotent re-runs.
 
 1. Build on droplet: `docker compose -f docker-compose.prod.yml up -d --build`
 2. Migrations run automatically on API container start (`apps/api/Dockerfile` entrypoint). To run manually: `docker compose -f docker-compose.prod.yml exec api node /app/packages/db/dist/migrate.js`
-3. Import: `whome-import --sqlite ...`
+3. Import: `domi-ops-import --sqlite ...`
 4. Point Caddy `reverse_proxy` from homehub container to `web:3000`
 5. Verify calendar + school before stopping HomeHub

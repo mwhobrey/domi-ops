@@ -5,7 +5,7 @@ import {
   MarketingShell,
   ThemeAwareScreenshot,
   resolveMarketingUrls,
-} from "@whome/marketing-ui";
+} from "@domi-ops/marketing-ui";
 import { ALSO_STRIP_ICONS, MODULE_TILES } from "@/lib/module-tiles";
 
 export function LandingPage() {

@@ -1,10 +1,10 @@
-import type { Database } from "@whome/db";
+import type { Database } from "@domi-ops/db";
 import {
   chores,
   choresRecurring,
   type chores as choresTable,
   type choresRecurring as choresRecurringTable,
-} from "@whome/db";
+} from "@domi-ops/db";
 import { and, eq, lte } from "drizzle-orm";
 import {
   advanceRecurringDate,
