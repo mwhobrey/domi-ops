@@ -1,4 +1,4 @@
-# Self-hosting whome
+# Self-hosting Domi Ops
 
 > **Household admins:** start with **[SETUP.md](./SETUP.md)** for step-by-step paths, configuration in plain language, optional Google setup, and best practices. This document is the technical reference.
 
@@ -45,8 +45,10 @@ Copy `.env.example` and set at minimum:
 | `DATABASE_URL` | PostgreSQL connection string |
 | `REDIS_URL` | BullMQ worker queue |
 | `SESSION_SECRET` | Better Auth signing (min 32 chars) |
-| `ENCRYPTION_KEY` | OAuth token encryption |
+| `ENCRYPTION_KEY` | OAuth token + health field encryption |
 | `AUTH_REQUIRED` | Must be `true` in production |
+| `SETUP_TOKEN` | Greenfield only — min 16 chars; `/setup` or `bootstrap:owner` (see [SETUP.md](./SETUP.md)) |
+| `POSTGRES_PASSWORD` | Required for `docker-compose.prod.yml` (compose builds `DATABASE_URL`) |
 | `S3_*` | MinIO locally; S3-compatible in prod |
 | `MODULES_ENABLED` | Comma list: `core,school,calendar_sync,drive,health` |
 
@@ -66,6 +68,8 @@ cp .env.example .env
 
 docker compose -f docker-compose.prod.yml up -d --build
 ```
+
+**First owner (greenfield):** set `SETUP_TOKEN` in `.env`, restart API, then open `/setup` or run `npm run bootstrap:owner`. See [SETUP.md § First login](./SETUP.md#first-login-and-household-setup).
 
 - **Migrations** run automatically when the API container starts (`packages/db/dist/migrate.js` in the API entrypoint).
 - **S3 bucket** is created on first API boot (`ensureS3Bucket` in `apps/api/src/lib/s3.ts`).
@@ -127,7 +131,7 @@ Controlled by `MODULES_ENABLED` at deploy time and per-household toggles in **Se
 
 ### Sensitive modules (health)
 
-whome is **not** a HIPAA-covered entity and does not claim HIPAA compliance. When the `health` module is enabled:
+Domi Ops is **not** a HIPAA-covered entity and does not claim HIPAA compliance. When the `health` module is enabled:
 
 - **In transit:** use HTTPS in production (Caddy or your reverse proxy). Plain HTTP dev is not suitable for real health data.
 - **At rest (application):** titles, notes, medication names/dosage/instructions, and dose log notes are encrypted in PostgreSQL via `@domi-ops/crypto` (`ENCRYPTION_KEY` — same key as Google OAuth tokens).
@@ -151,6 +155,8 @@ A minimal privacy page ships at `/privacy` for OAuth consent screens. Link it fr
 
 ## Troubleshooting
 
+See **[TROUBLESHOOTING.md](./TROUBLESHOOTING.md)** for a full index. Quick hits:
+
 | Symptom | Fix |
 |---------|-----|
 | OAuth `invalid_request` | Redirect URIs / JavaScript origins must exactly match `PUBLIC_APP_URL` |
@@ -161,9 +167,14 @@ A minimal privacy page ships at `/privacy` for OAuth consent screens. Link it fr
 | Avatar/upload fails | Verify `S3_*` and MinIO bucket (`scripts/ensure-minio.mjs` on dev reset) |
 | Web Push not delivered | Set `VAPID_*` env vars; user must enable in Profile |
 | `EADDRINUSE :3000` | Stop stale `next dev` or run infra-only: `docker compose up -d postgres redis minio` |
+| GHCR pull denied | `docker login ghcr.io` with PAT `read:packages` — [SETUP.md Path C](./SETUP.md#path-c-production-with-pre-built-images) |
+| Cannot create first owner | `SETUP_TOKEN` + `/setup` — [SETUP.md](./SETUP.md#first-login-and-household-setup) |
 
 ## Further reading
 
+- [SETUP.md](./SETUP.md) — step-by-step paths for household admins
+- [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) — common failures index
+- [SECURITY_REVIEW.md](./SECURITY_REVIEW.md) — pre-launch security checklist
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — system design
 - [CONTRIBUTING.md](../CONTRIBUTING.md) — dev workflow
 - [README.md](../README.md) — project overview

@@ -36,6 +36,8 @@
 - `README.md` — quick start, import, production pointers
 - `docs/ARCHITECTURE.md` — product tiers, cutover checklist
 - `docs/GOOGLE_OAUTH_SETUP.md` — Google Cloud Console redirect URIs
+- `docs/SECURITY_REVIEW.md` — pre-launch security checklist (WHO-172)
+- `docs/TROUBLESHOOTING.md` — self-host failure index (WHO-175)
 
 ## Repo facts (grounded)
 

@@ -150,6 +150,7 @@ ALLOW_PUBLIC_SIGNUP=false
 POSTGRES_PASSWORD=<generate>
 SESSION_SECRET=<generate — at least 32 characters>
 ENCRYPTION_KEY=<generate>
+SETUP_TOKEN=<generate — at least 16 characters; for /setup wizard>
 
 S3_ACCESS_KEY=<generate>
 S3_SECRET_KEY=<generate>
@@ -300,7 +301,7 @@ Google setup unlocks **Sign in with Google** and **Google Calendar import/sync**
    - User type: **External** (or Internal for Workspace-only).
    - App name, support email, developer contact.
    - **Application home page:** `https://home.example.com`
-   - **Privacy policy:** `https://home.example.com/privacy` (whome ships a minimal policy page).
+   - **Privacy policy:** `https://home.example.com/privacy` (Domi Ops ships a minimal policy page).
    - **Publishing status:** **Testing** is fine for family use — add every family Gmail under **Test users**.
 3. **APIs & Services → Credentials → Create credentials → OAuth client ID**
    - Type: **Web application**
@@ -357,7 +358,8 @@ All settings live in `.env` at the repo root. Production containers read this fi
 | `PUBLIC_APP_URL` | The URL families type in the browser (`https://home.example.com`). Drives OAuth redirects and cookie scope. **Must match your domain exactly.** |
 | `POSTGRES_PASSWORD` | Database password (compose uses it to build `DATABASE_URL` inside containers). |
 | `SESSION_SECRET` | Signs login cookies. **At least 32 random characters.** Never reuse across apps. |
-| `ENCRYPTION_KEY` | Encrypts stored OAuth tokens. Generate once; **do not rotate** without re-connecting Google accounts. |
+| `ENCRYPTION_KEY` | Encrypts stored OAuth tokens and health fields. Generate once; **do not rotate** without re-connecting Google / re-encrypting health data. |
+| `SETUP_TOKEN` | Greenfield only (min 16 chars). Unlocks `/setup` and `bootstrap:owner`. Remove or rotate after first household exists. |
 | `S3_ACCESS_KEY` / `S3_SECRET_KEY` | MinIO credentials in the bundled stack. Treat like a password. |
 | `AUTH_REQUIRED` | Keep `true` in production. |
 
@@ -365,7 +367,7 @@ All settings live in `.env` at the repo root. Production containers read this fi
 
 | Variable | Default | Notes |
 |----------|---------|-------|
-| `ALLOW_PUBLIC_SIGNUP` | off in production | When `false`, random visitors cannot create an owner account. |
+| `ALLOW_PUBLIC_SIGNUP` | off in production | When `false`, use `SETUP_TOKEN` + `/setup` for the first owner. |
 | `GOOGLE_OAUTH_CLIENT_ID` / `SECRET` | empty | Optional. Required only for Google sign-in or calendar sync. |
 | `EMAIL_VERIFICATION_REQUIRED` | off | Optional. Pair with `SMTP_*` vars for verified email sign-up. |
 
@@ -535,7 +537,7 @@ docker compose -f docker-compose.prod.yml -f docker-compose.staging.yml up -d
 # Test on host port 3002
 ```
 
-See `deploy/CUTOVER-WHOBBREY.md` for a full rehearsal checklist.
+See `deploy/CUTOVER.md` for a generic cutover checklist. Operator-specific migration notes live under `deploy/CUTOVER-*.md` (not required for greenfield installs).
 
 ### One household per database
 
@@ -568,15 +570,19 @@ See [HOMEHUB_IMPORT.md](./HOMEHUB_IMPORT.md). Always run `--dry-run` first.
 
 ## Troubleshooting
 
+See **[TROUBLESHOOTING.md](./TROUBLESHOOTING.md)** for the full index. Common issues:
+
 | Problem | Likely fix |
 |---------|------------|
+| Cannot create first owner | Set `SETUP_TOKEN`, open `/setup`, or `npm run bootstrap:owner` |
 | Google “redirect_uri_mismatch” | Redirect URIs in GCP must **exactly** match `PUBLIC_APP_URL` paths |
+| GHCR `pull access denied` | `docker login ghcr.io` with PAT (`read:packages`) — [Path C](#path-c-production-with-pre-built-images) |
 | Login works on one port but not another | You mixed `3000` and `3001` — pick one dev profile |
 | “Unauthorized” everywhere | Session cookie issue — confirm `PUBLIC_APP_URL` matches browser URL and HTTPS |
-| Calendar sync never runs | Worker container up? `REDIS_URL` set? Google OAuth + `calendar_sync` module enabled? |
+| Calendar sync never runs | Worker container up? `REDIS_URL` set? Google OAuth + `calendar_sync` enabled? |
 | Uploads fail | Check API logs; verify MinIO is running and `S3_*` keys match |
 | Push notifications silent | `VAPID_*` set? User enabled push in Profile? PWA installed on iOS? |
-| Database errors after update | API logs — run migrations manually if needed (see [SELF_HOST.md](./SELF_HOST.md)) |
+| Database errors after update | API logs — migrations run on API start; see [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) |
 
 More detail: [SELF_HOST.md](./SELF_HOST.md) · [GOOGLE_OAUTH_SETUP.md](./GOOGLE_OAUTH_SETUP.md)
 
@@ -590,7 +596,8 @@ Quick reference (run on any machine with OpenSSL):
 echo "POSTGRES_PASSWORD=$(openssl rand -base64 32 | tr -d '/+=' | head -c 32)"
 echo "SESSION_SECRET=$(openssl rand -base64 48 | tr -d '\n')"
 echo "ENCRYPTION_KEY=$(openssl rand -base64 32 | tr -d '\n')"
-echo "S3_ACCESS_KEY=whome$(openssl rand -hex 4)"
+echo "SETUP_TOKEN=$(openssl rand -base64 32 | tr -d '/+=' | head -c 32)"
+echo "S3_ACCESS_KEY=domi_ops_$(openssl rand -hex 4)"
 echo "S3_SECRET_KEY=$(openssl rand -base64 32 | tr -d '/+=' | head -c 40)"
 ```
 
@@ -603,6 +610,8 @@ Paste into `.env`, then `set -a && source .env && set +a` before `docker compose
 | Doc | Contents |
 |-----|----------|
 | [SELF_HOST.md](./SELF_HOST.md) | Technical self-host reference |
+| [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) | Common failures index |
+| [SECURITY_REVIEW.md](./SECURITY_REVIEW.md) | Pre-launch security checklist |
+| [GOOGLE_OAUTH_SETUP.md](./GOOGLE_OAUTH_SETUP.md) | Google Cloud step-by-step |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | System design; self-host and hosted tiers launch together at public release |
-| [deploy/CUTOVER-WHOBBREY.md](../deploy/CUTOVER-WHOBBREY.md) | Full production cutover walkthrough |
 | [README.md](../README.md) | Project overview |

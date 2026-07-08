@@ -28,6 +28,8 @@ Modules are toggled per household. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.
 ## Quick start (local)
 
 ```bash
+git clone https://github.com/mwhobrey/domi-ops.git
+cd domi-ops
 cp .env.example .env
 # Edit SESSION_SECRET, ENCRYPTION_KEY for production
 
@@ -37,6 +39,8 @@ npm run build
 npm run db:migrate   # required before first login
 npm run dev
 ```
+
+**First login (local greenfield):** with `ALLOW_PUBLIC_SIGNUP=false`, set `SETUP_TOKEN` in `.env`, open http://localhost:3000/setup, or run `npm run bootstrap:owner`.
 
 **Reset local DB** (wipe Docker volumes, re-migrate, flush Redis):
 
@@ -51,20 +55,22 @@ npm run dev
 
 ## Self-host (production)
 
-See **[docs/SETUP.md](docs/SETUP.md)** (recommended), [docs/SELF_HOST.md](docs/SELF_HOST.md), and [deploy/CUTOVER-WHOBBREY.md](deploy/CUTOVER-WHOBBREY.md).
+See **[docs/SETUP.md](docs/SETUP.md)** (recommended) and [docs/SELF_HOST.md](docs/SELF_HOST.md).
 
 ```bash
+git clone https://github.com/mwhobrey/domi-ops.git
+cd domi-ops
 cp .env.example .env
-# Set POSTGRES_PASSWORD, SESSION_SECRET, ENCRYPTION_KEY, S3_ACCESS_KEY, S3_SECRET_KEY, Google OAuth
+# Set POSTGRES_PASSWORD, SESSION_SECRET, ENCRYPTION_KEY, S3_ACCESS_KEY, S3_SECRET_KEY
+# Greenfield: SETUP_TOKEN (min 16 chars) for /setup or bootstrap:owner
 
 docker compose -f docker-compose.prod.yml up -d --build
-
-# Behind an existing reverse proxy (shared Docker network):
-# PROXY_NETWORK=your_proxy_network docker compose \
-#   -f docker-compose.prod.yml -f docker-compose.proxy-external.yml up -d --build
+# Then open https://your.domain/setup (or npm run bootstrap:owner on the server)
 ```
 
-Pre-built images are published to GHCR on `main` and version tags — see `docker-compose.prod.yml` and `DOMI_OPS_IMAGE_TAG` for pull-only deploys.
+Pre-built images are published to GHCR on `main` and version tags — see [SETUP.md Path C](docs/SETUP.md#path-c-production-with-pre-built-images) and `DOMI_OPS_IMAGE_TAG`.
+
+**Stuck?** [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
 
 ## Migrating from HomeHub
 
