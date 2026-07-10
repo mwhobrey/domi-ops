@@ -3,7 +3,12 @@ import { getMaterialActionLabel, materialOpenUrl } from "./school-materials";
 
 describe("school-materials web helpers", () => {
   it("labels test materials", () => {
-    expect(getMaterialActionLabel({ role: "handout", isTest: true })).toBe("Open test");
+    expect(
+      getMaterialActionLabel({ role: "handout", isTest: true, source: "google_doc" }),
+    ).toBe("Open test");
+    expect(
+      getMaterialActionLabel({ role: "student_material", isTest: true, source: "native_test" }),
+    ).toBe("Take test");
   });
 
   it("uses snapshot url when frozen", () => {

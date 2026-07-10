@@ -328,6 +328,7 @@ export function SchoolAssignmentSheet({
             assignmentId={savedAssignment.id}
             driveEnabled={driveEnabled}
             canEdit
+            assignmentPointsPossible={parseFloat(form.pointsPossible) || 100}
           />
         ) : (
           <p className="text-xs text-[var(--color-text-muted)]">

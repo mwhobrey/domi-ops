@@ -11,7 +11,8 @@ export type SchoolMaterialSource =
   | "domi_drive_file"
   | "domi_drive_link"
   | "external_url"
-  | "google_doc";
+  | "google_doc"
+  | "native_test";
 
 export interface SchoolMaterialDto {
   id: string;
@@ -31,6 +32,7 @@ export interface SchoolMaterialDto {
   googleFileId?: string | null;
   googleMimeType?: string | null;
   strictContentCheck?: boolean;
+  nativeTestPointsMode?: "explicit" | "weighted";
 }
 
 export const MATERIAL_ROLE_LABELS: Record<SchoolMaterialRole, string> = {
@@ -41,7 +43,8 @@ export const MATERIAL_ROLE_LABELS: Record<SchoolMaterialRole, string> = {
   reference: "Reference",
 };
 
-export function getMaterialActionLabel(material: Pick<SchoolMaterialDto, "role" | "isTest">): string {
+export function getMaterialActionLabel(material: Pick<SchoolMaterialDto, "role" | "isTest" | "source">): string {
+  if (material.source === "native_test") return "Take test";
   if (material.isTest || material.role === "student_material") return "Open test";
   if (material.role === "handout") return "Open handout";
   if (material.role === "rubric") return "View rubric";

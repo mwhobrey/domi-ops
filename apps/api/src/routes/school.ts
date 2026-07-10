@@ -15,6 +15,7 @@ import {
   schoolSubmissionArtifacts,
   schoolSubmissionGoogleCopies,
   schoolSubmissions,
+  schoolTestQuestions,
   users,
 } from "@domi-ops/db";
 import { and, asc, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
@@ -57,6 +58,13 @@ import {
   runGoogleLineageChecks,
   serializeSubmissionArtifact,
 } from "../lib/school-google-workflow.js";
+import {
+  serializeQuestionPreview,
+  serializeQuestionStaff,
+  validateQuestionInput,
+  type SchoolNativeTestPointsMode,
+  type SchoolQuestionType,
+} from "../lib/school-test-questions.js";
 import {
   canModifySubmissionArtifacts,
   submissionAccessForAuth,
@@ -254,6 +262,28 @@ async function resolveDriveSource(
     return { source: "domi_drive_link", externalUrl: obj.url };
   }
   return { source: "domi_drive_file", externalUrl: null };
+}
+
+async function staffNativeTestMaterial(
+  db: Database,
+  assignmentId: string,
+  materialId: string,
+  canEdit: boolean,
+) {
+  if (!canEdit) return { error: "forbidden" as const };
+  const [material] = await db
+    .select()
+    .from(schoolAssignmentMaterials)
+    .where(
+      and(
+        eq(schoolAssignmentMaterials.id, materialId),
+        eq(schoolAssignmentMaterials.assignmentId, assignmentId),
+      ),
+    )
+    .limit(1);
+  if (!material) return { error: "not_found" as const };
+  if (material.source !== "native_test") return { error: "not_native_test" as const };
+  return { material };
 }
 
 export function schoolRoutes(db: Database, env: Env) {
@@ -1234,9 +1264,10 @@ export function schoolRoutes(db: Database, env: Env) {
         .select()
         .from(schoolAssignmentMaterials)
         .where(eq(schoolAssignmentMaterials.assignmentId, id));
-      if (sourceMaterials.length > 0) {
-        await db.insert(schoolAssignmentMaterials).values(
-          sourceMaterials.map((m) => ({
+      for (const m of sourceMaterials) {
+        const [newMat] = await db
+          .insert(schoolAssignmentMaterials)
+          .values({
             assignmentId: row.id,
             role: m.role,
             source: m.source,
@@ -1251,7 +1282,27 @@ export function schoolRoutes(db: Database, env: Env) {
             strictContentCheck: m.strictContentCheck,
             studentVisible: m.studentVisible,
             observerVisible: m.observerVisible,
+            nativeTestPointsMode: m.nativeTestPointsMode,
             createdByUserId: auth.userId,
+          })
+          .returning();
+        if (!newMat || m.source !== "native_test") continue;
+        const questions = await db
+          .select()
+          .from(schoolTestQuestions)
+          .where(eq(schoolTestQuestions.materialId, m.id))
+          .orderBy(asc(schoolTestQuestions.sortOrder));
+        if (questions.length === 0) continue;
+        await db.insert(schoolTestQuestions).values(
+          questions.map((q) => ({
+            materialId: newMat.id,
+            sortOrder: q.sortOrder,
+            questionType: q.questionType,
+            promptMarkdown: q.promptMarkdown,
+            points: q.points,
+            weight: q.weight,
+            optionsJson: q.optionsJson,
+            correctAnswerJson: q.correctAnswerJson,
           })),
         );
       }
@@ -2015,6 +2066,7 @@ export function schoolRoutes(db: Database, env: Env) {
       googleRevisionId?: string | null;
       isTest?: boolean;
       strictContentCheck?: boolean;
+      nativeTestPointsMode?: SchoolNativeTestPointsMode;
       studentVisible?: boolean;
       observerVisible?: boolean;
     }>();
@@ -2033,7 +2085,9 @@ export function schoolRoutes(db: Database, env: Env) {
       if (resolved.externalUrl) externalUrl = resolved.externalUrl;
     }
 
-    if (source === "google_doc" || googleFileId) {
+    if (source === "native_test") {
+      if (!displayName?.trim()) displayName = "In-app test";
+    } else if (source === "google_doc" || googleFileId) {
       source = "google_doc";
       if (!googleFileId) return c.json({ error: "google_file_required" }, 400);
 
@@ -2101,8 +2155,14 @@ export function schoolRoutes(db: Database, env: Env) {
         googleFileId: validated.value.source === "google_doc" ? googleFileId : null,
         googleMimeType: validated.value.source === "google_doc" ? googleMimeType : null,
         googleRevisionId: validated.value.source === "google_doc" ? googleRevisionId : null,
-        isTest: validated.value.isTest ?? false,
+        isTest: validated.value.isTest ?? (validated.value.source === "native_test"),
         strictContentCheck: body.strictContentCheck ?? false,
+        nativeTestPointsMode:
+          validated.value.source === "native_test"
+            ? body.nativeTestPointsMode === "weighted"
+              ? "weighted"
+              : "explicit"
+            : null,
         studentVisible: validated.value.studentVisible ?? true,
         observerVisible: validated.value.observerVisible ?? false,
         createdByUserId: auth.userId,
@@ -2140,6 +2200,7 @@ export function schoolRoutes(db: Database, env: Env) {
       externalUrl?: string | null;
       isTest?: boolean;
       strictContentCheck?: boolean;
+      nativeTestPointsMode?: SchoolNativeTestPointsMode;
       studentVisible?: boolean;
       observerVisible?: boolean;
     }>();
@@ -2164,6 +2225,10 @@ export function schoolRoutes(db: Database, env: Env) {
     if (body.sortOrder !== undefined) patch.sortOrder = body.sortOrder;
     if (body.isTest !== undefined) patch.isTest = body.isTest;
     if (body.strictContentCheck !== undefined) patch.strictContentCheck = body.strictContentCheck;
+    if (body.nativeTestPointsMode !== undefined && existing.source === "native_test") {
+      patch.nativeTestPointsMode =
+        body.nativeTestPointsMode === "weighted" ? "weighted" : "explicit";
+    }
     if (body.studentVisible !== undefined) patch.studentVisible = validated.value.studentVisible!;
     if (body.observerVisible !== undefined) patch.observerVisible = validated.value.observerVisible!;
     if (body.externalUrl !== undefined) patch.externalUrl = body.externalUrl;
@@ -2198,6 +2263,236 @@ export function schoolRoutes(db: Database, env: Env) {
     if (existing.frozenAt) return c.json({ error: "material_frozen" }, 409);
 
     await db.delete(schoolAssignmentMaterials).where(eq(schoolAssignmentMaterials.id, materialId));
+    return c.json({ ok: true });
+  });
+
+  app.get("/assignments/:id/materials/:materialId/questions", async (c) => {
+    const auth = c.get("auth")!;
+    const assignmentId = c.req.param("id");
+    const materialId = c.req.param("materialId");
+    const ctx = await assignmentAccessForAuth(db, auth, assignmentId);
+    if (!ctx) return c.json({ error: "not_found" }, 404);
+
+    const resolved = await staffNativeTestMaterial(
+      db,
+      assignmentId,
+      materialId,
+      ctx.access.canEditAssignments,
+    );
+    if ("error" in resolved) {
+      const status = resolved.error === "forbidden" ? 403 : 404;
+      return c.json({ error: resolved.error }, status);
+    }
+
+    const questions = await db
+      .select()
+      .from(schoolTestQuestions)
+      .where(eq(schoolTestQuestions.materialId, materialId))
+      .orderBy(asc(schoolTestQuestions.sortOrder), asc(schoolTestQuestions.createdAt));
+
+    return c.json({
+      material: resolved.material,
+      questions: questions.map(serializeQuestionStaff),
+      frozen: Boolean(resolved.material.frozenAt),
+    });
+  });
+
+  app.get("/assignments/:id/materials/:materialId/questions/preview", async (c) => {
+    const auth = c.get("auth")!;
+    const assignmentId = c.req.param("id");
+    const materialId = c.req.param("materialId");
+    const ctx = await assignmentAccessForAuth(db, auth, assignmentId);
+    if (!ctx) return c.json({ error: "not_found" }, 404);
+
+    const resolved = await staffNativeTestMaterial(
+      db,
+      assignmentId,
+      materialId,
+      ctx.access.canEditAssignments,
+    );
+    if ("error" in resolved) {
+      const status = resolved.error === "forbidden" ? 403 : 404;
+      return c.json({ error: resolved.error }, status);
+    }
+
+    const questions = await db
+      .select()
+      .from(schoolTestQuestions)
+      .where(eq(schoolTestQuestions.materialId, materialId))
+      .orderBy(asc(schoolTestQuestions.sortOrder), asc(schoolTestQuestions.createdAt));
+
+    return c.json({ questions: questions.map(serializeQuestionPreview) });
+  });
+
+  app.post("/assignments/:id/materials/:materialId/questions", async (c) => {
+    const auth = c.get("auth")!;
+    const assignmentId = c.req.param("id");
+    const materialId = c.req.param("materialId");
+    const ctx = await assignmentAccessForAuth(db, auth, assignmentId);
+    if (!ctx) return c.json({ error: "not_found" }, 404);
+
+    const resolved = await staffNativeTestMaterial(
+      db,
+      assignmentId,
+      materialId,
+      ctx.access.canEditAssignments,
+    );
+    if ("error" in resolved) {
+      const status = resolved.error === "forbidden" ? 403 : 404;
+      return c.json({ error: resolved.error }, status);
+    }
+    if (resolved.material.frozenAt) return c.json({ error: "material_frozen" }, 409);
+
+    const body = await c.req.json<{
+      questionType?: SchoolQuestionType;
+      promptMarkdown?: string;
+      sortOrder?: number;
+      points?: number | null;
+      weight?: number | null;
+      optionsJson?: Array<{ id: string; label: string }> | null;
+      correctAnswerJson?: Record<string, unknown> | null;
+    }>();
+
+    const pointsMode = resolved.material.nativeTestPointsMode ?? "explicit";
+    const validated = validateQuestionInput(body, { pointsMode, isCreate: true });
+    if (!validated.ok) return c.json({ error: validated.error }, 400);
+
+    const existing = await db
+      .select({ sortOrder: schoolTestQuestions.sortOrder })
+      .from(schoolTestQuestions)
+      .where(eq(schoolTestQuestions.materialId, materialId));
+    const nextSort =
+      body.sortOrder ??
+      existing.reduce((max, row) => Math.max(max, row.sortOrder), -1) + 1;
+
+    const [row] = await db
+      .insert(schoolTestQuestions)
+      .values({
+        materialId,
+        sortOrder: nextSort,
+        questionType: validated.value.questionType,
+        promptMarkdown: validated.value.promptMarkdown,
+        points: validated.value.points ?? null,
+        weight: validated.value.weight ?? null,
+        optionsJson: validated.value.optionsJson,
+        correctAnswerJson: validated.value.correctAnswerJson,
+      })
+      .returning();
+
+    return c.json({ question: serializeQuestionStaff(row!) }, 201);
+  });
+
+  app.patch("/assignments/:id/materials/:materialId/questions/:questionId", async (c) => {
+    const auth = c.get("auth")!;
+    const assignmentId = c.req.param("id");
+    const materialId = c.req.param("materialId");
+    const questionId = c.req.param("questionId");
+    const ctx = await assignmentAccessForAuth(db, auth, assignmentId);
+    if (!ctx) return c.json({ error: "not_found" }, 404);
+
+    const resolved = await staffNativeTestMaterial(
+      db,
+      assignmentId,
+      materialId,
+      ctx.access.canEditAssignments,
+    );
+    if ("error" in resolved) {
+      const status = resolved.error === "forbidden" ? 403 : 404;
+      return c.json({ error: resolved.error }, status);
+    }
+    if (resolved.material.frozenAt) return c.json({ error: "material_frozen" }, 409);
+
+    const [existing] = await db
+      .select()
+      .from(schoolTestQuestions)
+      .where(
+        and(
+          eq(schoolTestQuestions.id, questionId),
+          eq(schoolTestQuestions.materialId, materialId),
+        ),
+      )
+      .limit(1);
+    if (!existing) return c.json({ error: "not_found" }, 404);
+
+    const body = await c.req.json<{
+      questionType?: SchoolQuestionType;
+      promptMarkdown?: string;
+      sortOrder?: number;
+      points?: number | null;
+      weight?: number | null;
+      optionsJson?: Array<{ id: string; label: string }> | null;
+      correctAnswerJson?: Record<string, unknown> | null;
+    }>();
+
+    const pointsMode = resolved.material.nativeTestPointsMode ?? "explicit";
+    const validated = validateQuestionInput(
+      {
+        questionType: (body.questionType ?? existing.questionType) as SchoolQuestionType,
+        promptMarkdown: body.promptMarkdown ?? existing.promptMarkdown,
+        sortOrder: body.sortOrder,
+        points: body.points !== undefined ? body.points : existing.points,
+        weight: body.weight !== undefined ? body.weight : existing.weight,
+        optionsJson: body.optionsJson !== undefined ? body.optionsJson : existing.optionsJson,
+        correctAnswerJson:
+          body.correctAnswerJson !== undefined
+            ? body.correctAnswerJson
+            : (existing.correctAnswerJson as Record<string, unknown> | null),
+      },
+      { pointsMode },
+    );
+    if (!validated.ok) return c.json({ error: validated.error }, 400);
+
+    const [row] = await db
+      .update(schoolTestQuestions)
+      .set({
+        sortOrder: body.sortOrder ?? existing.sortOrder,
+        questionType: validated.value.questionType,
+        promptMarkdown: validated.value.promptMarkdown,
+        points: validated.value.points ?? null,
+        weight: validated.value.weight ?? null,
+        optionsJson: validated.value.optionsJson,
+        correctAnswerJson: validated.value.correctAnswerJson,
+        updatedAt: new Date(),
+      })
+      .where(eq(schoolTestQuestions.id, questionId))
+      .returning();
+
+    return c.json({ question: serializeQuestionStaff(row!) });
+  });
+
+  app.delete("/assignments/:id/materials/:materialId/questions/:questionId", async (c) => {
+    const auth = c.get("auth")!;
+    const assignmentId = c.req.param("id");
+    const materialId = c.req.param("materialId");
+    const questionId = c.req.param("questionId");
+    const ctx = await assignmentAccessForAuth(db, auth, assignmentId);
+    if (!ctx) return c.json({ error: "not_found" }, 404);
+
+    const resolved = await staffNativeTestMaterial(
+      db,
+      assignmentId,
+      materialId,
+      ctx.access.canEditAssignments,
+    );
+    if ("error" in resolved) {
+      const status = resolved.error === "forbidden" ? 403 : 404;
+      return c.json({ error: resolved.error }, status);
+    }
+    if (resolved.material.frozenAt) return c.json({ error: "material_frozen" }, 409);
+
+    const [existing] = await db
+      .select({ id: schoolTestQuestions.id })
+      .from(schoolTestQuestions)
+      .where(
+        and(
+          eq(schoolTestQuestions.id, questionId),
+          eq(schoolTestQuestions.materialId, materialId),
+        ),
+      )
+      .limit(1);
+    if (!existing) return c.json({ error: "not_found" }, 404);
+
+    await db.delete(schoolTestQuestions).where(eq(schoolTestQuestions.id, questionId));
     return c.json({ ok: true });
   });
 

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
 import type { SchoolMaterialDto, SchoolMaterialRole } from "../lib/school-materials";
 import { MATERIAL_ROLE_LABELS } from "../lib/school-materials";
+import { SchoolTestQuestionEditor } from "./SchoolTestQuestionEditor";
 import { DriveObjectPicker } from "./DriveObjectPicker";
 import { GooglePickerButton } from "./GooglePickerButton";
 import { Alert, Badge, Button, Checkbox, Input, Select } from "./ui";
@@ -16,10 +17,12 @@ export function SchoolAssignmentMaterialsEditor({
   assignmentId,
   driveEnabled,
   canEdit,
+  assignmentPointsPossible,
 }: {
   assignmentId: string;
   driveEnabled: boolean;
   canEdit: boolean;
+  assignmentPointsPossible?: number | null;
 }) {
   const [materials, setMaterials] = useState<MaterialEditorRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,6 +62,22 @@ export function SchoolAssignmentMaterialsEditor({
       await loadMaterials();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not add material");
+    }
+  }
+
+  async function addNativeTest() {
+    setError(null);
+    try {
+      await apiClient.post(`/api/school/assignments/${assignmentId}/materials`, {
+        source: "native_test",
+        displayName: "In-app test",
+        role: "student_material",
+        isTest: true,
+        nativeTestPointsMode: "explicit",
+      });
+      await loadMaterials();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not create in-app test");
     }
   }
 
@@ -148,6 +167,7 @@ export function SchoolAssignmentMaterialsEditor({
                   <span className="text-sm font-medium">{m.displayName}</span>
                   <Badge tone="default">{MATERIAL_ROLE_LABELS[m.role]}</Badge>
                   {m.source === "google_doc" ? <Badge tone="default">Google</Badge> : null}
+                  {m.source === "native_test" ? <Badge tone="accent">In-app</Badge> : null}
                   {m.isTest ? <Badge tone="accent">Test</Badge> : null}
                   {frozen ? <Badge tone="warning">Frozen</Badge> : null}
                 </div>
@@ -202,6 +222,18 @@ export function SchoolAssignmentMaterialsEditor({
                     </div>
                   </div>
                 ) : null}
+                {m.source === "native_test" ? (
+                  <SchoolTestQuestionEditor
+                    assignmentId={assignmentId}
+                    materialId={m.id}
+                    pointsMode={m.nativeTestPointsMode ?? "explicit"}
+                    assignmentPointsPossible={assignmentPointsPossible ?? null}
+                    frozen={frozen}
+                    onPointsModeChange={async (mode) => {
+                      await patchMaterial(m.id, { nativeTestPointsMode: mode });
+                    }}
+                  />
+                ) : null}
                 {!frozen ? (
                   <Button type="button" size="sm" variant="ghost" onClick={() => void removeMaterial(m.id)}>
                     Remove
@@ -214,6 +246,9 @@ export function SchoolAssignmentMaterialsEditor({
       )}
 
       <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" size="sm" variant="secondary" onClick={() => void addNativeTest()}>
+          Create in-app test
+        </Button>
         {driveEnabled ? (
           <Button type="button" size="sm" variant="secondary" onClick={() => setPickerOpen(true)}>
             Add from Drive

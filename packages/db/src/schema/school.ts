@@ -2,6 +2,7 @@ import {
   boolean,
   date,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   real,
@@ -47,6 +48,20 @@ export const schoolMaterialSourceEnum = pgEnum("school_material_source", [
   "domi_drive_link",
   "external_url",
   "google_doc",
+  "native_test",
+]);
+
+export const schoolNativeTestPointsModeEnum = pgEnum("school_native_test_points_mode", [
+  "explicit",
+  "weighted",
+]);
+
+export const schoolQuestionTypeEnum = pgEnum("school_question_type", [
+  "multiple_choice",
+  "multiple_choice_multi",
+  "true_false",
+  "short_answer",
+  "long_answer",
 ]);
 
 export const schoolLineageStatusEnum = pgEnum("school_lineage_status", [
@@ -178,7 +193,9 @@ export const schoolAssignmentMaterials = pgTable("school_assignment_materials", 
   frozenAt: timestamp("frozen_at", { withTimezone: true }),
   snapshotS3Key: text("snapshot_s3_key"),
   snapshotTextS3Key: text("snapshot_text_s3_key"),
+  snapshotJsonS3Key: text("snapshot_json_s3_key"),
   snapshotContentHash: varchar("snapshot_content_hash", { length: 64 }),
+  nativeTestPointsMode: schoolNativeTestPointsModeEnum("native_test_points_mode"),
   createdByUserId: uuid("created_by_user_id").references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -225,6 +242,26 @@ export const schoolSubmissionGoogleCopies = pgTable(
       t.materialId,
     ),
   ],
+);
+
+export const schoolTestQuestions = pgTable(
+  "school_test_questions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    materialId: uuid("material_id")
+      .notNull()
+      .references(() => schoolAssignmentMaterials.id, { onDelete: "cascade" }),
+    sortOrder: integer("sort_order").notNull().default(0),
+    questionType: schoolQuestionTypeEnum("question_type").notNull(),
+    promptMarkdown: text("prompt_markdown").notNull().default(""),
+    points: real("points"),
+    weight: real("weight"),
+    optionsJson: jsonb("options_json").$type<Array<{ id: string; label: string }>>(),
+    correctAnswerJson: jsonb("correct_answer_json").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("school_test_questions_material_sort").on(t.materialId, t.sortOrder)],
 );
 
 export const schoolAttendance = pgTable(

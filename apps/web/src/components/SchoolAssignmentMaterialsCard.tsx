@@ -123,6 +123,9 @@ export function SchoolAssignmentMaterialsCard({
                       {material.source === "google_doc" ? (
                         <Badge tone="default">Google</Badge>
                       ) : null}
+                      {material.source === "native_test" ? (
+                        <Badge tone="accent">In-app</Badge>
+                      ) : null}
                       {material.isTest ? <Badge tone="accent">Test</Badge> : null}
                       {material.frozenAt ? <Badge tone="warning">Frozen</Badge> : null}
                     </div>

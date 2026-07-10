@@ -75,6 +75,14 @@ describe("validateMaterialInput", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toBe("google_file_required");
   });
+
+  it("accepts native_test create without drive or google", () => {
+    const result = validateMaterialInput(
+      { source: "native_test", displayName: "Quiz 1" },
+      { isCreate: true },
+    );
+    expect(result.ok).toBe(true);
+  });
 });
 
 describe("defaultVisibilityForRole", () => {

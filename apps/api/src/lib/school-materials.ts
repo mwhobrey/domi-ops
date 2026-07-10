@@ -15,6 +15,7 @@ export const SCHOOL_MATERIAL_SOURCES = [
   "domi_drive_link",
   "external_url",
   "google_doc",
+  "native_test",
 ] as const;
 
 export type SchoolMaterialSource = (typeof SCHOOL_MATERIAL_SOURCES)[number];
@@ -38,7 +39,9 @@ export interface SchoolMaterialRow {
   frozenAt: Date | null;
   snapshotS3Key: string | null;
   snapshotTextS3Key: string | null;
+  snapshotJsonS3Key: string | null;
   snapshotContentHash: string | null;
+  nativeTestPointsMode: "explicit" | "weighted" | null;
   createdByUserId: string | null;
   createdAt: Date;
 }
@@ -54,6 +57,7 @@ export interface MaterialInput {
   googleMimeType?: string | null;
   isTest?: boolean;
   strictContentCheck?: boolean;
+  nativeTestPointsMode?: "explicit" | "weighted";
   studentVisible?: boolean;
   observerVisible?: boolean;
 }
@@ -136,6 +140,10 @@ export function validateMaterialInput(
     if (!body.googleFileId?.trim()) return { ok: false, error: "google_file_required" };
   }
 
+  if (source === "native_test" && opts?.isCreate) {
+    if (!displayName) return { ok: false, error: "display_name_required" };
+  }
+
   return {
     ok: true,
     value: {
@@ -167,10 +175,13 @@ export function serializeMaterial(
     studentVisible: row.studentVisible,
     observerVisible: row.observerVisible,
     frozenAt: row.frozenAt?.toISOString() ?? null,
-    hasSnapshot: Boolean(row.snapshotS3Key),
+    hasSnapshot: Boolean(row.snapshotS3Key || row.snapshotJsonS3Key),
     driveObject: opts.driveObject ?? null,
     ...(row.source === "google_doc" && !row.frozenAt
       ? { googleFileId: row.googleFileId, googleMimeType: row.googleMimeType }
+      : {}),
+    ...(row.source === "native_test"
+      ? { nativeTestPointsMode: row.nativeTestPointsMode ?? "explicit" }
       : {}),
   };
 
