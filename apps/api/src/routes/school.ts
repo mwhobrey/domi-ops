@@ -30,6 +30,16 @@ import { buildClassGradebook } from "../lib/school-gradebook.js";
 import { buildSchoolReports, canViewSchoolReports } from "../lib/school-reports.js";
 import { canSubmitPastDue, isSubmissionLate } from "../lib/school-submission.js";
 import { freezeAssignmentTestMaterials } from "../lib/school-material-freeze.js";
+import { SchoolMaterialFreezeError } from "../lib/school-material-freeze-errors.js";
+import {
+  fetchGoogleDriveFileMetadata,
+  GOOGLE_FORMS_MIME,
+} from "../lib/google-drive-export.js";
+import {
+  ensureGoogleDocsAccessToken,
+  GoogleDocsCredentialsError,
+  loadGoogleDocsConnection,
+} from "../lib/google-docs-export.js";
 import {
   attemptsRemaining,
   isAttemptsExhausted,
@@ -1405,7 +1415,15 @@ export function schoolRoutes(db: Database, env: Env) {
         ),
       );
     if (submissionCount === 1) {
-      await freezeAssignmentTestMaterials(db, env, assignmentId);
+      try {
+        await freezeAssignmentTestMaterials(db, env, assignmentId);
+      } catch (e) {
+        if (e instanceof SchoolMaterialFreezeError) {
+          const status = e.code === "material_freeze_failed" ? 502 : 403;
+          return c.json({ error: e.code, message: e.message }, status);
+        }
+        throw e;
+      }
     }
 
     return c.json({
@@ -1688,6 +1706,9 @@ export function schoolRoutes(db: Database, env: Env) {
       sortOrder?: number;
       driveObjectId?: string | null;
       externalUrl?: string | null;
+      googleFileId?: string | null;
+      googleMimeType?: string | null;
+      googleRevisionId?: string | null;
       isTest?: boolean;
       studentVisible?: boolean;
       observerVisible?: boolean;
@@ -1695,6 +1716,11 @@ export function schoolRoutes(db: Database, env: Env) {
 
     let source = body.source as SchoolMaterialSource | undefined;
     let externalUrl = body.externalUrl ?? null;
+    let googleFileId = body.googleFileId?.trim() ?? null;
+    let googleMimeType = body.googleMimeType?.trim() ?? null;
+    let googleRevisionId = body.googleRevisionId?.trim() ?? null;
+    let displayName = body.displayName;
+
     if (body.driveObjectId) {
       const resolved = await resolveDriveSource(db, auth.householdId, body.driveObjectId);
       if (!resolved) return c.json({ error: "drive_object_not_found" }, 404);
@@ -1702,14 +1728,49 @@ export function schoolRoutes(db: Database, env: Env) {
       if (resolved.externalUrl) externalUrl = resolved.externalUrl;
     }
 
+    if (source === "google_doc" || googleFileId) {
+      source = "google_doc";
+      if (!googleFileId) return c.json({ error: "google_file_required" }, 400);
+
+      const conn = await loadGoogleDocsConnection(db, auth.householdId, auth.userId);
+      if (!conn) return c.json({ error: "google_docs_not_connected" }, 403);
+
+      let accessToken: string;
+      try {
+        accessToken = await ensureGoogleDocsAccessToken(db, env, conn);
+      } catch (e) {
+        if (e instanceof GoogleDocsCredentialsError) {
+          return c.json({ error: "google_docs_token_revoked", message: e.message }, 403);
+        }
+        throw e;
+      }
+
+      let meta;
+      try {
+        meta = await fetchGoogleDriveFileMetadata(accessToken, googleFileId);
+      } catch {
+        return c.json({ error: "google_file_inaccessible" }, 502);
+      }
+      if (!meta) return c.json({ error: "google_file_inaccessible" }, 404);
+      if (meta.mimeType === GOOGLE_FORMS_MIME) {
+        return c.json({ error: "google_forms_not_supported" }, 400);
+      }
+
+      googleMimeType = meta.mimeType;
+      googleRevisionId = meta.headRevisionId ?? googleRevisionId;
+      if (!displayName?.trim()) displayName = meta.name;
+    }
+
     const validated = validateMaterialInput(
       {
         role: body.role as Parameters<typeof validateMaterialInput>[0]["role"],
         source,
-        displayName: body.displayName,
+        displayName,
         sortOrder: body.sortOrder,
         driveObjectId: body.driveObjectId,
         externalUrl,
+        googleFileId,
+        googleMimeType,
         isTest: body.isTest,
         studentVisible: body.studentVisible,
         observerVisible: body.observerVisible,
@@ -1731,6 +1792,9 @@ export function schoolRoutes(db: Database, env: Env) {
           validated.value.source === "external_url" || validated.value.source === "domi_drive_link"
             ? externalUrl
             : null,
+        googleFileId: validated.value.source === "google_doc" ? googleFileId : null,
+        googleMimeType: validated.value.source === "google_doc" ? googleMimeType : null,
+        googleRevisionId: validated.value.source === "google_doc" ? googleRevisionId : null,
         isTest: validated.value.isTest ?? false,
         studentVisible: validated.value.studentVisible ?? true,
         observerVisible: validated.value.observerVisible ?? false,

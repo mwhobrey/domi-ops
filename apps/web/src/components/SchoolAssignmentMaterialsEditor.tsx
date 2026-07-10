@@ -5,6 +5,7 @@ import { ApiError, apiClient } from "../lib/client-api";
 import type { SchoolMaterialDto, SchoolMaterialRole } from "../lib/school-materials";
 import { MATERIAL_ROLE_LABELS } from "../lib/school-materials";
 import { DriveObjectPicker } from "./DriveObjectPicker";
+import { GooglePickerButton } from "./GooglePickerButton";
 import { Alert, Badge, Button, Checkbox, Input, Select } from "./ui";
 
 interface MaterialEditorRow extends SchoolMaterialDto {
@@ -58,6 +59,22 @@ export function SchoolAssignmentMaterialsEditor({
       await loadMaterials();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not add material");
+    }
+  }
+
+  async function addGoogleMaterial(file: { id: string; name: string; mimeType: string }) {
+    setError(null);
+    try {
+      await apiClient.post(`/api/school/assignments/${assignmentId}/materials`, {
+        source: "google_doc",
+        displayName: file.name,
+        googleFileId: file.id,
+        googleMimeType: file.mimeType,
+        role: "handout",
+      });
+      await loadMaterials();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not add Google file");
     }
   }
 
@@ -130,6 +147,7 @@ export function SchoolAssignmentMaterialsEditor({
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-sm font-medium">{m.displayName}</span>
                   <Badge tone="default">{MATERIAL_ROLE_LABELS[m.role]}</Badge>
+                  {m.source === "google_doc" ? <Badge tone="default">Google</Badge> : null}
                   {m.isTest ? <Badge tone="accent">Test</Badge> : null}
                   {frozen ? <Badge tone="warning">Frozen</Badge> : null}
                 </div>
@@ -186,12 +204,13 @@ export function SchoolAssignmentMaterialsEditor({
         </ul>
       )}
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {driveEnabled ? (
           <Button type="button" size="sm" variant="secondary" onClick={() => setPickerOpen(true)}>
             Add from Drive
           </Button>
         ) : null}
+        <GooglePickerButton onPicked={addGoogleMaterial} title="Attach Google file to assignment" />
       </div>
 
       <div className="grid gap-2 sm:grid-cols-2">

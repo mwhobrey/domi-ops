@@ -25,4 +25,26 @@ describe("school-materials web helpers", () => {
     });
     expect(url).toBe("/api/school/assignments/asn-1/materials/mat-1/snapshot");
   });
+
+  it("uses live Google URL before freeze", () => {
+    const url = materialOpenUrl("asn-1", {
+      id: "mat-2",
+      assignmentId: "asn-1",
+      role: "handout",
+      source: "google_doc",
+      displayName: "Doc",
+      sortOrder: 0,
+      driveObjectId: null,
+      externalUrl: null,
+      isTest: true,
+      studentVisible: true,
+      observerVisible: false,
+      frozenAt: null,
+      hasSnapshot: false,
+      driveObject: null,
+      googleFileId: "g-doc-1",
+      googleMimeType: "application/vnd.google-apps.document",
+    });
+    expect(url).toContain("docs.google.com/document/d/g-doc-1");
+  });
 });

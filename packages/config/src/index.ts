@@ -58,6 +58,8 @@ export const envSchema = z
     GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
     GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
     GOOGLE_OAUTH_REDIRECT_URI: z.string().url().optional(),
+    /** Browser Google Picker API key (HTTP-referrer restricted in GCP). */
+    GOOGLE_PICKER_API_KEY: z.string().optional(),
     GOOGLE_CALENDAR_DEFAULT_SYNC_MODE: syncMode.default("import_only"),
     MODULES_ENABLED: z
       .string()

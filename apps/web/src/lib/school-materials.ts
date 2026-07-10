@@ -1,3 +1,5 @@
+import { googleFileOpenUrl } from "./google-picker";
+
 export type SchoolMaterialRole =
   | "student_material"
   | "handout"
@@ -26,6 +28,8 @@ export interface SchoolMaterialDto {
   frozenAt: string | null;
   hasSnapshot: boolean;
   driveObject: { id: string; title: string; kind: string; url: string | null } | null;
+  googleFileId?: string | null;
+  googleMimeType?: string | null;
 }
 
 export const MATERIAL_ROLE_LABELS: Record<SchoolMaterialRole, string> = {
@@ -50,6 +54,9 @@ export function materialOpenUrl(
 ): string | null {
   if (material.frozenAt && material.hasSnapshot) {
     return `/api/school/assignments/${assignmentId}/materials/${material.id}/snapshot`;
+  }
+  if (material.source === "google_doc" && material.googleFileId) {
+    return googleFileOpenUrl(material.googleFileId, material.googleMimeType);
   }
   if (material.source === "domi_drive_file" && material.driveObjectId) {
     return `/api/core/drive/objects/${material.driveObjectId}/file`;

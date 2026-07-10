@@ -66,6 +66,15 @@ describe("validateMaterialInput", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toBe("material_frozen");
   });
+
+  it("requires google_file_id for google_doc create", () => {
+    const result = validateMaterialInput(
+      { source: "google_doc", displayName: "Worksheet" },
+      { isCreate: true },
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toBe("google_file_required");
+  });
 });
 
 describe("defaultVisibilityForRole", () => {

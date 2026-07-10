@@ -3,7 +3,14 @@ import type { Env } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
 import { driveObjects, schoolAssignmentMaterials, schoolAssignments, schoolClasses } from "@domi-ops/db";
 import { and, eq, isNull } from "drizzle-orm";
+import { exportGoogleFileForSnapshot } from "./google-drive-export.js";
+import {
+  ensureGoogleDocsAccessToken,
+  GoogleDocsCredentialsError,
+  loadGoogleDocsConnection,
+} from "./google-docs-export.js";
 import { getObjectBuffer, putObject } from "./s3.js";
+import { SchoolMaterialFreezeError } from "./school-material-freeze-errors.js";
 
 function materialSnapshotKeys(householdId: string, materialId: string, ext: string) {
   const base = `school/${householdId}/materials/${materialId}`;
@@ -101,6 +108,41 @@ async function freezeOneMaterial(
         }
       }
     }
+  } else if (material.source === "google_doc" && material.googleFileId) {
+    if (!material.createdByUserId) {
+      throw new SchoolMaterialFreezeError(
+        "material_freeze_failed",
+        "Google material missing creator — cannot export snapshot",
+      );
+    }
+    const conn = await loadGoogleDocsConnection(db, householdId, material.createdByUserId);
+    if (!conn) {
+      throw new SchoolMaterialFreezeError(
+        "google_docs_not_connected",
+        "Teacher must connect Google Docs before test materials can freeze",
+      );
+    }
+    let accessToken: string;
+    try {
+      accessToken = await ensureGoogleDocsAccessToken(db, env, conn);
+    } catch (e) {
+      if (e instanceof GoogleDocsCredentialsError) {
+        throw new SchoolMaterialFreezeError("google_docs_token_revoked", e.message);
+      }
+      throw e;
+    }
+    try {
+      const exported = await exportGoogleFileForSnapshot(accessToken, {
+        fileId: material.googleFileId,
+        mimeType: material.googleMimeType,
+      });
+      binaryBody = exported.binary;
+      contentType = exported.contentType;
+      plainText = exported.plainText;
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Google export failed";
+      throw new SchoolMaterialFreezeError("material_freeze_failed", message);
+    }
   }
 
   const keys = materialSnapshotKeys(householdId, material.id, extensionForContentType(contentType));
@@ -165,6 +207,7 @@ export async function freezeAssignmentTestMaterials(
     try {
       await freezeOneMaterial(db, env, assignment.householdId, material);
     } catch (err) {
+      if (material.source === "google_doc") throw err;
       console.error("school material freeze failed", material.id, err);
       await db
         .update(schoolAssignmentMaterials)

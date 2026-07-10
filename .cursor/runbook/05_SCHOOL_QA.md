@@ -370,6 +370,17 @@ One line.
 - [ ] `max_attempts=2`: two turn-ins succeed; third returns `attempts_exhausted` in UI
 - [ ] Duplicate assignment copies materials (unfrozen on copy)
 
+## Assignment materials — Google (WHO-206–208)
+
+Prereq: `GOOGLE_PICKER_API_KEY` in `.env` + Picker API enabled in GCP (`docs/GOOGLE_OAUTH_SETUP.md` §9).
+
+- [ ] Profile → Connect Google Docs (or inline from picker CTA)
+- [ ] Teacher: assignment sheet → **Add from Google** → pick Doc → material row + Google badge
+- [ ] Google Forms: picker shows hint; use Add link instead
+- [ ] Student: live Google link before freeze; snapshot proxy after first submit on `is_test`
+- [ ] Revoked Google token: first submit on Google test returns clear error; material stays unfrozen
+- [ ] `GET /api/core/google/docs/picker-session` → 403 when disconnected, 503 when key unset
+
 ---
 
 ## Quick validation order (Mike — start here)

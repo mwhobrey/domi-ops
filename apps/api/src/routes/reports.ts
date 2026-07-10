@@ -4,7 +4,11 @@ import type { Database } from "@domi-ops/db";
 import { MAX_WEEKS_IN_RANGE } from "@domi-ops/calendar-sync";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
-import { loadGoogleDocsConnection } from "../lib/google-docs-export.js";
+import {
+  ensureGoogleDocsAccessToken,
+  GoogleDocsCredentialsError,
+  loadGoogleDocsConnection,
+} from "../lib/google-docs-export.js";
 import {
   authorizeSchoolReports,
   buildCanonicalReport,
@@ -35,6 +39,42 @@ export function reportRoutes(db: Database, env: Env) {
       connected: Boolean(conn),
       connectUrl: "/auth/google/docs/start",
     });
+  });
+
+  app.get("/google/docs/picker-session", async (c) => {
+    const auth = c.get("auth")!;
+    if (!env.GOOGLE_PICKER_API_KEY || !env.GOOGLE_OAUTH_CLIENT_ID) {
+      return c.json({ error: "picker_not_configured" }, 503);
+    }
+
+    const conn = await loadGoogleDocsConnection(db, auth.householdId, auth.userId);
+    const next = c.req.query("next");
+    const connectUrl = next
+      ? `/auth/google/docs/start?next=${encodeURIComponent(next)}`
+      : "/auth/google/docs/start";
+
+    if (!conn) {
+      return c.json({ connected: false, connectUrl }, 403);
+    }
+
+    try {
+      const accessToken = await ensureGoogleDocsAccessToken(db, env, conn);
+      return c.json({
+        connected: true,
+        connectUrl,
+        accessToken,
+        developerKey: env.GOOGLE_PICKER_API_KEY,
+        appId: env.GOOGLE_OAUTH_CLIENT_ID,
+      });
+    } catch (e) {
+      if (e instanceof GoogleDocsCredentialsError) {
+        return c.json(
+          { error: "google_docs_token_revoked", message: e.message, connected: false, connectUrl },
+          403,
+        );
+      }
+      throw e;
+    }
   });
 
   app.get("/reports", async (c) => {

@@ -49,6 +49,8 @@ export interface MaterialInput {
   sortOrder?: number;
   driveObjectId?: string | null;
   externalUrl?: string | null;
+  googleFileId?: string | null;
+  googleMimeType?: string | null;
   isTest?: boolean;
   studentVisible?: boolean;
   observerVisible?: boolean;
@@ -127,6 +129,10 @@ export function validateMaterialInput(
     if (!body.driveObjectId?.trim()) return { ok: false, error: "drive_object_required" };
   }
 
+  if (source === "google_doc" && opts?.isCreate) {
+    if (!body.googleFileId?.trim()) return { ok: false, error: "google_file_required" };
+  }
+
   return {
     ok: true,
     value: {
@@ -159,6 +165,9 @@ export function serializeMaterial(
     frozenAt: row.frozenAt?.toISOString() ?? null,
     hasSnapshot: Boolean(row.snapshotS3Key),
     driveObject: opts.driveObject ?? null,
+    ...(row.source === "google_doc" && !row.frozenAt
+      ? { googleFileId: row.googleFileId, googleMimeType: row.googleMimeType }
+      : {}),
   };
 
   if (canTeacherViewMaterials(opts.viewMode)) {

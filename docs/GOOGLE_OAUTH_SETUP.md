@@ -91,3 +91,37 @@ Use HTTPS everywhere:
 - `PUBLIC_APP_URL=https://home.yourdomain.com`
 
 Add the production domain under **Firebase-style** authorized domains only if you use Firebase; Domi Ops does not require Firebase.
+
+## 9. Google Picker (school assignment materials)
+
+School teachers attach Google Docs/Drive files via the **Google Picker API** in the browser. Use the **same GCP project** as your OAuth client.
+
+### Enable APIs
+
+In **APIs & Services → Library**, enable:
+
+- **Google Picker API** (required for Phase 2 school materials)
+- **Google Drive API** and **Google Docs API** (likely already enabled for reports export)
+
+### API key (browser)
+
+1. **Credentials → Create credentials → API key**
+2. **Application restrictions → HTTP referrers** — add every origin users open in the browser:
+   - `http://localhost:3000/*` (native dev)
+   - `http://localhost:3001/*` (Docker web)
+   - `https://your.domain/*` (production)
+3. **API restrictions → Restrict key** → allow **Google Picker API** (optional: Google Drive API)
+
+If you already have an API key with matching referrer restrictions, add Picker API to its restriction list instead of creating a duplicate.
+
+### `.env`
+
+```env
+GOOGLE_PICKER_API_KEY=AIza...
+```
+
+The key is **not** exposed in the Next.js bundle. The API returns it only from authenticated `GET /api/core/google/docs/picker-session`.
+
+### OAuth client
+
+No new OAuth client is required. Picker uses the existing Web client ID as `appId` and the teacher's `google_docs_connections` token (`documents` + `drive.file` scopes). Confirm **Authorized JavaScript origins** (§3) include your dev/prod browser URL.

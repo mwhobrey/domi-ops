@@ -13,6 +13,7 @@ import { googleDocsConnections } from "@domi-ops/db";
 import { and, eq } from "drizzle-orm";
 import type { AppVariables } from "../middleware/auth.js";
 import { consumeOAuthState, setOAuthState } from "../lib/oauth-state.js";
+import { safeAppRedirectPath } from "../lib/safe-redirect.js";
 
 const DOCS_OAUTH_PREFIX = "oauth:google-docs";
 
@@ -34,9 +35,11 @@ export function googleDocsAuthRoutes(db: Database, env: Env) {
     }
 
     const state = randomOAuthState();
+    const returnPath = safeAppRedirectPath(c.req.query("next"));
     await setOAuthState(redisUrl(env), DOCS_OAUTH_PREFIX, state, {
       userId: auth.userId,
       householdId: auth.householdId,
+      next: returnPath ?? undefined,
     });
 
     const redirectUri = googleOAuthRedirectUri(env, "/auth/google/docs/callback");
@@ -57,7 +60,7 @@ export function googleDocsAuthRoutes(db: Database, env: Env) {
     const code = c.req.query("code");
     const state = c.req.query("state");
     const pending = state
-      ? await consumeOAuthState<{ userId: string; householdId: string }>(
+      ? await consumeOAuthState<{ userId: string; householdId: string; next?: string }>(
           redisUrl(env),
           DOCS_OAUTH_PREFIX,
           state,
@@ -104,7 +107,9 @@ export function googleDocsAuthRoutes(db: Database, env: Env) {
         });
       }
 
-      return c.redirect(`${env.PUBLIC_APP_URL}/profile?google_docs_connected=1`);
+      const successPath = safeAppRedirectPath(pending.next) ?? "/profile";
+      const successQuery = successPath === "/profile" ? "?google_docs_connected=1" : "";
+      return c.redirect(`${env.PUBLIC_APP_URL}${successPath}${successQuery}`);
     } catch (e) {
       console.error("google docs oauth callback", e);
       return c.redirect(`${env.PUBLIC_APP_URL}/profile?error=google_docs_oauth`);
