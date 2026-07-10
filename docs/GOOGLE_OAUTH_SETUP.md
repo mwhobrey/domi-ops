@@ -125,3 +125,13 @@ The key is **not** exposed in the Next.js bundle. The API returns it only from a
 ### OAuth client
 
 No new OAuth client is required. Picker uses the existing Web client ID as `appId` and the teacher's `google_docs_connections` token (`documents` + `drive.file` scopes). Confirm **Authorized JavaScript origins** (§3) include your dev/prod browser URL.
+
+## 10. Student Google Docs (school tests — WHO-209–212)
+
+Students connect the same **Google Docs** OAuth flow as teachers (`/auth/google/docs/start?next=…`). Scopes stay **`documents` + `drive.file`** — no full Drive scope.
+
+**Start test flow:** On assignments with an unfrozen `google_doc` test material, the API uses the **teacher's** token to grant the student's Google account **reader** access to the template, then the **student's** token runs `files.copy` into their Drive. The copy is tagged with Drive `appProperties` (`domi_ops_material_id`, `domi_ops_submission_id`, `domi_ops_template_file_id`) for lineage checks.
+
+**Submit:** Student picks their copy via Picker → `POST /api/school/submissions/:id/google-artifacts`. Lineage v1 flags mismatches for teachers but does not block turn-in.
+
+**Prereqs:** Student Google account email must match their linked Better Auth Google account (or profile email). Enable **Google Docs API** + **Google Drive API** for the project; student must be a **test user** on the consent screen in Testing mode.

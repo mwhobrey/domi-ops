@@ -32,6 +32,7 @@ export interface SchoolMaterialRow {
   googleMimeType: string | null;
   googleRevisionId: string | null;
   isTest: boolean;
+  strictContentCheck: boolean;
   studentVisible: boolean;
   observerVisible: boolean;
   frozenAt: Date | null;
@@ -52,6 +53,7 @@ export interface MaterialInput {
   googleFileId?: string | null;
   googleMimeType?: string | null;
   isTest?: boolean;
+  strictContentCheck?: boolean;
   studentVisible?: boolean;
   observerVisible?: boolean;
 }
@@ -96,7 +98,8 @@ export function validateMaterialInput(
       body.source !== undefined ||
       body.driveObjectId !== undefined ||
       body.externalUrl !== undefined ||
-      body.isTest !== undefined;
+      body.isTest !== undefined ||
+      body.strictContentCheck !== undefined;
     if (mutating) return { ok: false, error: "material_frozen" };
   }
 
@@ -160,6 +163,7 @@ export function serializeMaterial(
     driveObjectId: row.driveObjectId,
     externalUrl: row.externalUrl,
     isTest: row.isTest,
+    strictContentCheck: row.strictContentCheck,
     studentVisible: row.studentVisible,
     observerVisible: row.observerVisible,
     frozenAt: row.frozenAt?.toISOString() ?? null,
@@ -175,6 +179,7 @@ export function serializeMaterial(
       ...base,
       googleFileId: row.googleFileId,
       googleMimeType: row.googleMimeType,
+      strictContentCheck: row.strictContentCheck,
       snapshotContentHash: row.snapshotContentHash,
     };
   }

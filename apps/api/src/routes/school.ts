@@ -13,6 +13,7 @@ import {
   schoolEnrollments,
   schoolGrades,
   schoolSubmissionArtifacts,
+  schoolSubmissionGoogleCopies,
   schoolSubmissions,
   users,
 } from "@domi-ops/db";
@@ -34,6 +35,7 @@ import { SchoolMaterialFreezeError } from "../lib/school-material-freeze-errors.
 import {
   fetchGoogleDriveFileMetadata,
   GOOGLE_FORMS_MIME,
+  googleFileWebUrl,
 } from "../lib/google-drive-export.js";
 import {
   ensureGoogleDocsAccessToken,
@@ -48,6 +50,17 @@ import {
   validateMaterialInput,
   type SchoolMaterialSource,
 } from "../lib/school-materials.js";
+import { verifyGoogleSubmissionLineage } from "../lib/school-google-lineage.js";
+import {
+  assignmentNeedsGoogleConnection,
+  ensureGoogleStudentCopy,
+  runGoogleLineageChecks,
+  serializeSubmissionArtifact,
+} from "../lib/school-google-workflow.js";
+import {
+  canModifySubmissionArtifacts,
+  submissionAccessForAuth,
+} from "../lib/school-submission-access.js";
 import { contentTypeFromKey, getObjectBuffer } from "../lib/s3.js";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -1235,6 +1248,7 @@ export function schoolRoutes(db: Database, env: Env) {
             googleMimeType: m.googleMimeType,
             googleRevisionId: m.googleRevisionId,
             isTest: m.isTest,
+            strictContentCheck: m.strictContentCheck,
             studentVisible: m.studentVisible,
             observerVisible: m.observerVisible,
             createdByUserId: auth.userId,
@@ -1300,7 +1314,7 @@ export function schoolRoutes(db: Database, env: Env) {
           .select()
           .from(schoolSubmissionArtifacts)
           .where(eq(schoolSubmissionArtifacts.submissionId, s.id));
-        return { ...s, grade: grade ?? null, artifacts };
+        return { ...s, grade: grade ?? null, artifacts: artifacts.map(serializeSubmissionArtifact) };
       }),
     );
     return c.json({ submissions: withGrades, access });
@@ -1496,7 +1510,18 @@ export function schoolRoutes(db: Database, env: Env) {
   });
 
   app.post("/submissions/:id/artifacts", async (c) => {
+    const auth = c.get("auth")!;
     const submissionId = c.req.param("id");
+    const context = await schoolContextForAuth(db, auth);
+    if (!context) return c.json({ error: "not_a_member" }, 403);
+
+    const subCtx = await submissionAccessForAuth(db, auth, submissionId, {
+      memberId: context.memberId,
+      householdRole: context.householdRole,
+    });
+    if (!subCtx) return c.json({ error: "not_found" }, 404);
+    if (!canModifySubmissionArtifacts(subCtx)) return c.json({ error: "forbidden" }, 403);
+
     const body = await c.req.json<{
       artifactType: string;
       s3Key?: string;
@@ -1513,7 +1538,7 @@ export function schoolRoutes(db: Database, env: Env) {
         note: body.note ?? "",
       })
       .returning();
-    return c.json({ artifact: art }, 201);
+    return c.json({ artifact: serializeSubmissionArtifact(art!) }, 201);
   });
 
   app.get("/artifacts/:id/file", async (c) => {
@@ -1528,10 +1553,6 @@ export function schoolRoutes(db: Database, env: Env) {
       .where(eq(schoolSubmissionArtifacts.id, id))
       .limit(1);
     if (!artifact) return c.json({ error: "not_found" }, 404);
-    if (artifact.url && !artifact.s3Key) {
-      return c.redirect(artifact.url);
-    }
-    if (!artifact.s3Key) return c.json({ error: "not_found" }, 404);
 
     const [submission] = await db
       .select()
@@ -1578,6 +1599,16 @@ export function schoolRoutes(db: Database, env: Env) {
       (access.canSubmit && submission.studentMemberId === context.memberId);
     if (!canView) return c.json({ error: "forbidden" }, 403);
 
+    if (artifact.artifactType === "google_doc" && artifact.googleFileId) {
+      const openUrl = googleFileWebUrl(artifact.googleFileId, artifact.googleMimeType);
+      return c.redirect(openUrl);
+    }
+
+    if (artifact.url && !artifact.s3Key) {
+      return c.redirect(artifact.url);
+    }
+    if (!artifact.s3Key) return c.json({ error: "not_found" }, 404);
+
     const buf = await getObjectBuffer(env, artifact.s3Key);
     if (!buf) return c.json({ error: "storage_unavailable" }, 503);
 
@@ -1590,9 +1621,282 @@ export function schoolRoutes(db: Database, env: Env) {
   });
 
   app.delete("/artifacts/:id", async (c) => {
+    const auth = c.get("auth")!;
     const id = c.req.param("id");
+    const context = await schoolContextForAuth(db, auth);
+    if (!context) return c.json({ error: "not_a_member" }, 403);
+
+    const [artifact] = await db
+      .select()
+      .from(schoolSubmissionArtifacts)
+      .where(eq(schoolSubmissionArtifacts.id, id))
+      .limit(1);
+    if (!artifact) return c.json({ error: "not_found" }, 404);
+
+    const subCtx = await submissionAccessForAuth(db, auth, artifact.submissionId, {
+      memberId: context.memberId,
+      householdRole: context.householdRole,
+    });
+    if (!subCtx) return c.json({ error: "not_found" }, 404);
+    if (!canModifySubmissionArtifacts(subCtx)) return c.json({ error: "forbidden" }, 403);
+
     await db.delete(schoolSubmissionArtifacts).where(eq(schoolSubmissionArtifacts.id, id));
     return c.json({ ok: true });
+  });
+
+  app.get("/assignments/:id/google-readiness", async (c) => {
+    const auth = c.get("auth")!;
+    const assignmentId = c.req.param("id");
+    const ctx = await assignmentAccessForAuth(db, auth, assignmentId);
+    if (!ctx) return c.json({ error: "not_found" }, 404);
+
+    const materialRows = await db
+      .select()
+      .from(schoolAssignmentMaterials)
+      .where(eq(schoolAssignmentMaterials.assignmentId, assignmentId));
+    const visible = materialRows.filter((row) =>
+      materialVisibleToViewer(row, ctx.access.viewMode),
+    );
+    const needsGoogle = assignmentNeedsGoogleConnection(visible, ctx.access.viewMode);
+    const conn = await loadGoogleDocsConnection(db, auth.householdId, auth.userId);
+    const returnPath = `/school/assignment/${assignmentId}`;
+    const connectUrl = `/auth/google/docs/start?next=${encodeURIComponent(returnPath)}`;
+
+    return c.json({
+      needsGoogle,
+      connected: Boolean(conn),
+      connectUrl,
+    });
+  });
+
+  app.get("/assignments/:id/google-copies", async (c) => {
+    const auth = c.get("auth")!;
+    const assignmentId = c.req.param("id");
+    const ctx = await assignmentAccessForAuth(db, auth, assignmentId);
+    if (!ctx) return c.json({ error: "not_found" }, 404);
+    if (!ctx.access.canSubmit) return c.json({ error: "forbidden" }, 403);
+
+    const [submission] = await db
+      .select()
+      .from(schoolSubmissions)
+      .where(
+        and(
+          eq(schoolSubmissions.assignmentId, assignmentId),
+          eq(schoolSubmissions.studentMemberId, ctx.context.memberId),
+        ),
+      )
+      .limit(1);
+    if (!submission) return c.json({ copies: [] });
+
+    const copies = await db
+      .select()
+      .from(schoolSubmissionGoogleCopies)
+      .where(eq(schoolSubmissionGoogleCopies.submissionId, submission.id));
+
+    return c.json({
+      copies: copies.map((copy) => ({
+        id: copy.id,
+        materialId: copy.materialId,
+        studentGoogleFileId: copy.studentGoogleFileId,
+        studentGoogleMimeType: copy.studentGoogleMimeType,
+        openUrl: googleFileWebUrl(copy.studentGoogleFileId, copy.studentGoogleMimeType),
+        copiedAt: copy.copiedAt.toISOString(),
+      })),
+    });
+  });
+
+  app.post("/assignments/:assignmentId/materials/:materialId/start-copy", async (c) => {
+    const auth = c.get("auth")!;
+    const assignmentId = c.req.param("assignmentId");
+    const materialId = c.req.param("materialId");
+    const ctx = await assignmentAccessForAuth(db, auth, assignmentId);
+    if (!ctx) return c.json({ error: "not_found" }, 404);
+    if (!ctx.access.canSubmit) return c.json({ error: "forbidden" }, 403);
+
+    const [material] = await db
+      .select()
+      .from(schoolAssignmentMaterials)
+      .where(
+        and(
+          eq(schoolAssignmentMaterials.id, materialId),
+          eq(schoolAssignmentMaterials.assignmentId, assignmentId),
+        ),
+      )
+      .limit(1);
+    if (!material) return c.json({ error: "not_found" }, 404);
+    if (!materialVisibleToViewer(material, ctx.access.viewMode)) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+    if (material.source !== "google_doc" || !material.isTest) {
+      return c.json({ error: "invalid_material" }, 400);
+    }
+    if (material.frozenAt) return c.json({ error: "material_frozen" }, 409);
+
+    let [submission] = await db
+      .select()
+      .from(schoolSubmissions)
+      .where(
+        and(
+          eq(schoolSubmissions.assignmentId, assignmentId),
+          eq(schoolSubmissions.studentMemberId, ctx.context.memberId),
+        ),
+      )
+      .limit(1);
+    if (!submission) {
+      const [created] = await db
+        .insert(schoolSubmissions)
+        .values({
+          assignmentId,
+          studentMemberId: ctx.context.memberId,
+          status: "not_started",
+          turnInCount: 0,
+        })
+        .returning();
+      submission = created!;
+    }
+
+    try {
+      const result = await ensureGoogleStudentCopy(db, env, {
+        householdId: auth.householdId,
+        studentUserId: auth.userId,
+        submissionId: submission.id,
+        material,
+      });
+      return c.json({
+        copy: {
+          id: result.copy.id,
+          materialId: result.copy.materialId,
+          studentGoogleFileId: result.copy.studentGoogleFileId,
+          studentGoogleMimeType: result.copy.studentGoogleMimeType,
+          openUrl: result.openUrl,
+          copiedAt: result.copy.copiedAt.toISOString(),
+        },
+      });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "copy_failed";
+      if (message === "google_docs_not_connected" || message === "google_docs_token_revoked") {
+        return c.json({ error: message }, 403);
+      }
+      if (message === "google_account_email_required") {
+        return c.json({ error: message }, 400);
+      }
+      if (message === "teacher_google_docs_not_connected") {
+        return c.json(
+          { error: message, detail: "Teacher must reconnect Google Docs" },
+          502,
+        );
+      }
+      if (message === "material_missing_google_file" || message === "material_missing_teacher") {
+        return c.json({ error: message }, 400);
+      }
+      console.error("start-copy failed", e);
+      return c.json({ error: "template_not_accessible" }, 502);
+    }
+  });
+
+  app.post("/submissions/:submissionId/google-artifacts", async (c) => {
+    const auth = c.get("auth")!;
+    const submissionId = c.req.param("submissionId");
+    const context = await schoolContextForAuth(db, auth);
+    if (!context) return c.json({ error: "not_a_member" }, 403);
+
+    const subCtx = await submissionAccessForAuth(db, auth, submissionId, {
+      memberId: context.memberId,
+      householdRole: context.householdRole,
+    });
+    if (!subCtx) return c.json({ error: "not_found" }, 404);
+    if (!canModifySubmissionArtifacts(subCtx)) return c.json({ error: "forbidden" }, 403);
+
+    const body = await c.req.json<{
+      materialId?: string;
+      googleFileId?: string;
+      googleMimeType?: string | null;
+    }>();
+    if (!body.googleFileId?.trim()) {
+      return c.json({ error: "google_file_required" }, 400);
+    }
+
+    const studentConn = await loadGoogleDocsConnection(db, auth.householdId, auth.userId);
+    if (!studentConn) return c.json({ error: "google_docs_not_connected" }, 403);
+
+    let studentToken: string;
+    try {
+      studentToken = await ensureGoogleDocsAccessToken(db, env, studentConn);
+    } catch (e) {
+      if (e instanceof GoogleDocsCredentialsError) {
+        return c.json({ error: "google_docs_token_revoked", message: e.message }, 403);
+      }
+      throw e;
+    }
+
+    const meta = await fetchGoogleDriveFileMetadata(studentToken, body.googleFileId.trim());
+    if (!meta) return c.json({ error: "google_file_inaccessible" }, 404);
+
+    let copyRow: typeof schoolSubmissionGoogleCopies.$inferSelect | null = null;
+    let material: typeof schoolAssignmentMaterials.$inferSelect | null = null;
+    if (body.materialId) {
+      [material] = await db
+        .select()
+        .from(schoolAssignmentMaterials)
+        .where(
+          and(
+            eq(schoolAssignmentMaterials.id, body.materialId),
+            eq(schoolAssignmentMaterials.assignmentId, subCtx.submission.assignmentId),
+          ),
+        )
+        .limit(1);
+      if (!material) return c.json({ error: "material_not_found" }, 404);
+
+      const [copy] = await db
+        .select()
+        .from(schoolSubmissionGoogleCopies)
+        .where(
+          and(
+            eq(schoolSubmissionGoogleCopies.submissionId, submissionId),
+            eq(schoolSubmissionGoogleCopies.materialId, body.materialId),
+          ),
+        )
+        .limit(1);
+      copyRow = copy ?? null;
+    }
+
+    const lineage = material
+      ? await runGoogleLineageChecks(db, env, {
+          householdId: auth.householdId,
+          material,
+          pickedFileId: body.googleFileId.trim(),
+          pickedMimeType: body.googleMimeType ?? meta.mimeType,
+          copyRow,
+          appProperties: meta.appProperties ?? null,
+          studentAccessToken: studentToken,
+        })
+      : verifyGoogleSubmissionLineage({
+          pickedFileId: body.googleFileId.trim(),
+          copyRow: copyRow
+            ? {
+                studentGoogleFileId: copyRow.studentGoogleFileId,
+                materialId: copyRow.materialId,
+                templateGoogleFileId: copyRow.templateGoogleFileId,
+              }
+            : null,
+          appProperties: meta.appProperties ?? null,
+        });
+
+    const [art] = await db
+      .insert(schoolSubmissionArtifacts)
+      .values({
+        submissionId,
+        artifactType: "google_doc",
+        googleFileId: body.googleFileId.trim(),
+        googleMimeType: body.googleMimeType ?? meta.mimeType,
+        googleRevisionId: meta.headRevisionId ?? null,
+        materialId: body.materialId ?? null,
+        lineageStatus: lineage.status,
+        lineageDetail: lineage.detail,
+      })
+      .returning();
+
+    return c.json({ artifact: serializeSubmissionArtifact(art!) }, 201);
   });
 
   app.post("/submissions/:id/grade", async (c) => {
@@ -1710,6 +2014,7 @@ export function schoolRoutes(db: Database, env: Env) {
       googleMimeType?: string | null;
       googleRevisionId?: string | null;
       isTest?: boolean;
+      strictContentCheck?: boolean;
       studentVisible?: boolean;
       observerVisible?: boolean;
     }>();
@@ -1772,6 +2077,7 @@ export function schoolRoutes(db: Database, env: Env) {
         googleFileId,
         googleMimeType,
         isTest: body.isTest,
+        strictContentCheck: body.strictContentCheck,
         studentVisible: body.studentVisible,
         observerVisible: body.observerVisible,
       },
@@ -1796,6 +2102,7 @@ export function schoolRoutes(db: Database, env: Env) {
         googleMimeType: validated.value.source === "google_doc" ? googleMimeType : null,
         googleRevisionId: validated.value.source === "google_doc" ? googleRevisionId : null,
         isTest: validated.value.isTest ?? false,
+        strictContentCheck: body.strictContentCheck ?? false,
         studentVisible: validated.value.studentVisible ?? true,
         observerVisible: validated.value.observerVisible ?? false,
         createdByUserId: auth.userId,
@@ -1832,6 +2139,7 @@ export function schoolRoutes(db: Database, env: Env) {
       sortOrder?: number;
       externalUrl?: string | null;
       isTest?: boolean;
+      strictContentCheck?: boolean;
       studentVisible?: boolean;
       observerVisible?: boolean;
     }>();
@@ -1855,6 +2163,7 @@ export function schoolRoutes(db: Database, env: Env) {
     if (body.role !== undefined) patch.role = validated.value.role;
     if (body.sortOrder !== undefined) patch.sortOrder = body.sortOrder;
     if (body.isTest !== undefined) patch.isTest = body.isTest;
+    if (body.strictContentCheck !== undefined) patch.strictContentCheck = body.strictContentCheck;
     if (body.studentVisible !== undefined) patch.studentVisible = validated.value.studentVisible!;
     if (body.observerVisible !== undefined) patch.observerVisible = validated.value.observerVisible!;
     if (body.externalUrl !== undefined) patch.externalUrl = body.externalUrl;

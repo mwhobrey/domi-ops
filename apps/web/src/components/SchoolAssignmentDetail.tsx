@@ -10,8 +10,10 @@ import { displayArtifactFileName } from "../lib/school-artifact-url";
 import type { SchoolClassAccess } from "../lib/school-access";
 import { DriveAttachmentChips } from "./DriveAttachmentChips";
 import { DriveObjectPicker } from "./DriveObjectPicker";
+import { GooglePickerButton } from "./GooglePickerButton";
 import { SchoolSubmissionArtifacts } from "./SchoolSubmissionArtifacts";
 import { SchoolAssignmentMaterialsCard } from "./SchoolAssignmentMaterialsCard";
+import { SchoolGoogleDocsConnectBanner } from "./SchoolGoogleDocsConnectBanner";
 import { Alert, Badge, Button, Card, CardBody, CardHeader, Input, Textarea } from "./ui";
 interface Submission {
   id: string;
@@ -20,7 +22,19 @@ interface Submission {
   submittedAt?: string | null;
   isLate?: boolean;
   turnInCount?: number;
-  artifacts: { id: string; artifactType: string; s3Key: string | null; url: string | null }[];
+  artifacts: {
+    id: string;
+    artifactType: string;
+    s3Key: string | null;
+    url: string | null;
+    googleFileId?: string | null;
+    googleMimeType?: string | null;
+    materialId?: string | null;
+    lineageStatus?: string | null;
+    lineageDetail?: string | null;
+    openUrl?: string | null;
+    displayName?: string | null;
+  }[];
   grade: { score: number | null; feedbackHtml: string } | null;
 }
 
@@ -118,7 +132,8 @@ export function SchoolAssignmentDetail({
     const existing = initialSubmissions[0]?.grade?.score;
     return existing != null ? String(existing) : "";
   });
-  const [feedback, setFeedback] = useState(initialSubmissions[0]?.grade?.feedbackHtml ?? "");  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState(initialSubmissions[0]?.grade?.feedbackHtml ?? "");
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -131,6 +146,9 @@ export function SchoolAssignmentDetail({
   const submission = submissions[0];
   const turnInCount = submission?.turnInCount ?? 0;
   const attemptsBlocked = isAttemptsExhausted(maxAttempts, turnInCount);
+  const googleTestMaterial = materials.find(
+    (m) => m.source === "google_doc" && m.isTest && !m.frozenAt,
+  );
 
   useEffect(() => {
     if (!driveEnabled || !submission?.id) {
@@ -193,6 +211,30 @@ export function SchoolAssignmentDetail({
       }
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function attachGoogleArtifact(file: { id: string; mimeType: string }) {
+    setError(null);
+    try {
+      const activeSubmission = await ensureSubmissionRecord();
+      const data = await apiClient.post<{ artifact: Submission["artifacts"][number] }>(
+        `/api/school/submissions/${activeSubmission.id}/google-artifacts`,
+        {
+          materialId: googleTestMaterial?.id,
+          googleFileId: file.id,
+          googleMimeType: file.mimeType,
+        },
+      );
+      setSubmissions((prev) =>
+        prev.map((s) =>
+          s.id === activeSubmission.id
+            ? { ...s, artifacts: [...s.artifacts, data.artifact] }
+            : s,
+        ),
+      );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not attach Google Doc");
     }
   }
 
@@ -327,6 +369,10 @@ export function SchoolAssignmentDetail({
   return (
     <div className="space-y-6">
       {error && <Alert variant="error">{error}</Alert>}
+
+      {canSubmit && isStudent ? (
+        <SchoolGoogleDocsConnectBanner assignmentId={assignmentId} />
+      ) : null}
 
       <SchoolAssignmentMaterialsCard
         assignmentId={assignmentId}
@@ -502,6 +548,22 @@ export function SchoolAssignmentDetail({
                   </div>
                 </div>
               ) : null}
+              {googleTestMaterial ? (
+                <div className="space-y-2 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-3">
+                  <h4 className="text-sm font-medium">Google Doc submission</h4>
+                  <p className="text-xs text-[var(--color-text-muted)]">
+                    Start the test above, complete your copy in Google Docs, then attach it here
+                    before turning in.
+                  </p>
+                  <GooglePickerButton
+                    onPicked={attachGoogleArtifact}
+                    title="Submit your Google Doc"
+                    disabled={attemptsBlocked}
+                  >
+                    Submit via Google
+                  </GooglePickerButton>
+                </div>
+              ) : null}
               {uploadStatus && !uploadError && (
                 <p className="text-xs text-[var(--color-success)]">{uploadStatus}</p>
               )}
@@ -574,7 +636,11 @@ export function SchoolAssignmentDetail({
             )}
             <div className="space-y-2">
               <h3 className="text-sm font-medium">Submitted files</h3>
-              <SchoolSubmissionArtifacts artifacts={submission.artifacts} showPreview />
+              <SchoolSubmissionArtifacts
+                artifacts={submission.artifacts}
+                showPreview
+                showLineage
+              />
             </div>
             {driveEnabled && driveReferences.length > 0 ? (
               <div className="space-y-2">

@@ -49,6 +49,13 @@ export const schoolMaterialSourceEnum = pgEnum("school_material_source", [
   "google_doc",
 ]);
 
+export const schoolLineageStatusEnum = pgEnum("school_lineage_status", [
+  "unknown",
+  "pass",
+  "warn",
+  "fail",
+]);
+
 export const schoolClasses = pgTable("school_classes", {
   id: uuid("id").primaryKey().defaultRandom(),
   householdId: uuid("household_id")
@@ -165,6 +172,7 @@ export const schoolAssignmentMaterials = pgTable("school_assignment_materials", 
   googleMimeType: varchar("google_mime_type", { length: 128 }),
   googleRevisionId: varchar("google_revision_id", { length: 128 }),
   isTest: boolean("is_test").notNull().default(false),
+  strictContentCheck: boolean("strict_content_check").notNull().default(false),
   studentVisible: boolean("student_visible").notNull().default(true),
   observerVisible: boolean("observer_visible").notNull().default(false),
   frozenAt: timestamp("frozen_at", { withTimezone: true }),
@@ -184,8 +192,40 @@ export const schoolSubmissionArtifacts = pgTable("school_submission_artifacts", 
   s3Key: text("s3_key"),
   url: text("url"),
   note: text("note").default(""),
+  googleFileId: varchar("google_file_id", { length: 128 }),
+  googleMimeType: varchar("google_mime_type", { length: 128 }),
+  googleRevisionId: varchar("google_revision_id", { length: 128 }),
+  materialId: uuid("material_id").references(() => schoolAssignmentMaterials.id, {
+    onDelete: "set null",
+  }),
+  lineageStatus: schoolLineageStatusEnum("lineage_status").notNull().default("unknown"),
+  lineageDetail: text("lineage_detail"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const schoolSubmissionGoogleCopies = pgTable(
+  "school_submission_google_copies",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    submissionId: uuid("submission_id")
+      .notNull()
+      .references(() => schoolSubmissions.id, { onDelete: "cascade" }),
+    materialId: uuid("material_id")
+      .notNull()
+      .references(() => schoolAssignmentMaterials.id, { onDelete: "cascade" }),
+    templateGoogleFileId: varchar("template_google_file_id", { length: 128 }).notNull(),
+    studentGoogleFileId: varchar("student_google_file_id", { length: 128 }).notNull(),
+    studentGoogleMimeType: varchar("student_google_mime_type", { length: 128 }),
+    copiedAt: timestamp("copied_at", { withTimezone: true }).notNull().defaultNow(),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id),
+  },
+  (t) => [
+    uniqueIndex("school_submission_google_copies_submission_material").on(
+      t.submissionId,
+      t.materialId,
+    ),
+  ],
+);
 
 export const schoolAttendance = pgTable(
   "school_attendance",

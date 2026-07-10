@@ -9,6 +9,7 @@ export interface GoogleDriveFileMetadata {
   name: string;
   mimeType: string;
   headRevisionId?: string;
+  appProperties?: Record<string, string>;
 }
 
 export async function fetchGoogleDriveFileMetadata(
@@ -16,7 +17,7 @@ export async function fetchGoogleDriveFileMetadata(
   fileId: string,
 ): Promise<GoogleDriveFileMetadata | null> {
   const url = new URL(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}`);
-  url.searchParams.set("fields", "id,name,mimeType,headRevisionId");
+  url.searchParams.set("fields", "id,name,mimeType,headRevisionId,appProperties");
   url.searchParams.set("supportsAllDrives", "true");
 
   const res = await fetch(url.toString(), {
@@ -132,4 +133,61 @@ export function googleFileWebUrl(fileId: string, mimeType: string | null): strin
     return `https://docs.google.com/document/d/${fileId}/edit`;
   }
   return `https://drive.google.com/file/d/${fileId}/view`;
+}
+
+export async function shareGoogleFileWithEmail(
+  accessToken: string,
+  fileId: string,
+  email: string,
+  role: "reader" | "writer" = "reader",
+): Promise<void> {
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}/permissions`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        type: "user",
+        role,
+        emailAddress: email,
+        sendNotificationEmail: false,
+      }),
+    },
+  );
+  if (res.ok) return;
+  const text = await res.text();
+  if (res.status === 409 || text.includes("already exists")) return;
+  throw new Error(`Google Drive share failed: ${text}`);
+}
+
+export async function copyGoogleFileForStudent(
+  accessToken: string,
+  params: {
+    fileId: string;
+    name: string;
+    appProperties: Record<string, string>;
+  },
+): Promise<{ id: string; mimeType: string; webViewLink?: string }> {
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(params.fileId)}/copy`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: params.name,
+        appProperties: params.appProperties,
+      }),
+    },
+  );
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Google Drive copy failed: ${text}`);
+  }
+  return res.json() as Promise<{ id: string; mimeType: string; webViewLink?: string }>;
 }

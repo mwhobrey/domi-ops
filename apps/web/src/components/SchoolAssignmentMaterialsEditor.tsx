@@ -172,6 +172,15 @@ export function SchoolAssignmentMaterialsEditor({
                         checked={m.isTest}
                         onChange={(e) => void patchMaterial(m.id, { isTest: e.target.checked })}
                       />
+                      {m.isTest && m.source === "google_doc" ? (
+                        <Checkbox
+                          label="Strict content check"
+                          checked={m.strictContentCheck ?? false}
+                          onChange={(e) =>
+                            void patchMaterial(m.id, { strictContentCheck: e.target.checked })
+                          }
+                        />
+                      ) : null}
                       {m.role !== "answer_key" ? (
                         <>
                           <Checkbox

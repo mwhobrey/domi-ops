@@ -30,6 +30,7 @@ export interface SchoolMaterialDto {
   driveObject: { id: string; title: string; kind: string; url: string | null } | null;
   googleFileId?: string | null;
   googleMimeType?: string | null;
+  strictContentCheck?: boolean;
 }
 
 export const MATERIAL_ROLE_LABELS: Record<SchoolMaterialRole, string> = {

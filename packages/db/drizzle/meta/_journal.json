@@ -288,6 +288,20 @@
       "when": 1780495015000,
       "tag": "0041_school_materials_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1780495016000,
+      "tag": "0042_school_google_student",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1780495017000,
+      "tag": "0043_school_google_copies_rls",
+      "breakpoints": true
     }
   ]
 }
