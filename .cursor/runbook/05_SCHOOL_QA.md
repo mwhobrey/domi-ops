@@ -360,6 +360,18 @@ One line.
 
 ---
 
+## Assignment materials (WHO-201–204)
+
+- [ ] Teacher: create assignment → save → attach Drive file + external URL + answer key (student hidden) + rubric (observer visible only)
+- [ ] Student: sees handout/test only; Materials card CTAs open file/snapshot
+- [ ] Observer: sees student-visible + observer-only materials; no answer key
+- [ ] Mark material as test → student submits → material shows Frozen; teacher cannot edit/delete
+- [ ] Frozen test with Drive PDF: `GET /api/school/assignments/{id}/materials/{mid}/snapshot` returns file
+- [ ] `max_attempts=2`: two turn-ins succeed; third returns `attempts_exhausted` in UI
+- [ ] Duplicate assignment copies materials (unfrozen on copy)
+
+---
+
 ## Quick validation order (Mike — start here)
 
 1. `docker compose up -d postgres redis minio && npm run build && npm run db:migrate`

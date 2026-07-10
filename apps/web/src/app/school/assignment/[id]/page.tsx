@@ -4,6 +4,7 @@ import { AppShell } from "../../../../components/AppShell";
 import { SchoolAssignmentDetail } from "../../../../components/SchoolAssignmentDetail";
 import { apiFetch } from "../../../../lib/api";
 import type { SchoolClassAccess } from "../../../../lib/school-access";
+import type { SchoolMaterialDto } from "../../../../lib/school-materials";
 import { loadErrorMessage } from "../../../../lib/load-error";
 import { Alert } from "../../../../components/ui";
 
@@ -28,7 +29,9 @@ export default async function SchoolAssignmentPage({
     pointsPossible: 100,
     dueAt: null as string | null,
     visibility: "assigned",
+    maxAttempts: null as number | null,
   };
+  let materials: SchoolMaterialDto[] = [];
   let access: SchoolClassAccess | null = null;
   let loadError: string | null = null;
   let driveEnabled = false;
@@ -44,9 +47,11 @@ export default async function SchoolAssignmentPage({
         pointsPossible?: number;
         dueAt?: string | null;
         visibility?: string;
+        maxAttempts?: number | null;
       };
       class: { id: string; name: string };
       access: SchoolClassAccess;
+      materials?: SchoolMaterialDto[];
     }>(`/api/school/assignments/${id}`);
     assignmentTitle = detail.assignment.title;
     className = detail.class.name;
@@ -56,7 +61,9 @@ export default async function SchoolAssignmentPage({
       pointsPossible: detail.assignment.pointsPossible ?? 100,
       dueAt: detail.assignment.dueAt ?? null,
       visibility: detail.assignment.visibility ?? "assigned",
+      maxAttempts: detail.assignment.maxAttempts ?? null,
     };
+    materials = detail.materials ?? [];
     access = detail.access;
     const subRes = await apiFetch<{ submissions: typeof submissions; access: SchoolClassAccess }>(
       `/api/school/assignments/${id}/submissions`,
@@ -93,6 +100,8 @@ export default async function SchoolAssignmentPage({
           initialSubmissions={submissions}
           access={access}
           driveEnabled={driveEnabled}
+          materials={materials}
+          maxAttempts={assignmentMeta.maxAttempts}
         />
       ) : (
         <Alert variant="error">Could not resolve school access for this assignment.</Alert>

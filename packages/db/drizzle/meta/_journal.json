@@ -274,6 +274,20 @@
       "when": 1780495013000,
       "tag": "0039_rls_context_policies",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1780495014000,
+      "tag": "0040_school_assignment_materials",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1780495015000,
+      "tag": "0041_school_materials_rls",
+      "breakpoints": true
     }
   ]
 }

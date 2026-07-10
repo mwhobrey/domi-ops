@@ -4,8 +4,10 @@ import type { Env } from "@domi-ops/config";
 import { isHouseholdModuleEnabled } from "../lib/household-modules.js";
 import type { Database } from "@domi-ops/db";
 import {
+  driveObjects,
   householdMembers,
   schoolAssignmentCategories,
+  schoolAssignmentMaterials,
   schoolAssignments,
   schoolClasses,
   schoolEnrollments,
@@ -14,18 +16,28 @@ import {
   schoolSubmissions,
   users,
 } from "@domi-ops/db";
-import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import {
   isEnrollmentActiveNow,
   resolveClassAccess,
   resolveSchoolContext,
   visibleClassIdsForMember,
   type MemberEnrollmentRow,
+  type SchoolClassAccess,
 } from "../lib/school-access.js";
 import { publishedAssignmentVisibilities } from "../lib/school-assignment-visibility.js";
 import { buildClassGradebook } from "../lib/school-gradebook.js";
 import { buildSchoolReports, canViewSchoolReports } from "../lib/school-reports.js";
 import { canSubmitPastDue, isSubmissionLate } from "../lib/school-submission.js";
+import { freezeAssignmentTestMaterials } from "../lib/school-material-freeze.js";
+import {
+  attemptsRemaining,
+  isAttemptsExhausted,
+  materialVisibleToViewer,
+  serializeMaterial,
+  validateMaterialInput,
+  type SchoolMaterialSource,
+} from "../lib/school-materials.js";
 import { contentTypeFromKey, getObjectBuffer } from "../lib/s3.js";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -103,6 +115,122 @@ async function schoolContextForAuth(db: Database, auth: { householdId: string; u
     enrollments,
     taughtClassIds: taught.map((t) => t.id),
   });
+}
+
+async function assignmentAccessForAuth(
+  db: Database,
+  auth: { householdId: string; userId: string },
+  assignmentId: string,
+): Promise<
+  | {
+      assignment: typeof schoolAssignments.$inferSelect;
+      cls: typeof schoolClasses.$inferSelect;
+      access: SchoolClassAccess;
+      context: NonNullable<Awaited<ReturnType<typeof schoolContextForAuth>>>;
+    }
+  | null
+> {
+  const context = await schoolContextForAuth(db, auth);
+  if (!context) return null;
+  const [assignmentRow] = await db
+    .select()
+    .from(schoolAssignments)
+    .where(eq(schoolAssignments.id, assignmentId))
+    .limit(1);
+  if (!assignmentRow) return null;
+  const [cls] = await db
+    .select()
+    .from(schoolClasses)
+    .where(
+      and(eq(schoolClasses.id, assignmentRow.classId), eq(schoolClasses.householdId, auth.householdId)),
+    )
+    .limit(1);
+  if (!cls) return null;
+
+  const memberEnrollments = await memberEnrollmentsForHousehold(
+    db,
+    auth.householdId,
+    context.memberId,
+  );
+  const visibleIds = visibleClassIdsForMember({
+    memberId: context.memberId,
+    householdRole: context.householdRole,
+    classes: [
+      {
+        id: cls.id,
+        teacherMemberId: cls.teacherMemberId,
+        archived: cls.archived ?? false,
+      },
+    ],
+    enrollments: memberEnrollments,
+    includeArchived: true,
+  });
+  if (!visibleIds.includes(cls.id)) return null;
+
+  const [myEnrollment] = await db
+    .select()
+    .from(schoolEnrollments)
+    .where(
+      and(eq(schoolEnrollments.classId, cls.id), eq(schoolEnrollments.memberId, context.memberId)),
+    )
+    .limit(1);
+  const access = resolveClassAccess({
+    memberId: context.memberId,
+    householdRole: context.householdRole,
+    teacherMemberId: cls.teacherMemberId,
+    enrollment: myEnrollment ?? null,
+  });
+
+  return { assignment: assignmentRow, cls, access, context };
+}
+
+async function loadAssignmentMaterials(
+  db: Database,
+  assignmentId: string,
+  access: SchoolClassAccess,
+) {
+  const rows = await db
+    .select({
+      material: schoolAssignmentMaterials,
+      driveObject: driveObjects,
+    })
+    .from(schoolAssignmentMaterials)
+    .leftJoin(driveObjects, eq(schoolAssignmentMaterials.driveObjectId, driveObjects.id))
+    .where(eq(schoolAssignmentMaterials.assignmentId, assignmentId))
+    .orderBy(asc(schoolAssignmentMaterials.sortOrder), asc(schoolAssignmentMaterials.createdAt));
+
+  return rows
+    .filter((row) => materialVisibleToViewer(row.material, access.viewMode))
+    .map((row) =>
+      serializeMaterial(row.material, {
+        viewMode: access.viewMode,
+        driveObject: row.driveObject
+          ? {
+              id: row.driveObject.id,
+              title: row.driveObject.title,
+              kind: row.driveObject.kind,
+              url: row.driveObject.url,
+            }
+          : null,
+      }),
+    );
+}
+
+async function resolveDriveSource(
+  db: Database,
+  householdId: string,
+  driveObjectId: string,
+): Promise<{ source: SchoolMaterialSource; externalUrl: string | null } | null> {
+  const [obj] = await db
+    .select()
+    .from(driveObjects)
+    .where(and(eq(driveObjects.id, driveObjectId), eq(driveObjects.householdId, householdId)))
+    .limit(1);
+  if (!obj) return null;
+  if (obj.kind === "link") {
+    return { source: "domi_drive_link", externalUrl: obj.url };
+  }
+  return { source: "domi_drive_file", externalUrl: null };
 }
 
 export function schoolRoutes(db: Database, env: Env) {
@@ -839,6 +967,7 @@ export function schoolRoutes(db: Database, env: Env) {
       visibility?: "draft" | "assigned" | "closed";
       categoryId?: string | null;
       allowLate?: boolean;
+      maxAttempts?: number | null;
     }>();
     const [row] = await db
       .insert(schoolAssignments)
@@ -851,6 +980,7 @@ export function schoolRoutes(db: Database, env: Env) {
         visibility: body.visibility ?? "assigned",
         categoryId: body.categoryId ?? null,
         allowLate: body.allowLate ?? true,
+        maxAttempts: body.maxAttempts ?? null,
         createdByUserId: auth.userId,
       })
       .returning();
@@ -912,7 +1042,13 @@ export function schoolRoutes(db: Database, env: Env) {
       enrollment: myEnrollment ?? null,
     });
 
-    return c.json({ assignment: row, class: cls, access, context });
+    return c.json({
+      assignment: row,
+      class: cls,
+      access,
+      context,
+      materials: await loadAssignmentMaterials(db, id, access),
+    });
   });
 
   app.patch("/assignments/:id", async (c) => {
@@ -959,6 +1095,7 @@ export function schoolRoutes(db: Database, env: Env) {
       visibility?: "draft" | "assigned" | "closed";
       categoryId?: string | null;
       allowLate?: boolean;
+      maxAttempts?: number | null;
     }>();
     const patch: Record<string, unknown> = { updatedAt: new Date() };
     if (body.title !== undefined) patch.title = body.title;
@@ -968,6 +1105,7 @@ export function schoolRoutes(db: Database, env: Env) {
     if (body.visibility !== undefined) patch.visibility = body.visibility;
     if (body.categoryId !== undefined) patch.categoryId = body.categoryId;
     if (body.allowLate !== undefined) patch.allowLate = body.allowLate;
+    if (body.maxAttempts !== undefined) patch.maxAttempts = body.maxAttempts;
     const [row] = await db
       .update(schoolAssignments)
       .set(patch)
@@ -1063,10 +1201,37 @@ export function schoolRoutes(db: Database, env: Env) {
         dueAt: assignmentRow.dueAt,
         pointsPossible: assignmentRow.pointsPossible,
         allowLate: assignmentRow.allowLate,
+        maxAttempts: assignmentRow.maxAttempts,
         visibility: "draft",
         createdByUserId: auth.userId,
       })
       .returning();
+    if (row) {
+      const sourceMaterials = await db
+        .select()
+        .from(schoolAssignmentMaterials)
+        .where(eq(schoolAssignmentMaterials.assignmentId, id));
+      if (sourceMaterials.length > 0) {
+        await db.insert(schoolAssignmentMaterials).values(
+          sourceMaterials.map((m) => ({
+            assignmentId: row.id,
+            role: m.role,
+            source: m.source,
+            displayName: m.displayName,
+            sortOrder: m.sortOrder,
+            driveObjectId: m.driveObjectId,
+            externalUrl: m.externalUrl,
+            googleFileId: m.googleFileId,
+            googleMimeType: m.googleMimeType,
+            googleRevisionId: m.googleRevisionId,
+            isTest: m.isTest,
+            studentVisible: m.studentVisible,
+            observerVisible: m.observerVisible,
+            createdByUserId: auth.userId,
+          })),
+        );
+      }
+    }
     return c.json({ assignment: row }, 201);
   });
 
@@ -1181,6 +1346,12 @@ export function schoolRoutes(db: Database, env: Env) {
       )
       .limit(1);
 
+    if (
+      isAttemptsExhausted(assignmentRow.maxAttempts, existing?.turnInCount ?? 0)
+    ) {
+      return c.json({ error: "attempts_exhausted" }, 403);
+    }
+
     const now = new Date();
     const pastDueCheck = canSubmitPastDue({
       dueAt: assignmentRow.dueAt,
@@ -1193,6 +1364,7 @@ export function schoolRoutes(db: Database, env: Env) {
     }
 
     const isLate = isSubmissionLate(assignmentRow.dueAt, now);
+    let submissionRow: typeof schoolSubmissions.$inferSelect;
     if (existing) {
       const [updated] = await db
         .update(schoolSubmissions)
@@ -1201,22 +1373,105 @@ export function schoolRoutes(db: Database, env: Env) {
           submittedAt: now,
           isLate,
           studentNote: body.studentNote ?? existing.studentNote,
+          turnInCount: existing.turnInCount + 1,
           updatedAt: now,
         })
         .where(eq(schoolSubmissions.id, existing.id))
         .returning();
-      return c.json({ submission: updated });
+      submissionRow = updated!;
+    } else {
+      const [created] = await db
+        .insert(schoolSubmissions)
+        .values({
+          assignmentId,
+          studentMemberId,
+          status: "submitted",
+          submittedAt: now,
+          isLate,
+          studentNote: body.studentNote ?? "",
+          turnInCount: 1,
+        })
+        .returning();
+      submissionRow = created!;
+    }
+
+    const [{ count: submissionCount }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(schoolSubmissions)
+      .where(
+        and(
+          eq(schoolSubmissions.assignmentId, assignmentId),
+          ne(schoolSubmissions.status, "not_started"),
+        ),
+      );
+    if (submissionCount === 1) {
+      await freezeAssignmentTestMaterials(db, env, assignmentId);
+    }
+
+    return c.json({
+      submission: submissionRow,
+      attemptsRemaining: attemptsRemaining(assignmentRow.maxAttempts, submissionRow.turnInCount),
+    });
+  });
+
+  app.post("/assignments/:id/submissions/ensure", async (c) => {
+    const auth = c.get("auth")!;
+    const assignmentId = c.req.param("id");
+    const context = await schoolContextForAuth(db, auth);
+    if (!context) return c.json({ error: "not_a_member" }, 403);
+    const [assignmentRow] = await db
+      .select()
+      .from(schoolAssignments)
+      .where(eq(schoolAssignments.id, assignmentId))
+      .limit(1);
+    if (!assignmentRow) return c.json({ error: "not_found" }, 404);
+    const [cls] = await db
+      .select()
+      .from(schoolClasses)
+      .where(
+        and(eq(schoolClasses.id, assignmentRow.classId), eq(schoolClasses.householdId, auth.householdId)),
+      )
+      .limit(1);
+    if (!cls) return c.json({ error: "not_found" }, 404);
+    const [myEnrollment] = await db
+      .select()
+      .from(schoolEnrollments)
+      .where(
+        and(
+          eq(schoolEnrollments.classId, cls.id),
+          eq(schoolEnrollments.memberId, context.memberId),
+        ),
+      )
+      .limit(1);
+    const access = resolveClassAccess({
+      memberId: context.memberId,
+      householdRole: context.householdRole,
+      teacherMemberId: cls.teacherMemberId,
+      enrollment: myEnrollment ?? null,
+    });
+    if (!access.canSubmit) return c.json({ error: "forbidden" }, 403);
+
+    const [existing] = await db
+      .select()
+      .from(schoolSubmissions)
+      .where(
+        and(
+          eq(schoolSubmissions.assignmentId, assignmentId),
+          eq(schoolSubmissions.studentMemberId, context.memberId),
+        ),
+      )
+      .limit(1);
+    if (existing) {
+      return c.json({ submission: existing });
     }
 
     const [created] = await db
       .insert(schoolSubmissions)
       .values({
         assignmentId,
-        studentMemberId,
-        status: "submitted",
-        submittedAt: now,
-        isLate,
-        studentNote: body.studentNote ?? "",
+        studentMemberId: context.memberId,
+        status: "not_started",
+        turnInCount: 0,
       })
       .returning();
     return c.json({ submission: created }, 201);
@@ -1408,6 +1663,202 @@ export function schoolRoutes(db: Database, env: Env) {
       .set({ status: "graded", updatedAt: new Date() })
       .where(eq(schoolSubmissions.id, submissionId));
     return c.json({ grade }, 201);
+  });
+
+  app.get("/assignments/:id/materials", async (c) => {
+    const auth = c.get("auth")!;
+    const id = c.req.param("id");
+    const ctx = await assignmentAccessForAuth(db, auth, id);
+    if (!ctx) return c.json({ error: "not_found" }, 404);
+    const materials = await loadAssignmentMaterials(db, id, ctx.access);
+    return c.json({ materials, access: ctx.access });
+  });
+
+  app.post("/assignments/:id/materials", async (c) => {
+    const auth = c.get("auth")!;
+    const id = c.req.param("id");
+    const ctx = await assignmentAccessForAuth(db, auth, id);
+    if (!ctx) return c.json({ error: "not_found" }, 404);
+    if (!ctx.access.canEditAssignments) return c.json({ error: "forbidden" }, 403);
+
+    const body = await c.req.json<{
+      role?: string;
+      source?: string;
+      displayName?: string;
+      sortOrder?: number;
+      driveObjectId?: string | null;
+      externalUrl?: string | null;
+      isTest?: boolean;
+      studentVisible?: boolean;
+      observerVisible?: boolean;
+    }>();
+
+    let source = body.source as SchoolMaterialSource | undefined;
+    let externalUrl = body.externalUrl ?? null;
+    if (body.driveObjectId) {
+      const resolved = await resolveDriveSource(db, auth.householdId, body.driveObjectId);
+      if (!resolved) return c.json({ error: "drive_object_not_found" }, 404);
+      source = resolved.source;
+      if (resolved.externalUrl) externalUrl = resolved.externalUrl;
+    }
+
+    const validated = validateMaterialInput(
+      {
+        role: body.role as Parameters<typeof validateMaterialInput>[0]["role"],
+        source,
+        displayName: body.displayName,
+        sortOrder: body.sortOrder,
+        driveObjectId: body.driveObjectId,
+        externalUrl,
+        isTest: body.isTest,
+        studentVisible: body.studentVisible,
+        observerVisible: body.observerVisible,
+      },
+      { isCreate: true },
+    );
+    if (!validated.ok) return c.json({ error: validated.error }, 400);
+
+    const [row] = await db
+      .insert(schoolAssignmentMaterials)
+      .values({
+        assignmentId: id,
+        role: validated.value.role,
+        source: validated.value.source,
+        displayName: validated.value.displayName,
+        sortOrder: validated.value.sortOrder ?? 0,
+        driveObjectId: body.driveObjectId ?? null,
+        externalUrl:
+          validated.value.source === "external_url" || validated.value.source === "domi_drive_link"
+            ? externalUrl
+            : null,
+        isTest: validated.value.isTest ?? false,
+        studentVisible: validated.value.studentVisible ?? true,
+        observerVisible: validated.value.observerVisible ?? false,
+        createdByUserId: auth.userId,
+      })
+      .returning();
+
+    return c.json({ material: row }, 201);
+  });
+
+  app.patch("/assignments/:id/materials/:materialId", async (c) => {
+    const auth = c.get("auth")!;
+    const assignmentId = c.req.param("id");
+    const materialId = c.req.param("materialId");
+    const ctx = await assignmentAccessForAuth(db, auth, assignmentId);
+    if (!ctx) return c.json({ error: "not_found" }, 404);
+    if (!ctx.access.canEditAssignments) return c.json({ error: "forbidden" }, 403);
+
+    const [existing] = await db
+      .select()
+      .from(schoolAssignmentMaterials)
+      .where(
+        and(
+          eq(schoolAssignmentMaterials.id, materialId),
+          eq(schoolAssignmentMaterials.assignmentId, assignmentId),
+        ),
+      )
+      .limit(1);
+    if (!existing) return c.json({ error: "not_found" }, 404);
+    if (existing.frozenAt) return c.json({ error: "material_frozen" }, 409);
+
+    const body = await c.req.json<{
+      role?: string;
+      displayName?: string;
+      sortOrder?: number;
+      externalUrl?: string | null;
+      isTest?: boolean;
+      studentVisible?: boolean;
+      observerVisible?: boolean;
+    }>();
+
+    const validated = validateMaterialInput(
+      {
+        role: (body.role ?? existing.role) as Parameters<typeof validateMaterialInput>[0]["role"],
+        source: existing.source,
+        displayName: body.displayName ?? existing.displayName,
+        sortOrder: body.sortOrder,
+        isTest: body.isTest,
+        studentVisible: body.studentVisible,
+        observerVisible: body.observerVisible,
+      },
+      { isFrozen: Boolean(existing.frozenAt) },
+    );
+    if (!validated.ok) return c.json({ error: validated.error }, 400);
+
+    const patch: Partial<typeof schoolAssignmentMaterials.$inferInsert> = {};
+    if (body.displayName !== undefined) patch.displayName = validated.value.displayName;
+    if (body.role !== undefined) patch.role = validated.value.role;
+    if (body.sortOrder !== undefined) patch.sortOrder = body.sortOrder;
+    if (body.isTest !== undefined) patch.isTest = body.isTest;
+    if (body.studentVisible !== undefined) patch.studentVisible = validated.value.studentVisible!;
+    if (body.observerVisible !== undefined) patch.observerVisible = validated.value.observerVisible!;
+    if (body.externalUrl !== undefined) patch.externalUrl = body.externalUrl;
+
+    const [row] = await db
+      .update(schoolAssignmentMaterials)
+      .set(patch)
+      .where(eq(schoolAssignmentMaterials.id, materialId))
+      .returning();
+    return c.json({ material: row });
+  });
+
+  app.delete("/assignments/:id/materials/:materialId", async (c) => {
+    const auth = c.get("auth")!;
+    const assignmentId = c.req.param("id");
+    const materialId = c.req.param("materialId");
+    const ctx = await assignmentAccessForAuth(db, auth, assignmentId);
+    if (!ctx) return c.json({ error: "not_found" }, 404);
+    if (!ctx.access.canEditAssignments) return c.json({ error: "forbidden" }, 403);
+
+    const [existing] = await db
+      .select()
+      .from(schoolAssignmentMaterials)
+      .where(
+        and(
+          eq(schoolAssignmentMaterials.id, materialId),
+          eq(schoolAssignmentMaterials.assignmentId, assignmentId),
+        ),
+      )
+      .limit(1);
+    if (!existing) return c.json({ error: "not_found" }, 404);
+    if (existing.frozenAt) return c.json({ error: "material_frozen" }, 409);
+
+    await db.delete(schoolAssignmentMaterials).where(eq(schoolAssignmentMaterials.id, materialId));
+    return c.json({ ok: true });
+  });
+
+  app.get("/assignments/:id/materials/:materialId/snapshot", async (c) => {
+    const auth = c.get("auth")!;
+    const assignmentId = c.req.param("id");
+    const materialId = c.req.param("materialId");
+    const ctx = await assignmentAccessForAuth(db, auth, assignmentId);
+    if (!ctx) return c.json({ error: "not_found" }, 404);
+
+    const [row] = await db
+      .select()
+      .from(schoolAssignmentMaterials)
+      .where(
+        and(
+          eq(schoolAssignmentMaterials.id, materialId),
+          eq(schoolAssignmentMaterials.assignmentId, assignmentId),
+        ),
+      )
+      .limit(1);
+    if (!row || !materialVisibleToViewer(row, ctx.access.viewMode)) {
+      return c.json({ error: "not_found" }, 404);
+    }
+    if (!row.frozenAt || !row.snapshotS3Key) return c.json({ error: "snapshot_not_available" }, 404);
+
+    const buf = await getObjectBuffer(env, row.snapshotS3Key);
+    if (!buf) return c.json({ error: "not_found" }, 404);
+
+    const filename = row.displayName.replace(/"/g, "") || "snapshot";
+    return c.body(new Uint8Array(buf), 200, {
+      "Content-Type": contentTypeFromKey(row.snapshotS3Key),
+      "Content-Disposition": `inline; filename="${filename}"`,
+      "Cache-Control": "private, max-age=3600",
+    });
   });
 
   return app;

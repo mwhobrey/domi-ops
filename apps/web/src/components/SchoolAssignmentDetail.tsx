@@ -4,11 +4,14 @@ import { CheckCircle2, Circle, Upload } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
 import type { DriveReference } from "../lib/drive-types";
+import type { SchoolMaterialDto } from "../lib/school-materials";
+import { formatAttemptsRemaining, isAttemptsExhausted } from "../lib/school-materials";
 import { displayArtifactFileName } from "../lib/school-artifact-url";
 import type { SchoolClassAccess } from "../lib/school-access";
 import { DriveAttachmentChips } from "./DriveAttachmentChips";
 import { DriveObjectPicker } from "./DriveObjectPicker";
 import { SchoolSubmissionArtifacts } from "./SchoolSubmissionArtifacts";
+import { SchoolAssignmentMaterialsCard } from "./SchoolAssignmentMaterialsCard";
 import { Alert, Badge, Button, Card, CardBody, CardHeader, Input, Textarea } from "./ui";
 interface Submission {
   id: string;
@@ -16,6 +19,7 @@ interface Submission {
   studentNote: string;
   submittedAt?: string | null;
   isLate?: boolean;
+  turnInCount?: number;
   artifacts: { id: string; artifactType: string; s3Key: string | null; url: string | null }[];
   grade: { score: number | null; feedbackHtml: string } | null;
 }
@@ -89,6 +93,8 @@ export function SchoolAssignmentDetail({
   initialSubmissions,
   access,
   driveEnabled = false,
+  materials = [],
+  maxAttempts = null,
 }: {
   assignmentId: string;
   assignmentTitle: string;
@@ -100,6 +106,8 @@ export function SchoolAssignmentDetail({
   initialSubmissions: Submission[];
   access: SchoolClassAccess;
   driveEnabled?: boolean;
+  materials?: SchoolMaterialDto[];
+  maxAttempts?: number | null;
 }) {
   const canSubmit = access.canSubmit;
   const canGrade = access.canGrade;
@@ -121,6 +129,8 @@ export function SchoolAssignmentDetail({
   const [driveUploading, setDriveUploading] = useState(false);
 
   const submission = submissions[0];
+  const turnInCount = submission?.turnInCount ?? 0;
+  const attemptsBlocked = isAttemptsExhausted(maxAttempts, turnInCount);
 
   useEffect(() => {
     if (!driveEnabled || !submission?.id) {
@@ -146,23 +156,25 @@ export function SchoolAssignmentDetail({
   async function ensureSubmissionRecord(): Promise<Submission> {
     if (submission) return submission;
     const data = await apiClient.post<{ submission: Submission }>(
-      `/api/school/assignments/${assignmentId}/submit`,
-      { studentNote: note },
+      `/api/school/assignments/${assignmentId}/submissions/ensure`,
+      {},
     );
     const merged = mergeSubmissionResponse(undefined, {
       ...data.submission,
       artifacts: data.submission.artifacts ?? [],
       grade: null,
+      turnInCount: data.submission.turnInCount ?? 0,
     });
     setSubmissions([merged]);
     return merged;
   }
 
   async function submitWork() {
+    if (attemptsBlocked) return;
     setSubmitting(true);
     setError(null);
     try {
-      const data = await apiClient.post<{ submission: Submission }>(
+      const data = await apiClient.post<{ submission: Submission; attemptsRemaining?: number | null }>(
         `/api/school/assignments/${assignmentId}/submit`,
         { studentNote: note },
       );
@@ -172,7 +184,9 @@ export function SchoolAssignmentDetail({
         return [...rest, mergeSubmissionResponse(existing, data.submission)];
       });
     } catch (err) {
-      if (err instanceof ApiError && err.body?.includes("late_not_allowed")) {
+      if (err instanceof ApiError && err.body?.includes("attempts_exhausted")) {
+        setError("You have used all allowed attempts for this assignment.");
+      } else if (err instanceof ApiError && err.body?.includes("late_not_allowed")) {
         setError("This assignment is past due and no longer accepts new turn-ins.");
       } else {
         setError(err instanceof ApiError ? err.message : "Could not turn in assignment. Try again.");
@@ -313,6 +327,18 @@ export function SchoolAssignmentDetail({
   return (
     <div className="space-y-6">
       {error && <Alert variant="error">{error}</Alert>}
+
+      <SchoolAssignmentMaterialsCard
+        assignmentId={assignmentId}
+        materials={materials}
+        access={access}
+        maxAttempts={maxAttempts}
+        turnInCount={turnInCount}
+      />
+
+      {attemptsBlocked && canSubmit && isStudent ? (
+        <Alert variant="info">You have used all allowed attempts for this assignment.</Alert>
+      ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
         {!isStudent && visibility && <Badge tone="default">{visibility}</Badge>}
@@ -504,6 +530,7 @@ export function SchoolAssignmentDetail({
               className="w-full sm:w-auto"
               onClick={() => void submitWork()}
               loading={submitting}
+              disabled={attemptsBlocked}
             >
               {status === "not_started" ? "Turn in assignment" : "Save changes"}
             </Button>

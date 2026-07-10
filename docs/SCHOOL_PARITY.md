@@ -37,7 +37,9 @@
 
 | Capability | API | UI |
 |------------|-----|-----|
-| CRUD assignments | ✅ | ✅ Sheet: title, due, points, instructions, visibility |
+| CRUD assignments | ✅ | ✅ Sheet: title, due, points, instructions, visibility, max attempts |
+| Assignment materials | ✅ `school_assignment_materials` | ✅ Sheet materials editor + detail Materials card (WHO-201–204) |
+| Materials freeze (`is_test`) | ✅ First submission → S3 snapshot | ✅ Frozen badge; snapshot proxy |
 | Categories + weights | ✅ | ✅ Add/list/remove on class detail |
 | Submissions | ✅ | ✅ Workflow steps + file upload |
 | Grading + feedback | ✅ | ✅ Score + feedback + status badges |

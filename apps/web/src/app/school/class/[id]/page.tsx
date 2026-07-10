@@ -58,8 +58,12 @@ export default async function SchoolClassPage({ params }: { params: Promise<{ id
   let access: SchoolClassAccess | null = null;
   let context: SchoolContext | null = null;
   let loadError: string | null = null;
+  let driveEnabled = false;
 
   try {
+    const session = await apiFetch<{ modulesEnabled?: string[] }>("/auth/session");
+    driveEnabled = session.modulesEnabled?.includes("drive") ?? false;
+
     const detail = await apiFetch<{
       class: {
         id: string;
@@ -121,6 +125,7 @@ export default async function SchoolClassPage({ params }: { params: Promise<{ id
           members={members}
           access={access}
           currentMemberId={context.memberId}
+          driveEnabled={driveEnabled}
         />
       ) : (
         <Alert variant="error">Could not resolve school access for this class.</Alert>

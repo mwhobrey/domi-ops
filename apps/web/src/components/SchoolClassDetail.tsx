@@ -247,6 +247,8 @@ export function SchoolClassDetail({
 
   currentMemberId,
 
+  driveEnabled = false,
+
 }: {
 
   classId: string;
@@ -266,6 +268,8 @@ export function SchoolClassDetail({
   access: SchoolClassAccess;
 
   currentMemberId: string;
+
+  driveEnabled?: boolean;
 
 }) {
 
@@ -1727,6 +1731,8 @@ export function SchoolClassDetail({
         assignment={editingAssignment}
 
         categories={categories}
+
+        driveEnabled={driveEnabled}
 
         onSaved={(saved) => {
 

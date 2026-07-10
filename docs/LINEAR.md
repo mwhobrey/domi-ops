@@ -111,6 +111,7 @@ Workspace-level **Bug** / **Feature** may exist; attach in Linear UI if needed. 
 | M3 — Assignments & grading | [WHO-44](https://linear.app/mikewhob-whome/issue/WHO-44)–[WHO-46](https://linear.app/mikewhob-whome/issue/WHO-46) |
 | M4 — Role-aware views | [WHO-47](https://linear.app/mikewhob-whome/issue/WHO-47) |
 | M5 — QA runbook | [WHO-87](https://linear.app/mikewhob-whome/issue/WHO-87) (`.cursor/runbook/05_SCHOOL_QA.md`) |
+| M6 — Assignment materials & Google Docs tests | [WHO-200](https://linear.app/mikewhob-whome/issue/WHO-200) epic → [WHO-201](https://linear.app/mikewhob-whome/issue/WHO-201)–[WHO-217](https://linear.app/mikewhob-whome/issue/WHO-217) |
 
 ### [Shopping](https://linear.app/mikewhob-whome/project/shopping-418cd7a0c63a)
 

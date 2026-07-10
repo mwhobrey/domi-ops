@@ -1,6 +1,7 @@
 import {
   boolean,
   date,
+  integer,
   pgEnum,
   pgTable,
   real,
@@ -10,6 +11,7 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+import { driveObjects } from "./drive.js";
 import { households, users } from "./household.js";
 
 export const assignmentVisibilityEnum = pgEnum("assignment_visibility", [
@@ -30,6 +32,21 @@ export const attendanceStatusEnum = pgEnum("attendance_status", [
   "absent",
   "late",
   "excused",
+]);
+
+export const schoolMaterialRoleEnum = pgEnum("school_material_role", [
+  "student_material",
+  "handout",
+  "answer_key",
+  "rubric",
+  "reference",
+]);
+
+export const schoolMaterialSourceEnum = pgEnum("school_material_source", [
+  "domi_drive_file",
+  "domi_drive_link",
+  "external_url",
+  "google_doc",
 ]);
 
 export const schoolClasses = pgTable("school_classes", {
@@ -83,6 +100,8 @@ export const schoolAssignments = pgTable("school_assignments", {
   dueAt: timestamp("due_at", { withTimezone: true }),
   pointsPossible: real("points_possible").notNull().default(100),
   allowLate: boolean("allow_late").notNull().default(true),
+  /** Null = unlimited turn-ins per student. */
+  maxAttempts: integer("max_attempts"),
   visibility: assignmentVisibilityEnum("visibility").notNull().default("assigned"),
   /** One-shot Web Push reminder when due today or overdue (worker scan). */
   dueReminderSentAt: timestamp("due_reminder_sent_at", { withTimezone: true }),
@@ -104,6 +123,8 @@ export const schoolSubmissions = pgTable(
     isLate: boolean("is_late").notNull().default(false),
     attemptNumber: varchar("attempt_number", { length: 8 }).notNull().default("1"),
     studentNote: text("student_note").default(""),
+    /** Incremented on each successful POST /submit for this student. */
+    turnInCount: integer("turn_in_count").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -127,6 +148,31 @@ export const schoolGrades = pgTable("school_grades", {
   gradedByUserId: uuid("graded_by_user_id").references(() => users.id),
   gradedAt: timestamp("graded_at", { withTimezone: true }),
   revisionRequested: boolean("revision_requested").notNull().default(false),
+});
+
+export const schoolAssignmentMaterials = pgTable("school_assignment_materials", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  assignmentId: uuid("assignment_id")
+    .notNull()
+    .references(() => schoolAssignments.id, { onDelete: "cascade" }),
+  role: schoolMaterialRoleEnum("role").notNull().default("handout"),
+  source: schoolMaterialSourceEnum("source").notNull(),
+  displayName: varchar("display_name", { length: 256 }).notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  driveObjectId: uuid("drive_object_id").references(() => driveObjects.id, { onDelete: "set null" }),
+  externalUrl: text("external_url"),
+  googleFileId: varchar("google_file_id", { length: 128 }),
+  googleMimeType: varchar("google_mime_type", { length: 128 }),
+  googleRevisionId: varchar("google_revision_id", { length: 128 }),
+  isTest: boolean("is_test").notNull().default(false),
+  studentVisible: boolean("student_visible").notNull().default(true),
+  observerVisible: boolean("observer_visible").notNull().default(false),
+  frozenAt: timestamp("frozen_at", { withTimezone: true }),
+  snapshotS3Key: text("snapshot_s3_key"),
+  snapshotTextS3Key: text("snapshot_text_s3_key"),
+  snapshotContentHash: varchar("snapshot_content_hash", { length: 64 }),
+  createdByUserId: uuid("created_by_user_id").references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const schoolSubmissionArtifacts = pgTable("school_submission_artifacts", {
