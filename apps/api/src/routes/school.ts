@@ -35,15 +35,25 @@ import { canSubmitPastDue, isSubmissionLate } from "../lib/school-submission.js"
 import { freezeAssignmentTestMaterials } from "../lib/school-material-freeze.js";
 import { SchoolMaterialFreezeError } from "../lib/school-material-freeze-errors.js";
 import {
+  exportGoogleFileForSnapshot,
   fetchGoogleDriveFileMetadata,
   GOOGLE_FORMS_MIME,
   googleFileWebUrl,
 } from "../lib/google-drive-export.js";
 import {
   ensureGoogleDocsAccessToken,
+  exportToGoogleDocs,
   GoogleDocsCredentialsError,
   loadGoogleDocsConnection,
 } from "../lib/google-docs-export.js";
+import {
+  formatNativeTestHtml,
+  formatNativeTestPlainText,
+} from "../lib/school-test-google-export.js";
+import {
+  parseGoogleDocTestText,
+  type ParsedImportQuestion,
+} from "../lib/school-test-google-import.js";
 import {
   attemptsRemaining,
   isAttemptsExhausted,
@@ -291,6 +301,151 @@ async function staffNativeTestMaterial(
   if (!material) return { error: "not_found" as const };
   if (material.source !== "native_test") return { error: "not_native_test" as const };
   return { material };
+}
+
+async function loadConvertibleSourceMaterial(
+  db: Database,
+  env: Env,
+  params: {
+    householdId: string;
+    userId: string;
+    assignmentId: string;
+    materialId: string;
+  },
+): Promise<
+  | {
+      material: typeof schoolAssignmentMaterials.$inferSelect;
+      plainText: string;
+      openUrl: string | null;
+    }
+  | { error: string; message: string }
+> {
+  const [material] = await db
+    .select()
+    .from(schoolAssignmentMaterials)
+    .where(
+      and(
+        eq(schoolAssignmentMaterials.id, params.materialId),
+        eq(schoolAssignmentMaterials.assignmentId, params.assignmentId),
+      ),
+    )
+    .limit(1);
+  if (!material) return { error: "not_found", message: "Material not found" };
+
+  if (material.source === "google_doc" && material.googleFileId) {
+    const conn = await loadGoogleDocsConnection(db, params.householdId, params.userId);
+    if (!conn) {
+      return {
+        error: "google_docs_not_connected",
+        message: "Connect Google Docs to convert this material.",
+      };
+    }
+    let accessToken: string;
+    try {
+      accessToken = await ensureGoogleDocsAccessToken(db, env, conn);
+    } catch (e) {
+      if (e instanceof GoogleDocsCredentialsError) {
+        return { error: "google_docs_token_revoked", message: e.message };
+      }
+      throw e;
+    }
+    try {
+      const exported = await exportGoogleFileForSnapshot(accessToken, {
+        fileId: material.googleFileId,
+        mimeType: material.googleMimeType,
+      });
+      if (!exported.plainText.trim()) {
+        return {
+          error: "empty_document",
+          message: "Google Doc exported with no readable text.",
+        };
+      }
+      return {
+        material,
+        plainText: exported.plainText,
+        openUrl: googleFileWebUrl(material.googleFileId, material.googleMimeType),
+      };
+    } catch (e) {
+      return {
+        error: "export_failed",
+        message: e instanceof Error ? e.message : "Could not export Google Doc",
+      };
+    }
+  }
+
+  if (
+    (material.source === "domi_drive_file" || material.source === "domi_drive_link") &&
+    material.driveObjectId
+  ) {
+    const [obj] = await db
+      .select()
+      .from(driveObjects)
+      .where(
+        and(
+          eq(driveObjects.id, material.driveObjectId),
+          eq(driveObjects.householdId, params.householdId),
+        ),
+      )
+      .limit(1);
+    if (!obj) return { error: "not_found", message: "Drive object not found" };
+
+    if (obj.s3Key) {
+      if (!obj.contentType?.startsWith("text/")) {
+        return {
+          error: "unsupported_source",
+          message: "Only text files can be converted. PDF/image OCR is not supported yet.",
+        };
+      }
+      const buf = await getObjectBuffer(env, obj.s3Key);
+      if (!buf) {
+        return { error: "empty_document", message: "Drive file could not be read." };
+      }
+      const text = buf.toString("utf-8");
+      if (!text.trim()) {
+        return { error: "empty_document", message: "Drive file has no text content." };
+      }
+      return {
+        material,
+        plainText: text,
+        openUrl: `/api/core/drive/objects/${obj.id}/file`,
+      };
+    }
+    if (obj.url) {
+      try {
+        const res = await fetch(obj.url);
+        if (!res.ok) {
+          return { error: "export_failed", message: `Could not fetch Drive link (${res.status})` };
+        }
+        const contentType = res.headers.get("content-type")?.split(";")[0]?.trim() ?? "";
+        if (!contentType.startsWith("text/")) {
+          return {
+            error: "unsupported_source",
+            message:
+              "The link must return a text Content-Type. PDF/image OCR is not supported yet.",
+          };
+        }
+        const text = await res.text();
+        if (!text.trim()) {
+          return { error: "empty_document", message: "Drive link has no text content." };
+        }
+        return {
+          material,
+          plainText: text,
+          openUrl: obj.url,
+        };
+      } catch (e) {
+        return {
+          error: "export_failed",
+          message: e instanceof Error ? e.message : "Could not fetch Drive link",
+        };
+      }
+    }
+  }
+
+  return {
+    error: "unsupported_source",
+    message: "Only Google Doc or Domi Drive materials can be converted.",
+  };
 }
 
 export function schoolRoutes(db: Database, env: Env) {
@@ -2666,6 +2821,312 @@ export function schoolRoutes(db: Database, env: Env) {
 
     await db.delete(schoolAssignmentMaterials).where(eq(schoolAssignmentMaterials.id, materialId));
     return c.json({ ok: true });
+  });
+
+  app.post("/assignments/:id/materials/:materialId/export-google-doc", async (c) => {
+    const auth = c.get("auth")!;
+    const assignmentId = c.req.param("id");
+    const materialId = c.req.param("materialId");
+    const ctx = await assignmentAccessForAuth(db, auth, assignmentId);
+    if (!ctx) return c.json({ error: "not_found" }, 404);
+    if (!ctx.access.canEditAssignments) return c.json({ error: "forbidden" }, 403);
+
+    const resolved = await staffNativeTestMaterial(
+      db,
+      assignmentId,
+      materialId,
+      ctx.access.canEditAssignments,
+    );
+    if ("error" in resolved) {
+      const status = resolved.error === "forbidden" ? 403 : 404;
+      return c.json({ error: resolved.error }, status);
+    }
+
+    const body = (await c.req.json().catch(() => ({}))) as { includeAnswerKey?: boolean };
+    const includeAnswerKey = Boolean(body.includeAnswerKey);
+
+    const conn = await loadGoogleDocsConnection(db, auth.householdId, auth.userId);
+    if (!conn) {
+      return c.json(
+        {
+          error: "google_docs_not_connected",
+          message: "Connect Google Docs in profile settings, then export again.",
+        },
+        403,
+      );
+    }
+
+    let accessToken: string;
+    try {
+      accessToken = await ensureGoogleDocsAccessToken(db, env, conn);
+    } catch (e) {
+      if (e instanceof GoogleDocsCredentialsError) {
+        return c.json({ error: "google_docs_token_revoked", message: e.message }, 403);
+      }
+      throw e;
+    }
+
+    const questions = await db
+      .select()
+      .from(schoolTestQuestions)
+      .where(eq(schoolTestQuestions.materialId, materialId))
+      .orderBy(asc(schoolTestQuestions.sortOrder), asc(schoolTestQuestions.createdAt));
+
+    const exportQuestions = questions.map((q) => ({
+      sortOrder: q.sortOrder,
+      questionType: q.questionType as SchoolQuestionType,
+      promptMarkdown: q.promptMarkdown,
+      points: q.points,
+      weight: q.weight,
+      optionsJson: q.optionsJson,
+      correctAnswerJson: q.correctAnswerJson,
+    }));
+
+    const title = `${ctx.assignment.title} — ${resolved.material.displayName}`;
+    const plainText = formatNativeTestPlainText({
+      assignmentTitle: ctx.assignment.title,
+      testTitle: resolved.material.displayName,
+      questions: exportQuestions,
+      includeAnswerKey,
+    });
+    const html = formatNativeTestHtml({
+      assignmentTitle: ctx.assignment.title,
+      testTitle: resolved.material.displayName,
+      questions: exportQuestions,
+      includeAnswerKey,
+    });
+
+    try {
+      const exported = await exportToGoogleDocs({
+        accessToken,
+        title,
+        plainText,
+        html,
+        format: "styled",
+      });
+      return c.json({
+        documentId: exported.documentId,
+        url: exported.url,
+        includeAnswerKey,
+        questionCount: questions.length,
+      });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Google Docs export failed";
+      return c.json({ error: "export_failed", message }, 502);
+    }
+  });
+
+  app.post("/assignments/:id/materials/:materialId/convert-native-preview", async (c) => {
+    const auth = c.get("auth")!;
+    const assignmentId = c.req.param("id");
+    const materialId = c.req.param("materialId");
+    const ctx = await assignmentAccessForAuth(db, auth, assignmentId);
+    if (!ctx) return c.json({ error: "not_found" }, 404);
+    if (!ctx.access.canEditAssignments) return c.json({ error: "forbidden" }, 403);
+
+    const source = await loadConvertibleSourceMaterial(db, env, {
+      householdId: auth.householdId,
+      userId: auth.userId,
+      assignmentId,
+      materialId,
+    });
+    if ("error" in source) {
+      const status =
+        source.error === "google_docs_not_connected" || source.error === "google_docs_token_revoked"
+          ? 403
+          : source.error === "unsupported_source"
+            ? 400
+            : source.error === "empty_document"
+              ? 422
+              : source.error === "export_failed"
+                ? 502
+                : 404;
+      return c.json({ error: source.error, message: source.message }, status);
+    }
+
+    const parsed = parseGoogleDocTestText(source.plainText);
+    return c.json({
+      sourceMaterial: {
+        id: source.material.id,
+        displayName: source.material.displayName,
+        source: source.material.source,
+        openUrl: source.openUrl,
+      },
+      questionCount: parsed.questions.length,
+      warnings: parsed.warnings,
+      questions: parsed.questions,
+    });
+  });
+
+  app.post("/assignments/:id/materials/:materialId/convert-native", async (c) => {
+    const auth = c.get("auth")!;
+    const assignmentId = c.req.param("id");
+    const materialId = c.req.param("materialId");
+    const ctx = await assignmentAccessForAuth(db, auth, assignmentId);
+    if (!ctx) return c.json({ error: "not_found" }, 404);
+    if (!ctx.access.canEditAssignments) return c.json({ error: "forbidden" }, 403);
+
+    const [sourceMaterial] = await db
+      .select()
+      .from(schoolAssignmentMaterials)
+      .where(
+        and(
+          eq(schoolAssignmentMaterials.id, materialId),
+          eq(schoolAssignmentMaterials.assignmentId, assignmentId),
+        ),
+      )
+      .limit(1);
+    if (!sourceMaterial) return c.json({ error: "not_found" }, 404);
+    if (
+      sourceMaterial.source !== "google_doc" &&
+      sourceMaterial.source !== "domi_drive_file" &&
+      sourceMaterial.source !== "domi_drive_link"
+    ) {
+      return c.json({ error: "unsupported_source" }, 400);
+    }
+
+    const body = await c.req.json<{
+      displayName?: string;
+      pointsMode?: SchoolNativeTestPointsMode;
+      questions?: ParsedImportQuestion[];
+    }>();
+
+    let questions = body.questions;
+    if (!questions) {
+      const source = await loadConvertibleSourceMaterial(db, env, {
+        householdId: auth.householdId,
+        userId: auth.userId,
+        assignmentId,
+        materialId,
+      });
+      if ("error" in source) {
+        const status =
+          source.error === "google_docs_not_connected" || source.error === "google_docs_token_revoked"
+            ? 403
+            : source.error === "empty_document"
+              ? 422
+              : source.error === "export_failed"
+                ? 502
+                : source.error === "unsupported_source"
+                  ? 400
+                  : 404;
+        return c.json({ error: source.error, message: source.message }, status);
+      }
+      questions = parseGoogleDocTestText(source.plainText).questions;
+    }
+    if (questions.length === 0) {
+      return c.json({ error: "no_questions", message: "No questions to import" }, 400);
+    }
+
+    const pointsMode: SchoolNativeTestPointsMode =
+      body.pointsMode === "weighted" ? "weighted" : "explicit";
+    const validated: Array<{
+      questionType: SchoolQuestionType;
+      promptMarkdown: string;
+      points: number | null;
+      weight: number | null;
+      optionsJson: ParsedImportQuestion["optionsJson"];
+      correctAnswerJson: Record<string, unknown> | null;
+      sortOrder: number;
+    }> = [];
+    for (const [i, q] of questions.entries()) {
+      const missingAutoGradeKey =
+        q.questionType !== "long_answer" && q.correctAnswerJson == null;
+      const safeQuestion: ParsedImportQuestion = missingAutoGradeKey
+        ? {
+            ...q,
+            questionType: "long_answer",
+            promptMarkdown: [
+              q.promptMarkdown,
+              ...(q.optionsJson?.length
+                ? ["", "Imported options:", ...q.optionsJson.map((o) => `${o.id}) ${o.label}`)]
+                : []),
+            ].join("\n"),
+            optionsJson: null,
+            correctAnswerJson: null,
+          }
+        : q;
+      const check = validateQuestionInput(
+        {
+          questionType: safeQuestion.questionType,
+          promptMarkdown: safeQuestion.promptMarkdown,
+          points: safeQuestion.points,
+          weight: pointsMode === "weighted" ? safeQuestion.points : null,
+          optionsJson: safeQuestion.optionsJson,
+          correctAnswerJson: safeQuestion.correctAnswerJson,
+          sortOrder: i,
+        },
+        { pointsMode, isCreate: true },
+      );
+      if (!check.ok) {
+        return c.json(
+          { error: "invalid_question", message: check.error, index: i },
+          400,
+        );
+      }
+      validated.push({
+        questionType: check.value.questionType!,
+        promptMarkdown: check.value.promptMarkdown!,
+        points: check.value.points ?? null,
+        weight: check.value.weight ?? null,
+        optionsJson: check.value.optionsJson ?? null,
+        correctAnswerJson: check.value.correctAnswerJson ?? null,
+        sortOrder: i,
+      });
+    }
+
+    const [{ maxSort }] = await db
+      .select({
+        maxSort: sql<number>`coalesce(max(${schoolAssignmentMaterials.sortOrder}), -1)::int`,
+      })
+      .from(schoolAssignmentMaterials)
+      .where(eq(schoolAssignmentMaterials.assignmentId, assignmentId));
+
+    const displayName =
+      body.displayName?.trim() ||
+      `${sourceMaterial.displayName.replace(/\s*\(import\)$/i, "")} (in-app)`;
+
+    const created = await db.transaction(async (tx) => {
+      const [material] = await tx
+        .insert(schoolAssignmentMaterials)
+        .values({
+          assignmentId,
+          role: "student_material",
+          source: "native_test",
+          displayName: displayName.slice(0, 256),
+          sortOrder: (maxSort ?? -1) + 1,
+          isTest: true,
+          studentVisible: true,
+          observerVisible: false,
+          nativeTestPointsMode: pointsMode,
+          createdByUserId: auth.userId,
+        })
+        .returning();
+
+      await tx.insert(schoolTestQuestions).values(
+        validated.map((v, i) => ({
+          materialId: material!.id,
+          sortOrder: i,
+          questionType: v.questionType,
+          promptMarkdown: v.promptMarkdown,
+          points: v.points,
+          weight: v.weight,
+          optionsJson: v.optionsJson,
+          correctAnswerJson: v.correctAnswerJson,
+        })),
+      );
+      return material!;
+    });
+
+    return c.json(
+      {
+        material: serializeMaterial(created, { viewMode: "staff" }),
+        questionCount: validated.length,
+        sourceMaterialId: sourceMaterial.id,
+        editUrl: `/school/assignment/${assignmentId}/materials/${created.id}/edit`,
+      },
+      201,
+    );
   });
 
   app.get("/assignments/:id/materials/:materialId/questions", async (c) => {

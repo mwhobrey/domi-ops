@@ -16,11 +16,13 @@ interface PickerSession {
 
 export function GooglePickerButton({
   onPicked,
+  onBeforeOpen,
   disabled,
   children = "Add from Google",
   title,
 }: {
   onPicked: (file: GooglePickerFile) => void | Promise<void>;
+  onBeforeOpen?: () => boolean | void | Promise<boolean | void>;
   disabled?: boolean;
   children?: React.ReactNode;
   title?: string;
@@ -38,6 +40,8 @@ export function GooglePickerButton({
     setError(null);
     setFormsHint(false);
     try {
+      const shouldContinue = await onBeforeOpen?.();
+      if (shouldContinue === false) return;
       const session = await apiClient.get<PickerSession>(
         `/api/core/google/docs/picker-session?next=${encodeURIComponent(returnPath)}`,
       );
@@ -91,7 +95,7 @@ export function GooglePickerButton({
     } finally {
       setLoading(false);
     }
-  }, [onPicked, returnPath, title]);
+  }, [onBeforeOpen, onPicked, returnPath, title]);
 
   return (
     <div className="inline-flex flex-col gap-2">

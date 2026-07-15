@@ -35,6 +35,7 @@ interface GooglePickerBuilder {
   setOAuthToken: (token: string) => GooglePickerBuilder;
   setDeveloperKey: (key: string) => GooglePickerBuilder;
   setAppId: (appId: string) => GooglePickerBuilder;
+  setZIndex?: (zIndex: number) => GooglePickerBuilder;
   addView: (view: unknown) => GooglePickerBuilder;
   setCallback: (cb: (data: GooglePickerResponse) => void) => GooglePickerBuilder;
   build: () => { setVisible: (visible: boolean) => void };
@@ -101,6 +102,32 @@ function loadPickerApi(): Promise<void> {
   );
 }
 
+/**
+ * HTML `<dialog showModal()>` lives in the browser top layer, so Google Picker
+ * (normal DOM) can never stack above an open Sheet/Drawer via z-index alone.
+ * Temporarily close open dialogs while the picker is visible, then restore.
+ */
+function suspendTopLayerDialogs(): () => void {
+  const openDialogs = Array.from(
+    document.querySelectorAll(
+      "dialog.dialog-sheet[open], dialog.dialog-drawer[open], dialog.dialog-modal[open]",
+    ),
+  ) as HTMLDialogElement[];
+  for (const dialog of openDialogs) {
+    dialog.close();
+  }
+  return () => {
+    for (const dialog of openDialogs) {
+      if (!dialog.isConnected || dialog.open) continue;
+      try {
+        dialog.showModal();
+      } catch {
+        /* dialog may have been unmounted */
+      }
+    }
+  };
+}
+
 export async function openGooglePicker(opts: {
   accessToken: string;
   developerKey: string;
@@ -114,11 +141,17 @@ export async function openGooglePicker(opts: {
   const picker = window.google?.picker;
   if (!picker) throw new Error("picker_unavailable");
 
+  let restoreDialogs: (() => void) | null = null;
+  const finish = () => {
+    restoreDialogs?.();
+    restoreDialogs = null;
+  };
+
   const docsView = new picker.DocsView();
   docsView.setIncludeFolders(true);
   const uploadView = new picker.DocsUploadView();
 
-  const builder = new picker.PickerBuilder()
+  let builder = new picker.PickerBuilder()
     .setTitle(opts.title ?? "Select a file")
     .setOAuthToken(opts.accessToken)
     .setDeveloperKey(opts.developerKey)
@@ -128,11 +161,18 @@ export async function openGooglePicker(opts: {
     .addView(uploadView)
     .setCallback((data) => {
       if (data.action === picker.Action.CANCEL) {
+        finish();
         opts.onCancel?.();
         return;
       }
-      if (data.action !== picker.Action.PICKED || !data.docs?.[0]) return;
-      const doc = data.docs[0];
+      if (data.action !== picker.Action.PICKED) return;
+      const doc = data.docs?.[0];
+      if (!doc) {
+        finish();
+        opts.onCancel?.();
+        return;
+      }
+      finish();
       if (isGoogleFormsMime(doc.mimeType)) {
         opts.onFormsRejected?.();
         return;
@@ -145,5 +185,16 @@ export async function openGooglePicker(opts: {
       });
     });
 
-  builder.build().setVisible(true);
+  // Belt-and-suspenders if picker ever stacks against non-top-layer UI.
+  if (typeof builder.setZIndex === "function") {
+    builder = builder.setZIndex(100000);
+  }
+
+  restoreDialogs = suspendTopLayerDialogs();
+  try {
+    builder.build().setVisible(true);
+  } catch (err) {
+    finish();
+    throw err;
+  }
 }

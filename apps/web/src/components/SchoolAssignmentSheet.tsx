@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
 import { SchoolAssignmentMaterialsEditor } from "./SchoolAssignmentMaterialsEditor";
 import { Alert, Button, Checkbox, Input, Select, Sheet, Textarea } from "./ui";
@@ -88,6 +88,8 @@ export function SchoolAssignmentSheet({
   onSaved: (assignment: AssignmentRecord) => void;
 }) {
   const [savedAssignment, setSavedAssignment] = useState<AssignmentRecord | null>(assignment ?? null);
+  const savedAssignmentRef = useRef<AssignmentRecord | null>(assignment ?? null);
+  const createPromiseRef = useRef<Promise<string | null> | null>(null);
   const isEdit = Boolean(savedAssignment);
   const [form, setForm] = useState<AssignmentFormValues>(() =>
     assignment
@@ -109,6 +111,8 @@ export function SchoolAssignmentSheet({
   useEffect(() => {
     if (open) {
       setSavedAssignment(assignment ?? null);
+      savedAssignmentRef.current = assignment ?? null;
+      createPromiseRef.current = null;
       resetForm(assignment ?? null);
     }
   }, [open, assignment]);
@@ -131,12 +135,8 @@ export function SchoolAssignmentSheet({
     setError(null);
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!form.title.trim()) return;
-    setSaving(true);
-    setError(null);
-    const payload = {
+  function assignmentPayload() {
+    return {
       title: form.title.trim(),
       instructionsHtml: form.instructionsHtml,
       dueAt: form.dueAt ? new Date(form.dueAt).toISOString() : null,
@@ -146,27 +146,66 @@ export function SchoolAssignmentSheet({
       allowLate: form.allowLate,
       maxAttempts: maxAttemptsFromForm(form),
     };
-    try {
-      if (isEdit && savedAssignment) {
+  }
+
+  async function saveCurrentAssignment(): Promise<string | null> {
+    if (!form.title.trim()) {
+      setError("Add an assignment title before attaching materials.");
+      return null;
+    }
+    const existing = savedAssignmentRef.current;
+    if (!existing && createPromiseRef.current) {
+      return createPromiseRef.current;
+    }
+
+    const persist = async (): Promise<string | null> => {
+      setSaving(true);
+      setError(null);
+      try {
+        const payload = assignmentPayload();
+        if (existing) {
         const data = await apiClient.patch<{ assignment: AssignmentRecord }>(
-          `/api/school/assignments/${savedAssignment.id}`,
+            `/api/school/assignments/${existing.id}`,
           payload,
         );
         setSavedAssignment(data.assignment);
+          savedAssignmentRef.current = data.assignment;
         onSaved(data.assignment);
-      } else {
+        return data.assignment.id;
+        }
+
         const data = await apiClient.post<{ assignment: AssignmentRecord }>(
           `/api/school/classes/${classId}/assignments`,
           payload,
         );
         setSavedAssignment(data.assignment);
+        savedAssignmentRef.current = data.assignment;
         onSaved(data.assignment);
+        return data.assignment.id;
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : "Failed to save assignment");
+        return null;
+      } finally {
+        setSaving(false);
       }
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to save assignment");
+    };
+
+    if (existing) return persist();
+
+    const createPromise = persist();
+    createPromiseRef.current = createPromise;
+    try {
+      return await createPromise;
     } finally {
-      setSaving(false);
+      if (createPromiseRef.current === createPromise) {
+        createPromiseRef.current = null;
+      }
     }
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    await saveCurrentAssignment();
   }
 
   return (
@@ -175,6 +214,8 @@ export function SchoolAssignmentSheet({
       onClose={() => {
         resetForm(assignment ?? null);
         setSavedAssignment(assignment ?? null);
+        savedAssignmentRef.current = assignment ?? null;
+        createPromiseRef.current = null;
         onClose();
       }}
       title={isEdit ? "Edit assignment" : "New assignment"}
@@ -323,18 +364,13 @@ export function SchoolAssignmentSheet({
           />
         </div>
 
-        {savedAssignment ? (
-          <SchoolAssignmentMaterialsEditor
-            assignmentId={savedAssignment.id}
-            driveEnabled={driveEnabled}
-            canEdit
-            assignmentPointsPossible={parseFloat(form.pointsPossible) || 100}
-          />
-        ) : (
-          <p className="text-xs text-[var(--color-text-muted)]">
-            Save the assignment first to attach materials.
-          </p>
-        )}
+        <SchoolAssignmentMaterialsEditor
+          assignmentId={savedAssignment?.id ?? null}
+          ensureAssignment={saveCurrentAssignment}
+          driveEnabled={driveEnabled}
+          canEdit
+          assignmentPointsPossible={parseFloat(form.pointsPossible) || 100}
+        />
 
         <div className="flex gap-2 pt-2">
           <Button type="submit" loading={saving}>
@@ -347,6 +383,8 @@ export function SchoolAssignmentSheet({
             onClick={() => {
               resetForm(assignment ?? null);
               setSavedAssignment(assignment ?? null);
+              savedAssignmentRef.current = assignment ?? null;
+              createPromiseRef.current = null;
               onClose();
             }}
           >

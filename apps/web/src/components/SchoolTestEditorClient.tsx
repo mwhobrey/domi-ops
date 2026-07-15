@@ -8,6 +8,27 @@ import type { SchoolNativeTestPointsMode } from "../lib/school-test-questions";
 import { SchoolTestQuestionEditor } from "./SchoolTestQuestionEditor";
 import { Alert, AnchorButton, Badge, Button, Checkbox, Input, Modal } from "./ui";
 
+function apiErrorMessage(err: unknown, fallback: string): string {
+  if (!(err instanceof ApiError)) return fallback;
+  if (!err.body) return err.message;
+  try {
+    const parsed = JSON.parse(err.body) as { message?: string; error?: string };
+    return parsed.message || parsed.error || err.message;
+  } catch {
+    return err.message;
+  }
+}
+
+function apiErrorCode(err: unknown): string | null {
+  if (!(err instanceof ApiError) || !err.body) return null;
+  try {
+    const parsed = JSON.parse(err.body) as { error?: string };
+    return parsed.error ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function SchoolTestEditorClient({
   assignmentId,
   materialId,
@@ -37,6 +58,8 @@ export function SchoolTestEditorClient({
   const [exportOpen, setExportOpen] = useState(false);
   const [includeAnswerKey, setIncludeAnswerKey] = useState(false);
   const [docsConnected, setDocsConnected] = useState<boolean | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportResult, setExportResult] = useState<{ url: string } | null>(null);
 
   const loadDocsStatus = useCallback(async () => {
     try {
@@ -65,7 +88,7 @@ export function SchoolTestEditorClient({
       setSavedName(next);
       setDisplayName(next);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not rename test");
+      setError(apiErrorMessage(err, "Could not rename test"));
       setDisplayName(savedName);
     } finally {
       setSavingName(false);
@@ -80,7 +103,28 @@ export function SchoolTestEditorClient({
       });
       setPointsMode(mode);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not update points mode");
+      setError(apiErrorMessage(err, "Could not update points mode"));
+    }
+  }
+
+  async function exportToGoogleDoc() {
+    setExporting(true);
+    setError(null);
+    setExportResult(null);
+    try {
+      const data = await apiClient.post<{ url: string }>(
+        `/api/school/assignments/${assignmentId}/materials/${materialId}/export-google-doc`,
+        { includeAnswerKey },
+      );
+      setExportResult({ url: data.url });
+    } catch (err) {
+      const code = apiErrorCode(err);
+      if (code === "google_docs_not_connected" || code === "google_docs_token_revoked") {
+        setDocsConnected(false);
+      }
+      setError(apiErrorMessage(err, "Could not export Google Doc"));
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -113,7 +157,15 @@ export function SchoolTestEditorClient({
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="secondary" onClick={() => setExportOpen(true)}>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => {
+              setExportResult(null);
+              setError(null);
+              setExportOpen(true);
+            }}
+          >
             Export to Google Doc
           </Button>
           <AnchorButton href={`/school/assignment/${assignmentId}`} variant="ghost">
@@ -122,12 +174,12 @@ export function SchoolTestEditorClient({
         </div>
       </div>
 
-      {error ? <Alert variant="error">{error}</Alert> : null}
+      {error && !exportOpen ? <Alert variant="error">{error}</Alert> : null}
 
       {frozen ? (
         <Alert variant="info">
           This test froze after the first household submission. Questions are read-only; you can
-          still export a Google Doc backup once export ships.
+          still export a Google Doc backup.
         </Alert>
       ) : null}
 
@@ -179,7 +231,7 @@ export function SchoolTestEditorClient({
         <div className="space-y-4">
           <p className="text-sm text-[var(--color-text-muted)]">
             Creates a Google Doc in your Drive for posterity or printing. The live in-app test stays
-            in Domi Ops; this is a one-way backup (WHO-217).
+            in Domi Ops; this is a one-way backup.
           </p>
           <Checkbox
             label="Include answer key section"
@@ -194,17 +246,30 @@ export function SchoolTestEditorClient({
               </a>
             </Alert>
           ) : null}
-          {docsConnected ? (
-            <Alert variant="info">
-              Google Docs is connected. Export API lands in WHO-217 — this control is ready for that
-              wiring.
+          {error && exportOpen ? <Alert variant="error">{error}</Alert> : null}
+          {exportResult ? (
+            <Alert variant="success">
+              Doc created.{" "}
+              <a
+                href={exportResult.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium underline-offset-2 hover:underline"
+              >
+                Open in Google Docs
+              </a>
             </Alert>
           ) : null}
           <div className="flex flex-wrap justify-end gap-2">
             <Button type="button" variant="ghost" onClick={() => setExportOpen(false)}>
               Close
             </Button>
-            <Button type="button" disabled title="Ships with WHO-217">
+            <Button
+              type="button"
+              loading={exporting}
+              disabled={docsConnected !== true}
+              onClick={() => void exportToGoogleDoc()}
+            >
               Create Google Doc
             </Button>
           </div>

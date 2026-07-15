@@ -334,12 +334,13 @@ One commit per issue per team policy.
 
 ## Non-goals (explicit)
 
-- Import Google Doc → native questions
+- Perfect OCR / PDF / handwritten scan import (text Google Docs + Drive text files only for WHO-219)
 - In-app Google Doc iframe editing
 - Google Forms beyond link-only external URL
 - AI essay grading
 - Question banks / cross-assignment reuse
 - Timed tests / lockdown browser
+- Live bidirectional sync between native test and exported Google Doc
 
 ## Resolved decisions (2026-07-10)
 

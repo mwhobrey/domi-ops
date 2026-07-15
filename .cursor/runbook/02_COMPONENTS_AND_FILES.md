@@ -38,7 +38,9 @@ domi-ops/
 | `src/app/health/page.tsx` | Health tracker UI (`/health` — module-gated; API liveness is separate rewrite) |
 | `src/app/school/assignment/[id]/page.tsx` | Assignment detail |
 | `src/app/school/assignment/[id]/materials/[materialId]/edit/page.tsx` | Full-page native test teacher editor (WHO-218) |
-| `src/components/SchoolTestEditorClient.tsx` | Test editor chrome + Google Doc export modal shell |
+| `src/components/SchoolTestEditorClient.tsx` | Test editor chrome + Google Doc export (WHO-217) |
+| `src/components/SchoolTestTakerClient.tsx` | Student take flow (WHO-215) |
+| `src/components/SchoolNativeTestReview.tsx` | Teacher per-question review (WHO-216) |
 | `src/components/SchoolTestQuestionEditor.tsx` | Question CRUD / preview |
 | `src/app/shopping/page.tsx` | Shopping list |
 | `src/app/chores/page.tsx`, `notes/page.tsx`, `expenses/page.tsx` | Core list modules |
@@ -96,6 +98,8 @@ domi-ops/
 | `src/lib/reports/` | Canonical report types, module overview adapters, shared export dispatch |
 | `src/lib/report-render.ts` | Plain/styled HTML + CSV render for weekly + canonical reports |
 | `src/lib/google-docs-export.ts` | Google Docs/Drive API + token refresh |
+| `src/lib/school-test-google-export.ts` | Native test → Docs plain/html formatting (WHO-217) |
+| `src/lib/school-test-google-import.ts` | Soft-parse Doc text → draft questions (WHO-219) |
 | `src/routes/calendar.ts` | Connections, events, sync trigger; `GET /events` merges overlays |
 | `src/lib/calendar-overlays.ts` | School due-date + health virtual events for calendar |
 | `src/routes/household-health.ts` | `/api/health` — events, medications, dose log, glance |
