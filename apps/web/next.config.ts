@@ -28,11 +28,15 @@ loadRepoEnv();
 
 const apiUrl = process.env.API_URL ?? "http://localhost:4000";
 
+const publicAppUrl = process.env.PUBLIC_APP_URL ?? "http://localhost:3000";
+
 const nextConfig: NextConfig = {
   output: "standalone",
+  /** Suppress Next dev cross-origin warnings when browsing via 127.0.0.1 before redirect. */
+  allowedDevOrigins: ["127.0.0.1", "[::1]"],
   env: {
-    NEXT_PUBLIC_APP_URL: process.env.PUBLIC_APP_URL ?? "http://localhost:3000",
-    PUBLIC_APP_URL: process.env.PUBLIC_APP_URL ?? "http://localhost:3000",
+    NEXT_PUBLIC_APP_URL: publicAppUrl,
+    PUBLIC_APP_URL: publicAppUrl,
     NEXT_PUBLIC_DEMO_MODE: process.env.DEMO_MODE === "true" ? "true" : "false",
   },
   async headers() {

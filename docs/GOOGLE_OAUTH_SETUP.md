@@ -111,6 +111,7 @@ In **APIs & Services → Library**, enable:
    - `http://localhost:3001/*` (Docker web)
    - `https://your.domain/*` (production)
 3. **API restrictions → Restrict key** → allow **Google Picker API** (optional: Google Drive API)
+4. Add `https://docs.google.com/*` to website restrictions — Picker’s iframe often sends that referrer; without it Google may report “API developer key is invalid” even when localhost is allowed.
 
 If you already have an API key with matching referrer restrictions, add Picker API to its restriction list instead of creating a duplicate.
 
@@ -118,13 +119,21 @@ If you already have an API key with matching referrer restrictions, add Picker A
 
 ```env
 GOOGLE_PICKER_API_KEY=AIza...
+# Optional — digits only. Defaults to the numeric prefix of GOOGLE_OAUTH_CLIENT_ID.
+# GOOGLE_CLOUD_PROJECT_NUMBER=166249078987
 ```
 
 The key is **not** exposed in the Next.js bundle. The API returns it only from authenticated `GET /api/core/google/docs/picker-session`.
 
-### OAuth client
+### OAuth client + appId
 
-No new OAuth client is required. Picker uses the existing Web client ID as `appId` and the teacher's `google_docs_connections` token (`documents` + `drive.file` scopes). Confirm **Authorized JavaScript origins** (§3) include your dev/prod browser URL.
+No new OAuth client is required. Picker uses:
+
+- `developerKey` = `GOOGLE_PICKER_API_KEY`
+- `OAuth token` = teacher's `google_docs_connections` access token (`documents` + `drive.file`)
+- `appId` = GCP **project number** (not the OAuth client ID string). Domi Ops derives it from `GOOGLE_OAUTH_CLIENT_ID` (`{number}-….apps.googleusercontent.com`) or `GOOGLE_CLOUD_PROJECT_NUMBER`.
+
+Confirm **Authorized JavaScript origins** (§3) include your dev/prod browser URL.
 
 ## 10. Student Google Docs (school tests — WHO-209–212)
 

@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { Env } from "@domi-ops/config";
+import { googlePickerAppId } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
 import { MAX_WEEKS_IN_RANGE } from "@domi-ops/calendar-sync";
 import type { AppVariables } from "../middleware/auth.js";
@@ -47,6 +48,14 @@ export function reportRoutes(db: Database, env: Env) {
       return c.json({ error: "picker_not_configured" }, 503);
     }
 
+    const appId = googlePickerAppId({
+      projectNumber: env.GOOGLE_CLOUD_PROJECT_NUMBER,
+      oauthClientId: env.GOOGLE_OAUTH_CLIENT_ID,
+    });
+    if (!appId) {
+      return c.json({ error: "picker_app_id_invalid" }, 503);
+    }
+
     const conn = await loadGoogleDocsConnection(db, auth.householdId, auth.userId);
     const next = c.req.query("next");
     const connectUrl = next
@@ -64,7 +73,7 @@ export function reportRoutes(db: Database, env: Env) {
         connectUrl,
         accessToken,
         developerKey: env.GOOGLE_PICKER_API_KEY,
-        appId: env.GOOGLE_OAUTH_CLIENT_ID,
+        appId,
       });
     } catch (e) {
       if (e instanceof GoogleDocsCredentialsError) {

@@ -14,6 +14,8 @@ export {
   type DevWebProfile,
 } from "./dev-url.js";
 
+export { googlePickerAppId } from "./google-picker-app-id.js";
+
 const deploymentMode = z.enum(["single", "shared", "dedicated"]);
 const hostedTier = z.enum(["starter", "family", "family_school", "dedicated"]);
 const syncMode = z.enum(["import_only", "manual", "bidirectional"]);
@@ -60,6 +62,11 @@ export const envSchema = z
     GOOGLE_OAUTH_REDIRECT_URI: z.string().url().optional(),
     /** Browser Google Picker API key (HTTP-referrer restricted in GCP). */
     GOOGLE_PICKER_API_KEY: z.string().optional(),
+    /**
+     * GCP project number for Google Picker `setAppId` (digits only).
+     * Optional — derived from `GOOGLE_OAUTH_CLIENT_ID` prefix when unset.
+     */
+    GOOGLE_CLOUD_PROJECT_NUMBER: z.string().optional(),
     GOOGLE_CALENDAR_DEFAULT_SYNC_MODE: syncMode.default("import_only"),
     MODULES_ENABLED: z
       .string()

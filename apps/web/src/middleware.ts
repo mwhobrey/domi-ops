@@ -16,6 +16,9 @@ export async function middleware(request: NextRequest) {
   if (canonicalRedirect) return canonicalRedirect;
 
   const { pathname } = request.nextUrl;
+  if (pathname.startsWith("/auth/") || pathname === "/auth") {
+    return NextResponse.next();
+  }
   if (PUBLIC_PATHS.includes(pathname)) {
     return NextResponse.next();
   }
@@ -56,6 +59,8 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    "/",
+    "/auth/:path*",
     "/login",
     "/setup",
     "/privacy",

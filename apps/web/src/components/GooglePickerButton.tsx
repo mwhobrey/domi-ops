@@ -79,7 +79,9 @@ export function GooglePickerButton({
           return;
         }
         if (err.status === 503) {
-          setError("Google Picker is not configured. Add GOOGLE_PICKER_API_KEY to the server.");
+          setError(
+            "Google Picker is not configured. Check GOOGLE_PICKER_API_KEY and that the OAuth client id yields a numeric GCP project number (see docs/GOOGLE_OAUTH_SETUP.md §9).",
+          );
           return;
         }
         setError(err.message);
