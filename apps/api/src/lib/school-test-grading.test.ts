@@ -52,31 +52,31 @@ describe("school-test-grading", () => {
     expect(normalizeShortAnswer("  Hello\r\nWorld  ")).toBe("hello\nworld");
   });
 
-  it("scores multiple choice", () => {
-    expect(scoreQuestion(mc, { optionId: "a" }, "explicit", 10, [mc]).autoScore).toBe(2);
-    expect(scoreQuestion(mc, { optionId: "b" }, "explicit", 10, [mc]).autoScore).toBe(0);
-    expect(scoreQuestion(mc, {}, "explicit", 10, [mc]).autoScore).toBe(0);
+  it("scores multiple choice with raw explicit points when assignment total unset", () => {
+    expect(scoreQuestion(mc, { optionId: "a" }, "explicit", null, [mc]).autoScore).toBe(2);
+    expect(scoreQuestion(mc, { optionId: "b" }, "explicit", null, [mc]).autoScore).toBe(0);
+    expect(scoreQuestion(mc, {}, "explicit", null, [mc]).autoScore).toBe(0);
   });
 
   it("scores multi-select with set equality", () => {
     expect(
-      scoreQuestion(multi, { optionIds: ["c", "a"] }, "explicit", 10, [multi]).autoScore,
+      scoreQuestion(multi, { optionIds: ["c", "a"] }, "explicit", null, [multi]).autoScore,
     ).toBe(3);
     expect(
-      scoreQuestion(multi, { optionIds: ["a"] }, "explicit", 10, [multi]).autoScore,
+      scoreQuestion(multi, { optionIds: ["a"] }, "explicit", null, [multi]).autoScore,
     ).toBe(0);
   });
 
   it("scores true/false and short answer", () => {
-    expect(scoreQuestion(tf, { value: true }, "explicit", 10, [tf]).autoScore).toBe(1);
-    expect(scoreQuestion(short, { text: "mitochondria" }, "explicit", 10, [short]).autoScore).toBe(
+    expect(scoreQuestion(tf, { value: true }, "explicit", null, [tf]).autoScore).toBe(1);
+    expect(scoreQuestion(short, { text: "mitochondria" }, "explicit", null, [short]).autoScore).toBe(
       2,
     );
-    expect(scoreQuestion(short, { text: "nucleus" }, "explicit", 10, [short]).autoScore).toBe(0);
+    expect(scoreQuestion(short, { text: "nucleus" }, "explicit", null, [short]).autoScore).toBe(0);
   });
 
   it("leaves long answer for manual grade", () => {
-    const result = scoreQuestion(longQ, { text: "essay" }, "explicit", 10, [longQ]);
+    const result = scoreQuestion(longQ, { text: "essay" }, "explicit", null, [longQ]);
     expect(result.autoScore).toBeNull();
     expect(result.needsManualGrade).toBe(true);
   });
@@ -88,6 +88,30 @@ describe("school-test-grading", () => {
     ];
     expect(questionMaxPoints(qs[0]!, "weighted", 100, qs)).toBe(25);
     expect(questionMaxPoints(qs[1]!, "weighted", 100, qs)).toBe(75);
+  });
+
+  it("scales explicit points onto assignment total when set", () => {
+    const qs: GradableQuestion[] = [
+      { id: "a", questionType: "multiple_choice", points: 1, weight: null, correctAnswerJson: { optionId: "x" } },
+      { id: "b", questionType: "multiple_choice", points: 1, weight: null, correctAnswerJson: { optionId: "x" } },
+      { id: "c", questionType: "multiple_choice", points: 1, weight: null, correctAnswerJson: { optionId: "x" } },
+      { id: "d", questionType: "multiple_choice", points: 1, weight: null, correctAnswerJson: { optionId: "x" } },
+      { id: "e", questionType: "multiple_choice", points: 1, weight: null, correctAnswerJson: { optionId: "x" } },
+    ];
+    expect(questionMaxPoints(qs[0]!, "explicit", 100, qs)).toBe(20);
+    const earned = qs.slice(0, 4).map((q) =>
+      scoreQuestion(q, { optionId: "x" }, "explicit", 100, qs),
+    );
+    const missed = scoreQuestion(qs[4]!, { optionId: "y" }, "explicit", 100, qs);
+    expect(
+      rollupTestScore(
+        [...earned, missed].map((r) => ({
+          autoScore: r.autoScore,
+          manualScore: null,
+          needsManual: false,
+        })),
+      ),
+    ).toEqual({ score: 80, needsManualGrade: false });
   });
 
   it("rollups score or flags manual grade", () => {

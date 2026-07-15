@@ -127,13 +127,13 @@ Teachers choose per native test material (`native_test_points_mode`):
 
 | Mode | Question fields | Scoring |
 |------|-----------------|---------|
-| **`explicit`** | `points` per question (default 1) | `question_score` capped at `points`; test total = sum of `points` |
+| **`explicit`** | `points` per question (default 1) | If `assignment.points_possible` is set: `question_max = (points / sum(points)) × points_possible`. Otherwise raw sum of question points. |
 | **`weighted`** | `weight` per question (default 1) | `question_score = (weight / sum(weights)) × assignment.points_possible` |
 
 **Rules:**
 
 - **Weighted mode** requires `assignment.points_possible` to be set; editor shows % preview per question.
-- **Explicit mode** shows running sum; **warn** (non-blocking) if sum ≠ `points_possible` when assignment points are set.
+- **Explicit mode** shows running sum of relative points; when assignment total is set, auto-grade **scales onto that total** (e.g. 4/5 correct on a 100-pt assignment → 80). Warn (non-blocking) in the editor if relative sum ≠ `points_possible` so teachers notice unequal question weights.
 - Auto-grade and manual scores store **earned points** on the question; rollup uses the mode above.
 - Teacher may override per-question earned score; rollup recalculates.
 

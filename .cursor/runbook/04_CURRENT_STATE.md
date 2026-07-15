@@ -75,7 +75,7 @@
 - **School on calendar:** assignment `due_at` (visibility `assigned` or `closed`) appears as read-only overlay chips when `school` + `calendar_sync` modules on and user pref `calendarOverlaySchoolEnabled` (default true); role-filtered via `school-access.ts`. Assignments without a due date are omitted from calendar + weekly schedule reports.
 - Manual QA runbook: `.cursor/runbook/05_SCHOOL_QA.md` (smoke routes, WHO-41â€“48 matrix, import SQL checks).
 - Import: `school_submission_artifact` â†’ `school_submission_artifacts` + S3 keys from file mapper; re-import hydrates `idMap` from `import_records` (school + files mappers).
-- **Phase 4 (native test builder — WHO-213–219):** ADR Accepted. Teacher editor full-page (WHO-218). Student **Take test** (WHO-215). **WHO-216 done:** auto-grade on submit (`school-test-grading.ts`), `GET …/test-review`, `POST …/grade-question`, teacher student selector + per-question review/override; rollup → `school_grades`. WHO-217 export API, WHO-219 convert Doc→native pending.
+- **Phase 4 (native test builder — WHO-213–219):** ADR Accepted. Teacher editor full-page (WHO-218). Student **Take test** (WHO-215). **WHO-216 done:** auto-grade on submit (`school-test-grading.ts`), `GET …/test-review`, `POST …/grade-question`, teacher student selector + per-question review/override; rollup → `school_grades`. **WHO-220:** explicit scores scale to `assignment.points_possible`; grade form folded into per-student Student work. WHO-217 export API, WHO-219 convert Doc→native pending.
 
 ### Health module
 

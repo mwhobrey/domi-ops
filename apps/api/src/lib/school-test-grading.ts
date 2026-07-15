@@ -68,9 +68,22 @@ export function questionMaxPoints(
     const totalWeight = allQuestions.reduce((sum, q) => sum + (q.weight ?? 0), 0);
     const assignmentPts = assignmentPointsPossible ?? 0;
     if (totalWeight <= 0 || assignmentPts <= 0) return 0;
-    return ((question.weight ?? 0) / totalWeight) * assignmentPts;
+    return roundPoints(((question.weight ?? 0) / totalWeight) * assignmentPts);
   }
-  return question.points ?? 1;
+
+  const questionPoints = question.points ?? 1;
+  // When assignment has a total, scale explicit points onto that total so
+  // 4/5 correct on a 100-pt assignment grades as 80, not 4.
+  if (assignmentPointsPossible != null && assignmentPointsPossible > 0) {
+    const totalPoints = allQuestions.reduce((sum, q) => sum + (q.points ?? 1), 0);
+    if (totalPoints <= 0) return 0;
+    return roundPoints((questionPoints / totalPoints) * assignmentPointsPossible);
+  }
+  return questionPoints;
+}
+
+function roundPoints(value: number): number {
+  return Math.round(value * 1000) / 1000;
 }
 
 export function effectiveQuestionScore(params: {

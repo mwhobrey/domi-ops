@@ -45,6 +45,8 @@ export async function applyNativeTestAutoGrade(
     assignmentId: string;
     turnInNumber: number;
     gradedByUserId?: string | null;
+    /** When true (teacher review recompute), keep existing manualScore overrides. */
+    preserveManualScores?: boolean;
   },
 ): Promise<ApplyAutoGradeResult> {
   const [assignmentRow] = await db
@@ -112,21 +114,24 @@ export async function applyNativeTestAutoGrade(
       gradedQuestionCount += 1;
 
       if (existing) {
+        const manualScore = params.preserveManualScores ? existing.manualScore : null;
         await db
           .update(schoolSubmissionResponses)
           .set({
             autoScore: result.autoScore,
-            // Fresh turn-in clears prior manual overrides for this turn.
-            manualScore: null,
-            gradedByUserId: null,
-            gradedAt: result.autoScore != null ? now : null,
+            manualScore,
+            gradedByUserId: params.preserveManualScores ? existing.gradedByUserId : null,
+            gradedAt:
+              manualScore != null || result.autoScore != null
+                ? existing.gradedAt ?? now
+                : null,
             updatedAt: now,
           })
           .where(eq(schoolSubmissionResponses.id, existing.id));
         rollupRows.push({
           autoScore: result.autoScore,
-          manualScore: null,
-          needsManual: result.needsManualGrade,
+          manualScore,
+          needsManual: result.needsManualGrade && manualScore == null,
         });
       } else {
         const [inserted] = await db

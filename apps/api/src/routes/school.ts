@@ -2136,7 +2136,8 @@ export function schoolRoutes(db: Database, env: Env) {
 
     const turnInNumber = Math.max(1, submission.turnInCount);
 
-    // Backfill auto-scores for turns submitted before WHO-216.
+    // Recompute auto-scores on review so scale/points_possible changes apply
+    // (e.g. WHO-220 explicit→assignment total). Preserve teacher manual overrides.
     if (submission.turnInCount > 0) {
       const nativeMaterials = await db
         .select({ id: schoolAssignmentMaterials.id })
@@ -2148,48 +2149,19 @@ export function schoolRoutes(db: Database, env: Env) {
           ),
         );
       if (nativeMaterials.length > 0) {
-        const materialIds = nativeMaterials.map((m) => m.id);
-        const autoQuestions = await db
-          .select({ id: schoolTestQuestions.id })
-          .from(schoolTestQuestions)
-          .where(
-            and(
-              inArray(schoolTestQuestions.materialId, materialIds),
-              ne(schoolTestQuestions.questionType, "long_answer"),
-            ),
-          );
-        if (autoQuestions.length > 0) {
-          const existingResponses = await db
-            .select({
-              questionId: schoolSubmissionResponses.questionId,
-              autoScore: schoolSubmissionResponses.autoScore,
-            })
-            .from(schoolSubmissionResponses)
-            .where(
-              and(
-                eq(schoolSubmissionResponses.submissionId, submissionId),
-                eq(schoolSubmissionResponses.turnInNumber, turnInNumber),
-              ),
-            );
-          const autoByQuestion = new Map(
-            existingResponses.map((r) => [r.questionId, r.autoScore]),
-          );
-          const needsBackfill = autoQuestions.some((q) => autoByQuestion.get(q.id) == null);
-          if (needsBackfill) {
-            await applyNativeTestAutoGrade(db, {
-              submissionId,
-              assignmentId: assignmentRow.id,
-              turnInNumber,
-              gradedByUserId: auth.userId,
-            });
-            const [refreshed] = await db
-              .select()
-              .from(schoolSubmissions)
-              .where(eq(schoolSubmissions.id, submissionId))
-              .limit(1);
-            if (refreshed) submission = refreshed;
-          }
-        }
+        await applyNativeTestAutoGrade(db, {
+          submissionId,
+          assignmentId: assignmentRow.id,
+          turnInNumber,
+          gradedByUserId: auth.userId,
+          preserveManualScores: true,
+        });
+        const [refreshed] = await db
+          .select()
+          .from(schoolSubmissions)
+          .where(eq(schoolSubmissions.id, submissionId))
+          .limit(1);
+        if (refreshed) submission = refreshed;
       }
     }
 

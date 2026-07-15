@@ -716,6 +716,52 @@ export function SchoolAssignmentDetail({
                     <DriveAttachmentChips references={driveReferences} />
                   </div>
                 ) : null}
+                <div className="space-y-3 border-t border-[var(--color-border)] pt-4">
+                  <h3 className="text-sm font-medium">
+                    Grade{submission.studentLabel ? ` · ${submission.studentLabel}` : ""}
+                  </h3>
+                  {hasNativeTest ? (
+                    <p className="text-sm text-[var(--color-text-muted)]">
+                      Score updates from the test review above. You can still override the total or
+                      add feedback here.
+                    </p>
+                  ) : null}
+                  <form
+                    className="space-y-3"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void saveGrade(submission.id);
+                    }}
+                  >
+                    <div className="flex flex-wrap gap-2">
+                      <Input
+                        className="w-28"
+                        type="number"
+                        min={0}
+                        max={pointsPossible ?? undefined}
+                        step={0.5}
+                        placeholder="Score"
+                        value={score}
+                        onChange={(e) => setScore(e.target.value)}
+                        aria-label="Score"
+                      />
+                      {pointsPossible != null && (
+                        <span className="self-center text-sm text-[var(--color-text-muted)]">
+                          / {pointsPossible}
+                        </span>
+                      )}
+                    </div>
+                    <Textarea
+                      placeholder="Feedback (optional)"
+                      value={feedback}
+                      onChange={(e) => setFeedback(e.target.value)}
+                      aria-label="Feedback"
+                    />
+                    <Button type="submit" variant="secondary" loading={grading}>
+                      Save grade
+                    </Button>
+                  </form>
+                </div>
               </>
             ) : null}
           </CardBody>
@@ -753,60 +799,6 @@ export function SchoolAssignmentDetail({
                   {submission.grade.feedbackHtml}
                 </p>
               </div>
-            )}
-          </CardBody>
-        </Card>
-      )}
-
-      {canGrade && submission && (
-        <Card>
-          <CardHeader>
-            <h2 className="font-medium">Grade</h2>
-          </CardHeader>
-          <CardBody>
-            <form
-              className="space-y-3"
-              onSubmit={(e) => {
-                e.preventDefault();
-                void saveGrade(submission.id);
-              }}
-            >
-              <div className="flex flex-wrap gap-2">
-                <Input
-                  className="w-28"
-                  type="number"
-                  min={0}
-                  max={pointsPossible ?? undefined}
-                  step={0.5}
-                  placeholder="Score"
-                  value={score}
-                  onChange={(e) => setScore(e.target.value)}
-                  aria-label="Score"
-                />
-                {pointsPossible != null && (
-                  <span className="self-center text-sm text-[var(--color-text-muted)]">
-                    / {pointsPossible}
-                  </span>
-                )}
-              </div>
-              <Textarea
-                placeholder="Feedback (optional)"
-                value={feedback}
-                onChange={(e) => setFeedback(e.target.value)}
-                aria-label="Feedback"
-              />
-              <Button type="submit" variant="secondary" loading={grading}>
-                Save grade
-              </Button>
-            </form>
-            {submission.grade?.score != null && (
-              <p className="mt-3 text-sm">
-                Current score:{" "}
-                <strong>
-                  {submission.grade.score}
-                  {pointsPossible != null ? ` / ${pointsPossible}` : ""}
-                </strong>
-              </p>
             )}
           </CardBody>
         </Card>
