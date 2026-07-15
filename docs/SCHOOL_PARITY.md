@@ -41,7 +41,10 @@
 | Assignment materials | ✅ `school_assignment_materials` | ✅ Sheet materials editor + detail Materials card (WHO-201–204) |
 | Google attach (`google_doc`) | ✅ Picker session + Drive `files.get` verify | ✅ **Add from Google** (`GooglePickerButton`, WHO-206–207) |
 | Student Google test copy + submit | ✅ `start-copy`, `google-artifacts`, lineage (WHO-209–212) | ✅ Connect banner, **Start test** / **Open your copy**, Picker submit, teacher lineage badges |
-| Native in-app test (teacher builder) | ✅ `native_test` material + question CRUD (WHO-214) | ✅ **Create in-app test**, question editor, preview, explicit/weighted points |
+| Native in-app test (teacher builder) | ✅ `native_test` + full-page editor (WHO-214, WHO-218) | ✅ **Create in-app test** → `/materials/:id/edit`, preview, points modes; export UI shell (WHO-217 API pending) |
+| Native in-app test (student take) | ✅ WHO-215 | ✅ **Take test** CTA + take page + draft save; soft-warn partial turn-in |
+| Native in-app test (auto-grade + review) | ✅ WHO-216 | ✅ Auto-score on submit; teacher student selector + per-question review/override |
+| Convert Google Doc → native test | ⏳ WHO-219 | Backlog — non-destructive import + review wizard |
 | Materials freeze (`is_test`) | ✅ First submission → S3 snapshot (Drive/URL/Google) | ✅ Frozen badge; snapshot proxy; Google fail-loud (WHO-208) |
 | Strict content check (Google tests) | ✅ `strict_content_check` on material + L2 diff | ✅ Teacher checkbox on `is_test` + `google_doc` materials |
 | Categories + weights | ✅ | ✅ Add/list/remove on class detail |

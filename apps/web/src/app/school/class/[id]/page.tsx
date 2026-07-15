@@ -44,6 +44,7 @@ export default async function SchoolClassPage({ params }: { params: Promise<{ id
       missingTotal: 0,
       overdueTotal: 0,
       gradedTotal: 0,
+      submittedTotal: 0,
       classAveragePercent: null,
     },
     assignments: [],

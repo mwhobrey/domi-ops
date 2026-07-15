@@ -264,6 +264,37 @@ export const schoolTestQuestions = pgTable(
   (t) => [uniqueIndex("school_test_questions_material_sort").on(t.materialId, t.sortOrder)],
 );
 
+export const schoolSubmissionResponses = pgTable(
+  "school_submission_responses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    submissionId: uuid("submission_id")
+      .notNull()
+      .references(() => schoolSubmissions.id, { onDelete: "cascade" }),
+    materialId: uuid("material_id")
+      .notNull()
+      .references(() => schoolAssignmentMaterials.id, { onDelete: "cascade" }),
+    questionId: uuid("question_id")
+      .notNull()
+      .references(() => schoolTestQuestions.id, { onDelete: "cascade" }),
+    turnInNumber: integer("turn_in_number").notNull(),
+    responseJson: jsonb("response_json").$type<Record<string, unknown>>().notNull().default({}),
+    autoScore: real("auto_score"),
+    manualScore: real("manual_score"),
+    gradedByUserId: uuid("graded_by_user_id").references(() => users.id),
+    gradedAt: timestamp("graded_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("school_submission_responses_unique").on(
+      t.submissionId,
+      t.questionId,
+      t.turnInNumber,
+    ),
+  ],
+);
+
 export const schoolAttendance = pgTable(
   "school_attendance",
   {

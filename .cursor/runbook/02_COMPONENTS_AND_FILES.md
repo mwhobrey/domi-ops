@@ -36,7 +36,10 @@ domi-ops/
 | `src/app/dashboard/page.tsx` | Core dashboard via `apiFetch` |
 | `src/app/calendar/page.tsx` | Calendar UI |
 | `src/app/health/page.tsx` | Health tracker UI (`/health` — module-gated; API liveness is separate rewrite) |
-| `src/app/school/page.tsx` | School LMS UI |
+| `src/app/school/assignment/[id]/page.tsx` | Assignment detail |
+| `src/app/school/assignment/[id]/materials/[materialId]/edit/page.tsx` | Full-page native test teacher editor (WHO-218) |
+| `src/components/SchoolTestEditorClient.tsx` | Test editor chrome + Google Doc export modal shell |
+| `src/components/SchoolTestQuestionEditor.tsx` | Question CRUD / preview |
 | `src/app/shopping/page.tsx` | Shopping list |
 | `src/app/chores/page.tsx`, `notes/page.tsx`, `expenses/page.tsx` | Core list modules |
 | `src/app/profile/page.tsx` | Profile editor (identity, presence, prefs, integrations, notifications) |

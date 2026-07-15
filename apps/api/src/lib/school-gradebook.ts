@@ -39,6 +39,7 @@ export interface GradebookStudentRow {
   enrollmentId: string;
   cells: GradebookStudentCell[];
   gradedCount: number;
+  submittedCount: number;
   missingCount: number;
   overdueCount: number;
   averagePercent: number | null;
@@ -50,6 +51,7 @@ export interface GradebookSummary {
   missingTotal: number;
   overdueTotal: number;
   gradedTotal: number;
+  submittedTotal: number;
   classAveragePercent: number | null;
 }
 
@@ -164,10 +166,12 @@ export async function buildClassGradebook(
   let missingTotal = 0;
   let overdueTotal = 0;
   let gradedTotal = 0;
+  let submittedTotal = 0;
   const studentAverages: number[] = [];
 
   const students = studentEnrollments.map((enrollment) => {
     let gradedCount = 0;
+    let submittedCount = 0;
     let missingCount = 0;
     let overdueCount = 0;
     let pointsEarned = 0;
@@ -188,6 +192,7 @@ export async function buildClassGradebook(
       if (assignment.visibility !== "draft") {
         if (cell.missing) missingCount += 1;
         if (cell.overdue) overdueCount += 1;
+        if (cell.status === "submitted") submittedCount += 1;
         if (cell.status === "graded" && cell.score != null) {
           gradedCount += 1;
           pointsEarned += cell.score;
@@ -209,6 +214,7 @@ export async function buildClassGradebook(
     missingTotal += missingCount;
     overdueTotal += overdueCount;
     gradedTotal += gradedCount;
+    submittedTotal += submittedCount;
 
     const averagePercent =
       pointsGraded > 0 ? Math.round((pointsEarned / pointsGraded) * 1000) / 10 : null;
@@ -219,6 +225,7 @@ export async function buildClassGradebook(
       enrollmentId: enrollment.id,
       cells,
       gradedCount,
+      submittedCount,
       missingCount,
       overdueCount,
       averagePercent,
@@ -239,6 +246,7 @@ export async function buildClassGradebook(
       missingTotal,
       overdueTotal,
       gradedTotal,
+      submittedTotal,
       classAveragePercent,
     },
     assignments,

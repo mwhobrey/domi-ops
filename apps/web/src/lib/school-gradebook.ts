@@ -29,6 +29,7 @@ export interface GradebookStudentRow {
   enrollmentId: string;
   cells: GradebookStudentCell[];
   gradedCount: number;
+  submittedCount: number;
   missingCount: number;
   overdueCount: number;
   averagePercent: number | null;
@@ -40,6 +41,7 @@ export interface GradebookSummary {
   missingTotal: number;
   overdueTotal: number;
   gradedTotal: number;
+  submittedTotal: number;
   classAveragePercent: number | null;
 }
 

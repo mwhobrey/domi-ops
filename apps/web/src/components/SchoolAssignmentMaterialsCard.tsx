@@ -10,8 +10,10 @@ import {
   getMaterialActionLabel,
   materialOpenUrl,
   MATERIAL_ROLE_LABELS,
+  nativeTestEditUrl,
+  nativeTestTakeUrl,
 } from "../lib/school-materials";
-import { Alert, Badge, Button, Card, CardBody, CardHeader } from "./ui";
+import { Alert, AnchorButton, Badge, Button, Card, CardBody, CardHeader } from "./ui";
 
 interface GoogleCopyRow {
   materialId: string;
@@ -35,7 +37,10 @@ export function SchoolAssignmentMaterialsCard({
   const isStudent = access.viewMode === "student";
   const attemptsLabel = formatAttemptsRemaining(maxAttempts, turnInCount ?? 0);
   const [copies, setCopies] = useState<GoogleCopyRow[]>([]);
-  const [googleConnected, setGoogleConnected] = useState(true);
+  const [googleConnected, setGoogleConnected] = useState<boolean | null>(null);
+  const [connectUrl, setConnectUrl] = useState(
+    `/auth/google/docs/start?next=${encodeURIComponent(`/school/assignment/${assignmentId}`)}`,
+  );
   const [actionError, setActionError] = useState<string | null>(null);
   const [startingMaterialId, setStartingMaterialId] = useState<string | null>(null);
 
@@ -46,14 +51,16 @@ export function SchoolAssignmentMaterialsCard({
         apiClient.get<{ copies: GoogleCopyRow[] }>(
           `/api/school/assignments/${assignmentId}/google-copies`,
         ),
-        apiClient.get<{ connected: boolean }>(
+        apiClient.get<{ connected: boolean; connectUrl: string }>(
           `/api/school/assignments/${assignmentId}/google-readiness`,
         ),
       ]);
       setCopies(copyData.copies);
       setGoogleConnected(readiness.connected);
+      setConnectUrl(readiness.connectUrl);
     } catch {
       setCopies([]);
+      setGoogleConnected(false);
     }
   }, [assignmentId, isStudent]);
 
@@ -62,6 +69,10 @@ export function SchoolAssignmentMaterialsCard({
   }, [loadCopies]);
 
   async function startTest(materialId: string) {
+    if (googleConnected === false) {
+      window.location.href = connectUrl;
+      return;
+    }
     setStartingMaterialId(materialId);
     setActionError(null);
     try {
@@ -131,7 +142,26 @@ export function SchoolAssignmentMaterialsCard({
                     </div>
                   </div>
                   {!isTeacher ? (
-                    isGoogleTest ? (
+                    material.source === "native_test" ? (
+                      access.canSubmit ? (
+                        <AnchorButton
+                          href={nativeTestTakeUrl(assignmentId, material.id)}
+                          size="lg"
+                          className="w-full sm:w-auto"
+                        >
+                          {label}
+                        </AnchorButton>
+                      ) : href ? (
+                        <Button
+                          size="lg"
+                          className="w-full sm:w-auto"
+                          onClick={() => window.open(href, "_blank", "noopener,noreferrer")}
+                        >
+                          <ExternalLink className="mr-2 h-4 w-4" aria-hidden />
+                          View
+                        </Button>
+                      ) : null
+                    ) : isGoogleTest ? (
                       copy ? (
                         <Button
                           size="lg"
@@ -143,12 +173,25 @@ export function SchoolAssignmentMaterialsCard({
                           <ExternalLink className="mr-2 h-4 w-4" aria-hidden />
                           Open your copy
                         </Button>
+                      ) : googleConnected === false ? (
+                        <AnchorButton
+                          href={connectUrl}
+                          size="lg"
+                          variant="secondary"
+                          className="w-full sm:w-auto"
+                        >
+                          Connect Google Docs
+                        </AnchorButton>
                       ) : (
                         <Button
                           size="lg"
                           className="w-full sm:w-auto"
-                          loading={startingMaterialId === material.id}
-                          disabled={!googleConnected || startingMaterialId === material.id}
+                          loading={
+                            startingMaterialId === material.id || googleConnected === null
+                          }
+                          disabled={
+                            googleConnected !== true || startingMaterialId === material.id
+                          }
                           onClick={() => void startTest(material.id)}
                         >
                           Start test
@@ -164,6 +207,15 @@ export function SchoolAssignmentMaterialsCard({
                         {label}
                       </Button>
                     ) : null
+                  ) : material.source === "native_test" && access.canEditAssignments ? (
+                    <AnchorButton
+                      href={nativeTestEditUrl(assignmentId, material.id)}
+                      size="sm"
+                      variant="secondary"
+                      className="w-full sm:w-auto"
+                    >
+                      {material.frozenAt ? "View test" : "Edit test"}
+                    </AnchorButton>
                   ) : href ? (
                     <a
                       href={href}

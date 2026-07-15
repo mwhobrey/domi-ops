@@ -223,8 +223,8 @@ No Google token required for native test freeze.
 | `GET/POST/PATCH/DELETE …/materials/:materialId/questions` | staff | Question CRUD; block if frozen |
 | `GET …/materials/:materialId/questions/preview` | staff | Preview without student leakage |
 | `GET …/materials/:materialId/test` | student | Student-safe questions (live or snapshot) |
-| `GET /submissions/:id/test-responses` | student | Draft/current-turn responses |
-| `PUT /submissions/:id/test-responses` | student | Upsert draft (current turn only) |
+| `GET …/materials/:materialId/test-responses` | student | Draft/current-turn responses |
+| `PATCH …/materials/:materialId/test-responses` | student | Upsert draft (current turn only) |
 | `POST /assignments/:id/submit` | student | Existing turn-in; triggers auto-grade + freeze |
 | `POST /submissions/:id/grade-question` | staff | Manual score / override per question |
 
@@ -258,7 +258,7 @@ Teacher may override per-question scores; rollup recalculates.
 
 | Role | Flow |
 |------|------|
-| Teacher | Materials editor → **Create in-app test** → question editor → preview |
+| Teacher | Materials → **Create in-app test** → full-page editor (`/school/assignment/:id/materials/:materialId/edit`) → preview · **Export to Google Doc** (WHO-217) |
 | Student | Materials card → **Take test** / **Continue test** → in-app form → turn in |
 | Teacher | Student work → per-question results, lineage N/A for native; grade long answers |
 

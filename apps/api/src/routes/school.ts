@@ -14,6 +14,7 @@ import {
   schoolGrades,
   schoolSubmissionArtifacts,
   schoolSubmissionGoogleCopies,
+  schoolSubmissionResponses,
   schoolSubmissions,
   schoolTestQuestions,
   users,
@@ -65,6 +66,12 @@ import {
   type SchoolNativeTestPointsMode,
   type SchoolQuestionType,
 } from "../lib/school-test-questions.js";
+import {
+  applyNativeTestAutoGrade,
+  recomputeNativeTestRollup,
+  reviewQuestionMaxPoints,
+} from "../lib/school-test-auto-grade.js";
+import { effectiveQuestionScore } from "../lib/school-test-grading.js";
 import {
   canModifySubmissionArtifacts,
   submissionAccessForAuth,
@@ -1354,6 +1361,22 @@ export function schoolRoutes(db: Database, env: Env) {
     if (access.viewMode === "student") {
       subs = subs.filter((s) => s.studentMemberId === context.memberId);
     }
+    const memberIds = [...new Set(subs.map((s) => s.studentMemberId))];
+    const memberRows =
+      memberIds.length === 0
+        ? []
+        : await db
+            .select({
+              id: householdMembers.id,
+              name: householdMembers.name,
+              legacyDisplayName: householdMembers.legacyDisplayName,
+              email: users.email,
+            })
+            .from(householdMembers)
+            .innerJoin(users, eq(householdMembers.userId, users.id))
+            .where(inArray(householdMembers.id, memberIds));
+    const memberLabels = new Map(memberRows.map((m) => [m.id, memberShownLabel(m)]));
+
     const withGrades = await Promise.all(
       subs.map(async (s) => {
         const [grade] = await db
@@ -1365,7 +1388,12 @@ export function schoolRoutes(db: Database, env: Env) {
           .select()
           .from(schoolSubmissionArtifacts)
           .where(eq(schoolSubmissionArtifacts.submissionId, s.id));
-        return { ...s, grade: grade ?? null, artifacts: artifacts.map(serializeSubmissionArtifact) };
+        return {
+          ...s,
+          studentLabel: memberLabels.get(s.studentMemberId) ?? "Student",
+          grade: grade ?? null,
+          artifacts: artifacts.map(serializeSubmissionArtifact),
+        };
       }),
     );
     return c.json({ submissions: withGrades, access });
@@ -1470,6 +1498,13 @@ export function schoolRoutes(db: Database, env: Env) {
       submissionRow = created!;
     }
 
+    const autoGrade = await applyNativeTestAutoGrade(db, {
+      submissionId: submissionRow.id,
+      assignmentId,
+      turnInNumber: submissionRow.turnInCount,
+      gradedByUserId: auth.userId,
+    });
+
     const [{ count: submissionCount }] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(schoolSubmissions)
@@ -1491,9 +1526,26 @@ export function schoolRoutes(db: Database, env: Env) {
       }
     }
 
+    const [freshSubmission] = await db
+      .select()
+      .from(schoolSubmissions)
+      .where(eq(schoolSubmissions.id, submissionRow.id))
+      .limit(1);
+    const [grade] = await db
+      .select()
+      .from(schoolGrades)
+      .where(eq(schoolGrades.submissionId, submissionRow.id))
+      .limit(1);
+
     return c.json({
-      submission: submissionRow,
-      attemptsRemaining: attemptsRemaining(assignmentRow.maxAttempts, submissionRow.turnInCount),
+      submission: freshSubmission ?? submissionRow,
+      grade: grade ?? null,
+      needsManualGrade: autoGrade.needsManualGrade,
+      autoScore: autoGrade.score,
+      attemptsRemaining: attemptsRemaining(
+        assignmentRow.maxAttempts,
+        (freshSubmission ?? submissionRow).turnInCount,
+      ),
     });
   });
 
@@ -2038,6 +2090,384 @@ export function schoolRoutes(db: Database, env: Env) {
     return c.json({ grade }, 201);
   });
 
+  app.get("/submissions/:id/test-review", async (c) => {
+    const auth = c.get("auth")!;
+    const submissionId = c.req.param("id");
+    const context = await schoolContextForAuth(db, auth);
+    if (!context) return c.json({ error: "not_a_member" }, 403);
+    const [submissionRow] = await db
+      .select()
+      .from(schoolSubmissions)
+      .where(eq(schoolSubmissions.id, submissionId))
+      .limit(1);
+    if (!submissionRow) return c.json({ error: "not_found" }, 404);
+    let submission = submissionRow;
+    const [assignmentRow] = await db
+      .select()
+      .from(schoolAssignments)
+      .where(eq(schoolAssignments.id, submission.assignmentId))
+      .limit(1);
+    if (!assignmentRow) return c.json({ error: "not_found" }, 404);
+    const [cls] = await db
+      .select()
+      .from(schoolClasses)
+      .where(
+        and(eq(schoolClasses.id, assignmentRow.classId), eq(schoolClasses.householdId, auth.householdId)),
+      )
+      .limit(1);
+    if (!cls) return c.json({ error: "not_found" }, 404);
+    const [myEnrollment] = await db
+      .select()
+      .from(schoolEnrollments)
+      .where(
+        and(
+          eq(schoolEnrollments.classId, cls.id),
+          eq(schoolEnrollments.memberId, context.memberId),
+        ),
+      )
+      .limit(1);
+    const access = resolveClassAccess({
+      memberId: context.memberId,
+      householdRole: context.householdRole,
+      teacherMemberId: cls.teacherMemberId,
+      enrollment: myEnrollment ?? null,
+    });
+    if (!access.canGrade) return c.json({ error: "forbidden" }, 403);
+
+    const turnInNumber = Math.max(1, submission.turnInCount);
+
+    // Backfill auto-scores for turns submitted before WHO-216.
+    if (submission.turnInCount > 0) {
+      const nativeMaterials = await db
+        .select({ id: schoolAssignmentMaterials.id })
+        .from(schoolAssignmentMaterials)
+        .where(
+          and(
+            eq(schoolAssignmentMaterials.assignmentId, assignmentRow.id),
+            eq(schoolAssignmentMaterials.source, "native_test"),
+          ),
+        );
+      if (nativeMaterials.length > 0) {
+        const materialIds = nativeMaterials.map((m) => m.id);
+        const autoQuestions = await db
+          .select({ id: schoolTestQuestions.id })
+          .from(schoolTestQuestions)
+          .where(
+            and(
+              inArray(schoolTestQuestions.materialId, materialIds),
+              ne(schoolTestQuestions.questionType, "long_answer"),
+            ),
+          );
+        if (autoQuestions.length > 0) {
+          const existingResponses = await db
+            .select({
+              questionId: schoolSubmissionResponses.questionId,
+              autoScore: schoolSubmissionResponses.autoScore,
+            })
+            .from(schoolSubmissionResponses)
+            .where(
+              and(
+                eq(schoolSubmissionResponses.submissionId, submissionId),
+                eq(schoolSubmissionResponses.turnInNumber, turnInNumber),
+              ),
+            );
+          const autoByQuestion = new Map(
+            existingResponses.map((r) => [r.questionId, r.autoScore]),
+          );
+          const needsBackfill = autoQuestions.some((q) => autoByQuestion.get(q.id) == null);
+          if (needsBackfill) {
+            await applyNativeTestAutoGrade(db, {
+              submissionId,
+              assignmentId: assignmentRow.id,
+              turnInNumber,
+              gradedByUserId: auth.userId,
+            });
+            const [refreshed] = await db
+              .select()
+              .from(schoolSubmissions)
+              .where(eq(schoolSubmissions.id, submissionId))
+              .limit(1);
+            if (refreshed) submission = refreshed;
+          }
+        }
+      }
+    }
+
+    const materials = await db
+      .select()
+      .from(schoolAssignmentMaterials)
+      .where(
+        and(
+          eq(schoolAssignmentMaterials.assignmentId, assignmentRow.id),
+          eq(schoolAssignmentMaterials.source, "native_test"),
+        ),
+      )
+      .orderBy(asc(schoolAssignmentMaterials.sortOrder));
+
+    const [memberRow] = await db
+      .select({
+        id: householdMembers.id,
+        name: householdMembers.name,
+        legacyDisplayName: householdMembers.legacyDisplayName,
+        email: users.email,
+      })
+      .from(householdMembers)
+      .innerJoin(users, eq(householdMembers.userId, users.id))
+      .where(eq(householdMembers.id, submission.studentMemberId))
+      .limit(1);
+
+    const [grade] = await db
+      .select()
+      .from(schoolGrades)
+      .where(eq(schoolGrades.submissionId, submissionId))
+      .limit(1);
+
+    const materialReviews = [];
+    let needsManualGrade = false;
+    let earnedTotal = 0;
+    let maxTotal = 0;
+    let pendingManual = 0;
+
+    for (const material of materials) {
+      const pointsMode = (material.nativeTestPointsMode ?? "explicit") as SchoolNativeTestPointsMode;
+      const questions = await db
+        .select()
+        .from(schoolTestQuestions)
+        .where(eq(schoolTestQuestions.materialId, material.id))
+        .orderBy(asc(schoolTestQuestions.sortOrder));
+      const responses = await db
+        .select()
+        .from(schoolSubmissionResponses)
+        .where(
+          and(
+            eq(schoolSubmissionResponses.submissionId, submissionId),
+            eq(schoolSubmissionResponses.materialId, material.id),
+            eq(schoolSubmissionResponses.turnInNumber, turnInNumber),
+          ),
+        );
+      const byQuestion = new Map(responses.map((r) => [r.questionId, r]));
+      const gradable = questions.map((q) => ({
+        id: q.id,
+        questionType: q.questionType as SchoolQuestionType,
+        points: q.points,
+        weight: q.weight,
+        correctAnswerJson: q.correctAnswerJson,
+      }));
+
+      const questionReviews = questions.map((q) => {
+        const response = byQuestion.get(q.id);
+        const maxPoints = reviewQuestionMaxPoints(
+          {
+            id: q.id,
+            questionType: q.questionType as SchoolQuestionType,
+            points: q.points,
+            weight: q.weight,
+            correctAnswerJson: q.correctAnswerJson,
+          },
+          pointsMode,
+          assignmentRow.pointsPossible,
+          gradable,
+        );
+        const autoScore = response?.autoScore ?? null;
+        const manualScore = response?.manualScore ?? null;
+        const effective = effectiveQuestionScore({ autoScore, manualScore });
+        const isLong = q.questionType === "long_answer";
+        const needsManual = isLong && effective == null;
+        if (needsManual) {
+          needsManualGrade = true;
+          pendingManual += 1;
+        }
+        maxTotal += maxPoints;
+        if (effective != null) earnedTotal += effective;
+        return {
+          question: serializeQuestionStaff(q),
+          maxPoints,
+          responseJson: response?.responseJson ?? {},
+          autoScore,
+          manualScore,
+          effectiveScore: effective,
+          needsManualGrade: needsManual,
+          gradedAt: response?.gradedAt?.toISOString() ?? null,
+        };
+      });
+
+      materialReviews.push({
+        materialId: material.id,
+        displayName: material.displayName,
+        pointsMode,
+        questions: questionReviews,
+      });
+    }
+
+    return c.json({
+      submission: {
+        id: submission.id,
+        status: submission.status,
+        studentMemberId: submission.studentMemberId,
+        studentLabel: memberRow ? memberShownLabel(memberRow) : "Student",
+        turnInCount: submission.turnInCount,
+        submittedAt: submission.submittedAt?.toISOString() ?? null,
+      },
+      turnInNumber,
+      grade: grade ?? null,
+      needsManualGrade,
+      pendingManualCount: pendingManual,
+      earnedTotal: Math.round(earnedTotal * 1000) / 1000,
+      maxTotal: Math.round(maxTotal * 1000) / 1000,
+      materials: materialReviews,
+      access,
+    });
+  });
+
+  app.post("/submissions/:id/grade-question", async (c) => {
+    const auth = c.get("auth")!;
+    const submissionId = c.req.param("id");
+    const context = await schoolContextForAuth(db, auth);
+    if (!context) return c.json({ error: "not_a_member" }, 403);
+    const [submission] = await db
+      .select()
+      .from(schoolSubmissions)
+      .where(eq(schoolSubmissions.id, submissionId))
+      .limit(1);
+    if (!submission) return c.json({ error: "not_found" }, 404);
+    const [assignmentRow] = await db
+      .select()
+      .from(schoolAssignments)
+      .where(eq(schoolAssignments.id, submission.assignmentId))
+      .limit(1);
+    if (!assignmentRow) return c.json({ error: "not_found" }, 404);
+    const [cls] = await db
+      .select()
+      .from(schoolClasses)
+      .where(
+        and(eq(schoolClasses.id, assignmentRow.classId), eq(schoolClasses.householdId, auth.householdId)),
+      )
+      .limit(1);
+    if (!cls) return c.json({ error: "not_found" }, 404);
+    const [myEnrollment] = await db
+      .select()
+      .from(schoolEnrollments)
+      .where(
+        and(
+          eq(schoolEnrollments.classId, cls.id),
+          eq(schoolEnrollments.memberId, context.memberId),
+        ),
+      )
+      .limit(1);
+    const access = resolveClassAccess({
+      memberId: context.memberId,
+      householdRole: context.householdRole,
+      teacherMemberId: cls.teacherMemberId,
+      enrollment: myEnrollment ?? null,
+    });
+    if (!access.canGrade) return c.json({ error: "forbidden" }, 403);
+
+    const body = await c.req.json<{
+      questionId?: string;
+      manualScore?: number | null;
+      turnInNumber?: number;
+    }>();
+    if (!body.questionId) return c.json({ error: "question_id_required" }, 400);
+    if (body.manualScore != null && (typeof body.manualScore !== "number" || Number.isNaN(body.manualScore))) {
+      return c.json({ error: "invalid_score" }, 400);
+    }
+    if (body.manualScore != null && body.manualScore < 0) {
+      return c.json({ error: "invalid_score" }, 400);
+    }
+
+    const [question] = await db
+      .select()
+      .from(schoolTestQuestions)
+      .where(eq(schoolTestQuestions.id, body.questionId))
+      .limit(1);
+    if (!question) return c.json({ error: "not_found" }, 404);
+
+    const [material] = await db
+      .select()
+      .from(schoolAssignmentMaterials)
+      .where(
+        and(
+          eq(schoolAssignmentMaterials.id, question.materialId),
+          eq(schoolAssignmentMaterials.assignmentId, assignmentRow.id),
+          eq(schoolAssignmentMaterials.source, "native_test"),
+        ),
+      )
+      .limit(1);
+    if (!material) return c.json({ error: "not_found" }, 404);
+
+    const turnInNumber = body.turnInNumber ?? Math.max(1, submission.turnInCount);
+    const now = new Date();
+    const [existing] = await db
+      .select()
+      .from(schoolSubmissionResponses)
+      .where(
+        and(
+          eq(schoolSubmissionResponses.submissionId, submissionId),
+          eq(schoolSubmissionResponses.questionId, body.questionId),
+          eq(schoolSubmissionResponses.turnInNumber, turnInNumber),
+        ),
+      )
+      .limit(1);
+
+    let responseRow: typeof schoolSubmissionResponses.$inferSelect;
+    if (existing) {
+      const [updated] = await db
+        .update(schoolSubmissionResponses)
+        .set({
+          manualScore: body.manualScore ?? null,
+          gradedByUserId: auth.userId,
+          gradedAt: now,
+          updatedAt: now,
+        })
+        .where(eq(schoolSubmissionResponses.id, existing.id))
+        .returning();
+      responseRow = updated!;
+    } else {
+      const [created] = await db
+        .insert(schoolSubmissionResponses)
+        .values({
+          submissionId,
+          materialId: material.id,
+          questionId: body.questionId,
+          turnInNumber,
+          responseJson: {},
+          autoScore: null,
+          manualScore: body.manualScore ?? null,
+          gradedByUserId: auth.userId,
+          gradedAt: now,
+        })
+        .returning();
+      responseRow = created!;
+    }
+
+    const rollup = await recomputeNativeTestRollup(db, {
+      submissionId,
+      assignmentId: assignmentRow.id,
+      turnInNumber,
+      gradedByUserId: auth.userId,
+    });
+
+    const [grade] = await db
+      .select()
+      .from(schoolGrades)
+      .where(eq(schoolGrades.submissionId, submissionId))
+      .limit(1);
+
+    return c.json({
+      response: {
+        questionId: responseRow.questionId,
+        autoScore: responseRow.autoScore,
+        manualScore: responseRow.manualScore,
+        effectiveScore: effectiveQuestionScore({
+          autoScore: responseRow.autoScore,
+          manualScore: responseRow.manualScore,
+        }),
+      },
+      rollup,
+      grade: grade ?? null,
+    });
+  });
+
   app.get("/assignments/:id/materials", async (c) => {
     const auth = c.get("auth")!;
     const id = c.req.param("id");
@@ -2494,6 +2924,271 @@ export function schoolRoutes(db: Database, env: Env) {
 
     await db.delete(schoolTestQuestions).where(eq(schoolTestQuestions.id, questionId));
     return c.json({ ok: true });
+  });
+
+  app.get("/assignments/:id/materials/:materialId/test", async (c) => {
+    const auth = c.get("auth")!;
+    const assignmentId = c.req.param("id");
+    const materialId = c.req.param("materialId");
+    const ctx = await assignmentAccessForAuth(db, auth, assignmentId);
+    if (!ctx) return c.json({ error: "not_found" }, 404);
+    if (!ctx.access.canSubmit && ctx.access.viewMode !== "observer") {
+      return c.json({ error: "forbidden" }, 403);
+    }
+
+    const [material] = await db
+      .select()
+      .from(schoolAssignmentMaterials)
+      .where(
+        and(
+          eq(schoolAssignmentMaterials.id, materialId),
+          eq(schoolAssignmentMaterials.assignmentId, assignmentId),
+        ),
+      )
+      .limit(1);
+    if (!material || material.source !== "native_test") {
+      return c.json({ error: "not_found" }, 404);
+    }
+    if (!materialVisibleToViewer(material, ctx.access.viewMode)) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+
+    const questions = await db
+      .select()
+      .from(schoolTestQuestions)
+      .where(eq(schoolTestQuestions.materialId, materialId))
+      .orderBy(asc(schoolTestQuestions.sortOrder), asc(schoolTestQuestions.createdAt));
+
+    let submissionId: string | null = null;
+    let turnInNumber = 1;
+    let turnInCount = 0;
+    let draftLocked = false;
+
+    if (ctx.access.canSubmit) {
+      let [submission] = await db
+        .select()
+        .from(schoolSubmissions)
+        .where(
+          and(
+            eq(schoolSubmissions.assignmentId, assignmentId),
+            eq(schoolSubmissions.studentMemberId, ctx.context.memberId),
+          ),
+        )
+        .limit(1);
+      if (!submission) {
+        const [created] = await db
+          .insert(schoolSubmissions)
+          .values({
+            assignmentId,
+            studentMemberId: ctx.context.memberId,
+            status: "not_started",
+          })
+          .returning();
+        submission = created!;
+      }
+      submissionId = submission.id;
+      turnInCount = submission.turnInCount;
+      turnInNumber = submission.turnInCount + 1;
+      if (isAttemptsExhausted(ctx.assignment.maxAttempts, submission.turnInCount)) {
+        draftLocked = true;
+        turnInNumber = Math.max(1, submission.turnInCount);
+      }
+    }
+
+    return c.json({
+      material: serializeMaterial(material, { viewMode: ctx.access.viewMode }),
+      questions: questions.map(serializeQuestionPreview),
+      frozen: Boolean(material.frozenAt),
+      submissionId,
+      turnInNumber,
+      turnInCount,
+      draftLocked,
+      canSubmit: ctx.access.canSubmit && !draftLocked,
+      access: ctx.access,
+    });
+  });
+
+  app.get("/assignments/:id/materials/:materialId/test-responses", async (c) => {
+    const auth = c.get("auth")!;
+    const assignmentId = c.req.param("id");
+    const materialId = c.req.param("materialId");
+    const ctx = await assignmentAccessForAuth(db, auth, assignmentId);
+    if (!ctx) return c.json({ error: "not_found" }, 404);
+    if (!ctx.access.canSubmit) return c.json({ error: "forbidden" }, 403);
+
+    const [material] = await db
+      .select()
+      .from(schoolAssignmentMaterials)
+      .where(
+        and(
+          eq(schoolAssignmentMaterials.id, materialId),
+          eq(schoolAssignmentMaterials.assignmentId, assignmentId),
+        ),
+      )
+      .limit(1);
+    if (!material || material.source !== "native_test") {
+      return c.json({ error: "not_found" }, 404);
+    }
+
+    const [submission] = await db
+      .select()
+      .from(schoolSubmissions)
+      .where(
+        and(
+          eq(schoolSubmissions.assignmentId, assignmentId),
+          eq(schoolSubmissions.studentMemberId, ctx.context.memberId),
+        ),
+      )
+      .limit(1);
+    if (!submission) return c.json({ responses: [], turnInNumber: 1 });
+
+    const turnInNumber = isAttemptsExhausted(ctx.assignment.maxAttempts, submission.turnInCount)
+      ? Math.max(1, submission.turnInCount)
+      : submission.turnInCount + 1;
+
+    const rows = await db
+      .select()
+      .from(schoolSubmissionResponses)
+      .where(
+        and(
+          eq(schoolSubmissionResponses.submissionId, submission.id),
+          eq(schoolSubmissionResponses.materialId, materialId),
+          eq(schoolSubmissionResponses.turnInNumber, turnInNumber),
+        ),
+      );
+
+    return c.json({
+      submissionId: submission.id,
+      turnInNumber,
+      responses: rows.map((row) => ({
+        questionId: row.questionId,
+        responseJson: row.responseJson,
+        updatedAt: row.updatedAt.toISOString(),
+      })),
+    });
+  });
+
+  app.patch("/assignments/:id/materials/:materialId/test-responses", async (c) => {
+    const auth = c.get("auth")!;
+    const assignmentId = c.req.param("id");
+    const materialId = c.req.param("materialId");
+    const ctx = await assignmentAccessForAuth(db, auth, assignmentId);
+    if (!ctx) return c.json({ error: "not_found" }, 404);
+    if (!ctx.access.canSubmit) return c.json({ error: "forbidden" }, 403);
+
+    const [material] = await db
+      .select()
+      .from(schoolAssignmentMaterials)
+      .where(
+        and(
+          eq(schoolAssignmentMaterials.id, materialId),
+          eq(schoolAssignmentMaterials.assignmentId, assignmentId),
+        ),
+      )
+      .limit(1);
+    if (!material || material.source !== "native_test") {
+      return c.json({ error: "not_found" }, 404);
+    }
+    if (!materialVisibleToViewer(material, ctx.access.viewMode)) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+
+    let [submission] = await db
+      .select()
+      .from(schoolSubmissions)
+      .where(
+        and(
+          eq(schoolSubmissions.assignmentId, assignmentId),
+          eq(schoolSubmissions.studentMemberId, ctx.context.memberId),
+        ),
+      )
+      .limit(1);
+    if (!submission) {
+      const [created] = await db
+        .insert(schoolSubmissions)
+        .values({
+          assignmentId,
+          studentMemberId: ctx.context.memberId,
+          status: "not_started",
+        })
+        .returning();
+      submission = created!;
+    }
+
+    if (isAttemptsExhausted(ctx.assignment.maxAttempts, submission.turnInCount)) {
+      return c.json({ error: "attempts_exhausted" }, 403);
+    }
+
+    const turnInNumber = submission.turnInCount + 1;
+    const body = await c.req.json<{
+      responses?: Array<{ questionId: string; responseJson: Record<string, unknown> }>;
+    }>();
+    const incoming = body.responses ?? [];
+    if (incoming.length === 0) return c.json({ error: "responses_required" }, 400);
+
+    const questionRows = await db
+      .select({ id: schoolTestQuestions.id })
+      .from(schoolTestQuestions)
+      .where(eq(schoolTestQuestions.materialId, materialId));
+    const allowed = new Set(questionRows.map((q) => q.id));
+
+    const now = new Date();
+    for (const item of incoming) {
+      if (!allowed.has(item.questionId)) continue;
+      const responseJson =
+        item.responseJson && typeof item.responseJson === "object" ? item.responseJson : {};
+      const [existing] = await db
+        .select({ id: schoolSubmissionResponses.id })
+        .from(schoolSubmissionResponses)
+        .where(
+          and(
+            eq(schoolSubmissionResponses.submissionId, submission.id),
+            eq(schoolSubmissionResponses.questionId, item.questionId),
+            eq(schoolSubmissionResponses.turnInNumber, turnInNumber),
+          ),
+        )
+        .limit(1);
+      if (existing) {
+        await db
+          .update(schoolSubmissionResponses)
+          .set({ responseJson, updatedAt: now })
+          .where(eq(schoolSubmissionResponses.id, existing.id));
+      } else {
+        await db.insert(schoolSubmissionResponses).values({
+          submissionId: submission.id,
+          materialId,
+          questionId: item.questionId,
+          turnInNumber,
+          responseJson,
+        });
+      }
+    }
+
+    await db
+      .update(schoolSubmissions)
+      .set({ updatedAt: now })
+      .where(eq(schoolSubmissions.id, submission.id));
+
+    const rows = await db
+      .select()
+      .from(schoolSubmissionResponses)
+      .where(
+        and(
+          eq(schoolSubmissionResponses.submissionId, submission.id),
+          eq(schoolSubmissionResponses.materialId, materialId),
+          eq(schoolSubmissionResponses.turnInNumber, turnInNumber),
+        ),
+      );
+
+    return c.json({
+      submissionId: submission.id,
+      turnInNumber,
+      responses: rows.map((row) => ({
+        questionId: row.questionId,
+        responseJson: row.responseJson,
+        updatedAt: row.updatedAt.toISOString(),
+      })),
+    });
   });
 
   app.get("/assignments/:id/materials/:materialId/snapshot", async (c) => {

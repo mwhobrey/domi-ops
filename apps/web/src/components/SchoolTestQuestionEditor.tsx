@@ -176,9 +176,9 @@ export function SchoolTestQuestionEditor({
     Math.abs(explicitTotal - assignmentPointsPossible) > 0.01;
 
   return (
-    <div className="space-y-3 rounded-[var(--radius-lg)] border border-dashed border-[var(--color-border)] p-3">
+    <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h4 className="text-sm font-medium">In-app test questions</h4>
+        <h3 className="text-base font-medium">Questions</h3>
         <div className="flex flex-wrap gap-2">
           {!frozen ? (
             <Button type="button" size="sm" variant="secondary" onClick={() => void addQuestion()}>

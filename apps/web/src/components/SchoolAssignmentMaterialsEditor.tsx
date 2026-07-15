@@ -1,13 +1,13 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
 import type { SchoolMaterialDto, SchoolMaterialRole } from "../lib/school-materials";
-import { MATERIAL_ROLE_LABELS } from "../lib/school-materials";
-import { SchoolTestQuestionEditor } from "./SchoolTestQuestionEditor";
+import { MATERIAL_ROLE_LABELS, nativeTestEditUrl } from "../lib/school-materials";
 import { DriveObjectPicker } from "./DriveObjectPicker";
 import { GooglePickerButton } from "./GooglePickerButton";
-import { Alert, Badge, Button, Checkbox, Input, Select } from "./ui";
+import { Alert, AnchorButton, Badge, Button, Checkbox, Input, Select } from "./ui";
 
 interface MaterialEditorRow extends SchoolMaterialDto {
   _pending?: boolean;
@@ -24,6 +24,7 @@ export function SchoolAssignmentMaterialsEditor({
   canEdit: boolean;
   assignmentPointsPossible?: number | null;
 }) {
+  const router = useRouter();
   const [materials, setMaterials] = useState<MaterialEditorRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +32,7 @@ export function SchoolAssignmentMaterialsEditor({
   const [linkName, setLinkName] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
   const [addingLink, setAddingLink] = useState(false);
+  const [creatingTest, setCreatingTest] = useState(false);
 
   const loadMaterials = useCallback(async () => {
     setLoading(true);
@@ -67,17 +69,22 @@ export function SchoolAssignmentMaterialsEditor({
 
   async function addNativeTest() {
     setError(null);
+    setCreatingTest(true);
     try {
-      await apiClient.post(`/api/school/assignments/${assignmentId}/materials`, {
-        source: "native_test",
-        displayName: "In-app test",
-        role: "student_material",
-        isTest: true,
-        nativeTestPointsMode: "explicit",
-      });
-      await loadMaterials();
+      const created = await apiClient.post<{ material: SchoolMaterialDto }>(
+        `/api/school/assignments/${assignmentId}/materials`,
+        {
+          source: "native_test",
+          displayName: "In-app test",
+          role: "student_material",
+          isTest: true,
+          nativeTestPointsMode: "explicit",
+        },
+      );
+      router.push(nativeTestEditUrl(assignmentId, created.material.id));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not create in-app test");
+      setCreatingTest(false);
     }
   }
 
@@ -223,16 +230,21 @@ export function SchoolAssignmentMaterialsEditor({
                   </div>
                 ) : null}
                 {m.source === "native_test" ? (
-                  <SchoolTestQuestionEditor
-                    assignmentId={assignmentId}
-                    materialId={m.id}
-                    pointsMode={m.nativeTestPointsMode ?? "explicit"}
-                    assignmentPointsPossible={assignmentPointsPossible ?? null}
-                    frozen={frozen}
-                    onPointsModeChange={async (mode) => {
-                      await patchMaterial(m.id, { nativeTestPointsMode: mode });
-                    }}
-                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <AnchorButton
+                      href={nativeTestEditUrl(assignmentId, m.id)}
+                      size="sm"
+                      variant="secondary"
+                    >
+                      {frozen ? "View test" : "Edit test"}
+                    </AnchorButton>
+                    <p className="text-xs text-[var(--color-text-muted)]">
+                      Opens the full-page question builder
+                      {assignmentPointsPossible != null
+                        ? ` · assignment ${assignmentPointsPossible} pts`
+                        : ""}
+                    </p>
+                  </div>
                 ) : null}
                 {!frozen ? (
                   <Button type="button" size="sm" variant="ghost" onClick={() => void removeMaterial(m.id)}>
@@ -246,7 +258,13 @@ export function SchoolAssignmentMaterialsEditor({
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" size="sm" variant="secondary" onClick={() => void addNativeTest()}>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          loading={creatingTest}
+          onClick={() => void addNativeTest()}
+        >
           Create in-app test
         </Button>
         {driveEnabled ? (

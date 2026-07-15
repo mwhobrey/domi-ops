@@ -14,10 +14,13 @@ import { GooglePickerButton } from "./GooglePickerButton";
 import { SchoolSubmissionArtifacts } from "./SchoolSubmissionArtifacts";
 import { SchoolAssignmentMaterialsCard } from "./SchoolAssignmentMaterialsCard";
 import { SchoolGoogleDocsConnectBanner } from "./SchoolGoogleDocsConnectBanner";
-import { Alert, Badge, Button, Card, CardBody, CardHeader, Input, Textarea } from "./ui";
+import { SchoolNativeTestReview } from "./SchoolNativeTestReview";
+import { Alert, Badge, Button, Card, CardBody, CardHeader, Input, Select, Textarea } from "./ui";
 interface Submission {
   id: string;
   status: string;
+  studentMemberId?: string;
+  studentLabel?: string;
   studentNote: string;
   submittedAt?: string | null;
   isLate?: boolean;
@@ -127,6 +130,12 @@ export function SchoolAssignmentDetail({
   const canGrade = access.canGrade;
   const isStudent = access.viewMode === "student";
   const [submissions, setSubmissions] = useState(initialSubmissions);
+  const [selectedSubmissionId, setSelectedSubmissionId] = useState(() => {
+    const preferred =
+      initialSubmissions.find((s) => s.status === "submitted" || s.status === "graded") ??
+      initialSubmissions[0];
+    return preferred?.id ?? "";
+  });
   const [note, setNote] = useState(initialSubmissions[0]?.studentNote ?? "");
   const [score, setScore] = useState(() => {
     const existing = initialSubmissions[0]?.grade?.score;
@@ -143,7 +152,9 @@ export function SchoolAssignmentDetail({
   const [drivePickerOpen, setDrivePickerOpen] = useState(false);
   const [driveUploading, setDriveUploading] = useState(false);
 
-  const submission = submissions[0];
+  const submission =
+    submissions.find((s) => s.id === selectedSubmissionId) ?? submissions[0];
+  const hasNativeTest = materials.some((m) => m.source === "native_test");
   const turnInCount = submission?.turnInCount ?? 0;
   const attemptsBlocked = isAttemptsExhausted(maxAttempts, turnInCount);
   const googleTestMaterial = materials.find(
@@ -162,6 +173,14 @@ export function SchoolAssignmentDetail({
       .then((data) => setDriveReferences(data.references))
       .catch(() => setDriveReferences([]));
   }, [driveEnabled, submission?.id]);
+
+  useEffect(() => {
+    if (!submission) return;
+    setScore(submission.grade?.score != null ? String(submission.grade.score) : "");
+    setFeedback(submission.grade?.feedbackHtml ?? "");
+    if (isStudent) setNote(submission.studentNote ?? "");
+  }, [submission?.id, submission?.grade?.score, submission?.grade?.feedbackHtml, isStudent]);
+
   const status = submission?.status ?? "not_started";
   const statusMeta = isStudent
     ? (STUDENT_STATUS[status] ?? { label: status.replace("_", " "), tone: "default" as const })
@@ -184,6 +203,7 @@ export function SchoolAssignmentDetail({
       turnInCount: data.submission.turnInCount ?? 0,
     });
     setSubmissions([merged]);
+    setSelectedSubmissionId(merged.id);
     return merged;
   }
 
@@ -600,53 +620,103 @@ export function SchoolAssignmentDetail({
         </Card>
       )}
 
-      {canGrade && submission && (
+      {canGrade && (
         <Card>
           <CardHeader>
             <h2 className="font-medium">Student work</h2>
           </CardHeader>
           <CardBody className="space-y-4">
-            {submission.submittedAt && (
-              <p className="text-sm text-[var(--color-text-muted)]">
-                Turned in{" "}
-                {new Date(submission.submittedAt).toLocaleString(undefined, {
-                  weekday: "short",
-                  month: "short",
-                  day: "numeric",
-                  hour: "numeric",
-                  minute: "2-digit",
-                })}
-                {submission.isLate ? (
-                  <>
-                    {" "}
-                    <Badge tone="warning">Late</Badge>
-                  </>
-                ) : null}
-              </p>
-            )}
-            {submission.studentNote?.trim() ? (
+            {submissions.length > 0 ? (
               <div className="space-y-1">
-                <h3 className="text-sm font-medium">Student message</h3>
-                <p className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-elevated)] px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap">
-                  {submission.studentNote}
-                </p>
+                <label htmlFor="submission-student" className="text-sm font-medium">
+                  Student
+                </label>
+                <Select
+                  id="submission-student"
+                  value={submission?.id ?? ""}
+                  onChange={(e) => setSelectedSubmissionId(e.target.value)}
+                >
+                  {submissions.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.studentLabel ?? "Student"}
+                      {s.status !== "not_started" ? ` · ${s.status.replace("_", " ")}` : " · not started"}
+                      {s.grade?.score != null ? ` · ${s.grade.score}` : ""}
+                    </option>
+                  ))}
+                </Select>
               </div>
             ) : (
-              <p className="text-sm text-[var(--color-text-muted)]">No message from the student.</p>
+              <p className="text-sm text-[var(--color-text-muted)]">No student submissions yet.</p>
             )}
-            <div className="space-y-2">
-              <h3 className="text-sm font-medium">Submitted files</h3>
-              <SchoolSubmissionArtifacts
-                artifacts={submission.artifacts}
-                showPreview
-                showLineage
-              />
-            </div>
-            {driveEnabled && driveReferences.length > 0 ? (
-              <div className="space-y-2">
-                <h3 className="text-sm font-medium">Drive attachments</h3>
-                <DriveAttachmentChips references={driveReferences} />
-              </div>
+            {submission ? (
+              <>
+                {submission.submittedAt && (
+                  <p className="text-sm text-[var(--color-text-muted)]">
+                    Turned in{" "}
+                    {new Date(submission.submittedAt).toLocaleString(undefined, {
+                      weekday: "short",
+                      month: "short",
+                      day: "numeric",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                    {submission.isLate ? (
+                      <>
+                        {" "}
+                        <Badge tone="warning">Late</Badge>
+                      </>
+                    ) : null}
+                  </p>
+                )}
+                {submission.studentNote?.trim() ? (
+                  <div className="space-y-1">
+                    <h3 className="text-sm font-medium">Student message</h3>
+                    <p className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-elevated)] px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap">
+                      {submission.studentNote}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-[var(--color-text-muted)]">No message from the student.</p>
+                )}
+                <div className="space-y-2">
+                  <h3 className="text-sm font-medium">Submitted files</h3>
+                  <SchoolSubmissionArtifacts
+                    artifacts={submission.artifacts}
+                    showPreview
+                    showLineage
+                  />
+                </div>
+                {hasNativeTest && submission.status !== "not_started" ? (
+                  <SchoolNativeTestReview
+                    submissionId={submission.id}
+                    onRollupChange={(grade) => {
+                      setSubmissions((prev) =>
+                        prev.map((s) =>
+                          s.id === submission.id
+                            ? {
+                                ...s,
+                                grade: grade
+                                  ? {
+                                      score: grade.score,
+                                      feedbackHtml: grade.feedbackHtml ?? s.grade?.feedbackHtml ?? "",
+                                    }
+                                  : s.grade,
+                                status: grade?.score != null ? "graded" : s.status,
+                              }
+                            : s,
+                        ),
+                      );
+                      setScore(grade?.score != null ? String(grade.score) : "");
+                    }}
+                  />
+                ) : null}
+                {driveEnabled && driveReferences.length > 0 ? (
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-medium">Drive attachments</h3>
+                    <DriveAttachmentChips references={driveReferences} />
+                  </div>
+                ) : null}
+              </>
             ) : null}
           </CardBody>
         </Card>

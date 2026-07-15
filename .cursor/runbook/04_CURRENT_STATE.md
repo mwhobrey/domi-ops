@@ -39,7 +39,7 @@
 - **Email verification:** Better Auth `emailVerification` + optional SMTP (`SMTP_*`, `EMAIL_VERIFICATION_REQUIRED`); dev logs link when SMTP unset (`packages/auth/src/mail.ts`).
 - **Post-import join:** session hook moves users onto the **import marker** household; stubs claimed via **`users.import_claim_email`** + `import_records` (`homehub_claim_email`) from HomeHub **`config.yml`**, then Google display name / username fallback. Optional deprecated env: `HOUSEHOLD_MEMBER_EMAIL_MAP`. **Single-tenant:** live import targets the **oldest** household when one already exists.
 - Whome session DTO: `GET /auth/session` (household member context for API/UI).
-- **Google login (dev):** `127.0.0.1` → `PUBLIC_APP_URL` host redirect (`canonical-dev-host.ts`); auth proxy forwards `Set-Cookie` via `getSetCookie()`; `auth-client` omits `baseURL` (browser origin default).
+- **Google login (dev):** `127.0.0.1` → `PUBLIC_APP_URL` host redirect (`canonical-dev-host.ts`, reads `Host` header); auth proxy forwards `Set-Cookie` via `getSetCookie()`; `auth-client` omits `baseURL` (browser origin default).
 - **Google Calendar token refresh:** `invalid_grant` → `token_revoked` API + `CalendarCredentialsError` in worker; reconnect in calendar settings.
 - Calendar OAuth remains separate (`/auth/google/calendar/*`); state in Redis. **`createAuthMiddleware` must run before calendar routes** so `/start` sees session (WHO-84).
 
@@ -75,7 +75,7 @@
 - **School on calendar:** assignment `due_at` (visibility `assigned` or `closed`) appears as read-only overlay chips when `school` + `calendar_sync` modules on and user pref `calendarOverlaySchoolEnabled` (default true); role-filtered via `school-access.ts`. Assignments without a due date are omitted from calendar + weekly schedule reports.
 - Manual QA runbook: `.cursor/runbook/05_SCHOOL_QA.md` (smoke routes, WHO-41â€“48 matrix, import SQL checks).
 - Import: `school_submission_artifact` â†’ `school_submission_artifacts` + S3 keys from file mapper; re-import hydrates `idMap` from `import_records` (school + files mappers).
-- **Phase 4 (native test builder — WHO-213–217):** ADR [`docs/adr/004-school-native-test-builder.md`](../../docs/adr/004-school-native-test-builder.md) **Accepted** (2026-07-10). **WHO-214 shipped:** `native_test` material source, `school_test_questions`, migrations `0044`/`0045`, question CRUD API + teacher editor (`SchoolTestQuestionEditor`, explicit/weighted points). WHO-215–217 pending (student UI, auto-grade, Google export).
+- **Phase 4 (native test builder — WHO-213–219):** ADR Accepted. Teacher editor full-page (WHO-218). Student **Take test** (WHO-215). **WHO-216 done:** auto-grade on submit (`school-test-grading.ts`), `GET …/test-review`, `POST …/grade-question`, teacher student selector + per-question review/override; rollup → `school_grades`. WHO-217 export API, WHO-219 convert Doc→native pending.
 
 ### Health module
 

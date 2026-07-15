@@ -293,6 +293,7 @@ export function SchoolClassDetail({
               missingTotal: me?.missingCount ?? 0,
               overdueTotal: me?.overdueCount ?? 0,
               gradedTotal: me?.gradedCount ?? 0,
+              submittedTotal: me?.submittedCount ?? 0,
               classAveragePercent: me?.averagePercent ?? null,
             };
           })(),

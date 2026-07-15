@@ -130,7 +130,10 @@ export function SchoolClassGradebook({
                 <div>
                   <p className="font-medium">{label}</p>
                   <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
-                    {student.gradedCount} graded · {student.missingCount} missing
+                    {student.gradedCount} graded
+                    {student.submittedCount > 0 ? ` · ${student.submittedCount} submitted` : ""}
+                    {" · "}
+                    {student.missingCount} missing
                     {student.overdueCount > 0 ? ` · ${student.overdueCount} overdue` : ""}
                   </p>
                 </div>
@@ -269,10 +272,12 @@ export function SchoolClassGradebookSection({
         <h2 id="gradebook-heading" className="text-label text-[var(--color-text-muted)]">
           Progress
         </h2>
-        {gradebook.summary.gradedTotal > 0 ? (
-          <Badge tone="success">
+        {gradebook.summary.gradedTotal > 0 || gradebook.summary.submittedTotal > 0 ? (
+          <Badge tone={gradebook.summary.gradedTotal > 0 ? "success" : "accent"}>
             <CheckCircle2 className="mr-1 inline h-3 w-3" aria-hidden />
-            {gradebook.summary.gradedTotal} graded
+            {gradebook.summary.gradedTotal > 0
+              ? `${gradebook.summary.gradedTotal} graded`
+              : `${gradebook.summary.submittedTotal} submitted`}
           </Badge>
         ) : null}
       </div>

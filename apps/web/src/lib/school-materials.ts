@@ -70,6 +70,16 @@ export function materialOpenUrl(
   return null;
 }
 
+/** Teacher full-page builder for `native_test` materials (WHO-218). */
+export function nativeTestEditUrl(assignmentId: string, materialId: string): string {
+  return `/school/assignment/${assignmentId}/materials/${materialId}/edit`;
+}
+
+/** Student take page for `native_test` materials (WHO-215). */
+export function nativeTestTakeUrl(assignmentId: string, materialId: string): string {
+  return `/school/assignment/${assignmentId}/materials/${materialId}/take`;
+}
+
 export function formatAttemptsRemaining(maxAttempts: number | null | undefined, turnInCount: number): string | null {
   if (maxAttempts == null) return null;
   const remaining = Math.max(0, maxAttempts - turnInCount);
