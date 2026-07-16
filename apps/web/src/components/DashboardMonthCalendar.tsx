@@ -183,6 +183,7 @@ export function DashboardMonthCalendar({ compact = false }: { compact?: boolean 
                           router.push(ev.deepLink);
                           return;
                         }
+                        router.push(`/calendar?event=${encodeURIComponent(ev.id)}`);
                       }}
                     >
                       <div className="flex items-start gap-3">

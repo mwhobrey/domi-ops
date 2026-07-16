@@ -43,11 +43,9 @@ export function SchoolClassList({
   const isStudent = context?.viewMode === "student";
   const isObserver = context?.viewMode === "observer";
   const canCreate = context?.canCreateClass ?? true;
-  const classCount = classes.length;
-
   const statLabels = isStudent
-    ? { classes: "My classes", due: "Due this week", overdue: "Overdue" }
-    : { classes: "Classes", due: "Due this week", overdue: "Overdue" };
+    ? { due: "Due this week", overdue: "Overdue" }
+    : { due: "Due this week", overdue: "Overdue" };
 
   return (
     <div className="space-y-6">
@@ -64,20 +62,19 @@ export function SchoolClassList({
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="grid flex-1 gap-3 sm:grid-cols-3">
-        <StatTile label={statLabels.classes} value={classCount} href="/school" />
-        <StatTile
-          label={statLabels.due}
-          value={glance.dueSoon}
-          href="/school"
-          tone={glance.dueSoon > 0 ? "default" : "success"}
-        />
-        <StatTile
-          label={statLabels.overdue}
-          value={glance.overdue}
-          href="/school"
-          tone={glance.overdue > 0 ? "warning" : "success"}
-        />
+        <div className="grid flex-1 gap-3 sm:grid-cols-2">
+          <StatTile
+            label={statLabels.due}
+            value={glance.dueSoon}
+            href="/school/assignments?filter=due"
+            tone={glance.dueSoon > 0 ? "default" : "success"}
+          />
+          <StatTile
+            label={statLabels.overdue}
+            value={glance.overdue}
+            href="/school/assignments?filter=overdue"
+            tone={glance.overdue > 0 ? "warning" : "success"}
+          />
         </div>
         {context && <SchoolReportsLink />}
       </div>

@@ -86,6 +86,7 @@ export function TodayGlance({ driveModuleEnabled = false }: { driveModuleEnabled
                   key: c.id,
                   label: c.description,
                   meta: formatChoreDueMeta(c.dueDate, today),
+                  href: `/chores?highlight=${c.id}`,
                 }))}
                 overflowCount={chores.overflow}
                 emptyHint={chores.summary.tone === "success" ? "Nothing open right now." : undefined}
@@ -101,6 +102,7 @@ export function TodayGlance({ driveModuleEnabled = false }: { driveModuleEnabled
                   key: a.id,
                   label: a.title,
                   meta: `${a.className} · ${formatSchoolDueMeta(a.dueAt, a.overdue)}`,
+                  href: `/school/assignment/${a.id}`,
                 }))}
                 overflowCount={school.overflow ?? 0}
                 emptyHint={
@@ -122,6 +124,7 @@ export function TodayGlance({ driveModuleEnabled = false }: { driveModuleEnabled
                   key: item.id,
                   label: item.title,
                   meta: item.pinned ? "Pinned" : item.kind === "link" ? "Link" : "File",
+                  href: `/drive?highlight=${item.id}`,
                 }))}
                 overflowCount={drive.overflow ?? 0}
                 emptyHint={

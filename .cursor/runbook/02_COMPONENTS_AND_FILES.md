@@ -36,6 +36,7 @@ domi-ops/
 | `src/app/dashboard/page.tsx` | Core dashboard via `apiFetch` |
 | `src/app/calendar/page.tsx` | Calendar UI |
 | `src/app/health/page.tsx` | Health tracker UI (`/health` — module-gated; API liveness is separate rewrite) |
+| `src/app/school/assignments/page.tsx` | School-wide due/overdue assignment list (`?filter=due\|overdue`) |
 | `src/app/school/assignment/[id]/page.tsx` | Assignment detail |
 | `src/app/school/assignment/[id]/materials/[materialId]/edit/page.tsx` | Full-page native test teacher editor (WHO-218) |
 | `src/components/SchoolTestEditorClient.tsx` | Test editor chrome + Google Doc export (WHO-217) |
@@ -107,7 +108,7 @@ domi-ops/
 | `src/lib/health-crypto.ts` | Field encryption for PHI-like health columns |
 | `src/lib/health-serialize.ts` | Health DTO encrypt/decrypt + schedule JSON |
 | `src/routes/core.ts` | Dashboard, shopping, chores, notes, expenses; profile overlay prefs |
-| `src/routes/school.ts` | Classes, assignments, submissions |
+| `src/routes/school.ts` | Classes, assignments (`GET /assignments?filter=`), submissions |
 | `src/routes/school-upload.ts` | Presign stub |
 | `src/routes/health.ts` | API DB ping (`GET /health` on API host) |
 | `Dockerfile` + `scripts/docker-entrypoint-api.sh` | Migrate on start |

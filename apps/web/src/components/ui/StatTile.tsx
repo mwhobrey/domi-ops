@@ -18,20 +18,32 @@ export function StatTile({
 }: {
   label: string;
   value: string | number;
-  href: string;
+  href?: string;
   tone?: Tone;
   className?: string;
 }) {
+  const content = (
+    <>
+      <p className="text-label text-[var(--color-text-muted)]">{label}</p>
+      <p className={cn("mt-1 text-2xl font-semibold tabular-nums", toneClass[tone])}>{value}</p>
+    </>
+  );
+  const classes = cn(
+    "rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-subtle)] p-4 transition",
+    href && "group hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-surface-elevated)]",
+    className,
+  );
+
+  if (!href) {
+    return <div className={classes}>{content}</div>;
+  }
+
   return (
     <Link
       href={href}
-      className={cn(
-        "group rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-subtle)] p-4 transition hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-surface-elevated)]",
-        className,
-      )}
+      className={classes}
     >
-      <p className="text-label text-[var(--color-text-muted)]">{label}</p>
-      <p className={cn("mt-1 text-2xl font-semibold tabular-nums", toneClass[tone])}>{value}</p>
+      {content}
     </Link>
   );
 }

@@ -192,7 +192,7 @@ export function ExpensesList({ initialExpenses }: { initialExpenses: Expense[] }
     >
       {sorted.length > 0 && (
         <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <StatTile label="This month" value={formatMoney(monthTotal)} href="/expenses" />
+          <StatTile label="This month" value={formatMoney(monthTotal)} href="/expenses/reports" />
         </div>
       )}
 

@@ -627,6 +627,90 @@ export function schoolRoutes(db: Database, env: Env) {
     });
   });
 
+  app.get("/assignments", async (c) => {
+    const auth = c.get("auth")!;
+    if (!(await isHouseholdModuleEnabled(db, env, auth.householdId, "school"))) {
+      return c.json({ error: "school_disabled" }, 403);
+    }
+    const context = await schoolContextForAuth(db, auth);
+    if (!context) return c.json({ error: "not_a_member" }, 403);
+
+    const filter = c.req.query("filter") === "overdue" ? "overdue" : "due";
+    const allClassRows = await db
+      .select({
+        id: schoolClasses.id,
+        name: schoolClasses.name,
+        subject: schoolClasses.subject,
+        term: schoolClasses.term,
+        teacherMemberId: schoolClasses.teacherMemberId,
+        archived: schoolClasses.archived,
+      })
+      .from(schoolClasses)
+      .where(eq(schoolClasses.householdId, auth.householdId));
+
+    const enrollments = await memberEnrollmentsForHousehold(db, auth.householdId, context.memberId);
+    const visibleIds = visibleClassIdsForMember({
+      memberId: context.memberId,
+      householdRole: context.householdRole,
+      classes: allClassRows.map((r) => ({
+        id: r.id,
+        teacherMemberId: r.teacherMemberId,
+        archived: r.archived ?? false,
+      })),
+      enrollments,
+    });
+
+    if (visibleIds.length === 0) {
+      return c.json({ assignments: [], filter, context });
+    }
+
+    const now = new Date();
+    const weekAhead = new Date(now);
+    weekAhead.setDate(weekAhead.getDate() + 7);
+
+    const rows = await db
+      .select({
+        id: schoolAssignments.id,
+        title: schoolAssignments.title,
+        dueAt: schoolAssignments.dueAt,
+        visibility: schoolAssignments.visibility,
+        pointsPossible: schoolAssignments.pointsPossible,
+        classId: schoolClasses.id,
+        className: schoolClasses.name,
+        classSubject: schoolClasses.subject,
+        classTerm: schoolClasses.term,
+      })
+      .from(schoolAssignments)
+      .innerJoin(schoolClasses, eq(schoolAssignments.classId, schoolClasses.id))
+      .where(
+        and(
+          eq(schoolClasses.householdId, auth.householdId),
+          inArray(schoolClasses.id, visibleIds),
+          isNotNull(schoolAssignments.dueAt),
+          inArray(schoolAssignments.visibility, publishedAssignmentVisibilities()),
+        ),
+      );
+
+    const assignments = rows
+      .map((row) => {
+        const due = row.dueAt!;
+        const overdue = due < now;
+        return {
+          ...row,
+          dueAt: due.toISOString(),
+          overdue,
+        };
+      })
+      .filter((row) =>
+        filter === "overdue"
+          ? row.overdue
+          : !row.overdue && new Date(row.dueAt).getTime() <= weekAhead.getTime(),
+      )
+      .sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime());
+
+    return c.json({ assignments, filter, context });
+  });
+
   app.get("/classes", async (c) => {
     const auth = c.get("auth")!;
     if (!(await isHouseholdModuleEnabled(db, env, auth.householdId, "school"))) {

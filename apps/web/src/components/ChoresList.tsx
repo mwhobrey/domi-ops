@@ -1,6 +1,7 @@
 "use client";
 
 import { ClipboardList } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { cn } from "../lib/cn";
 import { ApiError, apiClient } from "../lib/client-api";
@@ -117,6 +118,7 @@ function ChoreRow({
   setEditChore,
   setDeleteId,
   memberLabel,
+  highlighted,
 }: {
   chore: Chore;
   showList: boolean;
@@ -126,6 +128,7 @@ function ChoreRow({
   setEditChore: (chore: Chore) => void;
   setDeleteId: (id: string) => void;
   memberLabel: (id: string | null) => string | null;
+  highlighted?: boolean;
 }) {
   const overdue = isOverdue(c.dueDate, c.done);
   const plabel = priorityLabel(c.priority);
@@ -134,7 +137,10 @@ function ChoreRow({
   return (
     <ListItem
       as="li"
-      className={cn(overdue && "border-[var(--color-danger)]/50")}
+      className={cn(
+        overdue && "border-[var(--color-danger)]/50",
+        highlighted && "ring-2 ring-[var(--color-accent)]",
+      )}
     >
       <Checkbox
         checked={c.done}
@@ -327,6 +333,8 @@ export function ChoresList({
   members?: HouseholdMemberOption[];
   initialKarma?: MemberKarma[];
 }) {
+  const searchParams = useSearchParams();
+  const highlightId = searchParams.get("highlight");
   const [chores, setChores] = useState(initialChores);
   const [recurring, setRecurring] = useState(initialRecurring);
   const [filter, setFilter] = useState<FilterMode>("open");
@@ -694,6 +702,7 @@ export function ChoresList({
                     setEditChore={setEditChore}
                     setDeleteId={setDeleteId}
                     memberLabel={memberLabel}
+                    highlighted={highlightId === c.id}
                   />
                 ))}
               </ul>
@@ -713,6 +722,7 @@ export function ChoresList({
               setEditChore={setEditChore}
               setDeleteId={setDeleteId}
               memberLabel={memberLabel}
+              highlighted={highlightId === c.id}
             />
           ))}
         </ul>
