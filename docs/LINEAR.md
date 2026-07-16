@@ -235,4 +235,4 @@ Detailed acceptance criteria: `docs/LINEAR_BACKLOG.md` (keep in sync when adding
 |----|--------|--------|
 | [WHO-134](https://linear.app/mikewhob-whome/issue/WHO-134) | Backlog | Marketing landing page (post-OSS) |
 
-Recent: **WHO-166**, **WHO-167** M4 a11y micro-polish **Done** — UI & shell polish project **M1–M4 complete**.
+Recent: **WHO-223** wire dead clickable surfaces (school due/overdue lists, glance deep links, dashboard events) **Done**. **WHO-166**, **WHO-167** M4 a11y micro-polish **Done** — UI & shell polish project **M1–M4 complete**.
