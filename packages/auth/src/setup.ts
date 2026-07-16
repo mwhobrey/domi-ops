@@ -12,8 +12,11 @@ const SETUP_GRANT_TTL_SEC = 30 * 60;
 
 export async function needsGreenfieldSetup(db: Database, env: Env): Promise<boolean> {
   if (env.DEPLOYMENT_MODE !== "single") return false;
-  if (await hasImportRecords(db)) return false;
-  return (await getCanonicalHouseholdId(db)) === null;
+  // households + import_records are RLS-scoped; bootstrap/status must see all rows.
+  return withSystemContext(db, async (sysDb) => {
+    if (await hasImportRecords(sysDb)) return false;
+    return (await getCanonicalHouseholdId(sysDb)) === null;
+  });
 }
 
 export function isSetupTokenConfigured(env: Env): boolean {

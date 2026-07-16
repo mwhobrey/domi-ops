@@ -82,6 +82,18 @@ app.on(["POST", "GET"], "/auth/*", async (c) => {
     (path.includes("/callback/google") || path.includes("/sign-in/social"))
   ) {
     if (!setupAccess) {
+      // Browser OAuth callback: send the user to /setup.
+      // Client fetch for /sign-in/social: return JSON so the login UI can show an error
+      // (a 302 is followed by fetch and looks like "nothing happened").
+      if (path.includes("/sign-in/social")) {
+        return c.json(
+          {
+            message:
+              "Initial setup requires a valid setup token. Open /setup on this server.",
+          },
+          403,
+        );
+      }
       const setupUrl = new URL("/setup", env.PUBLIC_APP_URL);
       setupUrl.searchParams.set("error", "token");
       return c.redirect(setupUrl.toString());
@@ -93,8 +105,9 @@ app.on(["POST", "GET"], "/auth/*", async (c) => {
 
 app.route("/", healthRoutes(db));
 app.route("/api/calendar", calendarRoutes(db, env));
-app.route("/api/core", coreRoutes(db, env));
+// Setup must mount before coreRoutes — core applies requireAuth to all /api/core/*.
 app.route("/api/core/setup", setupRoutes(db, env));
+app.route("/api/core", coreRoutes(db, env));
 app.route("/api/core", weeklyReportRoutes(db, env));
 app.route("/api/core", reportRoutes(db, env));
 app.route("/api/core/upload", browserUploadRoutes(env));

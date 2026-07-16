@@ -58,12 +58,16 @@ export function SetupForm({ googleEnabled }: { googleEnabled: boolean }) {
     setPending(true);
     try {
       await unlockToken();
-      await authClient.signIn.social({
+      const res = await authClient.signIn.social({
         provider: "google",
         callbackURL: "/dashboard",
       });
+      if (res.error) {
+        setError(res.error.message ?? "Google setup failed");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Google setup failed");
+    } finally {
       setPending(false);
     }
   }

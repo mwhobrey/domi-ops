@@ -97,10 +97,15 @@ export function LoginForm({
     setError(null);
     setPending(true);
     try {
-      await authClient.signIn.social({
+      const res = await authClient.signIn.social({
         provider: "google",
         callbackURL: nextPath,
       });
+      if (res.error) {
+        setError(res.error.message ?? "Google sign-in failed. Try again.");
+        return;
+      }
+      // Successful social sign-in navigates away; keep pending until then.
     } catch (err) {
       const msg = err instanceof Error ? err.message : null;
       if (msg?.includes("NetworkError") || msg?.includes("Failed to fetch")) {
@@ -114,6 +119,7 @@ export function LoginForm({
       } else {
         setError(msg?.trim() ? `Google sign-in failed: ${msg}` : "Google sign-in failed. Try again.");
       }
+    } finally {
       setPending(false);
     }
   }
