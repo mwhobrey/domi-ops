@@ -42,6 +42,9 @@ export interface ReportQueryParams {
   month?: string | null;
   term?: string | null;
   studentMemberId?: string | null;
+  memberId?: string | null;
+  eventType?: string | null;
+  groupBy?: string | null;
 }
 
 export type ExportScope =
@@ -180,12 +183,19 @@ export async function buildCanonicalReport(
     const fromDefault = new Date(`${to}T12:00:00.000Z`);
     fromDefault.setUTCDate(fromDefault.getUTCDate() - 30);
     const from = params.from?.trim() || fromDefault.toISOString().slice(0, 10);
-    const data = await buildHealthReports(db, env, {
-      householdId: auth.householdId,
-      userId: auth.userId,
-      memberId: auth.memberId ?? "",
-      role: auth.role ?? "member",
-    }, from, to);
+    const data = await buildHealthReports(
+      db,
+      env,
+      {
+        householdId: auth.householdId,
+        userId: auth.userId,
+        memberId: auth.memberId ?? "",
+        role: auth.role ?? "member",
+      },
+      from,
+      to,
+      { memberId: params.memberId, eventType: params.eventType, groupBy: params.groupBy },
+    );
     return healthOverviewToCanonical(data);
   }
 

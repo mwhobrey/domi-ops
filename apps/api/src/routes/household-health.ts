@@ -158,7 +158,14 @@ export function householdHealthRoutes(db: Database, env: Env) {
     const fromDefault = new Date(`${to}T12:00:00.000Z`);
     fromDefault.setUTCDate(fromDefault.getUTCDate() - 30);
     const from = c.req.query("from")?.trim() || fromDefault.toISOString().slice(0, 10);
-    const report = await buildHealthReports(db, env, auth, from, to);
+    const memberId = c.req.query("memberId")?.trim() || null;
+    const eventType = c.req.query("eventType")?.trim() || null;
+    const groupBy = c.req.query("groupBy")?.trim() || null;
+    const report = await buildHealthReports(db, env, auth, from, to, {
+      memberId,
+      eventType,
+      groupBy,
+    });
     return c.json(report);
   });
 

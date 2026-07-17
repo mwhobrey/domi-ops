@@ -27,6 +27,9 @@ export interface ReportExportParams {
   month?: string | null;
   term?: string | null;
   studentMemberId?: string | null;
+  memberId?: string | null;
+  eventType?: string | null;
+  groupBy?: string | null;
 }
 
 export interface ReportCatalogEntry {
@@ -63,6 +66,9 @@ export function reportExportBody(params: ReportExportParams): Record<string, unk
   if (params.month) body.month = params.month;
   if (params.term) body.term = params.term;
   if (params.studentMemberId) body.studentMemberId = params.studentMemberId;
+  if (params.memberId) body.memberId = params.memberId;
+  if (params.eventType) body.eventType = params.eventType;
+  if (params.groupBy) body.groupBy = params.groupBy;
   return body;
 }
 

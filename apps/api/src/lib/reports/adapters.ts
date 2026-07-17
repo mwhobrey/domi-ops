@@ -65,7 +65,7 @@ export function healthOverviewToCanonical(data: HealthReportData): CanonicalRepo
   const sections: CanonicalReportSection[] = [
     {
       key: "summary",
-      label: "Summary",
+      label: "Clinical summary",
       stats: [
         { label: "Health events", value: String(data.summary.totalEvents) },
         { label: "Ongoing now", value: String(data.summary.ongoingCount) },
@@ -129,20 +129,54 @@ export function healthOverviewToCanonical(data: HealthReportData): CanonicalRepo
     });
   }
 
-  if (data.recentEvents.length > 0) {
+  const eventHistory = data.eventHistory ?? data.recentEvents ?? [];
+  const eventGroups =
+    data.eventGroups && data.eventGroups.length > 0
+      ? data.eventGroups
+      : eventHistory.length > 0
+        ? [{ key: "all", label: "All events", events: eventHistory }]
+        : [];
+
+  if (eventGroups.length > 0) {
+    const groupLabel =
+      data.groupBy === "eventType"
+        ? "Event history by type"
+        : data.groupBy === "none"
+          ? "Event history"
+          : "Event history by date";
     sections.push({
-      key: "recent-events",
-      label: "Recent events",
+      key: "event-history",
+      label: groupLabel,
+      tables: eventGroups.map((group) => ({
+        key: `event-history-${group.key}`,
+        label: group.label,
+        columns: ["Event", "Type", "Member", "Started", "Ongoing"],
+        rows: group.events.map((r) => [
+          r.title,
+          r.typeLabel,
+          r.memberLabel,
+          r.startedAt?.slice(0, 10) ?? r.localDate ?? "—",
+          r.ongoing ? "Yes" : "No",
+        ]),
+      })),
+    });
+  }
+
+  if (data.medicationLogHistory && data.medicationLogHistory.length > 0) {
+    sections.push({
+      key: "medication-log-history",
+      label: "Medication log history",
       tables: [
         {
-          key: "recent-events",
-          label: "Recent events",
-          columns: ["Event", "Type", "Member", "Ongoing"],
-          rows: data.recentEvents.map((r) => [
-            r.title,
-            r.typeLabel,
+          key: "medication-log-history",
+          label: "Medication log history",
+          columns: ["Medication", "Member", "Status", "Logged", "Scheduled"],
+          rows: data.medicationLogHistory.map((r) => [
+            r.medicationName,
             r.memberLabel,
-            r.ongoing ? "Yes" : "No",
+            r.prn ? `${r.status} (PRN)` : r.status,
+            r.loggedAt.slice(0, 10),
+            r.scheduledAt?.slice(0, 10) ?? "—",
           ]),
         },
       ],

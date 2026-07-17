@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { HealthReportExport } from "../../lib/health-report-export";
+import type { HealthReportExport, HealthReportEventItem } from "../../lib/health-report-export";
 import { SectionHeader } from "../ui";
 
 function formatReportDate(iso: string): string {
@@ -23,7 +23,45 @@ function StatCard({ label, value }: { label: string; value: string | number }) {
   );
 }
 
+function EventHistoryItem({ ev }: { ev: HealthReportEventItem }) {
+  return (
+    <li className="px-4 py-3 text-sm">
+      <span className="hidden font-medium print:inline">{ev.title}</span>
+      <Link
+        href={`/health?event=${ev.id}`}
+        className="font-medium text-[var(--color-accent)] hover:underline print:hidden"
+      >
+        {ev.title}
+      </Link>
+      <p className="text-[var(--color-text-muted)] print:text-black/70">
+        {ev.typeLabel} · {ev.memberLabel}
+        {ev.ongoing ? " · Ongoing" : ""}
+        {ev.startedAt || ev.localDate
+          ? ` · ${formatReportDate((ev.startedAt ?? ev.localDate)!.slice(0, 10))}`
+          : ""}
+      </p>
+    </li>
+  );
+}
+
 export function HealthOverviewReportBody({ report }: { report: HealthReportExport }) {
+  const eventHistory = report.eventHistory?.length
+    ? report.eventHistory
+    : (report.recentEvents ?? []);
+  const eventGroups =
+    report.eventGroups && report.eventGroups.length > 0
+      ? report.eventGroups
+      : eventHistory.length > 0
+        ? [{ key: "all", label: "All events", events: eventHistory }]
+        : [];
+  const logHistory = report.medicationLogHistory ?? [];
+  const historyTitle =
+    report.groupBy === "eventType"
+      ? "Event history by type"
+      : report.groupBy === "none"
+        ? "Event history"
+        : "Event history by date";
+
   return (
     <div className="health-report-print space-y-6">
       <div className="hidden print:block">
@@ -35,16 +73,28 @@ export function HealthOverviewReportBody({ report }: { report: HealthReportExpor
 
       <p className="text-sm text-[var(--color-text-muted)] print:hidden">
         Household timezone: <span className="font-medium">{report.timezone}</span>
+        {report.eventType ? (
+          <>
+            {" "}
+            · Filtered to{" "}
+            <span className="font-medium">
+              {report.eventsByType[0]?.label ?? report.eventType}
+            </span>
+          </>
+        ) : null}
       </p>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <StatCard label="Health events" value={report.summary.totalEvents} />
-        <StatCard label="Ongoing now" value={report.summary.ongoingCount} />
-        <StatCard label="Active medications" value={report.summary.activeMedications} />
-        <StatCard label="Doses logged" value={report.summary.dosesLogged} />
-        <StatCard label="Scheduled meds" value={report.summary.scheduledMedications} />
-        <StatCard label="PRN meds" value={report.summary.prnMedications} />
-      </div>
+      <section className="space-y-3">
+        <SectionHeader title="Clinical summary" />
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <StatCard label="Health events" value={report.summary.totalEvents} />
+          <StatCard label="Ongoing now" value={report.summary.ongoingCount} />
+          <StatCard label="Active medications" value={report.summary.activeMedications} />
+          <StatCard label="Doses logged" value={report.summary.dosesLogged} />
+          <StatCard label="Scheduled meds" value={report.summary.scheduledMedications} />
+          <StatCard label="PRN meds" value={report.summary.prnMedications} />
+        </div>
+      </section>
 
       {report.eventsByType.length > 0 ? (
         <section className="space-y-2">
@@ -101,22 +151,39 @@ export function HealthOverviewReportBody({ report }: { report: HealthReportExpor
         </section>
       ) : null}
 
-      {report.recentEvents.length > 0 ? (
+      {eventGroups.length > 0 ? (
+        <section className="space-y-4">
+          <SectionHeader title={historyTitle} />
+          {eventGroups.map((group) => (
+            <div key={group.key} className="space-y-2">
+              {report.groupBy !== "none" ? (
+                <h3 className="text-sm font-medium text-[var(--color-text)]">
+                  {group.label}
+                  <span className="ml-2 font-normal text-[var(--color-text-muted)]">
+                    ({group.events.length})
+                  </span>
+                </h3>
+              ) : null}
+              <ul className="divide-y divide-[var(--color-border)] rounded-[var(--radius-lg)] border border-[var(--color-border)] print:border-black/20">
+                {group.events.map((ev) => (
+                  <EventHistoryItem key={ev.id} ev={ev} />
+                ))}
+              </ul>
+            </div>
+          ))}
+        </section>
+      ) : null}
+
+      {logHistory.length > 0 ? (
         <section className="space-y-2">
-          <SectionHeader title="Recent events" />
+          <SectionHeader title="Medication log history" />
           <ul className="divide-y divide-[var(--color-border)] rounded-[var(--radius-lg)] border border-[var(--color-border)] print:border-black/20">
-            {report.recentEvents.map((ev) => (
-              <li key={ev.id} className="px-4 py-3 text-sm">
-                <span className="hidden font-medium print:inline">{ev.title}</span>
-                <Link
-                  href={`/health?event=${ev.id}`}
-                  className="font-medium text-[var(--color-accent)] hover:underline print:hidden"
-                >
-                  {ev.title}
-                </Link>
+            {logHistory.map((log) => (
+              <li key={log.id} className="px-4 py-3 text-sm">
+                <p className="font-medium">{log.medicationName}</p>
                 <p className="text-[var(--color-text-muted)] print:text-black/70">
-                  {ev.typeLabel} · {ev.memberLabel}
-                  {ev.ongoing ? " · Ongoing" : ""}
+                  {log.memberLabel} · {log.prn ? `${log.status} (PRN)` : log.status} ·{" "}
+                  {formatReportDate(log.loggedAt.slice(0, 10))}
                 </p>
               </li>
             ))}

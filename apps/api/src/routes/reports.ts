@@ -111,6 +111,9 @@ export function reportRoutes(db: Database, env: Env) {
         month: c.req.query("month")?.trim() || null,
         term: c.req.query("term")?.trim() || null,
         studentMemberId: c.req.query("studentMemberId")?.trim() || null,
+        memberId: c.req.query("memberId")?.trim() || null,
+        eventType: c.req.query("eventType")?.trim() || null,
+        groupBy: c.req.query("groupBy")?.trim() || null,
       });
       if (!report) return c.json({ error: "not_found" }, 404);
       return c.json({ report });
@@ -137,6 +140,9 @@ export function reportRoutes(db: Database, env: Env) {
       month?: string | null;
       term?: string | null;
       studentMemberId?: string | null;
+      memberId?: string | null;
+      eventType?: string | null;
+      groupBy?: string | null;
       format?: ReportRenderFormat;
       destination?: ReportExportDestination;
     }>();
@@ -173,6 +179,9 @@ export function reportRoutes(db: Database, env: Env) {
         month: body.month,
         term: body.term,
         studentMemberId: body.studentMemberId,
+        memberId: body.memberId,
+        eventType: body.eventType,
+        groupBy: body.groupBy,
       });
     } catch (e) {
       if (e instanceof Error && e.message === "range_too_many_weeks") {
