@@ -55,7 +55,7 @@ Optional override: set `GOOGLE_OAUTH_REDIRECT_URI` only for calendar if you need
 2. **Publishing status:** **Testing** for personal/homelab use.
 3. **Test users:** Add every Google account that will sign in (required in Testing mode).
 4. **App domain:** Set **Application home page** and **Privacy policy** URLs. Google often blocks sign-in without a privacy policy link, even for localhost dev. Use your real domain or a static page you control.
-5. **Scopes:** Login uses `openid`, email, profile. Calendar connect adds the Calendar scope. Docs export adds `documents` + `drive.file` (sensitive — Testing + test users is fine). Enable **Google Docs API** and **Google Drive API** in the same GCP project.
+5. **Scopes:** Login uses `openid`, email, profile. Calendar connect adds the Calendar scope. Docs/Drive connect uses **`drive.file` only** (non-sensitive; Family Link–friendly) — create/open files via Picker or app uploads. Enable **Google Drive API** in the same GCP project (Docs API optional; we no longer call Docs REST).
 
 ## 6. `.env` alignment
 
@@ -130,17 +130,17 @@ The key is **not** exposed in the Next.js bundle. The API returns it only from a
 No new OAuth client is required. Picker uses:
 
 - `developerKey` = `GOOGLE_PICKER_API_KEY`
-- `OAuth token` = teacher's `google_docs_connections` access token (`documents` + `drive.file`)
+- `OAuth token` = teacher's `google_docs_connections` access token (`drive.file` only)
 - `appId` = GCP **project number** (not the OAuth client ID string). Domi Ops derives it from `GOOGLE_OAUTH_CLIENT_ID` (`{number}-….apps.googleusercontent.com`) or `GOOGLE_CLOUD_PROJECT_NUMBER`.
 
 Confirm **Authorized JavaScript origins** (§3) include your dev/prod browser URL.
 
 ## 10. Student Google Docs (school tests — WHO-209–212)
 
-Students connect the same **Google Docs** OAuth flow as teachers (`/auth/google/docs/start?next=…`). Scopes stay **`documents` + `drive.file`** — no full Drive scope.
+Students connect the same **Google Docs** OAuth flow as teachers (`/auth/google/docs/start?next=…`). Scopes are **`drive.file` only** (plus login openid/email/profile) — no Docs `documents` scope and no full Drive scope. Family Link supervised accounts can usually grant `drive.file`; if a child previously connected with the old scopes, **disconnect and reconnect** after this change.
 
 **Start test flow:** On assignments with an unfrozen `google_doc` test material, the API uses the **teacher's** token to grant the student's Google account **reader** access to the template, then the **student's** token runs `files.copy` into their Drive. The copy is tagged with Drive `appProperties` (`domi_ops_material_id`, `domi_ops_submission_id`, `domi_ops_template_file_id`) for lineage checks.
 
 **Submit:** Student picks their copy via Picker → `POST /api/school/submissions/:id/google-artifacts`. Lineage v1 flags mismatches for teachers but does not block turn-in.
 
-**Prereqs:** Student Google account email must match their linked Better Auth Google account (or profile email). Enable **Google Docs API** + **Google Drive API** for the project; student must be a **test user** on the consent screen in Testing mode.
+**Prereqs:** Student Google account email must match their linked Better Auth Google account (or profile email). Enable **Google Drive API** for the project; student must be a **test user** on the consent screen in Testing mode. Supervised (Family Link) accounts: use `drive.file` only (WHO-228) — reconnect Docs after upgrading if the child previously granted `documents`.

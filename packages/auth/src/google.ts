@@ -23,9 +23,10 @@ export const GOOGLE_CALENDAR_SCOPES = [
   "https://www.googleapis.com/auth/calendar",
 ];
 
+/** Docs/Drive connect — `drive.file` only (Family Link–friendly; non-sensitive).
+ *  Docs API `documents` scope removed: exports use Drive upload + convert. */
 export const GOOGLE_DOCS_SCOPES = [
   ...GOOGLE_LOGIN_SCOPES,
-  "https://www.googleapis.com/auth/documents",
   "https://www.googleapis.com/auth/drive.file",
 ];
 

@@ -137,54 +137,18 @@ export async function exportToGoogleDocs(params: {
   html: string;
   format: "plain" | "styled";
 }): Promise<{ documentId: string; url: string }> {
-  if (params.format === "styled") {
-    const uploaded = await googleDriveUpload({
-      accessToken: params.accessToken,
-      filename: `${params.title}.html`,
-      mimeType: "text/html",
-      body: Buffer.from(params.html, "utf-8"),
-      convertToGoogleDoc: true,
-    });
-    const url =
-      uploaded.webViewLink ?? `https://docs.google.com/document/d/${uploaded.id}/edit`;
-    return { documentId: uploaded.id, url };
-  }
-
-  const createRes = await fetch("https://docs.googleapis.com/v1/documents", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${params.accessToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ title: params.title }),
+  // Drive multipart upload + convert — works with drive.file only (no Docs API / documents scope).
+  const useHtml = params.format === "styled";
+  const uploaded = await googleDriveUpload({
+    accessToken: params.accessToken,
+    filename: useHtml ? `${params.title}.html` : `${params.title}.txt`,
+    mimeType: useHtml ? "text/html" : "text/plain",
+    body: Buffer.from(useHtml ? params.html : params.plainText, "utf-8"),
+    convertToGoogleDoc: true,
   });
-  if (!createRes.ok) {
-    const text = await createRes.text();
-    throw new Error(`Google Docs create failed: ${text}`);
-  }
-  const created = (await createRes.json()) as { documentId: string };
-  const text = params.plainText.endsWith("\n") ? params.plainText : `${params.plainText}\n`;
-  const batchRes = await fetch(
-    `https://docs.googleapis.com/v1/documents/${created.documentId}:batchUpdate`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${params.accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        requests: [{ insertText: { location: { index: 1 }, text } }],
-      }),
-    },
-  );
-  if (!batchRes.ok) {
-    const errText = await batchRes.text();
-    throw new Error(`Google Docs batchUpdate failed: ${errText}`);
-  }
-  return {
-    documentId: created.documentId,
-    url: `https://docs.google.com/document/d/${created.documentId}/edit`,
-  };
+  const url =
+    uploaded.webViewLink ?? `https://docs.google.com/document/d/${uploaded.id}/edit`;
+  return { documentId: uploaded.id, url };
 }
 
 export async function exportToGoogleDriveFile(params: {

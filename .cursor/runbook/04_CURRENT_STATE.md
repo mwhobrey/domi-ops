@@ -76,6 +76,7 @@
 - Manual QA runbook: `.cursor/runbook/05_SCHOOL_QA.md` (smoke routes, WHO-41â€“48 matrix, import SQL checks).
 - Import: `school_submission_artifact` â†’ `school_submission_artifacts` + S3 keys from file mapper; re-import hydrates `idMap` from `import_records` (school + files mappers).
 - **Phase 4 (native test builder — WHO-213–221):** ADR Accepted. Teacher editor full-page (WHO-218). Student **Take test** (WHO-215). Auto-grade + review (WHO-216/220). **WHO-217:** `POST …/export-google-doc` (one-way Docs backup + answer-key option). **WHO-219:** `convert-native-preview` / `convert-native` from Google Doc or Domi Drive → new `native_test` (non-destructive) + review modal. **WHO-221:** new-assignment material actions background-save in place; **Import Google test** runs Picker → attach → parse/review → native editor without close/reopen churn. **Google Picker vs Sheet:** `openGooglePicker` suspends open top-layer `<dialog>` hosts (sheet/drawer/modal) while Picker is visible, then restores — z-index alone cannot beat `showModal()` top layer.
+- **Google Docs OAuth (WHO-228):** Docs/Drive connect scopes are **`drive.file` only** (no sensitive `documents` scope) for Family Link supervised accounts. Exports create Docs via Drive upload+convert. Users who connected before must **reconnect Google Docs** after deploy.
 
 ### Health module
 
