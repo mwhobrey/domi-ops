@@ -516,7 +516,7 @@ function HealthEventSheet({
     event?.durationKind ?? "single_day",
   );
   const [visibility, setVisibility] = useState<"household" | "private">(
-    event?.visibility ?? "household",
+    event?.visibility ?? "private",
   );
   const [sharedMemberIds, setSharedMemberIds] = useState<string[]>(
     event?.sharedMemberIds ?? [],
@@ -537,7 +537,7 @@ function HealthEventSheet({
     setEndTime(event?.endTime ?? "");
     setHasEndTime(Boolean(event?.endTime));
     setDurationKind(event?.durationKind ?? "single_day");
-    setVisibility(event?.visibility ?? "household");
+    setVisibility(event?.visibility ?? "private");
     setSharedMemberIds(event?.sharedMemberIds ?? []);
   }, [open, event, defaultMemberId, householdTimezone]);
 
@@ -685,8 +685,8 @@ function HealthEventSheet({
             value={visibility}
             onChange={(e) => setVisibility(e.target.value as "household" | "private")}
           >
-            <option value="household">Household</option>
             <option value="private">Private</option>
+            <option value="household">Household</option>
           </Select>
         </label>
         {visibility === "private" ? (
@@ -696,7 +696,7 @@ function HealthEventSheet({
             value={sharedMemberIds}
             onChange={setSharedMemberIds}
             namePrefix="health-event-share"
-            hint="Optional. Selected members can read this private health event. You always have access."
+            hint="Private by default. Share with selected members so they can read this event. You and the subject always have access."
           />
         ) : null}
         <div className="flex justify-end gap-2">
@@ -739,7 +739,7 @@ function HealthMedicationSheet({
     medication?.schedule?.times?.length ? medication.schedule.times : ["08:00"],
   );
   const [visibility, setVisibility] = useState<"household" | "private">(
-    medication?.visibility ?? "household",
+    medication?.visibility ?? "private",
   );
   const [sharedMemberIds, setSharedMemberIds] = useState<string[]>(
     medication?.sharedMemberIds ?? [],
@@ -758,7 +758,7 @@ function HealthMedicationSheet({
     setScheduleTimes(
       medication?.schedule?.times?.length ? medication.schedule.times : ["08:00"],
     );
-    setVisibility(medication?.visibility ?? "household");
+    setVisibility(medication?.visibility ?? "private");
     setSharedMemberIds(medication?.sharedMemberIds ?? []);
     setEnabled(medication?.enabled ?? true);
   }, [open, medication, defaultMemberId]);
@@ -847,8 +847,8 @@ function HealthMedicationSheet({
             value={visibility}
             onChange={(e) => setVisibility(e.target.value as "household" | "private")}
           >
-            <option value="household">Household</option>
             <option value="private">Private</option>
+            <option value="household">Household</option>
           </Select>
         </label>
         {visibility === "private" ? (
@@ -858,7 +858,7 @@ function HealthMedicationSheet({
             value={sharedMemberIds}
             onChange={setSharedMemberIds}
             namePrefix="health-med-share"
-            hint="Optional. Selected members can read this private medication. You always have access."
+            hint="Private by default. Share with selected members so they can read this medication. You and the subject always have access."
           />
         ) : null}
         <div className="flex justify-end gap-2">

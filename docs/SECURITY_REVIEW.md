@@ -92,7 +92,7 @@
 |-------|--------|----------|
 | Encryption at rest | **Pass** | `encryptHealthField` / `decryptHealthField` via `@domi-ops/crypto` + `ENCRYPTION_KEY` (`health-crypto.ts`) |
 | Prod key required | **Pass** | Config `superRefine` when `health` ∈ `MODULES_ENABLED` |
-| Access control | **Pass** | `healthEventVisibleWhere` / `healthMedicationVisibleWhere`; private + shares; admin override |
+| Access control | **Pass** | `healthEventVisibleWhere` / `healthMedicationVisibleWhere`: household \| subject (`memberId`) \| creator \| explicit shares. **No admin override** on list/reports/overlays. New rows default **private** (WHO-226). |
 | HIPAA claim | **Pass** | Documented as **not** HIPAA-compliant in `SELF_HOST.md` |
 
 **Follow-up:** `ENCRYPTION_KEY` rotation tooling still absent (documented limitation).

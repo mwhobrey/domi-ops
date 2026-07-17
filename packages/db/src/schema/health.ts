@@ -46,7 +46,7 @@ export const healthEvents = pgTable("health_events", {
   startedAt: timestamp("started_at", { withTimezone: true }),
   endedAt: timestamp("ended_at", { withTimezone: true }),
   durationKind: healthEventDurationKindEnum("duration_kind").notNull().default("single_day"),
-  visibility: noteVisibilityEnum("visibility").notNull().default("household"),
+  visibility: noteVisibilityEnum("visibility").notNull().default("private"),
   createdByUserId: uuid("created_by_user_id").references(() => users.id, {
     onDelete: "set null",
   }),
@@ -84,7 +84,7 @@ export const healthMedications = pgTable("health_medications", {
   startDate: date("start_date"),
   endDate: date("end_date"),
   enabled: boolean("enabled").notNull().default(true),
-  visibility: noteVisibilityEnum("visibility").notNull().default("household"),
+  visibility: noteVisibilityEnum("visibility").notNull().default("private"),
   createdByUserId: uuid("created_by_user_id").references(() => users.id, {
     onDelete: "set null",
   }),

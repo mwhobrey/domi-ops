@@ -149,12 +149,13 @@ export async function scanHealthMedReminders(db: Database, env: Env): Promise<nu
               .limit(1);
             if (logged) continue;
 
+            // Subject (med.memberId) always has read access under WHO-226 visibility rules.
             const [member] = await db
               .select({ userId: householdMembers.userId })
               .from(householdMembers)
               .where(eq(householdMembers.id, med.memberId))
               .limit(1);
-            if (!member) continue;
+            if (!member?.userId) continue;
 
             const [userRow] = await db
               .select({ id: users.id })

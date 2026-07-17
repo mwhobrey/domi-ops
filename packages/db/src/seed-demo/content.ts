@@ -465,6 +465,7 @@ export async function seedDemoContent(
       scheduleJson: JSON.stringify({ times: ["08:00"], daysOfWeek: [0, 1, 2, 3, 4, 5, 6] }),
       startDate: addDaysYmd(today, -30),
       enabled: true,
+      visibility: "private",
       createdByUserId: maria.userId,
     })
     .returning({ id: healthMedications.id });
@@ -477,6 +478,7 @@ export async function seedDemoContent(
     scheduleKind: "prn",
     scheduleJson: "{}",
     enabled: true,
+    visibility: "private",
     createdByUserId: maria.userId,
   });
 

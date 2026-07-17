@@ -11,8 +11,9 @@ import { isHouseholdAdmin } from "./school-access.js";
 
 export type HealthVisibility = "household" | "private";
 
+/** Omit / unknown → private (WHO-226). Only explicit `"household"` opens the record. */
 export function normalizeHealthVisibility(value: unknown): HealthVisibility {
-  return value === "private" ? "private" : "household";
+  return value === "household" ? "household" : "private";
 }
 
 export function canManageMemberHealth(householdRole: string, targetMemberId: string, authMemberId: string): boolean {
@@ -106,6 +107,7 @@ export function healthEventVisibleWhere(db: Database, auth: {
     eq(healthEvents.householdId, auth.householdId),
     or(
       eq(healthEvents.visibility, "household"),
+      eq(healthEvents.memberId, auth.memberId),
       and(eq(healthEvents.visibility, "private"), eq(healthEvents.createdByUserId, auth.userId)),
       and(
         eq(healthEvents.visibility, "private"),
@@ -134,6 +136,7 @@ export function healthMedicationVisibleWhere(db: Database, auth: {
     eq(healthMedications.householdId, auth.householdId),
     or(
       eq(healthMedications.visibility, "household"),
+      eq(healthMedications.memberId, auth.memberId),
       and(
         eq(healthMedications.visibility, "private"),
         eq(healthMedications.createdByUserId, auth.userId),
@@ -174,11 +177,12 @@ export function isHealthRecordVisible(params: {
     householdRole,
     recordMemberId,
   } = params;
-  if (isHouseholdAdmin(householdRole)) return true;
+  // No admin override — matches SQL VisibleWhere (list/reports/overlays).
   if (visibility === "household") return true;
+  if (recordMemberId === authMemberId) return true;
   if (createdByUserId === authUserId) return true;
   if (sharedMemberIds.includes(authMemberId)) return true;
-  if (recordMemberId === authMemberId) return true;
+  void householdRole;
   return false;
 }
 
