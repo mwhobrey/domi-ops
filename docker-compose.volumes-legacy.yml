@@ -1,0 +1,22 @@
+# Pre-WHO-192 volume names (compose project "whome" → whome_whome_*).
+# Use on existing droplets that were deployed before domi-ops rename created
+# empty whome_domi_ops_* volumes.
+#
+#   docker compose \
+#     -f docker-compose.prod.yml \
+#     -f docker-compose.proxy-external.yml \
+#     -f docker-compose.volumes-legacy.yml \
+#     up -d
+#
+# Or: ./deploy/update-prod.sh
+
+volumes:
+  domi_ops_pg:
+    external: true
+    name: whome_whome_pg
+  domi_ops_redis:
+    external: true
+    name: whome_whome_redis
+  domi_ops_minio:
+    external: true
+    name: whome_whome_minio
