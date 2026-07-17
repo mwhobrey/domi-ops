@@ -236,15 +236,24 @@ export function SchoolAssignmentDetail({
 
   async function attachGoogleArtifact(file: { id: string; mimeType: string }) {
     setError(null);
+    setUploadStatus(null);
+    setUploadError(false);
     try {
       const activeSubmission = await ensureSubmissionRecord();
+      const body: {
+        googleFileId: string;
+        googleMimeType: string;
+        materialId?: string;
+      } = {
+        googleFileId: file.id,
+        googleMimeType: file.mimeType,
+      };
+      if (googleTestMaterial?.id) {
+        body.materialId = googleTestMaterial.id;
+      }
       const data = await apiClient.post<{ artifact: Submission["artifacts"][number] }>(
         `/api/school/submissions/${activeSubmission.id}/google-artifacts`,
-        {
-          materialId: googleTestMaterial?.id,
-          googleFileId: file.id,
-          googleMimeType: file.mimeType,
-        },
+        body,
       );
       setSubmissions((prev) =>
         prev.map((s) =>
@@ -253,8 +262,15 @@ export function SchoolAssignmentDetail({
             : s,
         ),
       );
+      setUploadStatus("Google file attached. Turn in when you are ready.");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not attach Google Doc");
+      if (err instanceof ApiError && err.body?.includes("google_docs_not_connected")) {
+        setError("Connect Google Docs in your profile, then try again.");
+      } else if (err instanceof ApiError && err.status === 503) {
+        setError("Google Picker is not configured on the server.");
+      } else {
+        setError(err instanceof ApiError ? err.message : "Could not attach Google Doc");
+      }
     }
   }
 
@@ -568,22 +584,25 @@ export function SchoolAssignmentDetail({
                   </div>
                 </div>
               ) : null}
-              {googleTestMaterial ? (
-                <div className="space-y-2 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-3">
-                  <h4 className="text-sm font-medium">Google Doc submission</h4>
-                  <p className="text-xs text-[var(--color-text-muted)]">
-                    Start the test above, complete your copy in Google Docs, then attach it here
-                    before turning in.
-                  </p>
-                  <GooglePickerButton
-                    onPicked={attachGoogleArtifact}
-                    title="Submit your Google Doc"
-                    disabled={attemptsBlocked}
-                  >
-                    Submit via Google
-                  </GooglePickerButton>
-                </div>
-              ) : null}
+              <div className="space-y-2 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-3">
+                <h4 className="text-sm font-medium">
+                  {googleTestMaterial ? "Google Doc submission" : "Submit via Google"}
+                </h4>
+                <p className="text-xs text-[var(--color-text-muted)]">
+                  {googleTestMaterial
+                    ? "Start the test above, complete your copy in Google Docs, then attach it here before turning in."
+                    : "Attach a Google Drive file, then use Turn in assignment below."}
+                </p>
+                <GooglePickerButton
+                  onPicked={attachGoogleArtifact}
+                  title={
+                    googleTestMaterial ? "Submit your Google Doc" : "Attach from Google Drive"
+                  }
+                  disabled={attemptsBlocked}
+                >
+                  Submit via Google
+                </GooglePickerButton>
+              </div>
               {uploadStatus && !uploadError && (
                 <p className="text-xs text-[var(--color-success)]">{uploadStatus}</p>
               )}

@@ -381,19 +381,21 @@ Prereq: `GOOGLE_PICKER_API_KEY` in `.env` + Picker API enabled in GCP (`docs/GOO
 - [ ] Revoked Google token: first submit on Google test returns clear error; material stays unfrozen
 - [ ] `GET /api/core/google/docs/picker-session` → 403 when disconnected, 503 when key unset
 
-## Assignment materials — Student Google (WHO-209–212)
+## Assignment materials — Student Google (WHO-209–212, WHO-227)
 
-Prereq: teacher attached `google_doc` test material; student has Google Docs connected.
+Prereq: student has Google Docs connected; `GOOGLE_PICKER_API_KEY` configured for Picker.
 
+- [ ] **Any assignment (WHO-227):** student sees **Submit via Google** → Picker attaches Drive file → artifact listed → **Turn in** succeeds (no `materialId` required)
 - [ ] Student without Google Docs sees connect banner on assignment with google test
 - [ ] Connect → OAuth returns to assignment via `next`
 - [ ] **Start test** creates doc in student's Drive; second click reopens same copy
-- [ ] Student edits copy, **Submit via Google** Picker attaches doc; turn-in succeeds
+- [ ] Student with `google_doc` test: edits copy → **Submit via Google** Picker attaches doc (with `materialId`); turn-in succeeds
 - [ ] Teacher Student work shows Google link + lineage badge (pass / review needed)
 - [ ] Pick unrelated doc → lineage warn/fail badge; submit still allowed (v1)
 - [ ] Teacher: **Strict content check** on Google test material → L2 diff on submit
 - [ ] First household submit still freezes teacher template (Phase 2 regression)
 - [ ] `max_attempts` respected on submit; S3/Drive attach paths still work
+- [ ] `GET /api/core/google/docs/picker-session` → 403 when disconnected, 503 when key unset
 
 ---
 
