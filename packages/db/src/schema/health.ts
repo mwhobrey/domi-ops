@@ -105,6 +105,31 @@ export const healthMedicationShares = pgTable(
   (t) => [primaryKey({ columns: [t.medicationId, t.memberId] })],
 );
 
+/** Per-grantee segment ACL for a subject's health data (WHO-229). */
+export const healthAclLevelEnum = pgEnum("health_acl_level", ["none", "read", "write"]);
+
+export const healthMemberAcl = pgTable(
+  "health_member_acl",
+  {
+    householdId: uuid("household_id")
+      .notNull()
+      .references(() => households.id, { onDelete: "cascade" }),
+    subjectMemberId: uuid("subject_member_id")
+      .notNull()
+      .references(() => householdMembers.id, { onDelete: "cascade" }),
+    granteeMemberId: uuid("grantee_member_id")
+      .notNull()
+      .references(() => householdMembers.id, { onDelete: "cascade" }),
+    eventsAccess: healthAclLevelEnum("events_access").notNull().default("none"),
+    medicationsAccess: healthAclLevelEnum("medications_access").notNull().default("none"),
+    dosesAccess: healthAclLevelEnum("doses_access").notNull().default("none"),
+    reportsAccess: healthAclLevelEnum("reports_access").notNull().default("none"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.subjectMemberId, t.granteeMemberId] })],
+);
+
 export const healthMedicationLogs = pgTable("health_medication_logs", {
   id: uuid("id").primaryKey().defaultRandom(),
   medicationId: uuid("medication_id")

@@ -18,7 +18,13 @@ import {
   encryptHealthField,
   HealthEncryptionError,
 } from "./health-crypto.js";
-import { loadHealthEventShareMap, loadHealthMedicationShareMap } from "./health-access.js";
+import {
+  canAccessHealthSegment,
+  loadHealthAclBySubjectForGrantee,
+  loadHealthEventShareMap,
+  loadHealthMedicationShareMap,
+  managementGrantsForSubject,
+} from "./health-access.js";
 
 type HealthEventRow = typeof healthEvents.$inferSelect;
 type HealthMedicationRow = typeof healthMedications.$inferSelect;
@@ -27,7 +33,12 @@ type HealthLogRow = typeof healthMedicationLogs.$inferSelect;
 export function serializeHealthEvent(
   row: HealthEventRow,
   env: Env,
-  extras?: { sharedMemberIds?: string[]; isOwnedByMe?: boolean; sharedWithMe?: boolean },
+  extras?: {
+    sharedMemberIds?: string[];
+    isOwnedByMe?: boolean;
+    sharedWithMe?: boolean;
+    canEdit?: boolean;
+  },
   timeZone?: string,
 ) {
   const base = {
@@ -47,6 +58,7 @@ export function serializeHealthEvent(
     sharedMemberIds: extras?.sharedMemberIds,
     isOwnedByMe: extras?.isOwnedByMe,
     sharedWithMe: extras?.sharedWithMe,
+    canEdit: extras?.canEdit,
     startDate: null as string | null,
     startTime: null as string | null,
     endDate: null as string | null,
@@ -92,7 +104,13 @@ export function resolveEventInstant(
 export function serializeHealthMedication(
   row: HealthMedicationRow,
   env: Env,
-  extras?: { sharedMemberIds?: string[]; isOwnedByMe?: boolean; sharedWithMe?: boolean },
+  extras?: {
+    sharedMemberIds?: string[];
+    isOwnedByMe?: boolean;
+    sharedWithMe?: boolean;
+    canEdit?: boolean;
+    canLog?: boolean;
+  },
 ) {
   return {
     id: row.id,
@@ -113,6 +131,8 @@ export function serializeHealthMedication(
     sharedMemberIds: extras?.sharedMemberIds,
     isOwnedByMe: extras?.isOwnedByMe,
     sharedWithMe: extras?.sharedWithMe,
+    canEdit: extras?.canEdit,
+    canLog: extras?.canLog,
   };
 }
 
@@ -132,7 +152,7 @@ export function serializeHealthLog(row: HealthLogRow, env: Env) {
 export async function enrichHealthEvents(
   db: Database,
   env: Env,
-  auth: { userId: string; memberId: string; householdId: string },
+  auth: { userId: string; memberId: string; householdId: string; role: string },
   rows: HealthEventRow[],
   timeZone?: string,
 ) {
@@ -147,15 +167,27 @@ export async function enrichHealthEvents(
   }
   const privateIds = rows.filter((r) => r.visibility === "private").map((r) => r.id);
   const shareMap = await loadHealthEventShareMap(db, privateIds);
+  const aclBySubject = await loadHealthAclBySubjectForGrantee(db, auth.householdId, auth.memberId);
   return rows.map((row) => {
     const sharedMemberIds = shareMap.get(row.id) ?? [];
     const isOwnedByMe = row.createdByUserId === auth.userId;
     const sharedWithMe =
       row.visibility === "private" && !isOwnedByMe && sharedMemberIds.includes(auth.memberId);
+    const grants = managementGrantsForSubject(
+      aclBySubject,
+      row.memberId,
+      auth.memberId,
+      auth.role,
+    );
+    const canEdit =
+      isOwnedByMe ||
+      row.visibility === "household" ||
+      canAccessHealthSegment(grants, "events", "write");
     return serializeHealthEvent(row, env, {
       sharedMemberIds: isOwnedByMe ? sharedMemberIds : undefined,
       isOwnedByMe,
       sharedWithMe,
+      canEdit,
     }, tz);
   });
 }
@@ -163,20 +195,34 @@ export async function enrichHealthEvents(
 export async function enrichHealthMedications(
   db: Database,
   env: Env,
-  auth: { userId: string; memberId: string },
+  auth: { userId: string; memberId: string; householdId: string; role: string },
   rows: HealthMedicationRow[],
 ) {
   const privateIds = rows.filter((r) => r.visibility === "private").map((r) => r.id);
   const shareMap = await loadHealthMedicationShareMap(db, privateIds);
+  const aclBySubject = await loadHealthAclBySubjectForGrantee(db, auth.householdId, auth.memberId);
   return rows.map((row) => {
     const sharedMemberIds = shareMap.get(row.id) ?? [];
     const isOwnedByMe = row.createdByUserId === auth.userId;
     const sharedWithMe =
       row.visibility === "private" && !isOwnedByMe && sharedMemberIds.includes(auth.memberId);
+    const grants = managementGrantsForSubject(
+      aclBySubject,
+      row.memberId,
+      auth.memberId,
+      auth.role,
+    );
+    const canEdit =
+      isOwnedByMe ||
+      row.visibility === "household" ||
+      canAccessHealthSegment(grants, "medications", "write");
+    const canLog = canAccessHealthSegment(grants, "doses", "write");
     return serializeHealthMedication(row, env, {
       sharedMemberIds: isOwnedByMe ? sharedMemberIds : undefined,
       isOwnedByMe,
       sharedWithMe,
+      canEdit,
+      canLog,
     });
   });
 }

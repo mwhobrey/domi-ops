@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ApiError, apiClient } from "../lib/client-api";
 import type { NoteShareMember } from "./NoteSharePicker";
 import { NoteSharePicker } from "./NoteSharePicker";
+import { HealthAclSheet, type HealthAclGrants } from "./HealthAclSheet";
 import { ModuleReportsLink } from "./reports/ModuleReportsLink";
 import {
   Alert,
@@ -50,6 +51,7 @@ export interface HealthEvent {
   sharedMemberIds?: string[];
   isOwnedByMe?: boolean;
   sharedWithMe?: boolean;
+  canEdit?: boolean;
 }
 
 export interface HealthMedication {
@@ -67,6 +69,9 @@ export interface HealthMedication {
   visibility: "household" | "private";
   sharedMemberIds?: string[];
   isOwnedByMe?: boolean;
+  sharedWithMe?: boolean;
+  canEdit?: boolean;
+  canLog?: boolean;
 }
 
 interface PendingDose {
@@ -202,25 +207,29 @@ export function HealthPageClient({
   const [error, setError] = useState<string | null>(null);
   const [eventSheetOpen, setEventSheetOpen] = useState(false);
   const [medSheetOpen, setMedSheetOpen] = useState(false);
+  const [aclSheetOpen, setAclSheetOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<HealthEvent | null>(null);
   const [editingMed, setEditingMed] = useState<HealthMedication | null>(null);
+  const [capabilities, setCapabilities] = useState<Record<string, HealthAclGrants>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [eventsRes, medsRes, glanceRes] = await Promise.all([
+      const [eventsRes, medsRes, glanceRes, capsRes] = await Promise.all([
         apiClient.get<{ events: HealthEvent[] }>("/api/health/events"),
         apiClient.get<{ medications: HealthMedication[] }>("/api/health/medications"),
         apiClient.get<{
           pendingDoses: PendingDose[];
           prnMedications: HealthMedication[];
         }>("/api/health/glance"),
+        apiClient.get<{ bySubject: Record<string, HealthAclGrants> }>("/api/health/capabilities"),
       ]);
       setEvents(eventsRes.events);
       setMedications(medsRes.medications);
       setPendingDoses(glanceRes.pendingDoses);
       setPrnMeds(glanceRes.prnMedications);
+      setCapabilities(capsRes.bySubject ?? {});
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load health data");
     } finally {
@@ -276,6 +285,25 @@ export function HealthPageClient({
     }
   }
 
+  const canAddEvent = members.some((m) => capabilities[m.memberId]?.events === "write");
+  const canAddMed = members.some((m) => capabilities[m.memberId]?.medications === "write");
+  const canManageSubjects = members
+    .filter((m) => {
+      const g = capabilities[m.memberId];
+      return g?.events === "write" || g?.medications === "write" || g?.doses === "write" || g?.reports === "write";
+    })
+    .map((m) => m.memberId);
+  // Subject can always manage own ACL even if empty caps not loaded yet
+  const aclSubjects = canManageSubjects.includes(currentMemberId)
+    ? canManageSubjects
+    : currentMemberId
+      ? [currentMemberId, ...canManageSubjects]
+      : canManageSubjects;
+
+  function canLogForMember(memberId: string) {
+    return capabilities[memberId]?.doses === "write";
+  }
+
   return (
     <div className="space-y-4">
       {error ? <Alert variant="error">{error}</Alert> : null}
@@ -293,7 +321,12 @@ export function HealthPageClient({
           </Button>
         ))}
         </div>
-        <ModuleReportsLink module="health" />
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="secondary" onClick={() => setAclSheetOpen(true)}>
+            Sharing
+          </Button>
+          <ModuleReportsLink module="health" />
+        </div>
       </div>
 
       {tab === "today" ? (
@@ -312,6 +345,7 @@ export function HealthPageClient({
                     title={dose.name}
                     subtitle={dose.scheduledTimeLabel || dose.scheduledTime}
                     trailing={
+                      canLogForMember(dose.memberId) ? (
                       <div className="flex gap-2">
                         <Button
                           size="sm"
@@ -337,6 +371,7 @@ export function HealthPageClient({
                           Skip
                         </Button>
                       </div>
+                      ) : null
                     }
                   />
                 ))
@@ -356,9 +391,11 @@ export function HealthPageClient({
                     title={med.name}
                     subtitle={med.dosage ?? "As needed"}
                     trailing={
+                      (med.canLog ?? canLogForMember(med.memberId)) ? (
                       <Button size="sm" onClick={() => void logDose(med.id, {})}>
                         Log dose
                       </Button>
+                      ) : null
                     }
                   />
                 ))
@@ -370,6 +407,7 @@ export function HealthPageClient({
 
       {tab === "events" ? (
         <div className="space-y-4">
+          {canAddEvent ? (
           <div className="flex justify-end">
             <Button
               size="sm"
@@ -381,6 +419,7 @@ export function HealthPageClient({
               Add event
             </Button>
           </div>
+          ) : null}
           {events.length === 0 && !loading ? (
             <EmptyState
               icon={<Heart className="h-8 w-8" aria-hidden />}
@@ -408,6 +447,7 @@ export function HealthPageClient({
 
       {tab === "medications" ? (
         <div className="space-y-4">
+          {canAddMed ? (
           <div className="flex justify-end">
             <Button
               size="sm"
@@ -419,6 +459,7 @@ export function HealthPageClient({
               Add medication
             </Button>
           </div>
+          ) : null}
           {medications.length === 0 && !loading ? (
             <EmptyState
               icon={<Heart className="h-8 w-8" aria-hidden />}
@@ -452,6 +493,10 @@ export function HealthPageClient({
         members={members}
         currentMemberId={currentMemberId}
         householdTimezone={householdTimezone}
+        writableMemberIds={members
+          .filter((m) => capabilities[m.memberId]?.events === "write")
+          .map((m) => m.memberId)}
+        readOnly={Boolean(editingEvent && editingEvent.canEdit === false)}
         onClose={() => {
           setEventSheetOpen(false);
           setEditingEvent(null);
@@ -469,6 +514,10 @@ export function HealthPageClient({
         medication={editingMed}
         members={members}
         currentMemberId={currentMemberId}
+        writableMemberIds={members
+          .filter((m) => capabilities[m.memberId]?.medications === "write")
+          .map((m) => m.memberId)}
+        readOnly={Boolean(editingMed && editingMed.canEdit === false)}
         onClose={() => {
           setMedSheetOpen(false);
           setEditingMed(null);
@@ -480,6 +529,17 @@ export function HealthPageClient({
           void load();
         }}
       />
+
+      <HealthAclSheet
+        open={aclSheetOpen}
+        onClose={() => {
+          setAclSheetOpen(false);
+          void load();
+        }}
+        members={members}
+        currentMemberId={currentMemberId}
+        canManageSubjects={aclSubjects}
+      />
     </div>
   );
 }
@@ -490,6 +550,8 @@ function HealthEventSheet({
   members,
   currentMemberId,
   householdTimezone,
+  writableMemberIds,
+  readOnly = false,
   onClose,
   onSaved,
 }: {
@@ -498,10 +560,16 @@ function HealthEventSheet({
   members: NoteShareMember[];
   currentMemberId: string;
   householdTimezone: string;
+  writableMemberIds: string[];
+  readOnly?: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const defaultMemberId = resolveDefaultMemberId(currentMemberId, members);
+  const memberChoices = members.filter((m) => writableMemberIds.includes(m.memberId));
+  const defaultMemberId = resolveDefaultMemberId(
+    currentMemberId,
+    memberChoices.length > 0 ? memberChoices : members,
+  );
   const [memberId, setMemberId] = useState(event?.memberId ?? defaultMemberId);
   const [type, setType] = useState<HealthEventType>(event?.type ?? "other");
   const [title, setTitle] = useState(event?.title ?? "");
@@ -542,7 +610,7 @@ function HealthEventSheet({
   }, [open, event, defaultMemberId, householdTimezone]);
 
   async function save() {
-    if (!title.trim()) return;
+    if (readOnly || !title.trim()) return;
     setBusy(true);
     setErr(null);
     const body = {
@@ -577,13 +645,17 @@ function HealthEventSheet({
   }
 
   return (
-    <Sheet open={open} onClose={onClose} title={event ? "Edit event" : "Add health event"}>
-      <div className="space-y-4 px-6 py-4">
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title={readOnly ? "Health event" : event ? "Edit event" : "Add health event"}
+    >
+      <fieldset className="space-y-4 px-6 py-4" disabled={readOnly}>
         {err ? <Alert variant="error">{err}</Alert> : null}
         <label className="block space-y-1 text-sm">
           <span>Member</span>
           <Select value={memberId} onChange={(e) => setMemberId(e.target.value)}>
-            {members.map((m) => (
+            {(memberChoices.length > 0 ? memberChoices : members).map((m) => (
               <option key={m.memberId} value={m.memberId}>
                 {m.label}
               </option>
@@ -701,13 +773,15 @@ function HealthEventSheet({
         ) : null}
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>
-            Cancel
+            {readOnly ? "Close" : "Cancel"}
           </Button>
+          {readOnly ? null : (
           <Button onClick={() => void save()} disabled={busy || !title.trim()}>
             Save
           </Button>
+          )}
         </div>
-      </div>
+      </fieldset>
     </Sheet>
   );
 }
@@ -717,6 +791,8 @@ function HealthMedicationSheet({
   medication,
   members,
   currentMemberId,
+  writableMemberIds,
+  readOnly = false,
   onClose,
   onSaved,
 }: {
@@ -724,10 +800,16 @@ function HealthMedicationSheet({
   medication: HealthMedication | null;
   members: NoteShareMember[];
   currentMemberId: string;
+  writableMemberIds: string[];
+  readOnly?: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const defaultMemberId = resolveDefaultMemberId(currentMemberId, members);
+  const memberChoices = members.filter((m) => writableMemberIds.includes(m.memberId));
+  const defaultMemberId = resolveDefaultMemberId(
+    currentMemberId,
+    memberChoices.length > 0 ? memberChoices : members,
+  );
   const [memberId, setMemberId] = useState(medication?.memberId ?? defaultMemberId);
   const [name, setName] = useState(medication?.name ?? "");
   const [dosage, setDosage] = useState(medication?.dosage ?? "");
@@ -764,7 +846,7 @@ function HealthMedicationSheet({
   }, [open, medication, defaultMemberId]);
 
   async function save() {
-    if (!name.trim()) return;
+    if (readOnly || !name.trim()) return;
     setBusy(true);
     setErr(null);
     const scheduleTimesNormalized = scheduleTimes
@@ -798,13 +880,17 @@ function HealthMedicationSheet({
   }
 
   return (
-    <Sheet open={open} onClose={onClose} title={medication ? "Edit medication" : "Add medication"}>
-      <div className="space-y-4 px-6 py-4">
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title={readOnly ? "Medication" : medication ? "Edit medication" : "Add medication"}
+    >
+      <fieldset className="space-y-4 px-6 py-4" disabled={readOnly}>
         {err ? <Alert variant="error">{err}</Alert> : null}
         <label className="block space-y-1 text-sm">
           <span>Member</span>
           <Select value={memberId} onChange={(e) => setMemberId(e.target.value)}>
-            {members.map((m) => (
+            {(memberChoices.length > 0 ? memberChoices : members).map((m) => (
               <option key={m.memberId} value={m.memberId}>
                 {m.label}
               </option>
@@ -863,13 +949,15 @@ function HealthMedicationSheet({
         ) : null}
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>
-            Cancel
+            {readOnly ? "Close" : "Cancel"}
           </Button>
+          {readOnly ? null : (
           <Button onClick={() => void save()} disabled={busy || !name.trim()}>
             Save
           </Button>
+          )}
         </div>
-      </div>
+      </fieldset>
     </Sheet>
   );
 }

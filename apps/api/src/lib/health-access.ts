@@ -4,16 +4,57 @@ import {
   healthEvents,
   healthMedicationShares,
   healthMedications,
+  healthMemberAcl,
   householdMembers,
 } from "@domi-ops/db";
-import { and, eq, exists, inArray, or } from "drizzle-orm";
+import { and, eq, exists, inArray, or, type AnyColumn } from "drizzle-orm";
 import { isHouseholdAdmin } from "./school-access.js";
 
 export type HealthVisibility = "household" | "private";
 
+export type HealthAclLevel = "none" | "read" | "write";
+
+export type HealthAclSegment = "events" | "medications" | "doses" | "reports";
+
+export type HealthAclGrants = {
+  events: HealthAclLevel;
+  medications: HealthAclLevel;
+  doses: HealthAclLevel;
+  reports: HealthAclLevel;
+};
+
+const ACL_RANK: Record<HealthAclLevel, number> = { none: 0, read: 1, write: 2 };
+
 /** Omit / unknown → private (WHO-226). Only explicit `"household"` opens the record. */
 export function normalizeHealthVisibility(value: unknown): HealthVisibility {
   return value === "household" ? "household" : "private";
+}
+
+export function normalizeHealthAclLevel(value: unknown): HealthAclLevel {
+  if (value === "read" || value === "write" || value === "none") return value;
+  return "none";
+}
+
+export function aclLevelAtLeast(level: HealthAclLevel, min: HealthAclLevel): boolean {
+  return ACL_RANK[level] >= ACL_RANK[min];
+}
+
+/**
+ * Doses write implies medications read (WHO-229) so caregivers can see meds they log against.
+ * Does not escalate medications write.
+ */
+export function effectiveMedicationsAccess(grants: HealthAclGrants): HealthAclLevel {
+  if (aclLevelAtLeast(grants.medications, "read")) return grants.medications;
+  if (grants.doses === "write") return "read";
+  return "none";
+}
+
+export function emptyHealthAclGrants(): HealthAclGrants {
+  return { events: "none", medications: "none", doses: "none", reports: "none" };
+}
+
+export function fullHealthAclGrants(): HealthAclGrants {
+  return { events: "write", medications: "write", doses: "write", reports: "write" };
 }
 
 export function canManageMemberHealth(householdRole: string, targetMemberId: string, authMemberId: string): boolean {
@@ -98,6 +139,172 @@ export async function replaceHealthMedicationShares(
   );
 }
 
+function rowToGrants(row: {
+  eventsAccess: HealthAclLevel;
+  medicationsAccess: HealthAclLevel;
+  dosesAccess: HealthAclLevel;
+  reportsAccess: HealthAclLevel;
+}): HealthAclGrants {
+  return {
+    events: row.eventsAccess,
+    medications: row.medicationsAccess,
+    doses: row.dosesAccess,
+    reports: row.reportsAccess,
+  };
+}
+
+/** ACL rows where auth is grantee (subject → grants). */
+export async function loadHealthAclBySubjectForGrantee(
+  db: Database,
+  householdId: string,
+  granteeMemberId: string,
+): Promise<Map<string, HealthAclGrants>> {
+  const map = new Map<string, HealthAclGrants>();
+  const rows = await db
+    .select()
+    .from(healthMemberAcl)
+    .where(
+      and(
+        eq(healthMemberAcl.householdId, householdId),
+        eq(healthMemberAcl.granteeMemberId, granteeMemberId),
+      ),
+    );
+  for (const row of rows) {
+    map.set(row.subjectMemberId, rowToGrants(row));
+  }
+  return map;
+}
+
+/** ACL rows for a subject (grantee → grants) — for sharing UI. */
+export async function loadHealthAclForSubject(
+  db: Database,
+  householdId: string,
+  subjectMemberId: string,
+): Promise<Array<{ granteeMemberId: string } & HealthAclGrants>> {
+  const rows = await db
+    .select()
+    .from(healthMemberAcl)
+    .where(
+      and(
+        eq(healthMemberAcl.householdId, householdId),
+        eq(healthMemberAcl.subjectMemberId, subjectMemberId),
+      ),
+    );
+  return rows.map((row) => ({
+    granteeMemberId: row.granteeMemberId,
+    ...rowToGrants(row),
+  }));
+}
+
+export async function replaceHealthAclForSubject(
+  db: Database,
+  householdId: string,
+  subjectMemberId: string,
+  entries: Array<{ granteeMemberId: string } & HealthAclGrants>,
+) {
+  await db
+    .delete(healthMemberAcl)
+    .where(
+      and(
+        eq(healthMemberAcl.householdId, householdId),
+        eq(healthMemberAcl.subjectMemberId, subjectMemberId),
+      ),
+    );
+  const values = entries
+    .filter((e) => e.granteeMemberId && e.granteeMemberId !== subjectMemberId)
+    .filter(
+      (e) =>
+        e.events !== "none" ||
+        e.medications !== "none" ||
+        e.doses !== "none" ||
+        e.reports !== "none",
+    )
+    .map((e) => ({
+      householdId,
+      subjectMemberId,
+      granteeMemberId: e.granteeMemberId,
+      eventsAccess: e.events,
+      medicationsAccess: e.medications,
+      dosesAccess: e.doses,
+      reportsAccess: e.reports,
+      updatedAt: new Date(),
+    }));
+  if (values.length === 0) return;
+  await db.insert(healthMemberAcl).values(values);
+}
+
+/**
+ * Management grants for UI / write checks: subject + household admin get full write.
+ * Do **not** use for list visibility — admins must not auto-see private PHI (WHO-226).
+ */
+export function managementGrantsForSubject(
+  aclBySubject: Map<string, HealthAclGrants>,
+  subjectMemberId: string,
+  authMemberId: string,
+  householdRole: string,
+): HealthAclGrants {
+  if (canManageMemberHealth(householdRole, subjectMemberId, authMemberId)) {
+    return fullHealthAclGrants();
+  }
+  return aclBySubject.get(subjectMemberId) ?? emptyHealthAclGrants();
+}
+
+/** Raw ACL row only — for visibility (no admin override). */
+export function visibilityGrantsForSubject(
+  aclBySubject: Map<string, HealthAclGrants>,
+  subjectMemberId: string,
+): HealthAclGrants {
+  return aclBySubject.get(subjectMemberId) ?? emptyHealthAclGrants();
+}
+
+export function canAccessHealthSegment(
+  grants: HealthAclGrants,
+  segment: HealthAclSegment,
+  min: HealthAclLevel,
+): boolean {
+  if (segment === "medications") {
+    return aclLevelAtLeast(effectiveMedicationsAccess(grants), min);
+  }
+  return aclLevelAtLeast(grants[segment], min);
+}
+
+export async function hasHealthSegmentAccess(
+  db: Database,
+  auth: { householdId: string; memberId: string; role: string },
+  subjectMemberId: string,
+  segment: HealthAclSegment,
+  min: HealthAclLevel,
+): Promise<boolean> {
+  if (canManageMemberHealth(auth.role, subjectMemberId, auth.memberId)) return true;
+  const map = await loadHealthAclBySubjectForGrantee(db, auth.householdId, auth.memberId);
+  return canAccessHealthSegment(map.get(subjectMemberId) ?? emptyHealthAclGrants(), segment, min);
+}
+
+function aclExistsSql(
+  db: Database,
+  authMemberId: string,
+  subjectMemberIdCol: AnyColumn,
+  accessCol:
+    | typeof healthMemberAcl.eventsAccess
+    | typeof healthMemberAcl.medicationsAccess
+    | typeof healthMemberAcl.dosesAccess
+    | typeof healthMemberAcl.reportsAccess,
+  levels: HealthAclLevel[],
+) {
+  return exists(
+    db
+      .select({ id: healthMemberAcl.subjectMemberId })
+      .from(healthMemberAcl)
+      .where(
+        and(
+          eq(healthMemberAcl.subjectMemberId, subjectMemberIdCol),
+          eq(healthMemberAcl.granteeMemberId, authMemberId),
+          inArray(accessCol, levels),
+        ),
+      ),
+  );
+}
+
 export function healthEventVisibleWhere(db: Database, auth: {
   householdId: string;
   userId: string;
@@ -123,6 +330,48 @@ export function healthEventVisibleWhere(db: Database, auth: {
             ),
         ),
       ),
+      aclExistsSql(db, auth.memberId, healthEvents.memberId, healthMemberAcl.eventsAccess, [
+        "read",
+        "write",
+      ]),
+    ),
+  );
+}
+
+/** Events visible for reports: list visibility OR reports segment ≥ read. */
+export function healthEventReportsVisibleWhere(db: Database, auth: {
+  householdId: string;
+  userId: string;
+  memberId: string;
+}) {
+  return and(
+    eq(healthEvents.householdId, auth.householdId),
+    or(
+      eq(healthEvents.visibility, "household"),
+      eq(healthEvents.memberId, auth.memberId),
+      and(eq(healthEvents.visibility, "private"), eq(healthEvents.createdByUserId, auth.userId)),
+      and(
+        eq(healthEvents.visibility, "private"),
+        exists(
+          db
+            .select({ eventId: healthEventShares.eventId })
+            .from(healthEventShares)
+            .where(
+              and(
+                eq(healthEventShares.eventId, healthEvents.id),
+                eq(healthEventShares.memberId, auth.memberId),
+              ),
+            ),
+        ),
+      ),
+      aclExistsSql(db, auth.memberId, healthEvents.memberId, healthMemberAcl.eventsAccess, [
+        "read",
+        "write",
+      ]),
+      aclExistsSql(db, auth.memberId, healthEvents.memberId, healthMemberAcl.reportsAccess, [
+        "read",
+        "write",
+      ]),
     ),
   );
 }
@@ -155,6 +404,66 @@ export function healthMedicationVisibleWhere(db: Database, auth: {
             ),
         ),
       ),
+      aclExistsSql(
+        db,
+        auth.memberId,
+        healthMedications.memberId,
+        healthMemberAcl.medicationsAccess,
+        ["read", "write"],
+      ),
+      // doses write ⇒ meds read
+      aclExistsSql(db, auth.memberId, healthMedications.memberId, healthMemberAcl.dosesAccess, [
+        "write",
+      ]),
+    ),
+  );
+}
+
+export function healthMedicationReportsVisibleWhere(db: Database, auth: {
+  householdId: string;
+  userId: string;
+  memberId: string;
+}) {
+  return and(
+    eq(healthMedications.householdId, auth.householdId),
+    or(
+      eq(healthMedications.visibility, "household"),
+      eq(healthMedications.memberId, auth.memberId),
+      and(
+        eq(healthMedications.visibility, "private"),
+        eq(healthMedications.createdByUserId, auth.userId),
+      ),
+      and(
+        eq(healthMedications.visibility, "private"),
+        exists(
+          db
+            .select({ medicationId: healthMedicationShares.medicationId })
+            .from(healthMedicationShares)
+            .where(
+              and(
+                eq(healthMedicationShares.medicationId, healthMedications.id),
+                eq(healthMedicationShares.memberId, auth.memberId),
+              ),
+            ),
+        ),
+      ),
+      aclExistsSql(
+        db,
+        auth.memberId,
+        healthMedications.memberId,
+        healthMemberAcl.medicationsAccess,
+        ["read", "write"],
+      ),
+      aclExistsSql(db, auth.memberId, healthMedications.memberId, healthMemberAcl.dosesAccess, [
+        "write",
+      ]),
+      aclExistsSql(
+        db,
+        auth.memberId,
+        healthMedications.memberId,
+        healthMemberAcl.reportsAccess,
+        ["read", "write"],
+      ),
     ),
   );
 }
@@ -167,6 +476,8 @@ export function isHealthRecordVisible(params: {
   sharedMemberIds: string[];
   householdRole: string;
   recordMemberId: string;
+  /** Effective segment access for this record's subject (events or meds). */
+  segmentAccess?: HealthAclLevel;
 }): boolean {
   const {
     visibility,
@@ -176,12 +487,14 @@ export function isHealthRecordVisible(params: {
     sharedMemberIds,
     householdRole,
     recordMemberId,
+    segmentAccess = "none",
   } = params;
   // No admin override — matches SQL VisibleWhere (list/reports/overlays).
   if (visibility === "household") return true;
   if (recordMemberId === authMemberId) return true;
   if (createdByUserId === authUserId) return true;
   if (sharedMemberIds.includes(authMemberId)) return true;
+  if (aclLevelAtLeast(segmentAccess, "read")) return true;
   void householdRole;
   return false;
 }
@@ -204,9 +517,11 @@ export async function filterVisibleHealthEventIds(
 
   const privateIds = rows.filter((r) => r.visibility === "private").map((r) => r.id);
   const shareMap = await loadHealthEventShareMap(db, privateIds);
+  const aclBySubject = await loadHealthAclBySubjectForGrantee(db, auth.householdId, auth.memberId);
 
   const visible = new Set<string>();
   for (const row of rows) {
+    const grants = visibilityGrantsForSubject(aclBySubject, row.memberId);
     if (
       isHealthRecordVisible({
         visibility: row.visibility,
@@ -216,6 +531,7 @@ export async function filterVisibleHealthEventIds(
         sharedMemberIds: shareMap.get(row.id) ?? [],
         householdRole: auth.role,
         recordMemberId: row.memberId,
+        segmentAccess: grants.events,
       })
     ) {
       visible.add(row.id);
@@ -244,9 +560,11 @@ export async function filterVisibleMedicationIds(
 
   const privateIds = rows.filter((r) => r.visibility === "private").map((r) => r.id);
   const shareMap = await loadHealthMedicationShareMap(db, privateIds);
+  const aclBySubject = await loadHealthAclBySubjectForGrantee(db, auth.householdId, auth.memberId);
 
   const visible = new Set<string>();
   for (const row of rows) {
+    const grants = visibilityGrantsForSubject(aclBySubject, row.memberId);
     if (
       isHealthRecordVisible({
         visibility: row.visibility,
@@ -256,10 +574,25 @@ export async function filterVisibleMedicationIds(
         sharedMemberIds: shareMap.get(row.id) ?? [],
         householdRole: auth.role,
         recordMemberId: row.memberId,
+        segmentAccess: effectiveMedicationsAccess(grants),
       })
     ) {
       visible.add(row.id);
     }
   }
   return visible;
+}
+
+/** Capabilities for current user across subjects (for UI gating). Includes admin/self full write. */
+export async function loadHealthCapabilities(
+  db: Database,
+  auth: { householdId: string; memberId: string; role: string },
+  memberIds: string[],
+): Promise<Record<string, HealthAclGrants>> {
+  const aclBySubject = await loadHealthAclBySubjectForGrantee(db, auth.householdId, auth.memberId);
+  const out: Record<string, HealthAclGrants> = {};
+  for (const id of memberIds) {
+    out[id] = managementGrantsForSubject(aclBySubject, id, auth.memberId, auth.role);
+  }
+  return out;
 }

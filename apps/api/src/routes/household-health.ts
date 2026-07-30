@@ -5,6 +5,7 @@ import {
   healthEvents,
   healthMedicationLogs,
   healthMedications,
+  householdMembers,
   households,
 } from "@domi-ops/db";
 import { and, desc, eq } from "drizzle-orm";
@@ -14,14 +15,20 @@ import { requireHouseholdModule } from "../lib/household-modules.js";
 import { HealthEncryptionError } from "../lib/health-crypto.js";
 import {
   canManageMemberHealth,
+  hasHealthSegmentAccess,
   healthEventVisibleWhere,
   healthMedicationVisibleWhere,
+  loadHealthAclForSubject,
+  loadHealthCapabilities,
   loadHealthEventShareMap,
   loadHealthMedicationShareMap,
+  normalizeHealthAclLevel,
   normalizeHealthVisibility,
+  replaceHealthAclForSubject,
   replaceHealthEventShares,
   replaceHealthMedicationShares,
   validateHealthShareMemberIds,
+  type HealthAclGrants,
 } from "../lib/health-access.js";
 import { todayIsoDateInTz, zonedLocalToUtc, formatTimeLabelInTz } from "@domi-ops/calendar-sync";
 import {
@@ -63,6 +70,93 @@ export function householdHealthRoutes(db: Database, env: Env) {
 
   app.use("/*", requireAuth(env));
   app.use("/*", requireHouseholdModule(db, env, "health"));
+
+  app.get("/capabilities", async (c) => {
+    const auth = c.get("auth")!;
+    const members = await db
+      .select({ id: householdMembers.id })
+      .from(householdMembers)
+      .where(eq(householdMembers.householdId, auth.householdId));
+    const bySubject = await loadHealthCapabilities(
+      db,
+      auth,
+      members.map((m) => m.id),
+    );
+    return c.json({ bySubject });
+  });
+
+  app.get("/acl/:subjectMemberId", async (c) => {
+    const auth = c.get("auth")!;
+    const subjectMemberId = c.req.param("subjectMemberId");
+    if (!canManageMemberHealth(auth.role, subjectMemberId, auth.memberId)) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+    const [subject] = await db
+      .select({ id: householdMembers.id })
+      .from(householdMembers)
+      .where(
+        and(
+          eq(householdMembers.id, subjectMemberId),
+          eq(householdMembers.householdId, auth.householdId),
+        ),
+      )
+      .limit(1);
+    if (!subject) return c.json({ error: "not_found" }, 404);
+    const grants = await loadHealthAclForSubject(db, auth.householdId, subjectMemberId);
+    return c.json({ subjectMemberId, grants });
+  });
+
+  app.put("/acl/:subjectMemberId", async (c) => {
+    const auth = c.get("auth")!;
+    const subjectMemberId = c.req.param("subjectMemberId");
+    if (!canManageMemberHealth(auth.role, subjectMemberId, auth.memberId)) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+    const [subject] = await db
+      .select({ id: householdMembers.id })
+      .from(householdMembers)
+      .where(
+        and(
+          eq(householdMembers.id, subjectMemberId),
+          eq(householdMembers.householdId, auth.householdId),
+        ),
+      )
+      .limit(1);
+    if (!subject) return c.json({ error: "not_found" }, 404);
+
+    const body = await c.req.json<{
+      grants?: Array<{
+        granteeMemberId: string;
+        events?: string;
+        medications?: string;
+        doses?: string;
+        reports?: string;
+      }>;
+    }>();
+
+    const raw = Array.isArray(body.grants) ? body.grants : [];
+    const granteeIds = await validateHealthShareMemberIds(
+      db,
+      auth.householdId,
+      raw.map((g) => g.granteeMemberId),
+      subjectMemberId,
+    );
+    const valid = new Set(granteeIds);
+    const entries: Array<{ granteeMemberId: string } & HealthAclGrants> = [];
+    for (const g of raw) {
+      if (!valid.has(g.granteeMemberId)) continue;
+      entries.push({
+        granteeMemberId: g.granteeMemberId,
+        events: normalizeHealthAclLevel(g.events),
+        medications: normalizeHealthAclLevel(g.medications),
+        doses: normalizeHealthAclLevel(g.doses),
+        reports: normalizeHealthAclLevel(g.reports),
+      });
+    }
+    await replaceHealthAclForSubject(db, auth.householdId, subjectMemberId, entries);
+    const grants = await loadHealthAclForSubject(db, auth.householdId, subjectMemberId);
+    return c.json({ subjectMemberId, grants });
+  });
 
   app.get("/glance", async (c) => {
     const auth = c.get("auth")!;
@@ -223,7 +317,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
     if (!body.memberId || !body.title?.trim()) {
       return c.json({ error: "invalid_body" }, 400);
     }
-    if (!canManageMemberHealth(auth.role, body.memberId, auth.memberId)) {
+    if (!(await hasHealthSegmentAccess(db, auth, body.memberId, "events", "write"))) {
       return c.json({ error: "forbidden" }, 403);
     }
 
@@ -289,6 +383,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
           event: serializeHealthEvent(row, env, {
             sharedMemberIds,
             isOwnedByMe: true,
+            canEdit: true,
           }, tz),
         },
         201,
@@ -309,11 +404,11 @@ export function householdHealthRoutes(db: Database, env: Env) {
       .where(and(eq(healthEvents.id, id), eq(healthEvents.householdId, auth.householdId)))
       .limit(1);
     if (!existing) return c.json({ error: "not_found" }, 404);
-    if (
-      existing.visibility === "private" &&
-      existing.createdByUserId !== auth.userId &&
-      !canManageMemberHealth(auth.role, existing.memberId, auth.memberId)
-    ) {
+    const canWriteEvent =
+      existing.createdByUserId === auth.userId ||
+      existing.visibility === "household" ||
+      (await hasHealthSegmentAccess(db, auth, existing.memberId, "events", "write"));
+    if (existing.visibility === "private" && !canWriteEvent) {
       return c.json({ error: "forbidden" }, 403);
     }
 
@@ -372,7 +467,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
         patch.endedAt = null;
       }
       if (body.memberId !== undefined) {
-        if (!canManageMemberHealth(auth.role, body.memberId, auth.memberId)) {
+        if (!(await hasHealthSegmentAccess(db, auth, body.memberId, "events", "write"))) {
           return c.json({ error: "forbidden" }, 403);
         }
         patch.memberId = body.memberId;
@@ -406,6 +501,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
         event: serializeHealthEvent(row, env, {
           sharedMemberIds: shareMap.get(row.id),
           isOwnedByMe: row.createdByUserId === auth.userId,
+          canEdit: true,
         }, tz),
       });
     } catch (e) {
@@ -424,10 +520,10 @@ export function householdHealthRoutes(db: Database, env: Env) {
       .where(and(eq(healthEvents.id, id), eq(healthEvents.householdId, auth.householdId)))
       .limit(1);
     if (!existing) return c.json({ error: "not_found" }, 404);
-    if (
-      existing.createdByUserId !== auth.userId &&
-      !canManageMemberHealth(auth.role, existing.memberId, auth.memberId)
-    ) {
+    const canDelete =
+      existing.createdByUserId === auth.userId ||
+      (await hasHealthSegmentAccess(db, auth, existing.memberId, "events", "write"));
+    if (!canDelete) {
       return c.json({ error: "forbidden" }, 403);
     }
     await db.delete(healthEvents).where(eq(healthEvents.id, id));
@@ -465,7 +561,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
     if (!body.memberId || !body.name?.trim()) {
       return c.json({ error: "invalid_body" }, 400);
     }
-    if (!canManageMemberHealth(auth.role, body.memberId, auth.memberId)) {
+    if (!(await hasHealthSegmentAccess(db, auth, body.memberId, "medications", "write"))) {
       return c.json({ error: "forbidden" }, 403);
     }
 
@@ -521,6 +617,8 @@ export function householdHealthRoutes(db: Database, env: Env) {
           medication: serializeHealthMedication(row, env, {
             sharedMemberIds,
             isOwnedByMe: true,
+            canEdit: true,
+            canLog: true,
           }),
         },
         201,
@@ -541,11 +639,11 @@ export function householdHealthRoutes(db: Database, env: Env) {
       .where(and(eq(healthMedications.id, id), eq(healthMedications.householdId, auth.householdId)))
       .limit(1);
     if (!existing) return c.json({ error: "not_found" }, 404);
-    if (
-      existing.visibility === "private" &&
-      existing.createdByUserId !== auth.userId &&
-      !canManageMemberHealth(auth.role, existing.memberId, auth.memberId)
-    ) {
+    const canWriteMed =
+      existing.createdByUserId === auth.userId ||
+      existing.visibility === "household" ||
+      (await hasHealthSegmentAccess(db, auth, existing.memberId, "medications", "write"));
+    if (existing.visibility === "private" && !canWriteMed) {
       return c.json({ error: "forbidden" }, 403);
     }
 
@@ -589,7 +687,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
       if (body.enabled !== undefined) patch.enabled = body.enabled;
       if (body.visibility !== undefined) patch.visibility = normalizeHealthVisibility(body.visibility);
       if (body.memberId !== undefined) {
-        if (!canManageMemberHealth(auth.role, body.memberId, auth.memberId)) {
+        if (!(await hasHealthSegmentAccess(db, auth, body.memberId, "medications", "write"))) {
           return c.json({ error: "forbidden" }, 403);
         }
         patch.memberId = body.memberId;
@@ -622,6 +720,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
         medication: serializeHealthMedication(row, env, {
           sharedMemberIds: shareMap.get(row.id),
           isOwnedByMe: row.createdByUserId === auth.userId,
+          canEdit: true,
         }),
       });
     } catch (e) {
@@ -640,10 +739,10 @@ export function householdHealthRoutes(db: Database, env: Env) {
       .where(and(eq(healthMedications.id, id), eq(healthMedications.householdId, auth.householdId)))
       .limit(1);
     if (!existing) return c.json({ error: "not_found" }, 404);
-    if (
-      existing.createdByUserId !== auth.userId &&
-      !canManageMemberHealth(auth.role, existing.memberId, auth.memberId)
-    ) {
+    const canDelete =
+      existing.createdByUserId === auth.userId ||
+      (await hasHealthSegmentAccess(db, auth, existing.memberId, "medications", "write"));
+    if (!canDelete) {
       return c.json({ error: "forbidden" }, 403);
     }
     await db.delete(healthMedications).where(eq(healthMedications.id, id));
@@ -659,7 +758,13 @@ export function householdHealthRoutes(db: Database, env: Env) {
       .where(and(eq(healthMedications.id, medId), eq(healthMedications.householdId, auth.householdId)))
       .limit(1);
     if (!med) return c.json({ error: "not_found" }, 404);
-    if (!canManageMemberHealth(auth.role, med.memberId, auth.memberId)) {
+    const visible = await db
+      .select({ id: healthMedications.id })
+      .from(healthMedications)
+      .where(and(eq(healthMedications.id, medId), healthMedicationVisibleWhere(db, auth)))
+      .limit(1);
+    if (visible.length === 0) return c.json({ error: "not_found" }, 404);
+    if (!(await hasHealthSegmentAccess(db, auth, med.memberId, "doses", "write"))) {
       return c.json({ error: "forbidden" }, 403);
     }
 

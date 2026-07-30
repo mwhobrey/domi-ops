@@ -344,6 +344,13 @@
       "when": 1780495022000,
       "tag": "0048_health_private_default",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1780495023000,
+      "tag": "0049_health_member_acl",
+      "breakpoints": true
     }
   ]
 }

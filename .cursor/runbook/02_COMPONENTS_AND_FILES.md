@@ -64,7 +64,8 @@ domi-ops/
 | `src/lib/api.ts` | Server `apiFetch`, `apiBase`, `ApiError` |
 | `src/lib/auth-links.ts` | OAuth URL helpers (client-safe import) |
 | `src/lib/load-error.ts` | SSR `loadErrorMessage()` helper |
-| `src/components/HealthPageClient.tsx` | Health events + medications UI |
+| `src/components/HealthPageClient.tsx` | Health events + medications UI + Sharing ACL sheet |
+| `src/components/HealthAclSheet.tsx` | Per-grantee segment ACL matrix (WHO-229) |
 | `src/lib/calendar-filters.ts` | Calendar lane/category + overlay filter pills (`domi-ops:calendar-hidden-overlays`) |
 | `src/lib/calendar-utils.ts` | Calendar DTO helpers; `isOverlayEvent`, overlay `source`/`deepLink` |
 | `src/lib/color-contrast.ts` | WCAG text color for event chips |
@@ -104,7 +105,7 @@ domi-ops/
 | `src/routes/calendar.ts` | Connections, events, sync trigger; `GET /events` merges overlays |
 | `src/lib/calendar-overlays.ts` | School due-date + health virtual events for calendar |
 | `src/routes/household-health.ts` | `/api/health` — events, medications, dose log, glance |
-| `src/lib/health-access.ts` | Health visibility + shares (notes pattern) |
+| `src/lib/health-access.ts` | Health visibility + shares + segment ACL (WHO-229) |
 | `src/lib/health-crypto.ts` | Field encryption for PHI-like health columns |
 | `src/lib/health-serialize.ts` | Health DTO encrypt/decrypt + schedule JSON |
 | `src/routes/core.ts` | Dashboard, shopping, chores, notes, expenses; profile overlay prefs |
@@ -135,7 +136,7 @@ domi-ops/
 | `src/schema/better-auth.ts` | `ba_sessions`, `ba_accounts`, `ba_verifications` |
 | `src/schema/calendar.ts` | Calendars, events, Google link tables, outbox |
 | `src/schema/school.ts` | LMS tables |
-| `src/schema/health.ts` | Health events, medications, dose logs, reminder sent |
+| `src/schema/health.ts` | Health events, medications, dose logs, reminder sent, member ACL |
 | `src/schema/core.ts` | Shopping, chores, notes, expenses, notices, home_status |
 | `src/schema/import.ts` | `import_records` |
 | `src/client.ts` | `createDb(url)` |

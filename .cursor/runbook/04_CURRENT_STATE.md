@@ -80,14 +80,15 @@
 
 ### Health module
 
-- API: `/api/health` (`household-health.ts`, `requireHouseholdModule(..., "health")`) — events CRUD (`health_events` + `health_event_shares`), **`GET /events/:id`**, medications CRUD (`scheduled` | `prn`), `POST /medications/:id/log`, `GET /glance`, **`GET /reports?from&to&memberId`** (clinical summary + full event/med-log history), `GET /medications/:id/logs`.
-- **Visibility (WHO-226):** new events/meds default **`private`** (migration `0048_health_private_default`; existing `household` rows unchanged). List/glance/overlays/reports use `health*VisibleWhere`: household \| **subject (`memberId`)** \| creator \| explicit shares. **No admin override.** Household is explicit opt-in via UI.
+- API: `/api/health` (`household-health.ts`, `requireHouseholdModule(..., "health")`) — events CRUD (`health_events` + `health_event_shares`), **`GET /events/:id`**, medications CRUD (`scheduled` | `prn`), `POST /medications/:id/log`, `GET /glance`, **`GET /reports?from&to&memberId`**, `GET /medications/:id/logs`.
+- **Visibility (WHO-226):** new events/meds default **`private`**. List/glance/overlays use `health*VisibleWhere`: household \| **subject (`memberId`)** \| creator \| explicit shares. **No admin override.** Household is explicit opt-in via UI.
+- **Segment ACL (WHO-229):** `health_member_acl` — per grantee `none|read|write` for `events` / `medications` / `doses` / `reports`. Subject or admin configures via **`GET/PUT /api/health/acl/:subjectMemberId`**; UI **Sharing** sheet on `/health`. **`GET /api/health/capabilities`** for UI gating. Doses `write` ⇒ medications `read`. Writes use segment ACL (or subject/admin/`canManageMemberHealth`). Per-record shares remain **read-only**. Reports use `health*ReportsVisibleWhere` (also reports ACL).
 - **Encryption:** PHI-like fields encrypted at rest via `health-crypto.ts` + `ENCRYPTION_KEY`; production requires key when `health` ∈ `MODULES_ENABLED`.
 - **Calendar overlays:** health events + scheduled med dose instants; PRN on calendar only when logged as medication events.
 - **Reminders:** worker `health.med.reminder.scan` (5m) notifies subject member (always has read access under WHO-226).
 - **Reports (WHO-225):** `/health/reports` + hub `health/overview` — clinical summary, event history, medication log history; filters: date range, member, **event type**; **group by date** (default) / event type / flat; Export… threads `memberId`/`eventType`/`groupBy` through canonical CSV/print/Drive/Docs.
-- UI: `/health` — visibility defaults to Private + `NoteSharePicker`; `/health/reports` member select + full histories.
-- DB: `0035_health_module`, `0036_health_event_duration`, **`0048_health_private_default`**.
+- UI: `/health` — visibility defaults to Private + `NoteSharePicker`; **Sharing** matrix for segment ACL; `/health/reports` member select + full histories.
+- DB: `0035_health_module`, `0036_health_event_duration`, **`0048_health_private_default`**, **`0049_health_member_acl`**.
 - Docs: `docs/SECURITY_REVIEW.md` health ACL (no admin override); `/privacy` health note.
 
 ### Calendar sync module

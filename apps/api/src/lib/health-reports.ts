@@ -13,7 +13,10 @@ import {
 } from "@domi-ops/calendar-sync";
 import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { listHouseholdMembersWithAuth, memberShownLabel } from "@domi-ops/auth";
-import { healthEventVisibleWhere, healthMedicationVisibleWhere } from "./health-access.js";
+import {
+  healthEventReportsVisibleWhere,
+  healthMedicationReportsVisibleWhere,
+} from "./health-access.js";
 import { decryptHealthFieldOrPassthrough } from "./health-crypto.js";
 
 export const HEALTH_EVENT_TYPE_LABELS: Record<string, string> = {
@@ -160,7 +163,7 @@ export async function buildHealthReports(
   const eventRows = await db
     .select()
     .from(healthEvents)
-    .where(healthEventVisibleWhere(db, auth))
+    .where(healthEventReportsVisibleWhere(db, auth))
     .orderBy(desc(healthEvents.startedAt));
 
   let eventsInRange = eventRows.filter((row) =>
@@ -184,7 +187,7 @@ export async function buildHealthReports(
   let medRows = await db
     .select()
     .from(healthMedications)
-    .where(healthMedicationVisibleWhere(db, auth));
+    .where(healthMedicationReportsVisibleWhere(db, auth));
   if (memberFilter) {
     medRows = medRows.filter((row) => row.memberId === memberFilter);
   }
