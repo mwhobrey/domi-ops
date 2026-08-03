@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { ApiError, apiClient } from "../lib/client-api";
 import type { NoteShareMember } from "./NoteSharePicker";
 import { NoteSharePicker } from "./NoteSharePicker";
-import { HealthAclSheet, type HealthAclGrants } from "./HealthAclSheet";
+import type { HealthAclGrants } from "./HealthPeopleAccessPanel";
 import { ModuleReportsLink } from "./reports/ModuleReportsLink";
 import {
   Alert,
@@ -207,7 +207,6 @@ export function HealthPageClient({
   const [error, setError] = useState<string | null>(null);
   const [eventSheetOpen, setEventSheetOpen] = useState(false);
   const [medSheetOpen, setMedSheetOpen] = useState(false);
-  const [aclSheetOpen, setAclSheetOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<HealthEvent | null>(null);
   const [editingMed, setEditingMed] = useState<HealthMedication | null>(null);
   const [capabilities, setCapabilities] = useState<Record<string, HealthAclGrants>>({});
@@ -287,18 +286,6 @@ export function HealthPageClient({
 
   const canAddEvent = members.some((m) => capabilities[m.memberId]?.events === "write");
   const canAddMed = members.some((m) => capabilities[m.memberId]?.medications === "write");
-  const canManageSubjects = members
-    .filter((m) => {
-      const g = capabilities[m.memberId];
-      return g?.events === "write" || g?.medications === "write" || g?.doses === "write" || g?.reports === "write";
-    })
-    .map((m) => m.memberId);
-  // Subject can always manage own ACL even if empty caps not loaded yet
-  const aclSubjects = canManageSubjects.includes(currentMemberId)
-    ? canManageSubjects
-    : currentMemberId
-      ? [currentMemberId, ...canManageSubjects]
-      : canManageSubjects;
 
   function canLogForMember(memberId: string) {
     return capabilities[memberId]?.doses === "write";
@@ -322,9 +309,9 @@ export function HealthPageClient({
         ))}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="secondary" onClick={() => setAclSheetOpen(true)}>
+          <LinkButton href="/health/sharing" size="sm" variant="secondary">
             Sharing
-          </Button>
+          </LinkButton>
           <ModuleReportsLink module="health" />
         </div>
       </div>
@@ -530,16 +517,6 @@ export function HealthPageClient({
         }}
       />
 
-      <HealthAclSheet
-        open={aclSheetOpen}
-        onClose={() => {
-          setAclSheetOpen(false);
-          void load();
-        }}
-        members={members}
-        currentMemberId={currentMemberId}
-        canManageSubjects={aclSubjects}
-      />
     </div>
   );
 }

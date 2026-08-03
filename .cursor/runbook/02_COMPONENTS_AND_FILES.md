@@ -36,6 +36,7 @@ domi-ops/
 | `src/app/dashboard/page.tsx` | Core dashboard via `apiFetch` |
 | `src/app/calendar/page.tsx` | Calendar UI |
 | `src/app/health/page.tsx` | Health tracker UI (`/health` — module-gated; API liveness is separate rewrite) |
+| `src/app/health/sharing/page.tsx` | Health sharing management (`/health/sharing`) |
 | `src/app/school/assignments/page.tsx` | School-wide due/overdue assignment list (`?filter=due\|overdue`) |
 | `src/app/school/assignment/[id]/page.tsx` | Assignment detail |
 | `src/app/school/assignment/[id]/materials/[materialId]/edit/page.tsx` | Full-page native test teacher editor (WHO-218) |
@@ -64,8 +65,9 @@ domi-ops/
 | `src/lib/api.ts` | Server `apiFetch`, `apiBase`, `ApiError` |
 | `src/lib/auth-links.ts` | OAuth URL helpers (client-safe import) |
 | `src/lib/load-error.ts` | SSR `loadErrorMessage()` helper |
-| `src/components/HealthPageClient.tsx` | Health events + medications UI + Sharing ACL sheet |
-| `src/components/HealthAclSheet.tsx` | Per-grantee segment ACL matrix (WHO-229) |
+| `src/components/HealthPageClient.tsx` | Health events + medications UI |
+| `src/components/HealthSharingClient.tsx` | `/health/sharing` — People ACL, shared-with-me, I've shared (WHO-230) |
+| `src/components/HealthPeopleAccessPanel.tsx` | Segment ACL matrix with presets |
 | `src/lib/calendar-filters.ts` | Calendar lane/category + overlay filter pills (`domi-ops:calendar-hidden-overlays`) |
 | `src/lib/calendar-utils.ts` | Calendar DTO helpers; `isOverlayEvent`, overlay `source`/`deepLink` |
 | `src/lib/color-contrast.ts` | WCAG text color for event chips |
