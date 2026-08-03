@@ -1,7 +1,7 @@
 "use client";
 
 import { Heart } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError, apiClient } from "../lib/client-api";
 import type { NoteShareMember } from "./NoteSharePicker";
@@ -77,10 +77,53 @@ export interface HealthMedication {
 interface PendingDose {
   medicationId: string;
   name: string;
+  dosage?: string | null;
   scheduledAt: string;
   scheduledTime: string;
   scheduledTimeLabel: string;
   memberId: string;
+}
+
+function groupPendingDosesByMemberThenTime(doses: PendingDose[]): Array<{
+  memberId: string;
+  times: Array<{ scheduledTime: string; label: string; doses: PendingDose[] }>;
+}> {
+  const byMember = new Map<string, PendingDose[]>();
+  for (const dose of doses) {
+    const list = byMember.get(dose.memberId) ?? [];
+    list.push(dose);
+    byMember.set(dose.memberId, list);
+  }
+  return [...byMember.entries()].map(([memberId, memberDoses]) => {
+    const byTime = new Map<string, PendingDose[]>();
+    for (const dose of memberDoses) {
+      const key = dose.scheduledTime;
+      const list = byTime.get(key) ?? [];
+      list.push(dose);
+      byTime.set(key, list);
+    }
+    const times = [...byTime.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([scheduledTime, timeDoses]) => ({
+        scheduledTime,
+        label: timeDoses[0]?.scheduledTimeLabel || scheduledTime,
+        doses: timeDoses,
+      }));
+    return { memberId, times };
+  });
+}
+
+function groupMedsByMember(meds: HealthMedication[]): Array<{
+  memberId: string;
+  meds: HealthMedication[];
+}> {
+  const byMember = new Map<string, HealthMedication[]>();
+  for (const med of meds) {
+    const list = byMember.get(med.memberId) ?? [];
+    list.push(med);
+    byMember.set(med.memberId, list);
+  }
+  return [...byMember.entries()].map(([memberId, list]) => ({ memberId, meds: list }));
 }
 
 const EVENT_TYPES: { value: HealthEventType; label: string }[] = [
@@ -118,12 +161,22 @@ function MedTimesEditor({
   times: string[];
   onChange: (times: string[]) => void;
 }) {
+  // Stable row ids — keying by value remounts the input on every change and eats focus.
+  const rowIdsRef = useRef<string[]>([]);
+  if (rowIdsRef.current.length < times.length) {
+    for (let i = rowIdsRef.current.length; i < times.length; i++) {
+      rowIdsRef.current.push(`med-time-${i}-${Math.random().toString(36).slice(2, 9)}`);
+    }
+  } else if (rowIdsRef.current.length > times.length) {
+    rowIdsRef.current = rowIdsRef.current.slice(0, times.length);
+  }
+
   return (
     <div className="space-y-2">
       <span className="text-sm font-medium text-[var(--color-text)]">Times</span>
       <ul className="space-y-2">
         {times.map((time, index) => (
-          <li key={`${index}-${time}`} className="flex items-center gap-2">
+          <li key={rowIdsRef.current[index]} className="flex items-center gap-2">
             <Input
               type="time"
               className="flex-1"
@@ -139,7 +192,10 @@ function MedTimesEditor({
               size="sm"
               variant="secondary"
               disabled={times.length <= 1}
-              onClick={() => onChange(times.filter((_, i) => i !== index))}
+              onClick={() => {
+                rowIdsRef.current = rowIdsRef.current.filter((_, i) => i !== index);
+                onChange(times.filter((_, i) => i !== index));
+              }}
             >
               Remove
             </Button>
@@ -319,72 +375,97 @@ export function HealthPageClient({
       {tab === "today" ? (
         <div className="space-y-6">
           <Card>
-            <CardBody className="space-y-3">
+            <CardBody className="space-y-4">
               <SectionHeader title="Scheduled doses" />
               {loading ? (
                 <p className="text-sm text-[var(--color-text-muted)]">Loading…</p>
               ) : pendingDoses.length === 0 ? (
                 <p className="text-sm text-[var(--color-text-muted)]">No pending doses today.</p>
               ) : (
-                pendingDoses.map((dose) => (
-                  <HealthRow
-                    key={`${dose.medicationId}-${dose.scheduledAt}`}
-                    title={dose.name}
-                    subtitle={dose.scheduledTimeLabel || dose.scheduledTime}
-                    trailing={
-                      canLogForMember(dose.memberId) ? (
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          onClick={() =>
-                            void logDose(dose.medicationId, {
-                              scheduledAt: dose.scheduledAt,
-                              alsoCreateEvent: false,
-                            })
-                          }
-                        >
-                          Taken
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={() =>
-                            void logDose(dose.medicationId, {
-                              scheduledAt: dose.scheduledAt,
-                              status: "skipped",
-                            })
-                          }
-                        >
-                          Skip
-                        </Button>
+                groupPendingDosesByMemberThenTime(pendingDoses).map((memberGroup) => (
+                  <div key={memberGroup.memberId} className="space-y-3">
+                    <h3 className="text-sm font-semibold text-[var(--color-text)]">
+                      {memberLabel(members, memberGroup.memberId)}
+                    </h3>
+                    {memberGroup.times.map((timeGroup) => (
+                      <div key={timeGroup.scheduledTime} className="space-y-2">
+                        <p className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]">
+                          {timeGroup.label}
+                        </p>
+                        <ul className="space-y-2">
+                          {timeGroup.doses.map((dose) => (
+                            <HealthRow
+                              key={`${dose.medicationId}-${dose.scheduledAt}`}
+                              title={dose.name}
+                              subtitle={dose.dosage?.trim() || undefined}
+                              trailing={
+                                canLogForMember(dose.memberId) ? (
+                                  <div className="flex gap-2">
+                                    <Button
+                                      size="sm"
+                                      onClick={() =>
+                                        void logDose(dose.medicationId, {
+                                          scheduledAt: dose.scheduledAt,
+                                          alsoCreateEvent: false,
+                                        })
+                                      }
+                                    >
+                                      Taken
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="secondary"
+                                      onClick={() =>
+                                        void logDose(dose.medicationId, {
+                                          scheduledAt: dose.scheduledAt,
+                                          status: "skipped",
+                                        })
+                                      }
+                                    >
+                                      Skip
+                                    </Button>
+                                  </div>
+                                ) : null
+                              }
+                            />
+                          ))}
+                        </ul>
                       </div>
-                      ) : null
-                    }
-                  />
+                    ))}
+                  </div>
                 ))
               )}
             </CardBody>
           </Card>
 
           <Card>
-            <CardBody className="space-y-3">
-              <SectionHeader title="PRN medications" />
+            <CardBody className="space-y-4">
+              <SectionHeader title="As needed (PRN)" />
               {prnMeds.length === 0 ? (
                 <p className="text-sm text-[var(--color-text-muted)]">No as-needed meds.</p>
               ) : (
-                prnMeds.map((med) => (
-                  <HealthRow
-                    key={med.id}
-                    title={med.name}
-                    subtitle={med.dosage ?? "As needed"}
-                    trailing={
-                      (med.canLog ?? canLogForMember(med.memberId)) ? (
-                      <Button size="sm" onClick={() => void logDose(med.id, {})}>
-                        Log dose
-                      </Button>
-                      ) : null
-                    }
-                  />
+                groupMedsByMember(prnMeds).map((memberGroup) => (
+                  <div key={memberGroup.memberId} className="space-y-2">
+                    <h3 className="text-sm font-semibold text-[var(--color-text)]">
+                      {memberLabel(members, memberGroup.memberId)}
+                    </h3>
+                    <ul className="space-y-2">
+                      {memberGroup.meds.map((med) => (
+                        <HealthRow
+                          key={med.id}
+                          title={med.name}
+                          subtitle={med.dosage?.trim() || "As needed"}
+                          trailing={
+                            (med.canLog ?? canLogForMember(med.memberId)) ? (
+                              <Button size="sm" onClick={() => void logDose(med.id, {})}>
+                                Log dose
+                              </Button>
+                            ) : null
+                          }
+                        />
+                      ))}
+                    </ul>
+                  </div>
                 ))
               )}
             </CardBody>

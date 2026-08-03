@@ -190,6 +190,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
     const pendingDoses: {
       medicationId: string;
       name: string;
+      dosage: string | null;
       scheduledAt: string;
       scheduledTime: string;
       scheduledTimeLabel: string;
@@ -200,6 +201,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
       const schedule = parseMedSchedule(med.scheduleJson);
       const times = schedule.times ?? [];
       const name = decryptHealthFieldOrPassthrough(med.name, env) ?? "Medication";
+      const dosage = decryptHealthFieldOrPassthrough(med.dosage, env);
       if (med.startDate && today < med.startDate) continue;
       if (med.endDate && today > med.endDate) continue;
       if (schedule.daysOfWeek?.length) {
@@ -224,6 +226,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
           pendingDoses.push({
             medicationId: med.id,
             name,
+            dosage,
             scheduledAt: scheduledAt.toISOString(),
             scheduledTime: hhmm,
             scheduledTimeLabel: formatTimeLabelInTz(scheduledAt, tz),
@@ -232,6 +235,8 @@ export function householdHealthRoutes(db: Database, env: Env) {
         }
       }
     }
+
+    pendingDoses.sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
 
     const events = await enrichHealthEvents(db, env, auth, eventRows.slice(0, 5));
     const prnList = await enrichHealthMedications(db, env, auth, prnMeds);
