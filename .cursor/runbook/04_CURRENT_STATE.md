@@ -88,7 +88,7 @@
 - **Calendar overlays:** health events + scheduled med dose instants; PRN on calendar only when logged as medication events.
 - **Reminders:** worker `health.med.reminder.scan` (5m) notifies subject member (always has read access under WHO-226).
 - **Reports (WHO-225):** `/health/reports` + hub `health/overview` — clinical summary, event history, medication log history; filters: date range, member, **event type**; **group by date** (default) / event type / flat; Export… threads `memberId`/`eventType`/`groupBy` through canonical CSV/print/Drive/Docs.
-- UI: `/health` — visibility defaults to Private + `NoteSharePicker`; `/health/sharing` for ACL + share lists; `/health/reports` member select + full histories.
+- UI: `/health` — visibility defaults to Private + `NoteSharePicker`; Today scheduled doses group by **member → time** with dosage on rows; **Taken all** on time slots with 2+ loggable doses; `/health/sharing` for ACL + share lists; `/health/reports` member select + full histories.
 - DB: `0035_health_module`, `0036_health_event_duration`, **`0048_health_private_default`**, **`0049_health_member_acl`**.
 - Docs: `docs/SECURITY_REVIEW.md` health ACL (no admin override); `/privacy` health note.
 

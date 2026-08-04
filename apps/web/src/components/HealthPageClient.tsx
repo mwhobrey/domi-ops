@@ -266,6 +266,7 @@ export function HealthPageClient({
   const [editingEvent, setEditingEvent] = useState<HealthEvent | null>(null);
   const [editingMed, setEditingMed] = useState<HealthMedication | null>(null);
   const [capabilities, setCapabilities] = useState<Record<string, HealthAclGrants>>({});
+  const [loggingAllKey, setLoggingAllKey] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -331,12 +332,35 @@ export function HealthPageClient({
   async function logDose(
     medicationId: string,
     opts: { scheduledAt?: string; alsoCreateEvent?: boolean; status?: string },
-  ) {
+    options?: { reload?: boolean },
+  ): Promise<boolean> {
     try {
       await apiClient.post(`/api/health/medications/${medicationId}/log`, opts);
-      await load();
+      if (options?.reload !== false) await load();
+      return true;
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not log dose");
+      return false;
+    }
+  }
+
+  async function logAllTaken(groupKey: string, doses: PendingDose[]) {
+    const actionable = doses.filter((d) => canLogForMember(d.memberId));
+    if (actionable.length === 0 || loggingAllKey) return;
+    setError(null);
+    setLoggingAllKey(groupKey);
+    try {
+      for (const dose of actionable) {
+        const ok = await logDose(
+          dose.medicationId,
+          { scheduledAt: dose.scheduledAt, alsoCreateEvent: false },
+          { reload: false },
+        );
+        if (!ok) break;
+      }
+      await load();
+    } finally {
+      setLoggingAllKey(null);
     }
   }
 
@@ -387,11 +411,28 @@ export function HealthPageClient({
                     <h3 className="text-sm font-semibold text-[var(--color-text)]">
                       {memberLabel(members, memberGroup.memberId)}
                     </h3>
-                    {memberGroup.times.map((timeGroup) => (
+                    {memberGroup.times.map((timeGroup) => {
+                      const loggable = timeGroup.doses.filter((d) => canLogForMember(d.memberId));
+                      const groupKey = `${memberGroup.memberId}:${timeGroup.scheduledTime}`;
+                      return (
                       <div key={timeGroup.scheduledTime} className="space-y-2">
-                        <p className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]">
-                          {timeGroup.label}
-                        </p>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]">
+                            {timeGroup.label}
+                            {timeGroup.doses.length > 1
+                              ? ` · ${timeGroup.doses.length} meds`
+                              : null}
+                          </p>
+                          {loggable.length > 1 ? (
+                            <Button
+                              size="sm"
+                              disabled={loggingAllKey !== null}
+                              onClick={() => void logAllTaken(groupKey, loggable)}
+                            >
+                              {loggingAllKey === groupKey ? "Saving…" : "Taken all"}
+                            </Button>
+                          ) : null}
+                        </div>
                         <ul className="space-y-2">
                           {timeGroup.doses.map((dose) => (
                             <HealthRow
@@ -431,7 +472,8 @@ export function HealthPageClient({
                           ))}
                         </ul>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ))
               )}
