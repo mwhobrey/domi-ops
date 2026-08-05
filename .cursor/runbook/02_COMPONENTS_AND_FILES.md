@@ -145,7 +145,7 @@ domi-ops/
 | `src/migrate.ts` | Migration runner |
 | `drizzle/*.sql` | Applied migrations (must be listed in `drizzle/meta/_journal.json`) |
 | `drizzle/meta/_journal.json` | Migration order registry for `migrate:run` |
-| `src/schema/push.ts` | `push_subscriptions` for Web Push |
+| `src/schema/push.ts` | `push_subscriptions` for Web Push (`timezone` = device IANA on subscribe) |
 | `src/schema/google-docs.ts` | `google_docs_connections` (encrypted OAuth tokens for report export) |
 | `drizzle.config.ts` | Drizzle Kit config |
 

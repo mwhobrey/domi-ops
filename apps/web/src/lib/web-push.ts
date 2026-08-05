@@ -1,5 +1,13 @@
 import { apiClient } from "./client-api";
 
+function deviceTimezone(): string | null {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+  } catch {
+    return null;
+  }
+}
+
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -56,6 +64,7 @@ export async function subscribeBrowserPush(publicKey: string): Promise<boolean> 
   await apiClient.post("/api/core/push/subscribe", {
     endpoint: json.endpoint,
     keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
+    timezone: deviceTimezone(),
   });
   return true;
 }
@@ -81,6 +90,7 @@ export async function syncPushSubscription(publicKey: string): Promise<boolean> 
   await apiClient.post("/api/core/push/subscribe", {
     endpoint: json.endpoint,
     keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
+    timezone: deviceTimezone(),
   });
   return true;
 }

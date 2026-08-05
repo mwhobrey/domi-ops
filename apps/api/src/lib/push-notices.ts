@@ -2,11 +2,13 @@ import type { Env } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
 import { householdMembers, pushSubscriptions, users } from "@domi-ops/db";
 import { and, eq, inArray, ne } from "drizzle-orm";
-import { deliverUserNotification } from "@domi-ops/calendar-sync";
+import { deliverUserNotification, isValidTimeZone } from "@domi-ops/calendar-sync";
 
 export type PushSubscriptionPayload = {
   endpoint: string;
   keys: { p256dh: string; auth: string };
+  /** IANA timezone of the registering device (WHO-233). */
+  timezone?: string | null;
 };
 
 export function isWebPushConfigured(env: Env): boolean {
@@ -66,6 +68,9 @@ export async function upsertPushSubscription(
   userId: string,
   sub: PushSubscriptionPayload,
 ): Promise<void> {
+  const rawTz =
+    typeof sub.timezone === "string" && sub.timezone.trim() ? sub.timezone.trim().slice(0, 64) : null;
+  const timezone = rawTz && isValidTimeZone(rawTz) ? rawTz : null;
   const existing = await db
     .select({ id: pushSubscriptions.id })
     .from(pushSubscriptions)
@@ -79,6 +84,7 @@ export async function upsertPushSubscription(
         userId,
         p256dh: sub.keys.p256dh,
         authKey: sub.keys.auth,
+        ...(timezone ? { timezone } : {}),
       })
       .where(eq(pushSubscriptions.id, existing[0].id));
     return;
@@ -89,6 +95,7 @@ export async function upsertPushSubscription(
     endpoint: sub.endpoint,
     p256dh: sub.keys.p256dh,
     authKey: sub.keys.auth,
+    timezone,
   });
 }
 

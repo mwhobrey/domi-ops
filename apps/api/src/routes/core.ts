@@ -651,7 +651,7 @@ export function coreRoutes(db: Database, env: Env) {
     if (!isWebPushConfigured(env)) {
       return c.json({ error: "push_not_configured" }, 503);
     }
-    const body = await c.req.json<PushSubscriptionPayload>();
+    const body = await c.req.json<PushSubscriptionPayload & { timezone?: string }>();
     if (!body?.endpoint || !body.keys?.p256dh || !body.keys?.auth) {
       return c.json({ error: "invalid_subscription" }, 400);
     }

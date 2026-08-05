@@ -10,7 +10,9 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { households, householdMembers, users } from "./household.js";
+import { pushSubscriptions } from "./push.js";
 import { noteVisibilityEnum } from "./core.js";
 
 export const healthEventTypeEnum = pgEnum("health_event_type", [
@@ -156,13 +158,18 @@ export const healthMedReminderSent = pgTable(
       .references(() => healthMedications.id, { onDelete: "cascade" }),
     scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull(),
     offsetMinutes: integer("offset_minutes").notNull(),
+    /** Null = inbox-only / no push endpoint; set per device for WHO-233. */
+    subscriptionId: uuid("subscription_id").references(() => pushSubscriptions.id, {
+      onDelete: "cascade",
+    }),
     sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    uniqueIndex("health_med_reminder_sent_unique").on(
-      t.medicationId,
-      t.scheduledAt,
-      t.offsetMinutes,
-    ),
+    uniqueIndex("health_med_reminder_sent_sub_unique")
+      .on(t.medicationId, t.scheduledAt, t.offsetMinutes, t.subscriptionId)
+      .where(sql`${t.subscriptionId} is not null`),
+    uniqueIndex("health_med_reminder_sent_nosub_unique")
+      .on(t.medicationId, t.scheduledAt, t.offsetMinutes)
+      .where(sql`${t.subscriptionId} is null`),
   ],
 );

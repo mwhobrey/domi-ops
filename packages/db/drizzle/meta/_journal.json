@@ -351,6 +351,13 @@
       "when": 1780495023000,
       "tag": "0049_health_member_acl",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1780495024000,
+      "tag": "0050_push_subscription_timezone",
+      "breakpoints": true
     }
   ]
 }

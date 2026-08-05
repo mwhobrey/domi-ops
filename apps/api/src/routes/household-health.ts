@@ -30,7 +30,7 @@ import {
   validateHealthShareMemberIds,
   type HealthAclGrants,
 } from "../lib/health-access.js";
-import { todayIsoDateInTz, zonedLocalToUtc, formatTimeLabelInTz } from "@domi-ops/calendar-sync";
+import { todayIsoDateInTz, zonedLocalToUtc, formatTimeLabelInTz, resolveAlertTimeZone } from "@domi-ops/calendar-sync";
 import {
   encryptHealthTextFields,
   enrichHealthEvents,
@@ -63,6 +63,16 @@ async function householdTimezone(db: Database, householdId: string): Promise<str
     .where(eq(households.id, householdId))
     .limit(1);
   return household?.timezone ?? "UTC";
+}
+
+function requestTimeZone(
+  c: { req: { header: (name: string) => string | undefined; query: (name: string) => string | undefined } },
+  householdTimezone: string,
+): string {
+  return resolveAlertTimeZone({
+    deviceTimezone: c.req.header("x-client-timezone") ?? c.req.query("timezone"),
+    householdTimezone,
+  });
 }
 
 export function householdHealthRoutes(db: Database, env: Env) {
@@ -165,7 +175,8 @@ export function householdHealthRoutes(db: Database, env: Env) {
       .from(households)
       .where(eq(households.id, auth.householdId))
       .limit(1);
-    const tz = household?.timezone ?? "UTC";
+    const householdTz = household?.timezone ?? "UTC";
+    const tz = requestTimeZone(c, householdTz);
     const today = todayIsoDateInTz(tz);
     const dayStart = zonedLocalToUtc(today, "00:00", tz);
     const dayEnd = zonedLocalToUtc(today, "23:59", tz);
@@ -245,6 +256,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
       enabled: true,
       today,
       timezone: tz,
+      householdTimezone: householdTz,
       activeEvents: events,
       pendingDoses,
       prnMedications: prnList,

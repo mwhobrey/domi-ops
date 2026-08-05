@@ -86,7 +86,7 @@
 - **Sharing UI (WHO-230):** `/health/sharing` — People access (presets + sticky save), Shared with me, I've shared (edit per-record sharees). `/health` **Sharing** links here.
 - **Encryption:** PHI-like fields encrypted at rest via `health-crypto.ts` + `ENCRYPTION_KEY`; production requires key when `health` ∈ `MODULES_ENABLED`.
 - **Calendar overlays:** health events + scheduled med dose instants; PRN on calendar only when logged as medication events.
-- **Reminders:** worker `health.med.reminder.scan` (5m) notifies subject member (always has read access under WHO-226).
+- **Reminders:** worker `health.med.reminder.scan` (5m) notifies subject member; fire times use **per-push-subscription timezone** (device `Intl` on subscribe) with household TZ fallback (WHO-233). In-app Alerts row is once per med/date/time/offset tag.
 - **Reports (WHO-225):** `/health/reports` + hub `health/overview` — clinical summary, event history, medication log history; filters: date range, member, **event type**; **group by date** (default) / event type / flat; Export… threads `memberId`/`eventType`/`groupBy` through canonical CSV/print/Drive/Docs.
 - UI: `/health` — visibility defaults to Private + `NoteSharePicker`; Today scheduled doses group by **member → time** with dosage on rows; **Taken all** on time slots with 2+ loggable doses; `/health/sharing` for ACL + share lists; `/health/reports` member select + full histories.
 - DB: `0035_health_module`, `0036_health_event_duration`, **`0048_health_private_default`**, **`0049_health_member_acl`**.

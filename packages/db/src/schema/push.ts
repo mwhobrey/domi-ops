@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core";
 import { users } from "./household.js";
 
 export const pushSubscriptions = pgTable(
@@ -11,6 +11,8 @@ export const pushSubscriptions = pgTable(
     endpoint: text("endpoint").notNull(),
     p256dh: text("p256dh").notNull(),
     authKey: text("auth_key").notNull(),
+    /** IANA timezone of the device that registered this subscription (WHO-233). */
+    timezone: varchar("timezone", { length: 64 }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("push_subscriptions_endpoint_idx").on(t.endpoint)],

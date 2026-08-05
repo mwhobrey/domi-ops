@@ -16,11 +16,18 @@ async function parseJson<T>(res: Response): Promise<T> {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  let clientTz: string | undefined;
+  try {
+    clientTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    clientTz = undefined;
+  }
   const res = await fetch(path, {
     ...init,
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
+      ...(clientTz ? { "X-Client-Timezone": clientTz } : {}),
       ...init?.headers,
     },
   });
