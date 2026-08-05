@@ -60,8 +60,16 @@ export interface HealthMedication {
   name: string;
   dosage: string | null;
   instructions: string | null;
-  scheduleKind: "scheduled" | "prn";
-  schedule: { times?: string[]; daysOfWeek?: number[] };
+  scheduleKind: "scheduled" | "prn" | "interval";
+  schedule: {
+    times?: string[];
+    daysOfWeek?: number[];
+    everyMinutes?: number;
+    anchor?: string;
+    fixedStartTime?: string;
+    intervalFrom?: string;
+    stop?: { mode?: string; maxDoses?: number; endTime?: string };
+  };
   reminderOffsets: number[];
   startDate: string | null;
   endDate: string | null;
@@ -82,6 +90,13 @@ interface PendingDose {
   scheduledTime: string;
   scheduledTimeLabel: string;
   memberId: string;
+  awaitingFirst?: boolean;
+}
+
+function scheduleKindLabel(kind: HealthMedication["scheduleKind"]): string {
+  if (kind === "prn") return "PRN";
+  if (kind === "interval") return "Every…";
+  return "Scheduled";
 }
 
 function groupPendingDosesByMemberThenTime(doses: PendingDose[]): Array<{
@@ -451,8 +466,9 @@ export function HealthPageClient({
                                         })
                                       }
                                     >
-                                      Taken
+                                      {dose.awaitingFirst ? "Start" : "Taken"}
                                     </Button>
+                                    {!dose.awaitingFirst ? (
                                     <Button
                                       size="sm"
                                       variant="secondary"
@@ -465,6 +481,7 @@ export function HealthPageClient({
                                     >
                                       Skip
                                     </Button>
+                                    ) : null}
                                   </div>
                                 ) : null
                               }
@@ -581,10 +598,10 @@ export function HealthPageClient({
               <HealthRow
                 key={med.id}
                 title={med.name}
-                subtitle={`${med.scheduleKind === "prn" ? "PRN" : "Scheduled"} · ${memberLabel(members, med.memberId)}`}
+                subtitle={`${scheduleKindLabel(med.scheduleKind)} · ${memberLabel(members, med.memberId)}`}
                 trailing={
                   <Badge tone={med.enabled ? "accent" : "default"}>
-                    {med.scheduleKind === "prn" ? "PRN" : "Scheduled"}
+                    {scheduleKindLabel(med.scheduleKind)}
                   </Badge>
                 }
                 onClick={() => {
@@ -914,12 +931,44 @@ function HealthMedicationSheet({
   const [name, setName] = useState(medication?.name ?? "");
   const [dosage, setDosage] = useState(medication?.dosage ?? "");
   const [instructions, setInstructions] = useState(medication?.instructions ?? "");
-  const [scheduleKind, setScheduleKind] = useState<"scheduled" | "prn">(
+  const [scheduleKind, setScheduleKind] = useState<"scheduled" | "prn" | "interval">(
     medication?.scheduleKind ?? "scheduled",
   );
   const [scheduleTimes, setScheduleTimes] = useState<string[]>(
     medication?.schedule?.times?.length ? medication.schedule.times : ["08:00"],
   );
+  const [everyAmount, setEveryAmount] = useState(() => {
+    const m = medication?.schedule?.everyMinutes;
+    if (!m) return "";
+    if (m % (24 * 60) === 0) return String(m / (24 * 60));
+    if (m % 60 === 0) return String(m / 60);
+    return String(m);
+  });
+  const [everyUnit, setEveryUnit] = useState<"minutes" | "hours" | "days">(() => {
+    const m = medication?.schedule?.everyMinutes;
+    if (!m) return "hours";
+    if (m % (24 * 60) === 0) return "days";
+    if (m % 60 === 0) return "hours";
+    return "minutes";
+  });
+  const [intervalAnchor, setIntervalAnchor] = useState<"first_taken" | "fixed_start">(
+    medication?.schedule?.anchor === "fixed_start" ? "fixed_start" : "first_taken",
+  );
+  const [fixedStartTime, setFixedStartTime] = useState(
+    medication?.schedule?.fixedStartTime ?? "08:00",
+  );
+  const [intervalFrom, setIntervalFrom] = useState<"last_taken" | "schedule_grid">(
+    medication?.schedule?.intervalFrom === "schedule_grid" ? "schedule_grid" : "last_taken",
+  );
+  const [stopMode, setStopMode] = useState<"max_doses" | "end_time" | "midnight">(
+    medication?.schedule?.stop?.mode === "end_time" || medication?.schedule?.stop?.mode === "midnight"
+      ? medication.schedule.stop.mode
+      : "max_doses",
+  );
+  const [maxDoses, setMaxDoses] = useState(
+    medication?.schedule?.stop?.maxDoses != null ? String(medication.schedule.stop.maxDoses) : "",
+  );
+  const [endTime, setEndTime] = useState(medication?.schedule?.stop?.endTime ?? "22:00");
   const [visibility, setVisibility] = useState<"household" | "private">(
     medication?.visibility ?? "private",
   );
@@ -940,6 +989,36 @@ function HealthMedicationSheet({
     setScheduleTimes(
       medication?.schedule?.times?.length ? medication.schedule.times : ["08:00"],
     );
+    const m = medication?.schedule?.everyMinutes;
+    if (!m) {
+      setEveryAmount("");
+      setEveryUnit("hours");
+    } else if (m % (24 * 60) === 0) {
+      setEveryAmount(String(m / (24 * 60)));
+      setEveryUnit("days");
+    } else if (m % 60 === 0) {
+      setEveryAmount(String(m / 60));
+      setEveryUnit("hours");
+    } else {
+      setEveryAmount(String(m));
+      setEveryUnit("minutes");
+    }
+    setIntervalAnchor(
+      medication?.schedule?.anchor === "fixed_start" ? "fixed_start" : "first_taken",
+    );
+    setFixedStartTime(medication?.schedule?.fixedStartTime ?? "08:00");
+    setIntervalFrom(
+      medication?.schedule?.intervalFrom === "schedule_grid" ? "schedule_grid" : "last_taken",
+    );
+    setStopMode(
+      medication?.schedule?.stop?.mode === "end_time" || medication?.schedule?.stop?.mode === "midnight"
+        ? medication.schedule.stop.mode
+        : "max_doses",
+    );
+    setMaxDoses(
+      medication?.schedule?.stop?.maxDoses != null ? String(medication.schedule.stop.maxDoses) : "",
+    );
+    setEndTime(medication?.schedule?.stop?.endTime ?? "22:00");
     setVisibility(medication?.visibility ?? "private");
     setSharedMemberIds(medication?.sharedMemberIds ?? []);
     setEnabled(medication?.enabled ?? true);
@@ -953,6 +1032,22 @@ function HealthMedicationSheet({
       .map((t) => t.trim())
       .filter(Boolean)
       .map((t) => (t.length >= 5 ? t.slice(0, 5) : t));
+    let everyMinutes: number | undefined;
+    if (scheduleKind === "interval") {
+      const amount = Number(everyAmount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        setErr("Enter how often doses repeat");
+        setBusy(false);
+        return;
+      }
+      everyMinutes =
+        everyUnit === "days" ? amount * 24 * 60 : everyUnit === "hours" ? amount * 60 : amount;
+      if (stopMode === "max_doses" && (!maxDoses.trim() || Number(maxDoses) < 1)) {
+        setErr("Enter max doses per day");
+        setBusy(false);
+        return;
+      }
+    }
     const body = {
       memberId,
       name: name.trim(),
@@ -960,7 +1055,21 @@ function HealthMedicationSheet({
       instructions: instructions.trim() || undefined,
       scheduleKind,
       schedule:
-        scheduleKind === "scheduled" ? { times: scheduleTimesNormalized } : undefined,
+        scheduleKind === "scheduled"
+          ? { times: scheduleTimesNormalized }
+          : scheduleKind === "interval"
+            ? {
+                everyMinutes,
+                anchor: intervalAnchor,
+                fixedStartTime: intervalAnchor === "fixed_start" ? fixedStartTime : undefined,
+                intervalFrom,
+                stop: {
+                  mode: stopMode,
+                  maxDoses: stopMode === "max_doses" ? Number(maxDoses) : undefined,
+                  endTime: stopMode === "end_time" ? endTime : undefined,
+                },
+              }
+            : undefined,
       enabled,
       visibility,
       sharedMemberIds: visibility === "private" ? sharedMemberIds : undefined,
@@ -1017,14 +1126,108 @@ function HealthMedicationSheet({
           <span>Schedule</span>
           <Select
             value={scheduleKind}
-            onChange={(e) => setScheduleKind(e.target.value as "scheduled" | "prn")}
+            onChange={(e) => setScheduleKind(e.target.value as "scheduled" | "prn" | "interval")}
           >
             <option value="scheduled">Scheduled times</option>
+            <option value="interval">Every N (interval)</option>
             <option value="prn">PRN (as needed)</option>
           </Select>
         </label>
         {scheduleKind === "scheduled" ? (
           <MedTimesEditor times={scheduleTimes} onChange={setScheduleTimes} />
+        ) : null}
+        {scheduleKind === "interval" ? (
+          <div className="space-y-3 rounded-lg border border-[var(--color-border)] p-3">
+            <div className="flex flex-wrap gap-2">
+              <label className="block flex-1 space-y-1 text-sm">
+                <span>Every</span>
+                <Input
+                  type="number"
+                  min={1}
+                  value={everyAmount}
+                  onChange={(e) => setEveryAmount(e.target.value)}
+                  placeholder="e.g. 3"
+                />
+              </label>
+              <label className="block w-32 space-y-1 text-sm">
+                <span>Unit</span>
+                <Select
+                  value={everyUnit}
+                  onChange={(e) => setEveryUnit(e.target.value as "minutes" | "hours" | "days")}
+                >
+                  <option value="minutes">Minutes</option>
+                  <option value="hours">Hours</option>
+                  <option value="days">Days</option>
+                </Select>
+              </label>
+            </div>
+            <label className="block space-y-1 text-sm">
+              <span>Start</span>
+              <Select
+                value={intervalAnchor}
+                onChange={(e) =>
+                  setIntervalAnchor(e.target.value as "first_taken" | "fixed_start")
+                }
+              >
+                <option value="first_taken">When first dose is Taken</option>
+                <option value="fixed_start">At a set morning time</option>
+              </Select>
+            </label>
+            {intervalAnchor === "fixed_start" ? (
+              <label className="block space-y-1 text-sm">
+                <span>Start time</span>
+                <Input
+                  type="time"
+                  value={fixedStartTime}
+                  onChange={(e) => setFixedStartTime(e.target.value)}
+                />
+              </label>
+            ) : null}
+            <label className="block space-y-1 text-sm">
+              <span>After that, next due is</span>
+              <Select
+                value={intervalFrom}
+                onChange={(e) =>
+                  setIntervalFrom(e.target.value as "last_taken" | "schedule_grid")
+                }
+              >
+                <option value="last_taken">Last Taken + interval</option>
+                <option value="schedule_grid">Fixed grid from start (even if late)</option>
+              </Select>
+            </label>
+            <label className="block space-y-1 text-sm">
+              <span>Stop for the day</span>
+              <Select
+                value={stopMode}
+                onChange={(e) =>
+                  setStopMode(e.target.value as "max_doses" | "end_time" | "midnight")
+                }
+              >
+                <option value="max_doses">Max doses</option>
+                <option value="end_time">After an end time</option>
+                <option value="midnight">Local midnight</option>
+              </Select>
+            </label>
+            {stopMode === "max_doses" ? (
+              <label className="block space-y-1 text-sm">
+                <span>Max doses / day</span>
+                <Input
+                  type="number"
+                  min={1}
+                  max={24}
+                  value={maxDoses}
+                  onChange={(e) => setMaxDoses(e.target.value)}
+                  placeholder="e.g. 5"
+                />
+              </label>
+            ) : null}
+            {stopMode === "end_time" ? (
+              <label className="block space-y-1 text-sm">
+                <span>End time</span>
+                <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+              </label>
+            ) : null}
+          </div>
         ) : null}
         <Checkbox checked={enabled} onChange={(e) => setEnabled(e.target.checked)} label="Enabled" />
         <label className="block space-y-1 text-sm">

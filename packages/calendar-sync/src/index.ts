@@ -48,6 +48,15 @@ export { scanChoreDigest, CHORE_DIGEST_HOUR } from "./chore-digest-scan.js";
 export { scanDriveQuotaWarnings } from "./drive-quota-scan.js";
 export { deliverUserNotification, persistUserNotifications, persistUserNotificationOnce, deliverUserNotificationToSubscriptions } from "./user-notify.js";
 export { isValidTimeZone, resolveAlertTimeZone } from "./alert-timezone.js";
+export {
+  parseIntervalSchedule,
+  normalizeIntervalSchedule,
+  nextIntervalPending,
+  intervalDoseInWindow,
+  type IntervalSchedule,
+  type IntervalLog,
+  type IntervalPendingDose,
+} from "./med-interval-schedule.js";
 export { scanSchoolReminders } from "./school-reminder-scan.js";
 export { scanHealthMedReminders } from "./health-med-reminder-scan.js";
 export { checkHouseholdBudgetAlerts, scanBudgetAlerts } from "./budget-alert-scan.js";

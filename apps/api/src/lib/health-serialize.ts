@@ -10,6 +10,7 @@ import {
   isMidnightInTz,
   localDateOfInstant,
   localTimeHhmm,
+  normalizeIntervalSchedule,
   zonedLocalToUtc,
 } from "@domi-ops/calendar-sync";
 import { eq } from "drizzle-orm";
@@ -271,10 +272,15 @@ function parseJsonNumberArray(raw: string | null | undefined): number[] {
 export function parseMedSchedule(raw: string | null | undefined): {
   times?: string[];
   daysOfWeek?: number[];
+  everyMinutes?: number;
+  anchor?: string;
+  fixedStartTime?: string;
+  intervalFrom?: string;
+  stop?: { mode?: string; maxDoses?: number; endTime?: string };
 } {
   if (!raw) return {};
   try {
-    const parsed = JSON.parse(raw) as { times?: string[]; daysOfWeek?: number[] };
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
     return {
       times: Array.isArray(parsed.times)
         ? parsed.times.filter((t): t is string => typeof t === "string")
@@ -282,6 +288,14 @@ export function parseMedSchedule(raw: string | null | undefined): {
       daysOfWeek: Array.isArray(parsed.daysOfWeek)
         ? parsed.daysOfWeek.filter((d): d is number => typeof d === "number")
         : undefined,
+      everyMinutes: typeof parsed.everyMinutes === "number" ? parsed.everyMinutes : undefined,
+      anchor: typeof parsed.anchor === "string" ? parsed.anchor : undefined,
+      fixedStartTime: typeof parsed.fixedStartTime === "string" ? parsed.fixedStartTime : undefined,
+      intervalFrom: typeof parsed.intervalFrom === "string" ? parsed.intervalFrom : undefined,
+      stop:
+        parsed.stop && typeof parsed.stop === "object"
+          ? (parsed.stop as { mode?: string; maxDoses?: number; endTime?: string })
+          : undefined,
     };
   } catch {
     return {};
@@ -290,12 +304,30 @@ export function parseMedSchedule(raw: string | null | undefined): {
 
 export function normalizeMedSchedule(body: {
   scheduleKind?: string;
-  schedule?: { times?: string[]; daysOfWeek?: number[] };
+  schedule?: {
+    times?: string[];
+    daysOfWeek?: number[];
+    everyMinutes?: number;
+    anchor?: string;
+    fixedStartTime?: string;
+    intervalFrom?: string;
+    stop?: { mode?: string; maxDoses?: number; endTime?: string };
+  };
 }) {
-  const kind = body.scheduleKind === "prn" ? ("prn" as const) : ("scheduled" as const);
-  if (kind === "prn") {
-    return { scheduleKind: kind, scheduleJson: "{}" };
+  if (body.scheduleKind === "prn") {
+    return { scheduleKind: "prn" as const, scheduleJson: "{}" };
   }
+  if (body.scheduleKind === "interval") {
+    const schedule = normalizeIntervalSchedule({
+      everyMinutes: body.schedule?.everyMinutes,
+      anchor: body.schedule?.anchor,
+      fixedStartTime: body.schedule?.fixedStartTime,
+      intervalFrom: body.schedule?.intervalFrom,
+      stop: body.schedule?.stop,
+    });
+    return { scheduleKind: "interval" as const, scheduleJson: JSON.stringify(schedule) };
+  }
+  const kind = "scheduled" as const;
   const times = (body.schedule?.times ?? []).filter((t) => typeof t === "string" && t.includes(":"));
   if (times.length === 0) {
     throw new Error("scheduled_meds_require_times");

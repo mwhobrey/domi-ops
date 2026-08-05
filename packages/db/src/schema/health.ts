@@ -24,7 +24,11 @@ export const healthEventTypeEnum = pgEnum("health_event_type", [
   "other",
 ]);
 
-export const medScheduleKindEnum = pgEnum("med_schedule_kind", ["scheduled", "prn"]);
+export const medScheduleKindEnum = pgEnum("med_schedule_kind", [
+  "scheduled",
+  "prn",
+  "interval",
+]);
 
 export const medLogStatusEnum = pgEnum("med_log_status", ["taken", "skipped", "missed"]);
 

@@ -30,7 +30,7 @@ import {
   validateHealthShareMemberIds,
   type HealthAclGrants,
 } from "../lib/health-access.js";
-import { todayIsoDateInTz, zonedLocalToUtc, formatTimeLabelInTz, resolveAlertTimeZone } from "@domi-ops/calendar-sync";
+import { todayIsoDateInTz, zonedLocalToUtc, formatTimeLabelInTz, resolveAlertTimeZone, nextIntervalPending, parseIntervalSchedule } from "@domi-ops/calendar-sync";
 import {
   encryptHealthTextFields,
   enrichHealthEvents,
@@ -196,6 +196,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
       );
 
     const scheduledMeds = medRows.filter((m) => m.scheduleKind === "scheduled");
+    const intervalMeds = medRows.filter((m) => m.scheduleKind === "interval");
     const prnMeds = medRows.filter((m) => m.scheduleKind === "prn");
 
     const pendingDoses: {
@@ -206,6 +207,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
       scheduledTime: string;
       scheduledTimeLabel: string;
       memberId: string;
+      awaitingFirst?: boolean;
     }[] = [];
 
     for (const med of scheduledMeds) {
@@ -245,6 +247,45 @@ export function householdHealthRoutes(db: Database, env: Env) {
           });
         }
       }
+    }
+
+    for (const med of intervalMeds) {
+      if (med.startDate && today < med.startDate) continue;
+      if (med.endDate && today > med.endDate) continue;
+      const schedule = parseIntervalSchedule(med.scheduleJson);
+      if (!schedule) continue;
+      const name = decryptHealthFieldOrPassthrough(med.name, env) ?? "Medication";
+      const dosage = decryptHealthFieldOrPassthrough(med.dosage, env);
+      const logRows = await db
+        .select({
+          scheduledAt: healthMedicationLogs.scheduledAt,
+          loggedAt: healthMedicationLogs.loggedAt,
+          status: healthMedicationLogs.status,
+        })
+        .from(healthMedicationLogs)
+        .where(eq(healthMedicationLogs.medicationId, med.id));
+      const pending = nextIntervalPending({
+        schedule,
+        tz,
+        date: today,
+        now: new Date(),
+        logs: logRows.map((l) => ({
+          scheduledAt: l.scheduledAt,
+          loggedAt: l.loggedAt,
+          status: l.status,
+        })),
+      });
+      if (!pending) continue;
+      pendingDoses.push({
+        medicationId: med.id,
+        name,
+        dosage,
+        scheduledAt: pending.scheduledAt.toISOString(),
+        scheduledTime: pending.scheduledTime,
+        scheduledTimeLabel: pending.scheduledTimeLabel,
+        memberId: med.memberId,
+        awaitingFirst: pending.awaitingFirst,
+      });
     }
 
     pendingDoses.sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
@@ -583,11 +624,14 @@ export function householdHealthRoutes(db: Database, env: Env) {
     }
 
     try {
-      let scheduleMeta: { scheduleKind: "scheduled" | "prn"; scheduleJson: string };
+      let scheduleMeta: { scheduleKind: "scheduled" | "prn" | "interval"; scheduleJson: string };
       try {
         scheduleMeta = normalizeMedSchedule(body);
-      } catch {
-        return c.json({ error: "scheduled_meds_require_times" }, 400);
+      } catch (e) {
+        return c.json(
+          { error: e instanceof Error ? e.message : "invalid_schedule" },
+          400,
+        );
       }
 
       const enc = encryptHealthTextFields(env, {
@@ -687,12 +731,19 @@ export function householdHealthRoutes(db: Database, env: Env) {
         patch.instructions = encryptHealthField(body.instructions, env);
       }
       if (body.scheduleKind !== undefined || body.schedule !== undefined) {
-        const scheduleMeta = normalizeMedSchedule({
-          scheduleKind: body.scheduleKind ?? existing.scheduleKind,
-          schedule: body.schedule ?? parseMedSchedule(existing.scheduleJson),
-        });
-        patch.scheduleKind = scheduleMeta.scheduleKind;
-        patch.scheduleJson = scheduleMeta.scheduleJson;
+        try {
+          const scheduleMeta = normalizeMedSchedule({
+            scheduleKind: body.scheduleKind ?? existing.scheduleKind,
+            schedule: body.schedule ?? parseMedSchedule(existing.scheduleJson),
+          });
+          patch.scheduleKind = scheduleMeta.scheduleKind;
+          patch.scheduleJson = scheduleMeta.scheduleJson;
+        } catch (e) {
+          return c.json(
+            { error: e instanceof Error ? e.message : "invalid_schedule" },
+            400,
+          );
+        }
       }
       if (body.reminderOffsets !== undefined) {
         patch.reminderOffsetsJson = JSON.stringify(
@@ -795,11 +846,15 @@ export function householdHealthRoutes(db: Database, env: Env) {
 
     const status = body.status === "skipped" || body.status === "missed" ? body.status : "taken";
     const isPrn = med.scheduleKind === "prn";
+    const isInterval = med.scheduleKind === "interval";
     const alsoCreateEvent = body.alsoCreateEvent ?? isPrn;
     const loggedAt = body.loggedAt ? new Date(body.loggedAt) : new Date();
     let scheduledAt: Date | null = body.scheduledAt ? new Date(body.scheduledAt) : null;
-    if (!isPrn && !scheduledAt) {
+    if (!isPrn && !isInterval && !scheduledAt) {
       return c.json({ error: "scheduled_at_required" }, 400);
+    }
+    if (isInterval && !scheduledAt) {
+      scheduledAt = loggedAt;
     }
 
     try {

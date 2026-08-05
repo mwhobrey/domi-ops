@@ -181,7 +181,11 @@ export function HealthSharingClient({
                             <p className="truncate font-medium text-[var(--color-text)]">{med.name}</p>
                             <p className="truncate text-sm text-[var(--color-text-muted)]">
                               {memberLabel(members, med.memberId)} ·{" "}
-                              {med.scheduleKind === "prn" ? "PRN" : "Scheduled"}
+                              {med.scheduleKind === "prn"
+                                ? "PRN"
+                                : med.scheduleKind === "interval"
+                                  ? "Every…"
+                                  : "Scheduled"}
                             </p>
                           </div>
                           <Badge tone="default">Shared</Badge>
@@ -235,7 +239,13 @@ export function HealthSharingClient({
                     <SharedByMeRow
                       key={med.id}
                       title={med.name}
-                      subtitle={med.scheduleKind === "prn" ? "PRN" : "Scheduled"}
+                      subtitle={
+                        med.scheduleKind === "prn"
+                          ? "PRN"
+                          : med.scheduleKind === "interval"
+                            ? "Every…"
+                            : "Scheduled"
+                      }
                       shareeIds={med.sharedMemberIds ?? []}
                       members={members}
                       onEdit={() => setShareEdit({ kind: "medication", record: med })}
