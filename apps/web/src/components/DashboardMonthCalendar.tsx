@@ -84,7 +84,19 @@ export function DashboardMonthCalendar({ compact = false }: { compact?: boolean 
       <Card className={compact ? "h-full" : undefined}>
         <CardHeader className={compact ? "pb-2" : undefined}>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <SectionHeader title={compact ? "Calendar" : "Household calendar"} />
+            <SectionHeader
+              title={compact ? "Month" : "Household calendar"}
+              action={
+                compact ? (
+                  <Link
+                    href="/calendar"
+                    className="text-xs font-medium text-[var(--color-accent)] hover:underline"
+                  >
+                    Open calendar
+                  </Link>
+                ) : undefined
+              }
+            />
             <div className="flex flex-wrap items-center gap-1.5">
               <Button
                 variant="secondary"

@@ -74,6 +74,7 @@ import {
 import { avatarObjectKey, processAvatarUpload } from "../lib/avatar-image.js";
 import { memberAvatarUrl } from "../lib/avatar-url.js";
 import { buildChoresGlance } from "../lib/chores-glance.js";
+import { buildShoppingGlance } from "../lib/shopping-glance.js";
 import {
   collectChoreListSuggestions,
   collectChoreTagSuggestions,
@@ -764,6 +765,34 @@ export function coreRoutes(db: Database, env: Env) {
       .from(shoppingItems)
       .where(eq(shoppingItems.householdId, auth.householdId));
     return c.json({ items: rows.map(serializeShoppingItem) });
+  });
+
+  app.get("/shopping/glance", async (c) => {
+    const auth = c.get("auth")!;
+    const rows = await db
+      .select({
+        id: shoppingItems.id,
+        item: shoppingItems.item,
+        checked: shoppingItems.checked,
+        quantity: shoppingItems.quantity,
+        unit: shoppingItems.unit,
+        tagsJson: shoppingItems.tagsJson,
+      })
+      .from(shoppingItems)
+      .where(eq(shoppingItems.householdId, auth.householdId))
+      .orderBy(shoppingItems.createdAt);
+    const mapped = rows.map((row) => {
+      const { aisle } = parseShoppingTagsJson(row.tagsJson);
+      return {
+        id: row.id,
+        item: row.item,
+        checked: row.checked,
+        aisle,
+        quantity: row.quantity ?? null,
+        unit: row.unit ?? null,
+      };
+    });
+    return c.json(buildShoppingGlance(mapped));
   });
 
   app.get("/shopping/suggestions", async (c) => {

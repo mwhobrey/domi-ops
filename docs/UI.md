@@ -57,10 +57,13 @@ Typography: **Inter** via `next/font` on `layout.tsx`.
 
 ## Dashboard widgets
 
-- **Weather:** Open-Meteo via `GET /api/core/weather?lat=&lon=&label=` and `GET /api/core/weather/geocode?q=`. Users pick **Use my location** (browser geolocation) or search city/state/ZIP; saved in `localStorage` (`domi-ops:weather-location`). Optional server default in `.env`.
+Layout (top → bottom): **Today at a glance** → **Today’s schedule** + **compact weather** (2-col `md+`) → **Household** → **Month** calendar (secondary).
+
+- **Today at a glance:** actionable tiles only — Chores, Shopping, School (module), Health (module). Drive is not on the dashboard glance. Grid: 2 cols `sm+`, up to 4 at `xl`.
+- **Today’s schedule:** `TodayAgenda` — today’s calendar events + overlays; deep-links to `/calendar?event=` or overlay `deepLink`.
+- **Weather:** compact strip on dashboard (`WeatherPanel compact`); Open-Meteo via `GET /api/core/weather?lat=&lon=&label=` and geocode; location in `localStorage` (`domi-ops:weather-location`).
 - **Household:** `HouseholdPanel` — current user status highlighted; other members below.
-- **Month calendar:** `DashboardMonthCalendar` — tap day for event sheet (close via X, backdrop, or Escape).
-- **Today at a glance:** when school + drive modules on, glance card spans full width above calendar; 3 tiles use 2 cols until `xl`.
+- **Month calendar:** `DashboardMonthCalendar` below the fold — tap day for event sheet (hourly weather when location set).
 
 ## PWA
 

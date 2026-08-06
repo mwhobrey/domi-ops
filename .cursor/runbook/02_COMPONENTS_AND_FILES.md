@@ -34,6 +34,9 @@ domi-ops/
 | `src/app/page.tsx` | Landing; server fetches `/health` |
 | `src/app/login/page.tsx` | Google sign-in entry |
 | `src/app/dashboard/page.tsx` | Core dashboard via `apiFetch` |
+| `src/components/DashboardBoard.tsx` | Home layout: glance → agenda+weather → household → month |
+| `src/components/TodayGlance.tsx` | Chores/shopping/school/health glance tiles |
+| `src/components/TodayAgenda.tsx` | Today’s calendar events + overlays |
 | `src/app/calendar/page.tsx` | Calendar UI |
 | `src/app/health/page.tsx` | Health tracker UI (`/health` — module-gated; API liveness is separate rewrite) |
 | `src/app/health/sharing/page.tsx` | Health sharing management (`/health/sharing`) |
@@ -110,7 +113,7 @@ domi-ops/
 | `src/lib/health-access.ts` | Health visibility + shares + segment ACL (WHO-229) |
 | `src/lib/health-crypto.ts` | Field encryption for PHI-like health columns |
 | `src/lib/health-serialize.ts` | Health DTO encrypt/decrypt + schedule JSON |
-| `src/routes/core.ts` | Dashboard, shopping, chores, notes, expenses; profile overlay prefs |
+| `src/routes/core.ts` | Dashboard, shopping (+ `/shopping/glance`), chores, notes, expenses; profile overlay prefs |
 | `src/routes/school.ts` | Classes, assignments (`GET /assignments?filter=`), submissions |
 | `src/routes/school-upload.ts` | Presign stub |
 | `src/routes/health.ts` | API DB ping (`GET /health` on API host) |
