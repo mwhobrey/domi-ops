@@ -417,7 +417,7 @@ VAPID_SUBJECT=mailto:you@example.com
 
 Each family member must opt in under **Profile → notifications** and tap **Enable on this device**. iOS requires installing the PWA first (iOS 16.4+).
 
-Medication reminders support **Taken** / **Skip** action buttons on Chromium/Android. **iOS PWA does not show notification action buttons** — tapping the notification opens Health and auto-logs via a signed deep link instead.
+Medication reminders support **Taken** / **Skip** action buttons on Chromium/Android. **iOS PWA does not show notification action buttons** — tapping the notification opens Health and auto-logs via a signed deep link instead. Caregivers with **Dose helper** (or any `doses: write`) on [Health → Sharing](/health/sharing) also receive reminders when their Profile health-med push toggle is on.
 
 ### Weather
 

@@ -172,6 +172,7 @@ Exports: `@domi-ops/db`, `@domi-ops/db/schema` (package.json `exports`).
 
 - `queue.ts` — `SYNC_QUEUE`, `enqueueSyncJob`.
 - `sync.ts` — pull logic, `runCalendarSyncJob` switch (includes v1 stubs).
+- `health-med-reminder-scan.ts` / `health-med-reminder-recipients.ts` — med push to subject + ACL `doses: write` (WHO-238).
 - `index.ts` — public exports; `registerSyncHandler` Map exists but **worker does not use it**.
 
 ### `@domi-ops/import-homehub` (`packages/import-homehub`)
