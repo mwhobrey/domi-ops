@@ -92,7 +92,7 @@
 |-------|--------|----------|
 | Encryption at rest | **Pass** | `encryptHealthField` / `decryptHealthField` via `@domi-ops/crypto` + `ENCRYPTION_KEY` (`health-crypto.ts`) |
 | Prod key required | **Pass** | Config `superRefine` when `health` ∈ `MODULES_ENABLED` |
-| Access control | **Pass** | `healthEventVisibleWhere` / `healthMedicationVisibleWhere`: household \| subject (`memberId`) \| creator \| explicit shares \| **segment ACL** (`health_member_acl`, WHO-229). **No admin override** on list/reports/overlays. New rows default **private** (WHO-226). Writes: subject/admin or segment `write` (`doses` write implies meds `read`). |
+| Access control | **Pass** | `healthEventVisibleWhere` / `healthMedicationVisibleWhere`: household \| subject (`memberId`) \| creator \| explicit shares \| **segment ACL** (`health_member_acl`, WHO-229). **No admin override** on list/reports/overlays. New rows default **private** (WHO-226). Writes: subject/admin or segment `write` (`doses` write implies meds `read`). Med reminder fan-out (WHO-238) follows the same rule: subject + ACL `doses: write` only — not household admin role. |
 | HIPAA claim | **Pass** | Documented as **not** HIPAA-compliant in `SELF_HOST.md` |
 
 **Follow-up:** `ENCRYPTION_KEY` rotation tooling still absent (documented limitation).

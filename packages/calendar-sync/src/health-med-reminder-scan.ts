@@ -9,13 +9,15 @@ import {
   healthMedReminderSent,
   healthMedicationLogs,
   healthMedications,
-  householdMembers,
   households,
   pushSubscriptions,
-  users,
 } from "@domi-ops/db";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { resolveAlertTimeZone } from "./alert-timezone.js";
+import {
+  listHealthMedReminderRecipients,
+  type HealthMedReminderRecipient,
+} from "./health-med-reminder-recipients.js";
 import { addDaysIso, todayIsoDateInTz, zonedLocalToUtc } from "./household-time.js";
 import { nextIntervalPending, parseIntervalSchedule } from "./med-interval-schedule.js";
 import {
@@ -27,6 +29,9 @@ const MED_PUSH_ACTIONS = [
   { action: "taken", title: "Taken" },
   { action: "skip", title: "Skip" },
 ] as const;
+
+const WINDOW_MS = 6 * 60 * 1000;
+const LOOKBACK_MS = 30 * 60 * 1000;
 
 function buildMedReminderDeepLink(input: {
   medicationId: string;
@@ -67,9 +72,6 @@ function mintMedActionToken(
     return null;
   }
 }
-
-const WINDOW_MS = 6 * 60 * 1000;
-const LOOKBACK_MS = 30 * 60 * 1000;
 
 function householdHasHealthModule(modulesEnabled: string): boolean {
   try {
@@ -115,8 +117,23 @@ function datesAround(tz: string): string[] {
   return [addDaysIso(today, -1), today, addDaysIso(today, 1)];
 }
 
+function medReminderBody(input: {
+  medName: string;
+  minutesUntil: number;
+  isSubject: boolean;
+  subjectLabel: string;
+}): string {
+  const core =
+    input.minutesUntil <= 0
+      ? `Time to take ${input.medName}`
+      : `${input.medName} in ${input.minutesUntil} min`;
+  if (input.isSubject) return core;
+  return `${input.subjectLabel} — ${core}`;
+}
+
 type DeliveryTarget = {
   subscriptionId: string | null;
+  userId: string;
   timezone: string;
   push?: {
     id: string;
@@ -132,6 +149,7 @@ async function alreadySent(
   scheduledAt: Date,
   offsetMinutes: number,
   subscriptionId: string | null,
+  userId: string,
 ): Promise<boolean> {
   const conditions = [
     eq(healthMedReminderSent.medicationId, medicationId),
@@ -142,6 +160,7 @@ async function alreadySent(
     conditions.push(eq(healthMedReminderSent.subscriptionId, subscriptionId));
   } else {
     conditions.push(isNull(healthMedReminderSent.subscriptionId));
+    conditions.push(eq(healthMedReminderSent.userId, userId));
   }
   const [row] = await db
     .select({ id: healthMedReminderSent.id })
@@ -149,6 +168,134 @@ async function alreadySent(
     .where(and(...conditions))
     .limit(1);
   return Boolean(row);
+}
+
+async function deliverOneMedReminder(
+  db: Database,
+  env: Env,
+  input: {
+    householdId: string;
+    medicationId: string;
+    medName: string;
+    scheduledAt: Date;
+    offsetMinutes: number;
+    tag: string;
+    now: Date;
+    recipient: HealthMedReminderRecipient;
+    subjectLabel: string;
+    target: DeliveryTarget;
+  },
+): Promise<boolean> {
+  if (
+    await alreadySent(
+      db,
+      input.medicationId,
+      input.scheduledAt,
+      input.offsetMinutes,
+      input.target.subscriptionId,
+      input.recipient.userId,
+    )
+  ) {
+    return false;
+  }
+
+  const minutesUntil = Math.max(
+    0,
+    Math.round((input.scheduledAt.getTime() - input.now.getTime()) / 60000),
+  );
+  const body = medReminderBody({
+    medName: input.medName,
+    minutesUntil,
+    isSubject: input.recipient.isSubject,
+    subjectLabel: input.subjectLabel,
+  });
+  const token = mintMedActionToken(env, {
+    householdId: input.householdId,
+    userId: input.recipient.userId,
+    medicationId: input.medicationId,
+    scheduledAt: input.scheduledAt,
+  });
+  const url = buildMedReminderDeepLink({
+    medicationId: input.medicationId,
+    scheduledAt: input.scheduledAt,
+    token,
+  });
+
+  if (input.target.push) {
+    await deliverUserNotificationToSubscriptions(db, env, {
+      userId: input.recipient.userId,
+      householdId: input.householdId,
+      title: "Medication reminder",
+      body,
+      url,
+      tag: input.tag,
+      subscriptions: [input.target.push],
+      ...(token
+        ? {
+            actions: [...MED_PUSH_ACTIONS],
+            data: {
+              medicationId: input.medicationId,
+              scheduledAt: input.scheduledAt.toISOString(),
+              token,
+            },
+          }
+        : {}),
+    });
+  } else {
+    await persistUserNotificationOnce(db, {
+      userId: input.recipient.userId,
+      householdId: input.householdId,
+      title: "Medication reminder",
+      body,
+      url,
+      tag: input.tag,
+    });
+  }
+
+  await db.insert(healthMedReminderSent).values({
+    medicationId: input.medicationId,
+    scheduledAt: input.scheduledAt,
+    offsetMinutes: input.offsetMinutes,
+    subscriptionId: input.target.subscriptionId,
+    userId: input.recipient.userId,
+  });
+  return true;
+}
+
+async function targetsForRecipient(
+  db: Database,
+  recipient: HealthMedReminderRecipient,
+  householdTz: string,
+): Promise<DeliveryTarget[]> {
+  const subs = await db
+    .select()
+    .from(pushSubscriptions)
+    .where(eq(pushSubscriptions.userId, recipient.userId));
+
+  if (subs.length > 0) {
+    return subs.map((sub) => ({
+      subscriptionId: sub.id,
+      userId: recipient.userId,
+      timezone: resolveAlertTimeZone({
+        deviceTimezone: sub.timezone,
+        householdTimezone: householdTz,
+      }),
+      push: {
+        id: sub.id,
+        endpoint: sub.endpoint,
+        p256dh: sub.p256dh,
+        authKey: sub.authKey,
+      },
+    }));
+  }
+
+  return [
+    {
+      subscriptionId: null,
+      userId: recipient.userId,
+      timezone: resolveAlertTimeZone({ householdTimezone: householdTz }),
+    },
+  ];
 }
 
 export async function scanHealthMedReminders(db: Database, env: Env): Promise<number> {
@@ -186,252 +333,124 @@ export async function scanHealthMedReminders(db: Database, env: Env): Promise<nu
       const offsets = parseOffsets(med.reminderOffsetsJson);
       const medName = decryptMedName(med.name, env);
 
-      const [member] = await db
-        .select({ userId: householdMembers.userId })
-        .from(householdMembers)
-        .where(eq(householdMembers.id, med.memberId))
-        .limit(1);
-      if (!member?.userId) continue;
+      const { recipients, subjectLabel } = await listHealthMedReminderRecipients(db, {
+        householdId: household.id,
+        subjectMemberId: med.memberId,
+      });
+      if (recipients.length === 0) continue;
 
-      const [userRow] = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(and(eq(users.id, member.userId), eq(users.pushHealthRemindersEnabled, true)))
-        .limit(1);
-      if (!userRow) continue;
+      for (const recipient of recipients) {
+        const targets = await targetsForRecipient(db, recipient, householdTz);
 
-      const subs = await db
-        .select()
-        .from(pushSubscriptions)
-        .where(eq(pushSubscriptions.userId, userRow.id));
+        for (const target of targets) {
+          const tz = target.timezone;
 
-      const targets: DeliveryTarget[] =
-        subs.length > 0
-          ? subs.map((sub) => ({
-              subscriptionId: sub.id,
-              timezone: resolveAlertTimeZone({
-                deviceTimezone: sub.timezone,
-                householdTimezone: householdTz,
-              }),
-              push: {
-                id: sub.id,
-                endpoint: sub.endpoint,
-                p256dh: sub.p256dh,
-                authKey: sub.authKey,
-              },
-            }))
-          : [
-              {
-                subscriptionId: null,
-                timezone: resolveAlertTimeZone({ householdTimezone: householdTz }),
-              },
-            ];
+          if (med.scheduleKind === "interval") {
+            const interval = parseIntervalSchedule(med.scheduleJson);
+            if (!interval) continue;
+            if (med.startDate && todayIsoDateInTz(tz) < med.startDate) continue;
+            if (med.endDate && todayIsoDateInTz(tz) > med.endDate) continue;
 
-      for (const target of targets) {
-        const tz = target.timezone;
+            const logRows = await db
+              .select({
+                scheduledAt: healthMedicationLogs.scheduledAt,
+                loggedAt: healthMedicationLogs.loggedAt,
+                status: healthMedicationLogs.status,
+              })
+              .from(healthMedicationLogs)
+              .where(eq(healthMedicationLogs.medicationId, med.id));
 
-        if (med.scheduleKind === "interval") {
-          const interval = parseIntervalSchedule(med.scheduleJson);
-          if (!interval) continue;
-          if (med.startDate && todayIsoDateInTz(tz) < med.startDate) continue;
-          if (med.endDate && todayIsoDateInTz(tz) > med.endDate) continue;
-
-          const logRows = await db
-            .select({
-              scheduledAt: healthMedicationLogs.scheduledAt,
-              loggedAt: healthMedicationLogs.loggedAt,
-              status: healthMedicationLogs.status,
-            })
-            .from(healthMedicationLogs)
-            .where(eq(healthMedicationLogs.medicationId, med.id));
-
-          const date = todayIsoDateInTz(tz);
-          const pending = nextIntervalPending({
-            schedule: interval,
-            tz,
-            date,
-            now,
-            logs: logRows.map((l) => ({
-              scheduledAt: l.scheduledAt,
-              loggedAt: l.loggedAt,
-              status: l.status,
-            })),
-          });
-          if (!pending || pending.awaitingFirst) continue;
-
-          for (const offsetMinutes of offsets) {
-            const fireAt = new Date(pending.scheduledAt.getTime() - offsetMinutes * 60 * 1000);
-            if (fireAt > windowEnd) continue;
-            if (fireAt < lookbackStart) continue;
-
-            if (
-              await alreadySent(db, med.id, pending.scheduledAt, offsetMinutes, target.subscriptionId)
-            ) {
-              continue;
-            }
-
-            const minutesUntil = Math.max(
-              0,
-              Math.round((pending.scheduledAt.getTime() - now.getTime()) / 60000),
-            );
-            const body =
-              minutesUntil <= 0
-                ? `Time to take ${medName}`
-                : `${medName} in ${minutesUntil} min`;
-            const tag = `health-med-${med.id}-${date}-${pending.scheduledTime}-${offsetMinutes}`;
-            const token = mintMedActionToken(env, {
-              householdId: household.id,
-              userId: userRow.id,
-              medicationId: med.id,
-              scheduledAt: pending.scheduledAt,
+            const date = todayIsoDateInTz(tz);
+            const pending = nextIntervalPending({
+              schedule: interval,
+              tz,
+              date,
+              now,
+              logs: logRows.map((l) => ({
+                scheduledAt: l.scheduledAt,
+                loggedAt: l.loggedAt,
+                status: l.status,
+              })),
             });
-            const url = buildMedReminderDeepLink({
-              medicationId: med.id,
-              scheduledAt: pending.scheduledAt,
-              token,
-            });
-
-            if (target.push) {
-              await deliverUserNotificationToSubscriptions(db, env, {
-                userId: userRow.id,
-                householdId: household.id,
-                title: "Medication reminder",
-                body,
-                url,
-                tag,
-                subscriptions: [target.push],
-                ...(token
-                  ? {
-                      actions: [...MED_PUSH_ACTIONS],
-                      data: {
-                        medicationId: med.id,
-                        scheduledAt: pending.scheduledAt.toISOString(),
-                        token,
-                      },
-                    }
-                  : {}),
-              });
-            } else {
-              await persistUserNotificationOnce(db, {
-                userId: userRow.id,
-                householdId: household.id,
-                title: "Medication reminder",
-                body,
-                url,
-                tag,
-              });
-            }
-
-            await db.insert(healthMedReminderSent).values({
-              medicationId: med.id,
-              scheduledAt: pending.scheduledAt,
-              offsetMinutes,
-              subscriptionId: target.subscriptionId,
-            });
-            sent += 1;
-          }
-          continue;
-        }
-
-        const schedule = parseSchedule(med.scheduleJson);
-        const times = schedule.times ?? [];
-        if (times.length === 0) continue;
-
-        for (const date of datesAround(tz)) {
-          if (med.startDate && date < med.startDate) continue;
-          if (med.endDate && date > med.endDate) continue;
-          if (schedule.daysOfWeek?.length) {
-            const dow = new Date(`${date}T12:00:00Z`).getUTCDay();
-            if (!schedule.daysOfWeek.includes(dow)) continue;
-          }
-
-          for (const time of times) {
-            const hhmm = time.length >= 5 ? time.slice(0, 5) : time;
-            const scheduledAt = zonedLocalToUtc(date, hhmm, tz);
+            if (!pending || pending.awaitingFirst) continue;
 
             for (const offsetMinutes of offsets) {
-              const fireAt = new Date(scheduledAt.getTime() - offsetMinutes * 60 * 1000);
+              const fireAt = new Date(pending.scheduledAt.getTime() - offsetMinutes * 60 * 1000);
               if (fireAt > windowEnd) continue;
               if (fireAt < lookbackStart) continue;
 
+              const tag = `health-med-${med.id}-${date}-${pending.scheduledTime}-${offsetMinutes}`;
               if (
-                await alreadySent(db, med.id, scheduledAt, offsetMinutes, target.subscriptionId)
+                await deliverOneMedReminder(db, env, {
+                  householdId: household.id,
+                  medicationId: med.id,
+                  medName,
+                  scheduledAt: pending.scheduledAt,
+                  offsetMinutes,
+                  tag,
+                  now,
+                  recipient,
+                  subjectLabel,
+                  target,
+                })
               ) {
-                continue;
+                sent += 1;
               }
+            }
+            continue;
+          }
 
-              const [logged] = await db
-                .select({ id: healthMedicationLogs.id })
-                .from(healthMedicationLogs)
-                .where(
-                  and(
-                    eq(healthMedicationLogs.medicationId, med.id),
-                    eq(healthMedicationLogs.scheduledAt, scheduledAt),
-                  ),
-                )
-                .limit(1);
-              if (logged) continue;
+          const schedule = parseSchedule(med.scheduleJson);
+          const times = schedule.times ?? [];
+          if (times.length === 0) continue;
 
-              const minutesUntil = Math.max(
-                0,
-                Math.round((scheduledAt.getTime() - now.getTime()) / 60000),
-              );
-              const body =
-                minutesUntil <= 0
-                  ? `Time to take ${medName}`
-                  : `${medName} in ${minutesUntil} min`;
+          for (const date of datesAround(tz)) {
+            if (med.startDate && date < med.startDate) continue;
+            if (med.endDate && date > med.endDate) continue;
+            if (schedule.daysOfWeek?.length) {
+              const dow = new Date(`${date}T12:00:00Z`).getUTCDay();
+              if (!schedule.daysOfWeek.includes(dow)) continue;
+            }
 
-              const tag = `health-med-${med.id}-${date}-${hhmm}-${offsetMinutes}`;
-              const token = mintMedActionToken(env, {
-                householdId: household.id,
-                userId: userRow.id,
-                medicationId: med.id,
-                scheduledAt,
-              });
-              const url = buildMedReminderDeepLink({
-                medicationId: med.id,
-                scheduledAt,
-                token,
-              });
+            for (const time of times) {
+              const hhmm = time.length >= 5 ? time.slice(0, 5) : time;
+              const scheduledAt = zonedLocalToUtc(date, hhmm, tz);
 
-              if (target.push) {
-                await deliverUserNotificationToSubscriptions(db, env, {
-                  userId: userRow.id,
-                  householdId: household.id,
-                  title: "Medication reminder",
-                  body,
-                  url,
-                  tag,
-                  subscriptions: [target.push],
-                  ...(token
-                    ? {
-                        actions: [...MED_PUSH_ACTIONS],
-                        data: {
-                          medicationId: med.id,
-                          scheduledAt: scheduledAt.toISOString(),
-                          token,
-                        },
-                      }
-                    : {}),
-                });
-              } else {
-                await persistUserNotificationOnce(db, {
-                  userId: userRow.id,
-                  householdId: household.id,
-                  title: "Medication reminder",
-                  body,
-                  url,
-                  tag,
-                });
+              for (const offsetMinutes of offsets) {
+                const fireAt = new Date(scheduledAt.getTime() - offsetMinutes * 60 * 1000);
+                if (fireAt > windowEnd) continue;
+                if (fireAt < lookbackStart) continue;
+
+                const [logged] = await db
+                  .select({ id: healthMedicationLogs.id })
+                  .from(healthMedicationLogs)
+                  .where(
+                    and(
+                      eq(healthMedicationLogs.medicationId, med.id),
+                      eq(healthMedicationLogs.scheduledAt, scheduledAt),
+                    ),
+                  )
+                  .limit(1);
+                if (logged) continue;
+
+                const tag = `health-med-${med.id}-${date}-${hhmm}-${offsetMinutes}`;
+                if (
+                  await deliverOneMedReminder(db, env, {
+                    householdId: household.id,
+                    medicationId: med.id,
+                    medName,
+                    scheduledAt,
+                    offsetMinutes,
+                    tag,
+                    now,
+                    recipient,
+                    subjectLabel,
+                    target,
+                  })
+                ) {
+                  sent += 1;
+                }
               }
-
-              await db.insert(healthMedReminderSent).values({
-                medicationId: med.id,
-                scheduledAt,
-                offsetMinutes,
-                subscriptionId: target.subscriptionId,
-              });
-              sent += 1;
             }
           }
         }

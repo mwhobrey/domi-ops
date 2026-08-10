@@ -166,6 +166,8 @@ export const healthMedReminderSent = pgTable(
     subscriptionId: uuid("subscription_id").references(() => pushSubscriptions.id, {
       onDelete: "cascade",
     }),
+    /** Recipient user for inbox-only dedupe across subject + dose admins (WHO-238). */
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
     sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -173,7 +175,7 @@ export const healthMedReminderSent = pgTable(
       .on(t.medicationId, t.scheduledAt, t.offsetMinutes, t.subscriptionId)
       .where(sql`${t.subscriptionId} is not null`),
     uniqueIndex("health_med_reminder_sent_nosub_unique")
-      .on(t.medicationId, t.scheduledAt, t.offsetMinutes)
+      .on(t.medicationId, t.scheduledAt, t.offsetMinutes, t.userId)
       .where(sql`${t.subscriptionId} is null`),
   ],
 );

@@ -365,6 +365,13 @@
       "when": 1780495025000,
       "tag": "0051_med_schedule_interval",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1780495026000,
+      "tag": "0052_health_med_reminder_sent_user",
+      "breakpoints": true
     }
   ]
 }
