@@ -1,6 +1,6 @@
 /* Minimal service worker — installable PWA; network-first for app routes.
  * Bump CACHE when shell assets change so activate purges stale caches. */
-const CACHE = "domi-ops-shell-v1";
+const CACHE = "domi-ops-shell-v2";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -31,8 +31,43 @@ function normalizePushPayload(raw) {
     title: raw.title ?? "Domi Ops",
     body: raw.body ?? "",
     tag,
+    actions: Array.isArray(raw.actions) ? raw.actions : undefined,
     data: { ...(raw.data ?? {}), url },
   };
+}
+
+function openAppPath(path) {
+  const target = new URL(path, self.location.origin).href;
+  return clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+    for (const client of list) {
+      if ("focus" in client) {
+        return client.focus().then(() => {
+          if ("navigate" in client) return client.navigate(target);
+        });
+      }
+    }
+    if (clients.openWindow) return clients.openWindow(target);
+  });
+}
+
+function medActionFallbackUrl(data, action) {
+  const params = new URLSearchParams();
+  if (data.medicationId) params.set("medication", data.medicationId);
+  params.set("action", action === "skip" ? "skip" : "taken");
+  if (data.scheduledAt) params.set("scheduledAt", data.scheduledAt);
+  if (data.token) params.set("token", data.token);
+  return `/health?${params.toString()}`;
+}
+
+async function postMedPushAction(token, action) {
+  const status = action === "skip" ? "skipped" : "taken";
+  const res = await fetch("/api/health/medications/push-action", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, action: status }),
+  });
+  return res.ok;
 }
 
 self.addEventListener("push", (event) => {
@@ -50,9 +85,10 @@ self.addEventListener("push", (event) => {
         tag: payload.tag,
         icon: "/icons/icon-192.png",
         data: payload.data,
+        ...(payload.actions?.length ? { actions: payload.actions } : {}),
       });
-      const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-      for (const client of clients) {
+      const clientList = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      for (const client of clientList) {
         client.postMessage({ type: "domi-ops:notification" });
       }
     })(),
@@ -61,18 +97,37 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const path = event.notification.data?.url ?? "/dashboard?notices=1";
-  const target = new URL(path, self.location.origin).href;
-  event.waitUntil(
-    clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
-      for (const client of list) {
-        if ("focus" in client) {
-          return client.focus().then(() => {
-            if ("navigate" in client) return client.navigate(target);
-          });
+  const data = event.notification.data ?? {};
+  const action = event.action;
+
+  if ((action === "taken" || action === "skip") && data.token) {
+    event.waitUntil(
+      (async () => {
+        try {
+          const ok = await postMedPushAction(data.token, action);
+          if (ok) {
+            const clientList = await self.clients.matchAll({
+              type: "window",
+              includeUncontrolled: true,
+            });
+            for (const client of clientList) {
+              client.postMessage({
+                type: "domi-ops:med-logged",
+                medicationId: data.medicationId,
+                action,
+              });
+            }
+            return;
+          }
+        } catch {
+          /* fall through to deep link */
         }
-      }
-      if (clients.openWindow) return clients.openWindow(target);
-    }),
-  );
+        return openAppPath(medActionFallbackUrl(data, action));
+      })(),
+    );
+    return;
+  }
+
+  const path = data.url ?? "/dashboard?notices=1";
+  event.waitUntil(openAppPath(path));
 });

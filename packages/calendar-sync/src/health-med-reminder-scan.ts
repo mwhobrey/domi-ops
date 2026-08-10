@@ -1,5 +1,9 @@
 import type { Env } from "@domi-ops/config";
-import { decryptSensitive } from "@domi-ops/crypto";
+import {
+  decryptSensitive,
+  healthMedPushActionSecret,
+  mintHealthMedPushActionToken,
+} from "@domi-ops/crypto";
 import type { Database } from "@domi-ops/db";
 import {
   healthMedReminderSent,
@@ -18,6 +22,51 @@ import {
   deliverUserNotificationToSubscriptions,
   persistUserNotificationOnce,
 } from "./user-notify.js";
+
+const MED_PUSH_ACTIONS = [
+  { action: "taken", title: "Taken" },
+  { action: "skip", title: "Skip" },
+] as const;
+
+function buildMedReminderDeepLink(input: {
+  medicationId: string;
+  scheduledAt: Date;
+  token: string | null;
+}): string {
+  const params = new URLSearchParams({ medication: input.medicationId });
+  if (input.token) {
+    params.set("action", "taken");
+    params.set("scheduledAt", input.scheduledAt.toISOString());
+    params.set("token", input.token);
+  }
+  return `/health?${params.toString()}`;
+}
+
+function mintMedActionToken(
+  env: Env,
+  input: {
+    householdId: string;
+    userId: string;
+    medicationId: string;
+    scheduledAt: Date;
+  },
+): string | null {
+  const secret = healthMedPushActionSecret(env);
+  if (!secret) return null;
+  try {
+    return mintHealthMedPushActionToken(
+      {
+        householdId: input.householdId,
+        userId: input.userId,
+        medicationId: input.medicationId,
+        scheduledAt: input.scheduledAt.toISOString(),
+      },
+      secret,
+    );
+  } catch {
+    return null;
+  }
+}
 
 const WINDOW_MS = 6 * 60 * 1000;
 const LOOKBACK_MS = 30 * 60 * 1000;
@@ -230,6 +279,17 @@ export async function scanHealthMedReminders(db: Database, env: Env): Promise<nu
                 ? `Time to take ${medName}`
                 : `${medName} in ${minutesUntil} min`;
             const tag = `health-med-${med.id}-${date}-${pending.scheduledTime}-${offsetMinutes}`;
+            const token = mintMedActionToken(env, {
+              householdId: household.id,
+              userId: userRow.id,
+              medicationId: med.id,
+              scheduledAt: pending.scheduledAt,
+            });
+            const url = buildMedReminderDeepLink({
+              medicationId: med.id,
+              scheduledAt: pending.scheduledAt,
+              token,
+            });
 
             if (target.push) {
               await deliverUserNotificationToSubscriptions(db, env, {
@@ -237,9 +297,19 @@ export async function scanHealthMedReminders(db: Database, env: Env): Promise<nu
                 householdId: household.id,
                 title: "Medication reminder",
                 body,
-                url: `/health?medication=${med.id}`,
+                url,
                 tag,
                 subscriptions: [target.push],
+                ...(token
+                  ? {
+                      actions: [...MED_PUSH_ACTIONS],
+                      data: {
+                        medicationId: med.id,
+                        scheduledAt: pending.scheduledAt.toISOString(),
+                        token,
+                      },
+                    }
+                  : {}),
               });
             } else {
               await persistUserNotificationOnce(db, {
@@ -247,7 +317,7 @@ export async function scanHealthMedReminders(db: Database, env: Env): Promise<nu
                 householdId: household.id,
                 title: "Medication reminder",
                 body,
-                url: `/health?medication=${med.id}`,
+                url,
                 tag,
               });
             }
@@ -312,6 +382,17 @@ export async function scanHealthMedReminders(db: Database, env: Env): Promise<nu
                   : `${medName} in ${minutesUntil} min`;
 
               const tag = `health-med-${med.id}-${date}-${hhmm}-${offsetMinutes}`;
+              const token = mintMedActionToken(env, {
+                householdId: household.id,
+                userId: userRow.id,
+                medicationId: med.id,
+                scheduledAt,
+              });
+              const url = buildMedReminderDeepLink({
+                medicationId: med.id,
+                scheduledAt,
+                token,
+              });
 
               if (target.push) {
                 await deliverUserNotificationToSubscriptions(db, env, {
@@ -319,9 +400,19 @@ export async function scanHealthMedReminders(db: Database, env: Env): Promise<nu
                   householdId: household.id,
                   title: "Medication reminder",
                   body,
-                  url: `/health?medication=${med.id}`,
+                  url,
                   tag,
                   subscriptions: [target.push],
+                  ...(token
+                    ? {
+                        actions: [...MED_PUSH_ACTIONS],
+                        data: {
+                          medicationId: med.id,
+                          scheduledAt: scheduledAt.toISOString(),
+                          token,
+                        },
+                      }
+                    : {}),
                 });
               } else {
                 await persistUserNotificationOnce(db, {
@@ -329,7 +420,7 @@ export async function scanHealthMedReminders(db: Database, env: Env): Promise<nu
                   householdId: household.id,
                   title: "Medication reminder",
                   body,
-                  url: `/health?medication=${med.id}`,
+                  url,
                   tag,
                 });
               }

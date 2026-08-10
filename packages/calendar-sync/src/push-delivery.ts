@@ -3,10 +3,17 @@ import { pushSubscriptions } from "@domi-ops/db";
 import { eq } from "drizzle-orm";
 import webpush from "web-push";
 
+export type WebPushNotificationAction = {
+  action: string;
+  title: string;
+};
+
 export type WebPushPayload = {
   title: string;
   body: string;
   tag: string;
+  /** Chromium/Android notification action buttons (ignored on iOS PWA). */
+  actions?: WebPushNotificationAction[];
   data: { url: string; [key: string]: string | undefined };
 };
 

@@ -1,5 +1,11 @@
 import { Hono } from "hono";
 import type { Env } from "@domi-ops/config";
+import { isModuleEnabled } from "@domi-ops/config";
+import {
+  healthMedPushActionSecret,
+  verifyHealthMedPushActionToken,
+  type HealthMedPushActionStatus,
+} from "@domi-ops/crypto";
 import type { Database } from "@domi-ops/db";
 import {
   healthEvents,
@@ -11,7 +17,10 @@ import {
 import { and, desc, eq } from "drizzle-orm";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
-import { requireHouseholdModule } from "../lib/household-modules.js";
+import {
+  isHouseholdModuleEnabled,
+  requireHouseholdModule,
+} from "../lib/household-modules.js";
 import { HealthEncryptionError } from "../lib/health-crypto.js";
 import {
   canManageMemberHealth,
@@ -56,6 +65,12 @@ function normalizeDurationKind(value: unknown): "single_day" | "ongoing" {
   return value === "ongoing" ? "ongoing" : "single_day";
 }
 
+function normalizePushActionStatus(value: unknown): HealthMedPushActionStatus | null {
+  if (value === "taken") return "taken";
+  if (value === "skipped" || value === "skip") return "skipped";
+  return null;
+}
+
 async function householdTimezone(db: Database, householdId: string): Promise<string> {
   const [household] = await db
     .select({ timezone: households.timezone })
@@ -77,6 +92,132 @@ function requestTimeZone(
 
 export function householdHealthRoutes(db: Database, env: Env) {
   const app = new Hono<{ Variables: AppVariables }>();
+
+  /**
+   * Token-authenticated dose log for Web Push action buttons / iOS deep links (WHO-235).
+   * Registered before requireAuth — cookie session is optional.
+   */
+  app.post("/medications/push-action", async (c) => {
+    if (!isModuleEnabled(env, "health")) {
+      return c.json({ error: "module_disabled" }, 403);
+    }
+
+    const secret = healthMedPushActionSecret(env);
+    if (!secret) {
+      return c.json({ error: "token_unavailable" }, 503);
+    }
+
+    const body = await c.req.json<{ token?: string; action?: string }>().catch(() => ({} as {
+      token?: string;
+      action?: string;
+    }));
+    const token = typeof body.token === "string" ? body.token : "";
+    const status = normalizePushActionStatus(body.action);
+    if (!token || !status) {
+      return c.json({ error: "invalid_request" }, 400);
+    }
+
+    const claims = verifyHealthMedPushActionToken(token, secret);
+    if (!claims) {
+      return c.json({ error: "invalid_token" }, 401);
+    }
+    if (!claims.actions.includes(status)) {
+      return c.json({ error: "action_not_allowed" }, 403);
+    }
+
+    if (!(await isHouseholdModuleEnabled(db, env, claims.householdId, "health"))) {
+      return c.json({ error: "module_disabled" }, 403);
+    }
+
+    const [member] = await db
+      .select({
+        memberId: householdMembers.id,
+        role: householdMembers.role,
+        userId: householdMembers.userId,
+        householdId: householdMembers.householdId,
+      })
+      .from(householdMembers)
+      .where(
+        and(
+          eq(householdMembers.userId, claims.userId),
+          eq(householdMembers.householdId, claims.householdId),
+        ),
+      )
+      .limit(1);
+    if (!member?.userId) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+
+    const auth = {
+      userId: member.userId,
+      householdId: member.householdId,
+      memberId: member.memberId,
+      role: member.role,
+    };
+
+    const [med] = await db
+      .select()
+      .from(healthMedications)
+      .where(
+        and(
+          eq(healthMedications.id, claims.medicationId),
+          eq(healthMedications.householdId, claims.householdId),
+        ),
+      )
+      .limit(1);
+    if (!med) {
+      return c.json({ error: "not_found" }, 404);
+    }
+
+    if (!(await hasHealthSegmentAccess(db, auth, med.memberId, "doses", "write"))) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+
+    const scheduledAt = new Date(claims.scheduledAt);
+    if (Number.isNaN(scheduledAt.getTime())) {
+      return c.json({ error: "invalid_token" }, 401);
+    }
+
+    const [existing] = await db
+      .select()
+      .from(healthMedicationLogs)
+      .where(
+        and(
+          eq(healthMedicationLogs.medicationId, med.id),
+          eq(healthMedicationLogs.scheduledAt, scheduledAt),
+        ),
+      )
+      .limit(1);
+    if (existing) {
+      return c.json({
+        ok: true,
+        alreadyLogged: true,
+        log: serializeHealthLog(existing, env),
+      });
+    }
+
+    const loggedAt = new Date();
+    try {
+      const [logRow] = await db
+        .insert(healthMedicationLogs)
+        .values({
+          medicationId: med.id,
+          scheduledAt,
+          status,
+          loggedAt,
+          loggedByUserId: auth.userId,
+          notes: null,
+          healthEventId: null,
+        })
+        .returning();
+
+      return c.json({ ok: true, alreadyLogged: false, log: serializeHealthLog(logRow, env) }, 201);
+    } catch (e) {
+      const resp = encryptionErrorResponse(c, e);
+      if (resp) return resp;
+      throw e;
+    }
+  });
 
   app.use("/*", requireAuth(env));
   app.use("/*", requireHouseholdModule(db, env, "health"));

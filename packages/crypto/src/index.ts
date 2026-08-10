@@ -90,3 +90,105 @@ export function decryptSensitive(value: string, encryptionKey: string): string {
     );
   }
 }
+
+/** Allowed dose statuses for interactive med push actions (WHO-235). */
+export type HealthMedPushActionStatus = "taken" | "skipped";
+
+export type HealthMedPushActionClaims = {
+  v: 1;
+  householdId: string;
+  userId: string;
+  medicationId: string;
+  /** ISO scheduled instant for the dose. */
+  scheduledAt: string;
+  actions: HealthMedPushActionStatus[];
+  /** Unix seconds. */
+  exp: number;
+};
+
+const HEALTH_MED_PUSH_TOKEN_TTL_SEC = 4 * 60 * 60;
+
+function signHealthMedPayload(payloadB64: string, secret: string): string {
+  return createHmac("sha256", secret).update(payloadB64).digest("base64url");
+}
+
+/**
+ * Mint a short-lived HMAC token for med reminder push actions.
+ * Prefer ENCRYPTION_KEY; SESSION_SECRET is an acceptable fallback in local/dev.
+ */
+export function mintHealthMedPushActionToken(
+  input: {
+    householdId: string;
+    userId: string;
+    medicationId: string;
+    scheduledAt: string;
+    actions?: HealthMedPushActionStatus[];
+    ttlSeconds?: number;
+  },
+  secret: string,
+  nowMs = Date.now(),
+): string {
+  if (!secret) throw new Error("health_med_push_token_secret_required");
+  const ttl = input.ttlSeconds ?? HEALTH_MED_PUSH_TOKEN_TTL_SEC;
+  const claims: HealthMedPushActionClaims = {
+    v: 1,
+    householdId: input.householdId,
+    userId: input.userId,
+    medicationId: input.medicationId,
+    scheduledAt: input.scheduledAt,
+    actions: input.actions ?? ["taken", "skipped"],
+    exp: Math.floor(nowMs / 1000) + ttl,
+  };
+  const payloadB64 = Buffer.from(JSON.stringify(claims), "utf8").toString("base64url");
+  const sig = signHealthMedPayload(payloadB64, secret);
+  return `${payloadB64}.${sig}`;
+}
+
+/** Verify signature + expiry; returns claims or null. */
+export function verifyHealthMedPushActionToken(
+  token: string,
+  secret: string,
+  nowMs = Date.now(),
+): HealthMedPushActionClaims | null {
+  if (!token || !secret) return null;
+  const dot = token.indexOf(".");
+  if (dot <= 0 || dot === token.length - 1) return null;
+  const payloadB64 = token.slice(0, dot);
+  const sig = token.slice(dot + 1);
+  const expected = signHealthMedPayload(payloadB64, secret);
+  const sigBuf = Buffer.from(sig);
+  const expBuf = Buffer.from(expected);
+  if (sigBuf.length !== expBuf.length || !sigBuf.equals(expBuf)) return null;
+  let claims: HealthMedPushActionClaims;
+  try {
+    claims = JSON.parse(Buffer.from(payloadB64, "base64url").toString("utf8")) as HealthMedPushActionClaims;
+  } catch {
+    return null;
+  }
+  if (claims.v !== 1) return null;
+  if (
+    typeof claims.householdId !== "string" ||
+    typeof claims.userId !== "string" ||
+    typeof claims.medicationId !== "string" ||
+    typeof claims.scheduledAt !== "string" ||
+    typeof claims.exp !== "number" ||
+    !Array.isArray(claims.actions)
+  ) {
+    return null;
+  }
+  if (claims.exp < Math.floor(nowMs / 1000)) return null;
+  if (Number.isNaN(Date.parse(claims.scheduledAt))) return null;
+  const actions = claims.actions.filter(
+    (a): a is HealthMedPushActionStatus => a === "taken" || a === "skipped",
+  );
+  if (actions.length === 0) return null;
+  return { ...claims, actions };
+}
+
+/** Resolve signing secret for med push tokens. */
+export function healthMedPushActionSecret(env: {
+  ENCRYPTION_KEY?: string;
+  SESSION_SECRET?: string;
+}): string | null {
+  return env.ENCRYPTION_KEY || env.SESSION_SECRET || null;
+}

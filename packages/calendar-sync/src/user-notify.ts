@@ -124,6 +124,9 @@ export async function deliverUserNotificationToSubscriptions(
     url: string;
     tag: string;
     subscriptions: PushSubscriptionDelivery[];
+    /** Extra notification `data` fields (e.g. med push action token). */
+    data?: Record<string, string | undefined>;
+    actions?: WebPushPayload["actions"];
   },
 ): Promise<void> {
   await persistUserNotificationOnce(db, {
@@ -146,7 +149,8 @@ export async function deliverUserNotificationToSubscriptions(
     title: input.title,
     body: input.body,
     tag: input.tag,
-    data: { url: input.url },
+    ...(input.actions?.length ? { actions: input.actions } : {}),
+    data: { ...(input.data ?? {}), url: input.url },
   };
   await deliverWebPush(db, input.subscriptions, payload);
 }

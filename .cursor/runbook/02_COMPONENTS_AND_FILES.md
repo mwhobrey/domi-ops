@@ -109,7 +109,7 @@ domi-ops/
 | `src/lib/school-test-google-import.ts` | Soft-parse Doc text → draft questions (WHO-219) |
 | `src/routes/calendar.ts` | Connections, events, sync trigger; `GET /events` merges overlays |
 | `src/lib/calendar-overlays.ts` | School due-date + health virtual events for calendar |
-| `src/routes/household-health.ts` | `/api/health` — events, medications, dose log, glance |
+| `src/routes/household-health.ts` | `/api/health` — events, medications, dose log, glance, **`POST /medications/push-action`** (token, no session) |
 | `src/lib/health-access.ts` | Health visibility + shares + segment ACL (WHO-229) |
 | `src/lib/health-crypto.ts` | Field encryption for PHI-like health columns |
 | `src/lib/health-serialize.ts` | Health DTO encrypt/decrypt + schedule JSON |
@@ -166,6 +166,7 @@ Exports: `@domi-ops/db`, `@domi-ops/db/schema` (package.json `exports`).
 ### `@domi-ops/crypto` (`packages/crypto`)
 
 - `encryptSensitive` / `decryptSensitive` for stored Google refresh tokens.
+- `mintHealthMedPushActionToken` / `verifyHealthMedPushActionToken` — HMAC dose-action tokens for med push (WHO-235).
 
 ### `@domi-ops/calendar-sync` (`packages/calendar-sync`)
 

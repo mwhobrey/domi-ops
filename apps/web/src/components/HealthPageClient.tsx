@@ -261,12 +261,20 @@ export function HealthPageClient({
   householdTimezone,
   initialEventId,
   initialMedicationId,
+  pushAction,
 }: {
   members: NoteShareMember[];
   currentMemberId: string;
   householdTimezone: string;
   initialEventId?: string;
   initialMedicationId?: string;
+  /** iOS / no-actions deep-link auto-log (WHO-235). */
+  pushAction?: {
+    medicationId: string;
+    action: string;
+    scheduledAt: string;
+    token: string;
+  };
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<"today" | "events" | "medications">("today");
@@ -276,12 +284,14 @@ export function HealthPageClient({
   const [prnMeds, setPrnMeds] = useState<HealthMedication[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pushActionNotice, setPushActionNotice] = useState<string | null>(null);
   const [eventSheetOpen, setEventSheetOpen] = useState(false);
   const [medSheetOpen, setMedSheetOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<HealthEvent | null>(null);
   const [editingMed, setEditingMed] = useState<HealthMedication | null>(null);
   const [capabilities, setCapabilities] = useState<Record<string, HealthAclGrants>>({});
   const [loggingAllKey, setLoggingAllKey] = useState<string | null>(null);
+  const pushActionHandled = useRef(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -335,14 +345,40 @@ export function HealthPageClient({
   }, [initialEventId, events, loading]);
 
   useEffect(() => {
-    if (!initialMedicationId) return;
+    if (!initialMedicationId || pushAction) return;
     const med = medications.find((m) => m.id === initialMedicationId);
     if (med) {
       setEditingMed(med);
       setMedSheetOpen(true);
       setTab("medications");
     }
-  }, [initialMedicationId, medications]);
+  }, [initialMedicationId, medications, pushAction]);
+
+  useEffect(() => {
+    if (!pushAction || pushActionHandled.current) return;
+    pushActionHandled.current = true;
+    const status =
+      pushAction.action === "skip" || pushAction.action === "skipped" ? "skipped" : "taken";
+    void (async () => {
+      try {
+        await apiClient.post("/api/health/medications/push-action", {
+          token: pushAction.token,
+          action: status,
+        });
+        setPushActionNotice(status === "skipped" ? "Dose marked skipped." : "Dose marked taken.");
+        setTab("today");
+        await load();
+      } catch (err) {
+        setError(
+          err instanceof ApiError
+            ? "Could not log dose from notification (link may have expired)."
+            : "Could not log dose from notification",
+        );
+      } finally {
+        router.replace("/health");
+      }
+    })();
+  }, [pushAction, load, router]);
 
   async function logDose(
     medicationId: string,
@@ -389,6 +425,7 @@ export function HealthPageClient({
   return (
     <div className="space-y-4">
       {error ? <Alert variant="error">{error}</Alert> : null}
+      {pushActionNotice ? <Alert variant="success">{pushActionNotice}</Alert> : null}
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-2">

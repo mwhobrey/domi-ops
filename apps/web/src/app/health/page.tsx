@@ -7,7 +7,13 @@ import { Alert } from "../../components/ui";
 export default async function HealthPage({
   searchParams,
 }: {
-  searchParams: Promise<{ event?: string; medication?: string }>;
+  searchParams: Promise<{
+    event?: string;
+    medication?: string;
+    action?: string;
+    scheduledAt?: string;
+    token?: string;
+  }>;
 }) {
   const params = await searchParams;
   let members: NoteShareMember[] = [];
@@ -39,6 +45,16 @@ export default async function HealthPage({
         householdTimezone={householdTimezone}
         initialEventId={params.event}
         initialMedicationId={params.medication}
+        pushAction={
+          params.token && params.action && params.scheduledAt && params.medication
+            ? {
+                medicationId: params.medication,
+                action: params.action,
+                scheduledAt: params.scheduledAt,
+                token: params.token,
+              }
+            : undefined
+        }
       />
     </AppShell>
   );
