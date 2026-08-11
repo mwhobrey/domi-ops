@@ -21,7 +21,6 @@ export type AppNavItem = {
 
 export const APP_NAV: AppNavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/reports", label: "Reports", icon: BarChart3 },
   { href: "/calendar", label: "Calendar", icon: Calendar, module: "calendar_sync" },
   { href: "/school", label: "School", icon: BookOpen, module: "school" },
   { href: "/shopping", label: "Shopping", icon: ShoppingCart },
@@ -30,6 +29,7 @@ export const APP_NAV: AppNavItem[] = [
   { href: "/drive", label: "Drive", icon: FolderOpen, module: "drive" },
   { href: "/health", label: "Health", icon: Heart, module: "health" },
   { href: "/expenses", label: "Expenses", icon: Receipt },
+  { href: "/reports", label: "Reports", icon: BarChart3 },
 ];
 
 export function isNavItemVisible(
