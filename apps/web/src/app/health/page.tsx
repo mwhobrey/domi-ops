@@ -10,6 +10,7 @@ export default async function HealthPage({
   searchParams: Promise<{
     event?: string;
     medication?: string;
+    take?: string;
     action?: string;
     scheduledAt?: string;
     token?: string;
@@ -45,6 +46,8 @@ export default async function HealthPage({
         householdTimezone={householdTimezone}
         initialEventId={params.event}
         initialMedicationId={params.medication}
+        initialTakeMedicationId={params.take}
+        initialTakeScheduledAt={params.scheduledAt}
         pushAction={
           params.token && params.action && params.scheduledAt && params.medication
             ? {

@@ -94,7 +94,7 @@ function buildHealthTile(glance: HealthGlance | null): GlanceTileModel | null {
         meta: [late ? "Overdue" : d.scheduledTimeLabel, d.dosage, d.awaitingFirst ? "Start" : null]
           .filter(Boolean)
           .join(" · "),
-        href: `/health?medication=${encodeURIComponent(d.medicationId)}`,
+        href: `/health?take=${encodeURIComponent(d.medicationId)}&scheduledAt=${encodeURIComponent(d.scheduledAt)}`,
       };
     }),
     overflowCount: Math.max(0, pending.length - 3),

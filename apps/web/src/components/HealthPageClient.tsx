@@ -229,29 +229,80 @@ function MedTimesEditor({
   );
 }
 
+function formatEventWhen(ev: HealthEvent): string | null {
+  if (ev.startDate) {
+    const [y, m, d] = ev.startDate.split("-").map(Number);
+    if (y && m && d) {
+      const dateLabel = new Date(y, m - 1, d).toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
+      if (ev.startTime) {
+        const [hh, mm] = ev.startTime.split(":").map(Number);
+        if (Number.isFinite(hh) && Number.isFinite(mm)) {
+          const timeLabel = new Date(2000, 0, 1, hh, mm).toLocaleTimeString(undefined, {
+            hour: "numeric",
+            minute: "2-digit",
+          });
+          return `${dateLabel} · ${timeLabel}`;
+        }
+      }
+      return dateLabel;
+    }
+  }
+  if (ev.startedAt) {
+    const at = new Date(ev.startedAt);
+    if (!Number.isNaN(at.getTime())) {
+      return at.toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      });
+    }
+  }
+  return null;
+}
+
 function HealthRow({
   title,
   subtitle,
   trailing,
   onClick,
+  highlighted,
+  rowRef,
 }: {
   title: string;
   subtitle?: string;
   trailing?: React.ReactNode;
   onClick?: () => void;
+  highlighted?: boolean;
+  rowRef?: React.Ref<HTMLDivElement>;
 }) {
   return (
-    <ListItem as={onClick ? "button" : "div"} onClick={onClick}>
-      <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
-        <div className="min-w-0 text-left">
-          <p className="truncate font-medium text-[var(--color-text)]">{title}</p>
-          {subtitle ? (
-            <p className="truncate text-sm text-[var(--color-text-muted)]">{subtitle}</p>
-          ) : null}
+    <div ref={rowRef}>
+      <ListItem
+        as={onClick ? "button" : "div"}
+        onClick={onClick}
+        className={
+          highlighted
+            ? "ring-2 ring-[var(--color-accent)] ring-offset-2 ring-offset-[var(--color-surface)]"
+            : undefined
+        }
+      >
+        <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+          <div className="min-w-0 text-left">
+            <p className="truncate font-medium text-[var(--color-text)]">{title}</p>
+            {subtitle ? (
+              <p className="truncate text-sm text-[var(--color-text-muted)]">{subtitle}</p>
+            ) : null}
+          </div>
+          {trailing}
         </div>
-        {trailing}
-      </div>
-    </ListItem>
+      </ListItem>
+    </div>
   );
 }
 
@@ -261,6 +312,8 @@ export function HealthPageClient({
   householdTimezone,
   initialEventId,
   initialMedicationId,
+  initialTakeMedicationId,
+  initialTakeScheduledAt,
   pushAction,
 }: {
   members: NoteShareMember[];
@@ -268,6 +321,9 @@ export function HealthPageClient({
   householdTimezone: string;
   initialEventId?: string;
   initialMedicationId?: string;
+  /** Dashboard / calendar dose deep-link → Today Taken (WHO-239). */
+  initialTakeMedicationId?: string;
+  initialTakeScheduledAt?: string;
   /** iOS / no-actions deep-link auto-log (WHO-235). */
   pushAction?: {
     medicationId: string;
@@ -291,7 +347,10 @@ export function HealthPageClient({
   const [editingMed, setEditingMed] = useState<HealthMedication | null>(null);
   const [capabilities, setCapabilities] = useState<Record<string, HealthAclGrants>>({});
   const [loggingAllKey, setLoggingAllKey] = useState<string | null>(null);
+  const [highlightTakeKey, setHighlightTakeKey] = useState<string | null>(null);
   const pushActionHandled = useRef(false);
+  const takeHandled = useRef(false);
+  const highlightTakeRef = useRef<HTMLDivElement | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -345,14 +404,31 @@ export function HealthPageClient({
   }, [initialEventId, events, loading]);
 
   useEffect(() => {
-    if (!initialMedicationId || pushAction) return;
+    if (!initialMedicationId || pushAction || initialTakeMedicationId) return;
     const med = medications.find((m) => m.id === initialMedicationId);
     if (med) {
       setEditingMed(med);
       setMedSheetOpen(true);
       setTab("medications");
     }
-  }, [initialMedicationId, medications, pushAction]);
+  }, [initialMedicationId, medications, pushAction, initialTakeMedicationId]);
+
+  useEffect(() => {
+    if (!initialTakeMedicationId || pushAction || takeHandled.current) return;
+    if (loading) return;
+    takeHandled.current = true;
+    setTab("today");
+    const key = initialTakeScheduledAt
+      ? `${initialTakeMedicationId}-${initialTakeScheduledAt}`
+      : initialTakeMedicationId;
+    setHighlightTakeKey(key);
+    router.replace("/health");
+  }, [initialTakeMedicationId, initialTakeScheduledAt, pushAction, loading, router]);
+
+  useEffect(() => {
+    if (!highlightTakeKey || tab !== "today") return;
+    highlightTakeRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [highlightTakeKey, tab, pendingDoses]);
 
   useEffect(() => {
     if (!pushAction || pushActionHandled.current) return;
@@ -486,9 +562,16 @@ export function HealthPageClient({
                           ) : null}
                         </div>
                         <ul className="space-y-2">
-                          {timeGroup.doses.map((dose) => (
+                          {timeGroup.doses.map((dose) => {
+                            const doseKey = `${dose.medicationId}-${dose.scheduledAt}`;
+                            const highlighted =
+                              highlightTakeKey === doseKey ||
+                              highlightTakeKey === dose.medicationId;
+                            return (
                             <HealthRow
-                              key={`${dose.medicationId}-${dose.scheduledAt}`}
+                              key={doseKey}
+                              rowRef={highlighted ? highlightTakeRef : undefined}
+                              highlighted={highlighted}
                               title={dose.name}
                               subtitle={dose.dosage?.trim() || undefined}
                               trailing={
@@ -523,7 +606,8 @@ export function HealthPageClient({
                                 ) : null
                               }
                             />
-                          ))}
+                            );
+                          })}
                         </ul>
                       </div>
                       );
@@ -591,11 +675,20 @@ export function HealthPageClient({
               description="Log sickness, injuries, or appointments."
             />
           ) : (
-            events.map((ev) => (
+            events.map((ev) => {
+              const when = formatEventWhen(ev);
+              return (
               <HealthRow
                 key={ev.id}
                 title={ev.title}
-                subtitle={`${EVENT_TYPES.find((t) => t.value === ev.type)?.label ?? ev.type} · ${memberLabel(members, ev.memberId)}${ev.durationKind === "ongoing" && !ev.endedAt ? " · Ongoing" : ""}`}
+                subtitle={[
+                  EVENT_TYPES.find((t) => t.value === ev.type)?.label ?? ev.type,
+                  memberLabel(members, ev.memberId),
+                  when,
+                  ev.durationKind === "ongoing" && !ev.endedAt ? "Ongoing" : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
                 trailing={
                   ev.visibility === "private" ? <Badge tone="default">Private</Badge> : null
                 }
@@ -604,7 +697,8 @@ export function HealthPageClient({
                   setEventSheetOpen(true);
                 }}
               />
-            ))
+              );
+            })
           )}
         </div>
       ) : null}

@@ -326,7 +326,7 @@ export async function buildMedicationDoseOverlays(
             calendarId: OVERLAY_CALENDAR_HEALTH_MED,
             source: "health_med",
             overlayKind: "health_med",
-            deepLink: `/health?medication=${med.id}`,
+                deepLink: `/health?take=${med.id}&scheduledAt=${encodeURIComponent(iso)}`,
           }),
         );
       }
