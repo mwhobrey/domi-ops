@@ -29,6 +29,7 @@ function parseKind(value: string | null): ReportKind | null {
   if (
     value === "weekly" ||
     value === "overview" ||
+    value === "medications" ||
     value === "school-grades" ||
     value === "school-open-work" ||
     value === "school-transcript"
@@ -140,7 +141,12 @@ export function ReportsHubClient() {
       return <ExpenseMonthlyReportSection driveEnabled={driveEnabled} initialMonth={month ?? undefined} />;
     }
     if (activeModule === "health") {
-      return <HealthOverviewReportSection driveEnabled={driveEnabled} />;
+      return (
+        <HealthOverviewReportSection
+          driveEnabled={driveEnabled}
+          focus={activeKind === "medications" ? "medications" : "overview"}
+        />
+      );
     }
     return null;
   }, [activeModule, activeKind, driveEnabled, term, month]);

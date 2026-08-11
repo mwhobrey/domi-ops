@@ -454,10 +454,14 @@ export function householdHealthRoutes(db: Database, env: Env) {
     const memberId = c.req.query("memberId")?.trim() || null;
     const eventType = c.req.query("eventType")?.trim() || null;
     const groupBy = c.req.query("groupBy")?.trim() || null;
+    const medicationId = c.req.query("medicationId")?.trim() || null;
+    const scheduleKind = c.req.query("scheduleKind")?.trim() || null;
     const report = await buildHealthReports(db, env, auth, from, to, {
       memberId,
       eventType,
       groupBy,
+      medicationId,
+      scheduleKind,
     });
     return c.json(report);
   });

@@ -7,9 +7,11 @@ import {
   households,
 } from "@domi-ops/db";
 import {
+  addDaysIso,
   isoDateInRange,
   localDateOfInstant,
   todayIsoDateInTz,
+  zonedLocalToUtc,
 } from "@domi-ops/calendar-sync";
 import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { listHouseholdMembersWithAuth, memberShownLabel } from "@domi-ops/auth";
@@ -18,6 +20,7 @@ import {
   healthMedicationReportsVisibleWhere,
 } from "./health-access.js";
 import { decryptHealthFieldOrPassthrough } from "./health-crypto.js";
+import { parseMedSchedule } from "./health-serialize.js";
 
 export const HEALTH_EVENT_TYPE_LABELS: Record<string, string> = {
   sickness: "Sickness",
@@ -31,6 +34,7 @@ export const HEALTH_EVENT_TYPE_LABELS: Record<string, string> = {
 export const HEALTH_EVENT_TYPES = Object.keys(HEALTH_EVENT_TYPE_LABELS);
 
 export type HealthReportGroupBy = "date" | "eventType" | "none";
+export type HealthReportScheduleKind = "scheduled" | "prn" | "interval";
 
 /** Soft cap for full history sections (UI + CSV). */
 export const HEALTH_EVENT_HISTORY_CAP = 500;
@@ -54,6 +58,137 @@ export type HealthReportEventItem = {
   ongoing: boolean;
   localDate: string | null;
 };
+
+export function isoDatesInInclusiveRange(from: string, to: string): string[] {
+  if (from > to) return [];
+  const out: string[] = [];
+  let cur = from;
+  // Cap expansion to ~2 years to avoid runaway
+  for (let i = 0; i < 800 && cur <= to; i += 1) {
+    out.push(cur);
+    cur = addDaysIso(cur, 1);
+  }
+  return out;
+}
+
+/** Expected clock times (UTC) for a scheduled med over [from, to] inclusive local dates. */
+export function enumerateScheduledDoseInstants(input: {
+  scheduleJson: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  from: string;
+  to: string;
+  timeZone: string;
+}): Date[] {
+  const schedule = parseMedSchedule(input.scheduleJson);
+  const times = schedule.times ?? [];
+  if (times.length === 0) return [];
+  const instants: Date[] = [];
+  for (const date of isoDatesInInclusiveRange(input.from, input.to)) {
+    if (input.startDate && date < input.startDate) continue;
+    if (input.endDate && date > input.endDate) continue;
+    if (schedule.daysOfWeek?.length) {
+      const dow = new Date(`${date}T12:00:00Z`).getUTCDay();
+      if (!schedule.daysOfWeek.includes(dow)) continue;
+    }
+    for (const time of times) {
+      const hhmm = time.length >= 5 ? time.slice(0, 5) : time;
+      instants.push(zonedLocalToUtc(date, hhmm, input.timeZone));
+    }
+  }
+  return instants;
+}
+
+/**
+ * Expected-vs-taken for scheduled meds.
+ * Past slots without taken/skipped → missed. Future slots → pending (not in %.
+ */
+export function computeExpectedScheduledAdherence(input: {
+  expected: Date[];
+  logs: { scheduledAt: Date | null; status: string }[];
+  now?: Date;
+}): {
+  expected: number;
+  taken: number;
+  skipped: number;
+  missed: number;
+  pending: number;
+  adherencePct: number | null;
+} {
+  const now = input.now ?? new Date();
+  const byIso = new Map<string, string>();
+  for (const log of input.logs) {
+    if (!log.scheduledAt) continue;
+    byIso.set(log.scheduledAt.toISOString(), log.status);
+  }
+
+  let taken = 0;
+  let skipped = 0;
+  let missed = 0;
+  let pending = 0;
+
+  for (const expected of input.expected) {
+    const status = byIso.get(expected.toISOString());
+    if (status === "taken") {
+      taken += 1;
+      continue;
+    }
+    if (status === "skipped") {
+      skipped += 1;
+      continue;
+    }
+    if (status === "missed" || expected.getTime() <= now.getTime()) {
+      missed += 1;
+      continue;
+    }
+    pending += 1;
+  }
+
+  const due = taken + skipped + missed;
+  return {
+    expected: input.expected.length,
+    taken,
+    skipped,
+    missed,
+    pending,
+    adherencePct: due > 0 ? Math.round((taken / due) * 100) : null,
+  };
+}
+
+export function buildPrnFrequencyByDay(input: {
+  logs: { medicationId: string; loggedAt: Date; scheduledAt: Date | null }[];
+  medById: Map<string, { memberId: string }>;
+  memberLabel: Map<string, string>;
+  timeZone: string;
+}): { date: string; memberId: string; memberLabel: string; count: number }[] {
+  const buckets = new Map<string, { date: string; memberId: string; memberLabel: string; count: number }>();
+  for (const log of input.logs) {
+    if (log.scheduledAt != null) continue;
+    const med = input.medById.get(log.medicationId);
+    if (!med) continue;
+    const date = localDateOfInstant(log.loggedAt, input.timeZone);
+    const key = `${date}:${med.memberId}`;
+    const existing = buckets.get(key);
+    if (existing) {
+      existing.count += 1;
+    } else {
+      buckets.set(key, {
+        date,
+        memberId: med.memberId,
+        memberLabel: input.memberLabel.get(med.memberId) ?? "Member",
+        count: 1,
+      });
+    }
+  }
+  return [...buckets.values()].sort((a, b) =>
+    a.date === b.date ? a.memberLabel.localeCompare(b.memberLabel) : b.date.localeCompare(a.date),
+  );
+}
+
+export function normalizeHealthScheduleKind(value: unknown): HealthReportScheduleKind | null {
+  if (value === "scheduled" || value === "prn" || value === "interval") return value;
+  return null;
+}
 
 export function normalizeHealthEventType(value: unknown): string | null {
   const raw = typeof value === "string" ? value.trim() : "";
@@ -138,11 +273,15 @@ export async function buildHealthReports(
     memberId?: string | null;
     eventType?: string | null;
     groupBy?: string | null;
+    medicationId?: string | null;
+    scheduleKind?: string | null;
   },
 ) {
   const memberFilter = opts?.memberId?.trim() || null;
   const eventTypeFilter = normalizeHealthEventType(opts?.eventType);
   const groupBy = normalizeHealthReportGroupBy(opts?.groupBy);
+  const medicationFilter = opts?.medicationId?.trim() || null;
+  const scheduleKindFilter = normalizeHealthScheduleKind(opts?.scheduleKind);
 
   const [household] = await db
     .select({ timezone: households.timezone })
@@ -151,6 +290,8 @@ export async function buildHealthReports(
     .limit(1);
   const timezone = household?.timezone ?? "UTC";
   const today = todayIsoDateInTz(timezone);
+  const now = new Date();
+  const adherenceTo = to < today ? to : today;
 
   const roster = await listHouseholdMembersWithAuth(db, auth.householdId);
   const memberLabel = new Map(
@@ -191,6 +332,12 @@ export async function buildHealthReports(
   if (memberFilter) {
     medRows = medRows.filter((row) => row.memberId === memberFilter);
   }
+  if (medicationFilter) {
+    medRows = medRows.filter((row) => row.id === medicationFilter);
+  }
+  if (scheduleKindFilter) {
+    medRows = medRows.filter((row) => row.scheduleKind === scheduleKindFilter);
+  }
 
   const medIds = medRows.map((m) => m.id);
   const logRows: HealthLogRow[] =
@@ -209,51 +356,85 @@ export async function buildHealthReports(
           .orderBy(desc(healthMedicationLogs.loggedAt));
 
   const medById = new Map(medRows.map((m) => [m.id, m]));
-  const adherence: Record<
-    string,
-    { taken: number; skipped: number; missed: number; prn: number }
-  > = {};
-
+  const logsByMed = new Map<string, HealthLogRow[]>();
   for (const log of logRows) {
-    const bucket = adherence[log.medicationId] ?? {
-      taken: 0,
-      skipped: 0,
-      missed: 0,
-      prn: 0,
-    };
-    if (log.scheduledAt == null) {
-      bucket.prn += 1;
-    } else if (log.status === "taken") {
-      bucket.taken += 1;
-    } else if (log.status === "skipped") {
-      bucket.skipped += 1;
-    } else if (log.status === "missed") {
-      bucket.missed += 1;
-    }
-    adherence[log.medicationId] = bucket;
+    const list = logsByMed.get(log.medicationId) ?? [];
+    list.push(log);
+    logsByMed.set(log.medicationId, list);
   }
 
-  const medicationAdherence = Object.entries(adherence).map(([medicationId, counts]) => {
-    const med = medById.get(medicationId);
-    const name = med
-      ? (decryptHealthFieldOrPassthrough(med.name, env) ?? "Medication")
-      : "Medication";
-    const scheduledTotal = counts.taken + counts.skipped + counts.missed;
-    const adherencePct =
-      scheduledTotal > 0 ? Math.round((counts.taken / scheduledTotal) * 100) : null;
+  const medicationAdherence = medRows.map((med) => {
+    const name = decryptHealthFieldOrPassthrough(med.name, env) ?? "Medication";
+    const logs = logsByMed.get(med.id) ?? [];
+    const prn = logs.filter((l) => l.scheduledAt == null).length;
+
+    if (med.scheduleKind === "scheduled") {
+      const expected = enumerateScheduledDoseInstants({
+        scheduleJson: med.scheduleJson,
+        startDate: med.startDate,
+        endDate: med.endDate,
+        from,
+        to: adherenceTo,
+        timeZone: timezone,
+      });
+      const computed = computeExpectedScheduledAdherence({
+        expected,
+        logs: logs.map((l) => ({ scheduledAt: l.scheduledAt, status: l.status })),
+        now,
+      });
+      return {
+        medicationId: med.id,
+        name,
+        scheduleKind: med.scheduleKind,
+        memberId: med.memberId,
+        memberLabel: memberLabel.get(med.memberId) ?? "Member",
+        taken: computed.taken,
+        skipped: computed.skipped,
+        missed: computed.missed,
+        pending: computed.pending,
+        expected: computed.expected,
+        prn,
+        scheduledTotal: computed.taken + computed.skipped + computed.missed,
+        adherencePct: computed.adherencePct,
+      };
+    }
+
+    let taken = 0;
+    let skipped = 0;
+    let missed = 0;
+    for (const log of logs) {
+      if (log.scheduledAt == null) continue;
+      if (log.status === "taken") taken += 1;
+      else if (log.status === "skipped") skipped += 1;
+      else if (log.status === "missed") missed += 1;
+    }
+    const scheduledTotal = taken + skipped + missed;
     return {
-      medicationId,
+      medicationId: med.id,
       name,
-      scheduleKind: med?.scheduleKind ?? "scheduled",
-      memberId: med?.memberId ?? "",
-      memberLabel: med ? (memberLabel.get(med.memberId) ?? "Member") : "Member",
-      ...counts,
+      scheduleKind: med.scheduleKind,
+      memberId: med.memberId,
+      memberLabel: memberLabel.get(med.memberId) ?? "Member",
+      taken,
+      skipped,
+      missed,
+      pending: 0,
+      expected: scheduledTotal,
+      prn,
       scheduledTotal,
-      adherencePct,
+      adherencePct:
+        scheduledTotal > 0 ? Math.round((taken / scheduledTotal) * 100) : med.scheduleKind === "prn" ? null : null,
     };
   });
 
   medicationAdherence.sort((a, b) => b.scheduledTotal + b.prn - (a.scheduledTotal + a.prn));
+
+  const prnFrequency = buildPrnFrequencyByDay({
+    logs: logRows,
+    medById,
+    memberLabel,
+    timeZone: timezone,
+  });
 
   const mapEvent = (row: HealthEventRow): HealthReportEventItem => {
     const anchor = row.startedAt ?? row.createdAt;
@@ -303,11 +484,15 @@ export async function buildHealthReports(
     memberId: memberFilter,
     eventType: eventTypeFilter,
     groupBy,
+    medicationId: medicationFilter,
+    scheduleKind: scheduleKindFilter,
     summary: {
       totalEvents: eventsInRange.length,
       ongoingCount,
       activeMedications: medRows.filter((m) => m.enabled).length,
       scheduledMedications: medRows.filter((m) => m.enabled && m.scheduleKind === "scheduled")
+        .length,
+      intervalMedications: medRows.filter((m) => m.enabled && m.scheduleKind === "interval")
         .length,
       prnMedications: medRows.filter((m) => m.enabled && m.scheduleKind === "prn").length,
       dosesLogged: logRows.length,
@@ -323,6 +508,15 @@ export async function buildHealthReports(
       count,
     })),
     medicationAdherence,
+    prnFrequency,
+    medications: medRows.map((m) => ({
+      id: m.id,
+      name: decryptHealthFieldOrPassthrough(m.name, env) ?? "Medication",
+      scheduleKind: m.scheduleKind,
+      memberId: m.memberId,
+      memberLabel: memberLabel.get(m.memberId) ?? "Member",
+      enabled: m.enabled,
+    })),
     eventHistory,
     eventGroups,
     medicationLogHistory,

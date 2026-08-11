@@ -22,6 +22,7 @@ import {
   choresOverviewToCanonical,
   expensesOverviewToCanonical,
   healthOverviewToCanonical,
+  healthMedicationsToCanonical,
   schoolGradesToCanonical,
   schoolOpenWorkToCanonical,
   schoolTranscriptToCanonical,
@@ -45,6 +46,8 @@ export interface ReportQueryParams {
   memberId?: string | null;
   eventType?: string | null;
   groupBy?: string | null;
+  medicationId?: string | null;
+  scheduleKind?: string | null;
 }
 
 export type ExportScope =
@@ -178,7 +181,7 @@ export async function buildCanonicalReport(
     return report ? weeklyToCanonical(report) : null;
   }
 
-  if (module === "health" && kind === "overview") {
+  if ((module === "health" && kind === "overview") || (module === "health" && kind === "medications")) {
     const to = params.to?.trim() || new Date().toISOString().slice(0, 10);
     const fromDefault = new Date(`${to}T12:00:00.000Z`);
     fromDefault.setUTCDate(fromDefault.getUTCDate() - 30);
@@ -194,9 +197,17 @@ export async function buildCanonicalReport(
       },
       from,
       to,
-      { memberId: params.memberId, eventType: params.eventType, groupBy: params.groupBy },
+      {
+        memberId: params.memberId,
+        eventType: params.eventType,
+        groupBy: params.groupBy,
+        medicationId: params.medicationId,
+        scheduleKind: params.scheduleKind,
+      },
     );
-    return healthOverviewToCanonical(data);
+    return kind === "medications"
+      ? healthMedicationsToCanonical(data)
+      : healthOverviewToCanonical(data);
   }
 
   if (module === "chores" && kind === "overview") {
@@ -241,7 +252,7 @@ const MODULE_KINDS: Record<ReportModule, ReportKind[]> = {
   chores: ["weekly", "overview"],
   shopping: ["weekly", "overview"],
   expenses: ["weekly", "overview"],
-  health: ["overview"],
+  health: ["overview", "medications"],
 };
 
 export async function buildReportCatalog(

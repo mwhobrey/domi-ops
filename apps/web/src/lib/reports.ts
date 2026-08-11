@@ -3,6 +3,7 @@ export type ReportModule = "school" | "chores" | "shopping" | "expenses" | "heal
 export type ReportKind =
   | "weekly"
   | "overview"
+  | "medications"
   | "school-grades"
   | "school-open-work"
   | "school-transcript";
@@ -30,6 +31,8 @@ export interface ReportExportParams {
   memberId?: string | null;
   eventType?: string | null;
   groupBy?: string | null;
+  medicationId?: string | null;
+  scheduleKind?: string | null;
 }
 
 export interface ReportCatalogEntry {
@@ -41,6 +44,7 @@ export interface ReportCatalogEntry {
 export const REPORT_KIND_LABELS: Record<ReportKind, string> = {
   weekly: "Weekly schedule",
   overview: "Overview",
+  medications: "Medications",
   "school-grades": "Grade summary",
   "school-open-work": "Open work",
   "school-transcript": "Transcript",
@@ -69,6 +73,8 @@ export function reportExportBody(params: ReportExportParams): Record<string, unk
   if (params.memberId) body.memberId = params.memberId;
   if (params.eventType) body.eventType = params.eventType;
   if (params.groupBy) body.groupBy = params.groupBy;
+  if (params.medicationId) body.medicationId = params.medicationId;
+  if (params.scheduleKind) body.scheduleKind = params.scheduleKind;
   return body;
 }
 

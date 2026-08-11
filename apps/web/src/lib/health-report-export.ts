@@ -19,11 +19,14 @@ export interface HealthReportExport {
   memberId?: string | null;
   eventType?: string | null;
   groupBy?: HealthReportGroupBy;
+  medicationId?: string | null;
+  scheduleKind?: string | null;
   summary: {
     totalEvents: number;
     ongoingCount: number;
     activeMedications: number;
     scheduledMedications: number;
+    intervalMedications?: number;
     prnMedications: number;
     dosesLogged: number;
   };
@@ -33,12 +36,25 @@ export interface HealthReportExport {
     medicationId: string;
     name: string;
     scheduleKind: string;
+    memberId?: string;
+    memberLabel?: string;
     taken: number;
     skipped: number;
     missed: number;
+    pending?: number;
+    expected?: number;
     prn: number;
     scheduledTotal: number;
     adherencePct: number | null;
+  }[];
+  prnFrequency?: { date: string; memberId: string; memberLabel: string; count: number }[];
+  medications?: {
+    id: string;
+    name: string;
+    scheduleKind: string;
+    memberId: string;
+    memberLabel: string;
+    enabled: boolean;
   }[];
   eventHistory: HealthReportEventItem[];
   eventGroups?: {
@@ -67,4 +83,10 @@ export const HEALTH_REPORT_EVENT_TYPES: { value: string; label: string }[] = [
   { value: "symptom", label: "Symptom" },
   { value: "medication", label: "Medication" },
   { value: "other", label: "Other" },
+];
+
+export const HEALTH_REPORT_SCHEDULE_KINDS: { value: string; label: string }[] = [
+  { value: "scheduled", label: "Scheduled" },
+  { value: "interval", label: "Interval" },
+  { value: "prn", label: "PRN" },
 ];

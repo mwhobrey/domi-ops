@@ -5,6 +5,7 @@ export type ReportModule = "school" | "chores" | "shopping" | "expenses" | "heal
 export type ReportKind =
   | "weekly"
   | "overview"
+  | "medications"
   | "school-grades"
   | "school-open-work"
   | "school-transcript";
@@ -69,6 +70,7 @@ export const REPORT_MODULE_LABELS: Record<ReportModule, string> = {
 export const REPORT_KIND_LABELS: Record<ReportKind, string> = {
   weekly: "Weekly schedule",
   overview: "Overview",
+  medications: "Medications",
   "school-grades": "Grade summary",
   "school-open-work": "Open work",
   "school-transcript": "Transcript",

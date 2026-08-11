@@ -72,6 +72,7 @@ export function healthOverviewToCanonical(data: HealthReportData): CanonicalRepo
         { label: "Active medications", value: String(data.summary.activeMedications) },
         { label: "Doses logged", value: String(data.summary.dosesLogged) },
         { label: "Scheduled meds", value: String(data.summary.scheduledMedications) },
+        { label: "Interval meds", value: String(data.summary.intervalMedications ?? 0) },
         { label: "PRN meds", value: String(data.summary.prnMedications) },
       ],
     },
@@ -107,27 +108,7 @@ export function healthOverviewToCanonical(data: HealthReportData): CanonicalRepo
     });
   }
 
-  if (data.medicationAdherence.length > 0) {
-    sections.push({
-      key: "medication-adherence",
-      label: "Medication adherence",
-      tables: [
-        {
-          key: "medication-adherence",
-          label: "Medication adherence",
-          columns: ["Medication", "Taken", "Skipped", "Missed", "PRN", "Adherence %"],
-          rows: data.medicationAdherence.map((r) => [
-            r.name,
-            r.taken,
-            r.skipped,
-            r.missed,
-            r.prn,
-            r.adherencePct != null ? `${r.adherencePct}%` : "—",
-          ]),
-        },
-      ],
-    });
-  }
+  appendMedicationSections(data, sections);
 
   const eventHistory = data.eventHistory ?? data.recentEvents ?? [];
   const eventGroups =
@@ -155,10 +136,80 @@ export function healthOverviewToCanonical(data: HealthReportData): CanonicalRepo
           r.title,
           r.typeLabel,
           r.memberLabel,
-          r.startedAt?.slice(0, 10) ?? r.localDate ?? "—",
+          r.startedAt ? formatIsoDateTime(r.startedAt) : (r.localDate ?? "—"),
           r.ongoing ? "Yes" : "No",
         ]),
       })),
+    });
+  }
+
+  return {
+    title: `Health report — ${data.from} to ${data.to}`,
+    module: "health",
+    kind: "overview",
+    generatedAt: new Date().toISOString(),
+    timezone: data.timezone,
+    sections,
+  };
+}
+
+function formatIsoDateTime(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 16).replace("T", " ");
+  return d.toISOString().slice(0, 16).replace("T", " ");
+}
+
+function appendMedicationSections(data: HealthReportData, sections: CanonicalReportSection[]) {
+  if (data.medicationAdherence.length > 0) {
+    sections.push({
+      key: "medication-adherence",
+      label: "Medication adherence",
+      tables: [
+        {
+          key: "medication-adherence",
+          label: "Medication adherence",
+          columns: [
+            "Medication",
+            "Member",
+            "Kind",
+            "Expected",
+            "Taken",
+            "Skipped",
+            "Missed",
+            "Pending",
+            "PRN",
+            "Adherence %",
+          ],
+          rows: data.medicationAdherence.map((r) => [
+            r.name,
+            r.memberLabel,
+            r.scheduleKind,
+            r.expected ?? r.scheduledTotal,
+            r.taken,
+            r.skipped,
+            r.missed,
+            r.pending ?? 0,
+            r.prn,
+            r.adherencePct != null ? `${r.adherencePct}%` : "—",
+          ]),
+        },
+      ],
+    });
+  }
+
+  if (data.prnFrequency && data.prnFrequency.length > 0) {
+    sections.push({
+      key: "prn-frequency",
+      label: "PRN frequency by day",
+      tables: [
+        {
+          key: "prn-frequency",
+          label: "PRN frequency by day",
+          columns: ["Date", "Member", "Doses"],
+          rows: data.prnFrequency.map((r) => [r.date, r.memberLabel, r.count]),
+        },
+      ],
     });
   }
 
@@ -175,18 +226,34 @@ export function healthOverviewToCanonical(data: HealthReportData): CanonicalRepo
             r.medicationName,
             r.memberLabel,
             r.prn ? `${r.status} (PRN)` : r.status,
-            r.loggedAt.slice(0, 10),
-            r.scheduledAt?.slice(0, 10) ?? "—",
+            formatIsoDateTime(r.loggedAt),
+            r.scheduledAt ? formatIsoDateTime(r.scheduledAt) : "—",
           ]),
         },
       ],
     });
   }
+}
 
+export function healthMedicationsToCanonical(data: HealthReportData): CanonicalReport {
+  const sections: CanonicalReportSection[] = [
+    {
+      key: "summary",
+      label: "Medication summary",
+      stats: [
+        { label: "Active medications", value: String(data.summary.activeMedications) },
+        { label: "Scheduled", value: String(data.summary.scheduledMedications) },
+        { label: "Interval", value: String(data.summary.intervalMedications ?? 0) },
+        { label: "PRN", value: String(data.summary.prnMedications) },
+        { label: "Doses logged", value: String(data.summary.dosesLogged) },
+      ],
+    },
+  ];
+  appendMedicationSections(data, sections);
   return {
-    title: `Health report — ${data.from} to ${data.to}`,
+    title: `Medication report — ${data.from} to ${data.to}`,
     module: "health",
-    kind: "overview",
+    kind: "medications",
     generatedAt: new Date().toISOString(),
     timezone: data.timezone,
     sections,

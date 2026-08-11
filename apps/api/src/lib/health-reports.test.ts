@@ -2,9 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   applyHealthEventTypeFilter,
   applyHealthMemberFilter,
+  buildPrnFrequencyByDay,
+  computeExpectedScheduledAdherence,
+  enumerateScheduledDoseInstants,
   eventOverlapsReportRange,
   groupHealthEvents,
   HEALTH_EVENT_HISTORY_CAP,
+  isoDatesInInclusiveRange,
   normalizeHealthEventType,
   normalizeHealthReportGroupBy,
   type HealthReportEventItem,
@@ -160,5 +164,76 @@ describe("event type filter + grouping", () => {
 describe("history caps", () => {
   it("exposes a soft cap above the old 12-row tease", () => {
     expect(HEALTH_EVENT_HISTORY_CAP).toBeGreaterThanOrEqual(100);
+  });
+});
+
+describe("scheduled adherence helpers", () => {
+  it("lists iso dates inclusive", () => {
+    expect(isoDatesInInclusiveRange("2026-07-01", "2026-07-03")).toEqual([
+      "2026-07-01",
+      "2026-07-02",
+      "2026-07-03",
+    ]);
+  });
+
+  it("enumerates expected times for daily schedule", () => {
+    const instants = enumerateScheduledDoseInstants({
+      scheduleJson: JSON.stringify({ times: ["08:00", "20:00"] }),
+      startDate: null,
+      endDate: null,
+      from: "2026-07-01",
+      to: "2026-07-01",
+      timeZone: "UTC",
+    });
+    expect(instants.map((d) => d.toISOString())).toEqual([
+      "2026-07-01T08:00:00.000Z",
+      "2026-07-01T20:00:00.000Z",
+    ]);
+  });
+
+  it("marks past unset expected slots as missed", () => {
+    const expected = [
+      new Date("2026-07-01T08:00:00.000Z"),
+      new Date("2026-07-01T20:00:00.000Z"),
+    ];
+    const result = computeExpectedScheduledAdherence({
+      expected,
+      logs: [{ scheduledAt: expected[0]!, status: "taken" }],
+      now: new Date("2026-07-02T00:00:00.000Z"),
+    });
+    expect(result).toMatchObject({
+      expected: 2,
+      taken: 1,
+      skipped: 0,
+      missed: 1,
+      pending: 0,
+      adherencePct: 50,
+    });
+  });
+
+  it("builds PRN frequency by day/member", () => {
+    const rows = buildPrnFrequencyByDay({
+      logs: [
+        {
+          medicationId: "m1",
+          loggedAt: new Date("2026-07-02T15:00:00.000Z"),
+          scheduledAt: null,
+        },
+        {
+          medicationId: "m1",
+          loggedAt: new Date("2026-07-02T18:00:00.000Z"),
+          scheduledAt: null,
+        },
+        {
+          medicationId: "m1",
+          loggedAt: new Date("2026-07-02T12:00:00.000Z"),
+          scheduledAt: new Date("2026-07-02T08:00:00.000Z"),
+        },
+      ],
+      medById: new Map([["m1", { memberId: "mem1" }]]),
+      memberLabel: new Map([["mem1", "Alex"]]),
+      timeZone: "UTC",
+    });
+    expect(rows).toEqual([{ date: "2026-07-02", memberId: "mem1", memberLabel: "Alex", count: 2 }]);
   });
 });
