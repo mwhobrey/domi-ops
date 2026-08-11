@@ -12,6 +12,7 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { households, householdMembers, users } from "./household.js";
 
 export const shoppingRecurring = pgTable("shopping_recurring", {
@@ -39,6 +40,7 @@ export const expenses = pgTable("expenses", {
   amount: real("amount").notNull().default(0),
   category: varchar("category", { length: 64 }),
   expenseDate: date("expense_date").notNull(),
+  memberId: uuid("member_id").references(() => householdMembers.id, { onDelete: "set null" }),
   createdByDisplayName: varchar("created_by_display_name", { length: 64 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -50,11 +52,40 @@ export const expenseBudgets = pgTable(
     householdId: uuid("household_id")
       .notNull()
       .references(() => households.id, { onDelete: "cascade" }),
+    /** Null = household budget; set = personal owned by this member (WHO-237). */
+    memberId: uuid("member_id").references(() => householdMembers.id, { onDelete: "cascade" }),
     category: varchar("category", { length: 64 }).notNull(),
     monthlyTarget: real("monthly_target").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("expense_budgets_household_category").on(t.householdId, t.category)],
+  (t) => [
+    uniqueIndex("expense_budgets_household_category")
+      .on(t.householdId, t.category)
+      .where(sql`${t.memberId} is null`),
+    uniqueIndex("expense_budgets_personal_category")
+      .on(t.householdId, t.memberId, t.category)
+      .where(sql`${t.memberId} is not null`),
+  ],
+);
+
+export const expenseBudgetShareAccessEnum = pgEnum("expense_budget_share_access", [
+  "read",
+  "write",
+]);
+
+export const expenseBudgetShares = pgTable(
+  "expense_budget_shares",
+  {
+    budgetId: uuid("budget_id")
+      .notNull()
+      .references(() => expenseBudgets.id, { onDelete: "cascade" }),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => householdMembers.id, { onDelete: "cascade" }),
+    access: expenseBudgetShareAccessEnum("access").notNull().default("read"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.budgetId, t.memberId] })],
 );
 
 export const expenseBudgetAlertSent = pgTable(
@@ -64,18 +95,20 @@ export const expenseBudgetAlertSent = pgTable(
     householdId: uuid("household_id")
       .notNull()
       .references(() => households.id, { onDelete: "cascade" }),
+    /** Null = household budget alert; set = personal owner memberId (WHO-237). */
+    memberId: uuid("member_id").references(() => householdMembers.id, { onDelete: "cascade" }),
     category: varchar("category", { length: 64 }).notNull(),
     monthKey: varchar("month_key", { length: 7 }).notNull(),
     alertKind: varchar("alert_kind", { length: 16 }).notNull(),
     sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    uniqueIndex("expense_budget_alert_sent_unique").on(
-      t.householdId,
-      t.category,
-      t.monthKey,
-      t.alertKind,
-    ),
+    uniqueIndex("expense_budget_alert_sent_household_unique")
+      .on(t.householdId, t.category, t.monthKey, t.alertKind)
+      .where(sql`${t.memberId} is null`),
+    uniqueIndex("expense_budget_alert_sent_personal_unique")
+      .on(t.householdId, t.memberId, t.category, t.monthKey, t.alertKind)
+      .where(sql`${t.memberId} is not null`),
   ],
 );
 

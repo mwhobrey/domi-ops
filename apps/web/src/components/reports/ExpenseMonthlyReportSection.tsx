@@ -15,6 +15,7 @@ interface ExpenseReportCategoryRow {
 
 interface ExpenseReport {
   month: string;
+  scope?: "household" | "personal";
   monthSpend: number;
   monthBudgeted: number;
   percentUsed: number | null;
@@ -78,6 +79,7 @@ export function ExpenseMonthlyReportSection({
   initialMonth?: string;
 }) {
   const [month, setMonth] = useState(initialMonth ?? currentMonthValue());
+  const [scope, setScope] = useState<"household" | "personal">("household");
   const [report, setReport] = useState<ExpenseReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -87,7 +89,7 @@ export function ExpenseMonthlyReportSection({
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({ month });
+      const params = new URLSearchParams({ month, scope });
       const data = await apiClient.get<ExpenseReport>(`/api/core/expenses/reports?${params}`);
       setReport(data);
     } catch (err) {
@@ -96,7 +98,7 @@ export function ExpenseMonthlyReportSection({
     } finally {
       setLoading(false);
     }
-  }, [month]);
+  }, [month, scope]);
 
   useEffect(() => {
     void load();
@@ -135,6 +137,19 @@ export function ExpenseMonthlyReportSection({
             value={month}
             onChange={(e) => setMonth(e.target.value)}
           />
+        </div>
+        <div className="flex flex-wrap gap-2 self-end">
+          {(["household", "personal"] as const).map((key) => (
+            <Button
+              key={key}
+              type="button"
+              size="sm"
+              variant={scope === key ? "primary" : "secondary"}
+              onClick={() => setScope(key)}
+            >
+              {key === "household" ? "Household" : "Me"}
+            </Button>
+          ))}
         </div>
         <Button type="submit" loading={loading}>
           Update

@@ -54,6 +54,9 @@ domi-ops/
 | `src/components/ProfileGoogleDocsConnect.tsx` | Google Docs/Drive export OAuth connect on profile |
 | `src/app/reports/page.tsx` | Central reports hub (`ReportsHubClient`) |
 | `src/app/*/reports/page.tsx` | Per-module report pages (contextual entry; same section components as hub) |
+| `src/components/ExpensesList.tsx` | Expenses list + Household|Personal budgets + shares (WHO-237) |
+| `src/components/ExpenseEditSheet.tsx` | Expense edit + member attribution |
+| `src/components/reports/ExpenseMonthlyReportSection.tsx` | Spending reports Household|Me scope |
 | `src/components/reports/ReportExportSheet.tsx` | Shared export sheet (Drive, Google Docs/Drive, download CSV/JSON/YAML, print) |
 | `src/components/reports/ReportsHubClient.tsx` | Module/kind picker + inline report runners |
 | `src/lib/reports.ts` | Report module/kind types + hub URL helpers |
@@ -113,6 +116,8 @@ domi-ops/
 | `src/lib/health-access.ts` | Health visibility + shares + segment ACL (WHO-229) |
 | `src/lib/health-crypto.ts` | Field encryption for PHI-like health columns |
 | `src/lib/health-serialize.ts` | Health DTO encrypt/decrypt + schedule JSON |
+| `src/lib/expense-budget-access.ts` | Personal budget view/write + shares (WHO-237) |
+| `src/lib/expenses.ts` | Expense serialize, category spend, budget summaries, reports |
 | `src/routes/core.ts` | Dashboard, shopping (+ `/shopping/glance`), chores, notes, expenses; profile overlay prefs |
 | `src/routes/school.ts` | Classes, assignments (`GET /assignments?filter=`), submissions |
 | `src/routes/school-upload.ts` | Presign stub |
@@ -142,7 +147,7 @@ domi-ops/
 | `src/schema/calendar.ts` | Calendars, events, Google link tables, outbox |
 | `src/schema/school.ts` | LMS tables |
 | `src/schema/health.ts` | Health events, medications, dose logs, reminder sent, member ACL |
-| `src/schema/core.ts` | Shopping, chores, notes, expenses, notices, home_status |
+| `src/schema/core.ts` | Shopping, chores, notes, expenses (+ personal budgets/shares), notices, home_status |
 | `src/schema/import.ts` | `import_records` |
 | `src/client.ts` | `createDb(url)` |
 | `src/migrate.ts` | Migration runner |
@@ -173,6 +178,7 @@ Exports: `@domi-ops/db`, `@domi-ops/db/schema` (package.json `exports`).
 - `queue.ts` — `SYNC_QUEUE`, `enqueueSyncJob`.
 - `sync.ts` — pull logic, `runCalendarSyncJob` switch (includes v1 stubs).
 - `health-med-reminder-scan.ts` / `health-med-reminder-recipients.ts` — med push to subject + ACL `doses: write` (WHO-238).
+- `budget-alert-scan.ts` — expense budget 80%/100% push; household vs personal recipients (WHO-237).
 - `index.ts` — public exports; `registerSyncHandler` Map exists but **worker does not use it**.
 
 ### `@domi-ops/import-homehub` (`packages/import-homehub`)

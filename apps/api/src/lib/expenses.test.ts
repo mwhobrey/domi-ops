@@ -57,6 +57,10 @@ describe("buildExpenseReportFromData", () => {
       monthSpend: 0,
       percentUsed: 0,
       status: "under",
+      memberId: null,
+      scope: "household",
+      shareAccess: null,
+      shares: [],
     },
     {
       id: "b2",
@@ -65,6 +69,10 @@ describe("buildExpenseReportFromData", () => {
       monthSpend: 0,
       percentUsed: 0,
       status: "under",
+      memberId: null,
+      scope: "household",
+      shareAccess: null,
+      shares: [],
     },
   ];
 
@@ -77,6 +85,7 @@ describe("buildExpenseReportFromData", () => {
           amount: 120,
           category: "Groceries",
           expenseDate: "2026-06-05",
+          memberId: null,
           createdByDisplayName: null,
         },
         {
@@ -85,6 +94,7 @@ describe("buildExpenseReportFromData", () => {
           amount: 85,
           category: "Gas",
           expenseDate: "2026-06-10",
+          memberId: null,
           createdByDisplayName: null,
         },
         {
@@ -93,6 +103,7 @@ describe("buildExpenseReportFromData", () => {
           amount: 45,
           category: "Dining",
           expenseDate: "2026-06-12",
+          memberId: null,
           createdByDisplayName: null,
         },
         {
@@ -101,6 +112,7 @@ describe("buildExpenseReportFromData", () => {
           amount: 50,
           category: "Utilities",
           expenseDate: "2026-04-15",
+          memberId: null,
           createdByDisplayName: null,
         },
       ],
@@ -128,6 +140,7 @@ describe("buildExpenseReportFromData", () => {
           amount: 20,
           category: null,
           expenseDate: "2026-06-01",
+          memberId: null,
           createdByDisplayName: null,
         },
       ],

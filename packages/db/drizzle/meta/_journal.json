@@ -372,6 +372,13 @@
       "when": 1780495026000,
       "tag": "0052_health_med_reminder_sent_user",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1780495027000,
+      "tag": "0053_personal_expense_budgets",
+      "breakpoints": true
     }
   ]
 }

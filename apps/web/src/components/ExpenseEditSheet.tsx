@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
-import { Alert, Button, Combobox, Input, Sheet } from "./ui";
+import type { NoteShareMember } from "./NoteSharePicker";
+import { Alert, Button, Combobox, Input, Select, Sheet } from "./ui";
 
 export interface Expense {
   id: string;
@@ -10,16 +11,19 @@ export interface Expense {
   amount: number;
   category: string | null;
   expenseDate: string;
+  memberId?: string | null;
 }
 
 export function ExpenseEditSheet({
   expense,
+  members,
   categorySuggestions,
   onCategoryQuery,
   onClose,
   onSaved,
 }: {
   expense: Expense | null;
+  members: NoteShareMember[];
   categorySuggestions: string[];
   onCategoryQuery: (query: string) => void;
   onClose: () => void;
@@ -29,6 +33,7 @@ export function ExpenseEditSheet({
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
   const [expenseDate, setExpenseDate] = useState("");
+  const [memberId, setMemberId] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,6 +43,7 @@ export function ExpenseEditSheet({
     setAmount(String(expense.amount));
     setCategory(expense.category ?? "");
     setExpenseDate(expense.expenseDate);
+    setMemberId(expense.memberId ?? "");
     setError(null);
   }, [expense]);
 
@@ -54,6 +60,7 @@ export function ExpenseEditSheet({
         amount: parsed,
         category: category.trim() || null,
         expenseDate,
+        memberId: memberId || null,
       });
       onSaved(data.expense);
       onClose();
@@ -93,6 +100,17 @@ export function ExpenseEditSheet({
           />
         </label>
         <label className="block space-y-1">
+          <span className="text-sm font-medium">Attributed to</span>
+          <Select value={memberId} onChange={(e) => setMemberId(e.target.value)} aria-label="Attributed to">
+            <option value="">Unassigned</option>
+            {members.map((m) => (
+              <option key={m.memberId} value={m.memberId}>
+                {m.label}
+              </option>
+            ))}
+          </Select>
+        </label>
+        <label className="block space-y-1">
           <span className="text-sm font-medium">Date</span>
           <Input type="date" value={expenseDate} onChange={(e) => setExpenseDate(e.target.value)} required />
         </label>
@@ -100,7 +118,7 @@ export function ExpenseEditSheet({
           <Button type="submit" loading={loading}>
             Save
           </Button>
-          <Button type="button" variant="ghost" onClick={onClose}>
+          <Button type="button" variant="secondary" onClick={onClose}>
             Cancel
           </Button>
         </div>

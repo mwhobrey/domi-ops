@@ -1,6 +1,7 @@
 import type { Database } from "@domi-ops/db";
 import { expenseBudgets, expenses, type expenses as expensesTable } from "@domi-ops/db";
 import { and, eq, sql } from "drizzle-orm";
+import type { ExpenseBudgetShareAccess } from "./expense-budget-access.js";
 
 export const BUDGET_WARNING_RATIO = 0.8;
 
@@ -10,6 +11,7 @@ export interface SerializedExpense {
   amount: number;
   category: string | null;
   expenseDate: string;
+  memberId: string | null;
   createdByDisplayName: string | null;
 }
 
@@ -20,6 +22,10 @@ export interface BudgetSummary {
   monthSpend: number;
   percentUsed: number;
   status: "under" | "warning" | "over";
+  memberId: string | null;
+  scope: "household" | "personal";
+  shareAccess: ExpenseBudgetShareAccess | null;
+  shares: { memberId: string; access: ExpenseBudgetShareAccess }[];
 }
 
 export function normalizeExpenseCategory(value: unknown): string | null {
@@ -35,7 +41,7 @@ export function currentMonthKey(date = new Date()): string {
 export function serializeExpense(
   row: Pick<
     typeof expensesTable.$inferSelect,
-    "id" | "title" | "amount" | "category" | "expenseDate" | "createdByDisplayName"
+    "id" | "title" | "amount" | "category" | "expenseDate" | "createdByDisplayName" | "memberId"
   >,
 ): SerializedExpense {
   return {
@@ -44,6 +50,7 @@ export function serializeExpense(
     amount: row.amount,
     category: row.category,
     expenseDate: row.expenseDate,
+    memberId: row.memberId ?? null,
     createdByDisplayName: row.createdByDisplayName,
   };
 }
@@ -81,17 +88,20 @@ export async function sumCategorySpendForMonth(
   householdId: string,
   category: string,
   monthKey: string,
+  opts?: { memberId?: string | null },
 ): Promise<number> {
+  const conditions = [
+    eq(expenses.householdId, householdId),
+    sql`lower(trim(${expenses.category})) = ${category.trim().toLowerCase()}`,
+    sql`to_char(${expenses.expenseDate}, 'YYYY-MM') = ${monthKey}`,
+  ];
+  if (opts?.memberId) {
+    conditions.push(eq(expenses.memberId, opts.memberId));
+  }
   const [row] = await db
     .select({ total: sql<number>`coalesce(sum(${expenses.amount}), 0)` })
     .from(expenses)
-    .where(
-      and(
-        eq(expenses.householdId, householdId),
-        sql`lower(trim(${expenses.category})) = ${category.trim().toLowerCase()}`,
-        sql`to_char(${expenses.expenseDate}, 'YYYY-MM') = ${monthKey}`,
-      ),
-    );
+    .where(and(...conditions));
   return Number(row?.total ?? 0);
 }
 
@@ -106,30 +116,91 @@ export function budgetStatus(
   return "under";
 }
 
+export async function summarizeBudgetRow(
+  db: Database,
+  budget: {
+    id: string;
+    householdId: string;
+    category: string;
+    monthlyTarget: number;
+    memberId: string | null;
+  },
+  monthKey: string,
+  extras?: {
+    shareAccess?: ExpenseBudgetShareAccess | null;
+    shares?: { memberId: string; access: ExpenseBudgetShareAccess }[];
+  },
+): Promise<BudgetSummary> {
+  const monthSpend = await sumCategorySpendForMonth(
+    db,
+    budget.householdId,
+    budget.category,
+    monthKey,
+    budget.memberId ? { memberId: budget.memberId } : undefined,
+  );
+  const percentUsed =
+    budget.monthlyTarget > 0 ? Math.round((monthSpend / budget.monthlyTarget) * 100) : 0;
+  return {
+    id: budget.id,
+    category: budget.category,
+    monthlyTarget: budget.monthlyTarget,
+    monthSpend,
+    percentUsed,
+    status: budgetStatus(monthSpend, budget.monthlyTarget),
+    memberId: budget.memberId,
+    scope: budget.memberId ? "personal" : "household",
+    shareAccess: extras?.shareAccess ?? null,
+    shares: extras?.shares ?? [],
+  };
+}
+
 export async function buildBudgetSummaries(
   db: Database,
   householdId: string,
   monthKey = currentMonthKey(),
+  opts?: {
+    budgets?: Array<{
+      id: string;
+      householdId: string;
+      category: string;
+      monthlyTarget: number;
+      memberId: string | null;
+      shareAccess?: ExpenseBudgetShareAccess | null;
+      shares?: { memberId: string; access: ExpenseBudgetShareAccess }[];
+    }>;
+    /** Filter personal vs household when using DB load. */
+    scope?: "household" | "personal";
+    ownerMemberId?: string;
+  },
 ): Promise<BudgetSummary[]> {
-  const budgets = await db
-    .select()
-    .from(expenseBudgets)
-    .where(eq(expenseBudgets.householdId, householdId))
-    .orderBy(expenseBudgets.category);
+  let budgets = opts?.budgets;
+  if (!budgets) {
+    const rows = await db
+      .select()
+      .from(expenseBudgets)
+      .where(eq(expenseBudgets.householdId, householdId))
+      .orderBy(expenseBudgets.category);
+    budgets = rows.map((b) => ({
+      ...b,
+      shareAccess: null as ExpenseBudgetShareAccess | null,
+      shares: [] as { memberId: string; access: ExpenseBudgetShareAccess }[],
+    }));
+  }
+
+  if (opts?.scope === "household") {
+    budgets = budgets.filter((b) => !b.memberId);
+  } else if (opts?.scope === "personal" && opts.ownerMemberId) {
+    budgets = budgets.filter((b) => b.memberId === opts.ownerMemberId);
+  }
 
   const summaries: BudgetSummary[] = [];
   for (const budget of budgets) {
-    const monthSpend = await sumCategorySpendForMonth(db, householdId, budget.category, monthKey);
-    const percentUsed =
-      budget.monthlyTarget > 0 ? Math.round((monthSpend / budget.monthlyTarget) * 100) : 0;
-    summaries.push({
-      id: budget.id,
-      category: budget.category,
-      monthlyTarget: budget.monthlyTarget,
-      monthSpend,
-      percentUsed,
-      status: budgetStatus(monthSpend, budget.monthlyTarget),
-    });
+    summaries.push(
+      await summarizeBudgetRow(db, budget, monthKey, {
+        shareAccess: budget.shareAccess ?? null,
+        shares: budget.shares ?? [],
+      }),
+    );
   }
   return summaries;
 }
@@ -148,6 +219,7 @@ export interface ExpenseReportCategoryRow {
 
 export interface ExpenseReport {
   month: string;
+  scope: "household" | "personal";
   monthSpend: number;
   monthBudgeted: number;
   percentUsed: number | null;
@@ -190,13 +262,14 @@ export function monthKeysEndingAt(endMonthKey: string, count: number): string[] 
 
 type ExpenseReportRow = Pick<
   typeof expensesTable.$inferSelect,
-  "id" | "title" | "amount" | "category" | "expenseDate" | "createdByDisplayName"
+  "id" | "title" | "amount" | "category" | "expenseDate" | "createdByDisplayName" | "memberId"
 >;
 
 export function buildExpenseReportFromData(
   expenseRows: ExpenseReportRow[],
   budgets: BudgetSummary[],
   monthKey: string,
+  scope: "household" | "personal" = "household",
   trendMonthCount = 6,
 ): ExpenseReport {
   const trendMonths = monthKeysEndingAt(monthKey, trendMonthCount);
@@ -288,6 +361,7 @@ export function buildExpenseReportFromData(
 
   return {
     month: monthKey,
+    scope,
     monthSpend,
     monthBudgeted,
     percentUsed,
@@ -304,10 +378,21 @@ export async function buildExpenseReports(
   db: Database,
   householdId: string,
   monthKey = currentMonthKey(),
+  opts?: { scope?: "household" | "personal"; memberId?: string },
 ): Promise<ExpenseReport> {
   const normalized = normalizeMonthKey(monthKey) ?? currentMonthKey();
   const trendMonths = monthKeysEndingAt(normalized, 6);
   const earliest = trendMonths[0]!;
+  const scope = opts?.scope === "personal" ? "personal" : "household";
+
+  const conditions = [
+    eq(expenses.householdId, householdId),
+    sql`to_char(${expenses.expenseDate}, 'YYYY-MM') >= ${earliest}`,
+    sql`to_char(${expenses.expenseDate}, 'YYYY-MM') <= ${normalized}`,
+  ];
+  if (scope === "personal" && opts?.memberId) {
+    conditions.push(eq(expenses.memberId, opts.memberId));
+  }
 
   const rows = await db
     .select({
@@ -317,16 +402,14 @@ export async function buildExpenseReports(
       category: expenses.category,
       expenseDate: expenses.expenseDate,
       createdByDisplayName: expenses.createdByDisplayName,
+      memberId: expenses.memberId,
     })
     .from(expenses)
-    .where(
-      and(
-        eq(expenses.householdId, householdId),
-        sql`to_char(${expenses.expenseDate}, 'YYYY-MM') >= ${earliest}`,
-        sql`to_char(${expenses.expenseDate}, 'YYYY-MM') <= ${normalized}`,
-      ),
-    );
+    .where(and(...conditions));
 
-  const budgets = await buildBudgetSummaries(db, householdId, normalized);
-  return buildExpenseReportFromData(rows, budgets, normalized);
+  const budgets = await buildBudgetSummaries(db, householdId, normalized, {
+    scope,
+    ownerMemberId: opts?.memberId,
+  });
+  return buildExpenseReportFromData(rows, budgets, normalized, scope);
 }
