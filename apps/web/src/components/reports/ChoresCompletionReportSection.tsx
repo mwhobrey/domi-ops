@@ -101,7 +101,7 @@ export function ChoresCompletionReportSection({ driveEnabled = true }: { driveEn
       ) : null}
 
       <form
-        className="flex flex-wrap items-end gap-2"
+        className="no-print flex flex-wrap items-end gap-2"
         onSubmit={(e) => {
           e.preventDefault();
           void load();
@@ -137,7 +137,7 @@ export function ChoresCompletionReportSection({ driveEnabled = true }: { driveEn
       ) : null}
 
       {report && !loading ? (
-        <>
+        <div className="report-print space-y-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard label="Completions" value={report.summary.totalCompletions} />
             <StatCard
@@ -196,7 +196,7 @@ export function ChoresCompletionReportSection({ driveEnabled = true }: { driveEn
               </table>
             </div>
           )}
-        </>
+        </div>
       ) : null}
 
       <ReportExportSheet

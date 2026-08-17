@@ -88,7 +88,7 @@ domi-ops/
 | `next.config.ts` | `standalone` output; rewrites `/api`, `/health` |
 | `Dockerfile` | Build arg `API_URL` for server-side fetch |
 
-**Report kinds (WHO-155):** `GET /api/core/reports/catalog` lists enabled modules. Kinds: `weekly`, `overview`, `school-grades`, `school-open-work`, `school-transcript`. Export: `POST /api/core/reports/export` with `destination`: `preview` | `domi-ops-drive` | `google-docs` | `google-drive`; preview includes `downloads` (`csv`, `json`, `yaml`). Legacy `/api/core/weekly-reports/*` unchanged.
+**Report kinds (WHO-155 / WHO-244):** `GET /api/core/reports/catalog` lists enabled modules. Kinds: `weekly`, `overview`, `medications`, `medications-today`, `medication-list`, `school-grades`, `school-open-work`, `school-transcript`. Health hub kinds: **Events**, **Today's doses**, **Dose history**, **Medication list**. Export: `POST /api/core/reports/export` with `destination`: `preview` | `domi-ops-drive` | `google-docs` | `google-drive`; preview includes `downloads` (`csv`, `json`, `yaml`). Print uses canonical HTML (`@media print`) plus on-screen `.report-print` CSS. Legacy `/api/core/weekly-reports/*` unchanged.
 
 
 **State:** No Redux/Zustand. Server Components fetch via `apiFetch`; client components minimal. Session lives in HTTP-only cookie on API side.

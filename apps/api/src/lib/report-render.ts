@@ -342,10 +342,12 @@ const CANONICAL_HTML_STYLES = [
   "h4{font-size:.95rem;margin:.75rem 0 .35rem}",
   ".stats p{margin:.25rem 0}",
   "table{border-collapse:collapse;width:100%;margin-bottom:1rem}",
-  "th,td{border:1px solid #e5e7eb;padding:.5rem .75rem;text-align:left}",
+  "th,td{border:1px solid #e5e7eb;padding:.5rem .75rem;text-align:left;vertical-align:top}",
   "th{background:#f9fafb;font-weight:600}",
   "tr:nth-child(even) td{background:#fcfcfd}",
   ".empty{color:#6b7280;font-style:italic}",
+  "@page{size:letter;margin:0.6in}",
+  "@media print{body{margin:0;color:#000}h2,h3,h4{break-after:avoid}table{break-inside:auto}tr{break-inside:avoid}thead{display:table-header-group}th{background:#eee !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}}",
 ].join("");
 
 export function renderCanonicalReportStyledHtml(report: CanonicalReport): string {

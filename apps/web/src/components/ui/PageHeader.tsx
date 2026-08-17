@@ -26,7 +26,7 @@ export function PageHeader({
       : "mt-1 hidden max-w-2xl text-sm text-[var(--color-text-muted)] lg:block";
 
   return (
-    <div className="mb-6 flex flex-wrap items-start justify-between gap-4 max-lg:items-center no-print">
+    <div className="mb-6 flex flex-wrap items-start justify-between gap-4 max-lg:items-center">
       <div>
         <h1
           className={
@@ -38,10 +38,14 @@ export function PageHeader({
           {title}
         </h1>
         {showDescription && (
-          <p className={descriptionClassName}>{description}</p>
+          <p className={`${descriptionClassName} no-print`}>{description}</p>
         )}
       </div>
-      {actions && <PageHeaderActions>{actions}</PageHeaderActions>}
+      {actions && (
+        <div className="no-print">
+          <PageHeaderActions>{actions}</PageHeaderActions>
+        </div>
+      )}
     </div>
   );
 }

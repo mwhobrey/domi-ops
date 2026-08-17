@@ -69,11 +69,6 @@ export function healthOverviewToCanonical(data: HealthReportData): CanonicalRepo
       stats: [
         { label: "Health events", value: String(data.summary.totalEvents) },
         { label: "Ongoing now", value: String(data.summary.ongoingCount) },
-        { label: "Active medications", value: String(data.summary.activeMedications) },
-        { label: "Doses logged", value: String(data.summary.dosesLogged) },
-        { label: "Scheduled meds", value: String(data.summary.scheduledMedications) },
-        { label: "Interval meds", value: String(data.summary.intervalMedications ?? 0) },
-        { label: "PRN meds", value: String(data.summary.prnMedications) },
       ],
     },
   ];
@@ -108,43 +103,10 @@ export function healthOverviewToCanonical(data: HealthReportData): CanonicalRepo
     });
   }
 
-  appendMedicationSections(data, sections);
-
-  const eventHistory = data.eventHistory ?? data.recentEvents ?? [];
-  const eventGroups =
-    data.eventGroups && data.eventGroups.length > 0
-      ? data.eventGroups
-      : eventHistory.length > 0
-        ? [{ key: "all", label: "All events", events: eventHistory }]
-        : [];
-
-  if (eventGroups.length > 0) {
-    const groupLabel =
-      data.groupBy === "eventType"
-        ? "Event history by type"
-        : data.groupBy === "none"
-          ? "Event history"
-          : "Event history by date";
-    sections.push({
-      key: "event-history",
-      label: groupLabel,
-      tables: eventGroups.map((group) => ({
-        key: `event-history-${group.key}`,
-        label: group.label,
-        columns: ["Event", "Type", "Member", "Started", "Ongoing"],
-        rows: group.events.map((r) => [
-          r.title,
-          r.typeLabel,
-          r.memberLabel,
-          r.startedAt ? formatIsoDateTime(r.startedAt) : (r.localDate ?? "—"),
-          r.ongoing ? "Yes" : "No",
-        ]),
-      })),
-    });
-  }
+  appendEventHistorySections(data, sections);
 
   return {
-    title: `Health report — ${data.from} to ${data.to}`,
+    title: `Health events — ${data.from} to ${data.to}`,
     module: "health",
     kind: "overview",
     generatedAt: new Date().toISOString(),
@@ -153,11 +115,58 @@ export function healthOverviewToCanonical(data: HealthReportData): CanonicalRepo
   };
 }
 
-function formatIsoDateTime(iso: string | null | undefined): string {
+function formatIsoDateTime(iso: string | null | undefined, timeZone?: string): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso.slice(0, 16).replace("T", " ");
-  return d.toISOString().slice(0, 16).replace("T", " ");
+  if (!timeZone) return d.toISOString().slice(0, 16).replace("T", " ");
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(d);
+  } catch {
+    return d.toISOString().slice(0, 16).replace("T", " ");
+  }
+}
+
+function appendEventHistorySections(data: HealthReportData, sections: CanonicalReportSection[]) {
+  const eventHistory = data.eventHistory ?? data.recentEvents ?? [];
+  const eventGroups =
+    data.eventGroups && data.eventGroups.length > 0
+      ? data.eventGroups
+      : eventHistory.length > 0
+        ? [{ key: "all", label: "All events", events: eventHistory }]
+        : [];
+
+  if (eventGroups.length === 0) return;
+
+  const groupLabel =
+    data.groupBy === "eventType"
+      ? "Event history by type"
+      : data.groupBy === "none"
+        ? "Event history"
+        : "Event history by date";
+  sections.push({
+    key: "event-history",
+    label: groupLabel,
+    tables: eventGroups.map((group) => ({
+      key: `event-history-${group.key}`,
+      label: group.label,
+      columns: ["When", "Event", "Type", "Member", "Ongoing"],
+      rows: group.events.map((r) => [
+        r.startedAtLabel || formatIsoDateTime(r.startedAt, data.timezone),
+        r.title,
+        r.typeLabel,
+        r.memberLabel,
+        r.ongoing ? "Yes" : "No",
+      ]),
+    })),
+  });
 }
 
 function appendMedicationSections(data: HealthReportData, sections: CanonicalReportSection[]) {
@@ -221,13 +230,13 @@ function appendMedicationSections(data: HealthReportData, sections: CanonicalRep
         {
           key: "medication-log-history",
           label: "Medication log history",
-          columns: ["Medication", "Member", "Status", "Logged", "Scheduled"],
+          columns: ["When logged", "Scheduled", "Medication", "Member", "Status"],
           rows: data.medicationLogHistory.map((r) => [
+            r.loggedAtLabel || formatIsoDateTime(r.loggedAt, data.timezone),
+            r.scheduledAtLabel || (r.scheduledAt ? formatIsoDateTime(r.scheduledAt, data.timezone) : "—"),
             r.medicationName,
             r.memberLabel,
             r.prn ? `${r.status} (PRN)` : r.status,
-            formatIsoDateTime(r.loggedAt),
-            r.scheduledAt ? formatIsoDateTime(r.scheduledAt) : "—",
           ]),
         },
       ],
@@ -251,12 +260,92 @@ export function healthMedicationsToCanonical(data: HealthReportData): CanonicalR
   ];
   appendMedicationSections(data, sections);
   return {
-    title: `Medication report — ${data.from} to ${data.to}`,
+    title: `Dose history — ${data.from} to ${data.to}`,
     module: "health",
     kind: "medications",
     generatedAt: new Date().toISOString(),
     timezone: data.timezone,
     sections,
+  };
+}
+
+export function healthTodayToCanonical(data: HealthReportData): CanonicalReport {
+  const date = data.todayDoseDate ?? data.to;
+  const rows = data.todayDoses ?? [];
+  const taken = rows.filter((r) => r.status === "taken" || r.status === "prn").length;
+  const skipped = rows.filter((r) => r.status === "skipped").length;
+  const missed = rows.filter((r) => r.status === "missed").length;
+  const pending = rows.filter((r) => r.status === "pending").length;
+  return {
+    title: `Today's doses — ${date}`,
+    module: "health",
+    kind: "medications-today",
+    generatedAt: new Date().toISOString(),
+    timezone: data.timezone,
+    sections: [
+      {
+        key: "summary",
+        label: "Today",
+        stats: [
+          { label: "Taken", value: String(taken) },
+          { label: "Skipped", value: String(skipped) },
+          { label: "Missed", value: String(missed) },
+          { label: "Pending", value: String(pending) },
+        ],
+      },
+      {
+        key: "today-doses",
+        label: "Doses",
+        tables: [
+          {
+            key: "today-doses",
+            label: "Doses",
+            columns: ["When", "Logged", "Member", "Medication", "Dosage", "Status"],
+            rows: rows.map((r) => [
+              r.scheduledAtLabel,
+              r.loggedAtLabel ?? "—",
+              r.memberLabel,
+              r.medicationName,
+              r.dosage ?? "—",
+              r.statusLabel,
+            ]),
+          },
+        ],
+        emptyMessage: rows.length === 0 ? "No doses scheduled or logged today." : undefined,
+      },
+    ],
+  };
+}
+
+export function healthMedicationListToCanonical(data: HealthReportData): CanonicalReport {
+  const meds = (data.medications ?? []).filter((m) => m.enabled);
+  return {
+    title: "Current medications",
+    module: "health",
+    kind: "medication-list",
+    generatedAt: new Date().toISOString(),
+    timezone: data.timezone,
+    sections: [
+      {
+        key: "medication-list",
+        label: "Medication list",
+        tables: [
+          {
+            key: "medication-list",
+            label: "Current medications",
+            columns: ["Member", "Medication", "Dosage", "Schedule", "Instructions"],
+            rows: meds.map((m) => [
+              m.memberLabel,
+              m.name,
+              m.dosage ?? "—",
+              m.scheduleSummary ?? m.scheduleKind,
+              m.instructions ?? "—",
+            ]),
+          },
+        ],
+        emptyMessage: meds.length === 0 ? "No active medications." : undefined,
+      },
+    ],
   };
 }
 

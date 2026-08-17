@@ -1,5 +1,11 @@
 export type HealthReportGroupBy = "date" | "eventType" | "none";
 
+export type HealthReportFocus =
+  | "overview"
+  | "medications"
+  | "medications-today"
+  | "medication-list";
+
 export interface HealthReportEventItem {
   id: string;
   title: string;
@@ -8,8 +14,39 @@ export interface HealthReportEventItem {
   memberLabel: string;
   ongoing: boolean;
   startedAt: string | null;
+  startedAtLabel?: string;
   localDate?: string | null;
   notes?: string | null;
+}
+
+export interface HealthTodayDoseRow {
+  medicationId: string;
+  medicationName: string;
+  dosage: string | null;
+  memberId: string;
+  memberLabel: string;
+  scheduleKind: string;
+  status: string;
+  statusLabel: string;
+  scheduledAt: string | null;
+  scheduledAtLabel: string;
+  loggedAt: string | null;
+  loggedAtLabel: string | null;
+  notes: string | null;
+}
+
+export interface HealthMedicationListItem {
+  id: string;
+  name: string;
+  dosage?: string | null;
+  instructions?: string | null;
+  scheduleKind: string;
+  scheduleSummary?: string;
+  memberId: string;
+  memberLabel: string;
+  enabled: boolean;
+  startDate?: string | null;
+  endDate?: string | null;
 }
 
 export interface HealthReportExport {
@@ -48,14 +85,7 @@ export interface HealthReportExport {
     adherencePct: number | null;
   }[];
   prnFrequency?: { date: string; memberId: string; memberLabel: string; count: number }[];
-  medications?: {
-    id: string;
-    name: string;
-    scheduleKind: string;
-    memberId: string;
-    memberLabel: string;
-    enabled: boolean;
-  }[];
+  medications?: HealthMedicationListItem[];
   eventHistory: HealthReportEventItem[];
   eventGroups?: {
     key: string;
@@ -68,10 +98,14 @@ export interface HealthReportExport {
     memberLabel: string;
     status: string;
     loggedAt: string;
+    loggedAtLabel?: string;
     scheduledAt: string | null;
+    scheduledAtLabel?: string | null;
     prn: boolean;
     notes?: string | null;
   }[];
+  todayDoses?: HealthTodayDoseRow[];
+  todayDoseDate?: string;
   /** @deprecated Prefer eventHistory */
   recentEvents?: HealthReportEventItem[];
 }
@@ -89,4 +123,11 @@ export const HEALTH_REPORT_SCHEDULE_KINDS: { value: string; label: string }[] = 
   { value: "scheduled", label: "Scheduled" },
   { value: "interval", label: "Interval" },
   { value: "prn", label: "PRN" },
+];
+
+export const HEALTH_REPORT_FOCUS_OPTIONS: { id: HealthReportFocus; label: string }[] = [
+  { id: "overview", label: "Events" },
+  { id: "medications-today", label: "Today's doses" },
+  { id: "medications", label: "Dose history" },
+  { id: "medication-list", label: "Medication list" },
 ];

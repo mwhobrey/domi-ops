@@ -6,6 +6,8 @@ export type ReportKind =
   | "weekly"
   | "overview"
   | "medications"
+  | "medications-today"
+  | "medication-list"
   | "school-grades"
   | "school-open-work"
   | "school-transcript";
@@ -70,8 +72,33 @@ export const REPORT_MODULE_LABELS: Record<ReportModule, string> = {
 export const REPORT_KIND_LABELS: Record<ReportKind, string> = {
   weekly: "Weekly schedule",
   overview: "Overview",
-  medications: "Medications",
+  medications: "Dose history",
+  "medications-today": "Today's doses",
+  "medication-list": "Medication list",
   "school-grades": "Grade summary",
   "school-open-work": "Open work",
   "school-transcript": "Transcript",
 };
+
+export const HEALTH_REPORT_KINDS: { id: ReportKind; label: string; description: string }[] = [
+  {
+    id: "overview",
+    label: "Events",
+    description: "Clinical events in a date range",
+  },
+  {
+    id: "medications-today",
+    label: "Today's doses",
+    description: "Taken, skipped, missed, and pending doses for today",
+  },
+  {
+    id: "medications",
+    label: "Dose history",
+    description: "Adherence and medication logs for a date range",
+  },
+  {
+    id: "medication-list",
+    label: "Medication list",
+    description: "Current medications with dosage and instructions",
+  },
+];

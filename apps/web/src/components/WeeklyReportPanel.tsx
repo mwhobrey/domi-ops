@@ -202,7 +202,7 @@ export function WeeklyReportPanel({
   return (
     <div className="space-y-4">
       <div
-        className="flex flex-wrap gap-1 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-1 text-sm"
+        className="no-print flex flex-wrap gap-1 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-1 text-sm"
         role="tablist"
         aria-label="Week selection mode"
       >
@@ -230,7 +230,7 @@ export function WeeklyReportPanel({
       </div>
 
       {scopeMode === "week" ? (
-        <div className="flex flex-wrap items-end gap-2">
+        <div className="no-print flex flex-wrap items-end gap-2">
           <IconButton
             type="button"
             label="Previous week"
@@ -262,7 +262,7 @@ export function WeeklyReportPanel({
           ) : null}
         </div>
       ) : (
-        <div className="flex flex-wrap items-end gap-2">
+        <div className="no-print flex flex-wrap items-end gap-2">
           <label className="space-y-1 text-sm">
             <span className="text-[var(--color-text-muted)]">From</span>
             <Input
@@ -289,7 +289,7 @@ export function WeeklyReportPanel({
         </div>
       )}
 
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="no-print flex flex-wrap items-end justify-between gap-3">
         <label className="space-y-1 text-sm">
           <span className="text-[var(--color-text-muted)]">Group by</span>
           <Select value={variant} onChange={(e) => setVariant(e.target.value)}>
@@ -321,7 +321,7 @@ export function WeeklyReportPanel({
           <Spinner />
         </div>
       ) : scopeMode === "week" && weekReport ? (
-        <div className="space-y-4">
+        <div className="report-print space-y-4">
           <p className="text-sm text-[var(--color-text-muted)]">
             {weekReport.totalItems} item{weekReport.totalItems === 1 ? "" : "s"} due Mon–Fri
           </p>
@@ -332,7 +332,7 @@ export function WeeklyReportPanel({
           )}
         </div>
       ) : scopeMode === "range" ? (
-        <div className="space-y-8">
+        <div className="report-print space-y-8">
           {rangeReports.length === 0 ? (
             <EmptyState
               title="No weeks in range"

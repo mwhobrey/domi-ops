@@ -4,6 +4,8 @@ export type ReportKind =
   | "weekly"
   | "overview"
   | "medications"
+  | "medications-today"
+  | "medication-list"
   | "school-grades"
   | "school-open-work"
   | "school-transcript";
@@ -44,7 +46,9 @@ export interface ReportCatalogEntry {
 export const REPORT_KIND_LABELS: Record<ReportKind, string> = {
   weekly: "Weekly schedule",
   overview: "Overview",
-  medications: "Medications",
+  medications: "Dose history",
+  "medications-today": "Today's doses",
+  "medication-list": "Medication list",
   "school-grades": "Grade summary",
   "school-open-work": "Open work",
   "school-transcript": "Transcript",

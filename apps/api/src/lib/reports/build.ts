@@ -23,6 +23,8 @@ import {
   expensesOverviewToCanonical,
   healthOverviewToCanonical,
   healthMedicationsToCanonical,
+  healthTodayToCanonical,
+  healthMedicationListToCanonical,
   schoolGradesToCanonical,
   schoolOpenWorkToCanonical,
   schoolTranscriptToCanonical,
@@ -31,7 +33,7 @@ import {
   weeklyToCanonical,
 } from "./adapters.js";
 import type { CanonicalReport, ReportCatalogEntry, ReportKind, ReportModule } from "./types.js";
-import { REPORT_KIND_LABELS, REPORT_MODULE_LABELS } from "./types.js";
+import { REPORT_KIND_LABELS, REPORT_MODULE_LABELS, HEALTH_REPORT_KINDS } from "./types.js";
 
 export interface ReportQueryParams {
   module: ReportModule;
@@ -181,11 +183,27 @@ export async function buildCanonicalReport(
     return report ? weeklyToCanonical(report) : null;
   }
 
-  if ((module === "health" && kind === "overview") || (module === "health" && kind === "medications")) {
-    const to = params.to?.trim() || new Date().toISOString().slice(0, 10);
-    const fromDefault = new Date(`${to}T12:00:00.000Z`);
-    fromDefault.setUTCDate(fromDefault.getUTCDate() - 30);
-    const from = params.from?.trim() || fromDefault.toISOString().slice(0, 10);
+  if (module === "health") {
+    const isToday = kind === "medications-today";
+    const isList = kind === "medication-list";
+    if (
+      kind !== "overview" &&
+      kind !== "medications" &&
+      !isToday &&
+      !isList
+    ) {
+      return null;
+    }
+    const toDefault = params.to?.trim() || new Date().toISOString().slice(0, 10);
+    const fromDefaultDate = new Date(`${toDefault}T12:00:00.000Z`);
+    fromDefaultDate.setUTCDate(fromDefaultDate.getUTCDate() - 30);
+    let from = params.from?.trim() || fromDefaultDate.toISOString().slice(0, 10);
+    let to = toDefault;
+    if (isToday || isList) {
+      // Today + medication list are point-in-time; clamp the log window to one local day.
+      to = params.to?.trim() || toDefault;
+      from = isToday ? to : from;
+    }
     const data = await buildHealthReports(
       db,
       env,
@@ -199,15 +217,17 @@ export async function buildCanonicalReport(
       to,
       {
         memberId: params.memberId,
-        eventType: params.eventType,
+        eventType: kind === "overview" ? params.eventType : null,
         groupBy: params.groupBy,
-        medicationId: params.medicationId,
-        scheduleKind: params.scheduleKind,
+        medicationId: kind === "overview" || isList ? null : params.medicationId,
+        scheduleKind: kind === "overview" || isList ? null : params.scheduleKind,
+        pinToToday: isToday,
       },
     );
-    return kind === "medications"
-      ? healthMedicationsToCanonical(data)
-      : healthOverviewToCanonical(data);
+    if (kind === "medications") return healthMedicationsToCanonical(data);
+    if (kind === "medications-today") return healthTodayToCanonical(data);
+    if (kind === "medication-list") return healthMedicationListToCanonical(data);
+    return healthOverviewToCanonical(data);
   }
 
   if (module === "chores" && kind === "overview") {
@@ -252,7 +272,7 @@ const MODULE_KINDS: Record<ReportModule, ReportKind[]> = {
   chores: ["weekly", "overview"],
   shopping: ["weekly", "overview"],
   expenses: ["weekly", "overview"],
-  health: ["overview", "medications"],
+  health: ["overview", "medications-today", "medications", "medication-list"],
 };
 
 export async function buildReportCatalog(
@@ -269,10 +289,13 @@ export async function buildReportCatalog(
       continue;
     }
 
-    const kinds = MODULE_KINDS[module].map((id) => ({
-      id,
-      label: REPORT_KIND_LABELS[id],
-    }));
+    const kinds =
+      module === "health"
+        ? HEALTH_REPORT_KINDS
+        : MODULE_KINDS[module].map((id) => ({
+            id,
+            label: REPORT_KIND_LABELS[id],
+          }));
 
     entries.push({
       module,

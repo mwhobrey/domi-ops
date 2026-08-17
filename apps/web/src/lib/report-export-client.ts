@@ -33,5 +33,10 @@ export function printReportHtml(html: string, title: string) {
   printWindow.document.title = title;
   printWindow.document.close();
   printWindow.focus();
-  printWindow.print();
+  const triggerPrint = () => printWindow.print();
+  if (printWindow.document.readyState === "complete") {
+    printWindow.setTimeout(triggerPrint, 50);
+  } else {
+    printWindow.addEventListener("load", triggerPrint, { once: true });
+  }
 }

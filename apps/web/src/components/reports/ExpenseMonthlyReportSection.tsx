@@ -121,7 +121,7 @@ export function ExpenseMonthlyReportSection({
       ) : null}
 
       <form
-        className="flex flex-wrap items-end gap-2"
+        className="no-print flex flex-wrap items-end gap-2"
         onSubmit={(e) => {
           e.preventDefault();
           void load();
@@ -169,7 +169,7 @@ export function ExpenseMonthlyReportSection({
       ) : null}
 
       {report && !loading ? (
-        <>
+        <div className="report-print space-y-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard label="Spent this month" value={formatMoney(report.monthSpend)} />
             <StatCard
@@ -216,7 +216,7 @@ export function ExpenseMonthlyReportSection({
               description="Add expenses on the main list to see spending here."
             />
           ) : null}
-        </>
+        </div>
       ) : null}
 
       <ReportExportSheet

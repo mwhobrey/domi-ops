@@ -30,6 +30,8 @@ function parseKind(value: string | null): ReportKind | null {
     value === "weekly" ||
     value === "overview" ||
     value === "medications" ||
+    value === "medications-today" ||
+    value === "medication-list" ||
     value === "school-grades" ||
     value === "school-open-work" ||
     value === "school-transcript"
@@ -144,7 +146,13 @@ export function ReportsHubClient() {
       return (
         <HealthOverviewReportSection
           driveEnabled={driveEnabled}
-          focus={activeKind === "medications" ? "medications" : "overview"}
+          focus={
+            activeKind === "medications" ||
+            activeKind === "medications-today" ||
+            activeKind === "medication-list"
+              ? activeKind
+              : "overview"
+          }
         />
       );
     }
@@ -173,7 +181,7 @@ export function ReportsHubClient() {
 
   return (
     <div className="space-y-6">
-      <Card className="lg:hidden">
+      <Card className="no-print lg:hidden">
         <CardBody className="space-y-3">
           <nav aria-label="Report modules" className="flex gap-2 overflow-x-auto pb-1">
             {catalog.map((entry) => (
@@ -240,7 +248,7 @@ export function ReportsHubClient() {
       </Card>
 
       <div className="grid gap-6 lg:grid-cols-[14rem_minmax(0,1fr)]">
-        <aside className="hidden space-y-4 lg:block">
+        <aside className="no-print hidden space-y-4 lg:block">
           <nav aria-label="Report modules" className="space-y-1">
             {catalog.map((entry) => (
               <button

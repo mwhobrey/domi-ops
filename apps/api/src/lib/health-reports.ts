@@ -8,8 +8,12 @@ import {
 } from "@domi-ops/db";
 import {
   addDaysIso,
+  formatTimeLabelInTz,
+  isMidnightInTz,
   isoDateInRange,
   localDateOfInstant,
+  nextIntervalPending,
+  parseIntervalSchedule,
   todayIsoDateInTz,
   zonedLocalToUtc,
 } from "@domi-ops/calendar-sync";
@@ -53,11 +57,284 @@ export type HealthReportEventItem = {
   memberLabel: string;
   notes: string | null;
   startedAt: string | null;
+  startedAtLabel: string;
   endedAt: string | null;
+  endedAtLabel: string | null;
   durationKind: string;
   ongoing: boolean;
   localDate: string | null;
 };
+
+export type HealthTodayDoseStatus = "taken" | "skipped" | "missed" | "pending" | "prn";
+
+export type HealthTodayDoseRow = {
+  medicationId: string;
+  medicationName: string;
+  dosage: string | null;
+  memberId: string;
+  memberLabel: string;
+  scheduleKind: string;
+  status: HealthTodayDoseStatus;
+  statusLabel: string;
+  scheduledAt: string | null;
+  scheduledAtLabel: string;
+  loggedAt: string | null;
+  loggedAtLabel: string | null;
+  notes: string | null;
+};
+
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+export function formatHealthInstantLabel(
+  instant: Date | string | null | undefined,
+  timeZone: string,
+  opts?: { dateOnly?: boolean },
+): string {
+  if (!instant) return "—";
+  const d = instant instanceof Date ? instant : new Date(instant);
+  if (Number.isNaN(d.getTime())) return "—";
+  try {
+    const dateOpts: Intl.DateTimeFormatOptions = {
+      timeZone,
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    };
+    if (opts?.dateOnly) {
+      return new Intl.DateTimeFormat("en-US", dateOpts).format(d);
+    }
+    return new Intl.DateTimeFormat("en-US", {
+      ...dateOpts,
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(d);
+  } catch {
+    return opts?.dateOnly ? d.toISOString().slice(0, 10) : d.toISOString().slice(0, 16).replace("T", " ");
+  }
+}
+
+export function formatHealthWhenLabel(
+  instant: Date | string | null | undefined,
+  timeZone: string,
+  fallbackDate?: string | null,
+): string {
+  if (!instant) {
+    return fallbackDate ? formatHealthInstantLabel(`${fallbackDate}T12:00:00Z`, timeZone, { dateOnly: true }) : "—";
+  }
+  const d = instant instanceof Date ? instant : new Date(instant);
+  if (Number.isNaN(d.getTime())) return fallbackDate ?? "—";
+  if (isMidnightInTz(d, timeZone)) {
+    return formatHealthInstantLabel(d, timeZone, { dateOnly: true });
+  }
+  return formatHealthInstantLabel(d, timeZone);
+}
+
+function formatClockLabel(hhmm: string, timeZone: string): string {
+  const time = hhmm.length >= 5 ? hhmm.slice(0, 5) : hhmm;
+  try {
+    return formatTimeLabelInTz(zonedLocalToUtc("2026-01-15", time, timeZone), timeZone);
+  } catch {
+    return time;
+  }
+}
+
+export function formatMedScheduleSummary(
+  scheduleKind: string,
+  scheduleJson: string | null | undefined,
+  timeZone = "UTC",
+): string {
+  if (scheduleKind === "prn") return "As needed (PRN)";
+  if (scheduleKind === "interval") {
+    const schedule = parseIntervalSchedule(scheduleJson);
+    if (!schedule) return "Interval";
+    const every =
+      schedule.everyMinutes % 60 === 0
+        ? `every ${schedule.everyMinutes / 60} hour${schedule.everyMinutes === 60 ? "" : "s"}`
+        : `every ${schedule.everyMinutes} minutes`;
+    const start =
+      schedule.anchor === "fixed_start" && schedule.fixedStartTime
+        ? ` starting ${formatClockLabel(schedule.fixedStartTime, timeZone)}`
+        : " from first dose";
+    let stop = "";
+    if (schedule.stop.mode === "max_doses" && schedule.stop.maxDoses) {
+      stop = `; stop after ${schedule.stop.maxDoses} dose${schedule.stop.maxDoses === 1 ? "" : "s"}`;
+    } else if (schedule.stop.mode === "end_time" && schedule.stop.endTime) {
+      stop = `; until ${formatClockLabel(schedule.stop.endTime, timeZone)}`;
+    } else if (schedule.stop.mode === "midnight") {
+      stop = "; until midnight";
+    }
+    return `Interval, ${every}${start}${stop}`;
+  }
+  const schedule = parseMedSchedule(scheduleJson);
+  const times = (schedule.times ?? []).map((t) => formatClockLabel(t, timeZone));
+  const timePart = times.length > 0 ? times.join(", ") : "no times set";
+  const days = schedule.daysOfWeek?.filter((d) => d >= 0 && d <= 6) ?? [];
+  if (days.length > 0 && days.length < 7) {
+    const dayPart = [...days]
+      .sort((a, b) => a - b)
+      .map((d) => DAY_NAMES[d] ?? String(d))
+      .join(", ");
+    return `${dayPart} at ${timePart}`;
+  }
+  return `Daily at ${timePart}`;
+}
+
+export function todayDoseStatusLabel(status: HealthTodayDoseStatus): string {
+  if (status === "prn") return "PRN taken";
+  if (status === "pending") return "Pending";
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+export function buildTodayDoseRows(input: {
+  date: string;
+  timeZone: string;
+  now?: Date;
+  meds: {
+    id: string;
+    name: string;
+    dosage: string | null;
+    memberId: string;
+    memberLabel: string;
+    scheduleKind: string;
+    scheduleJson: string | null;
+    startDate: string | null;
+    endDate: string | null;
+    enabled: boolean;
+  }[];
+  logs: {
+    medicationId: string;
+    status: string;
+    scheduledAt: Date | null;
+    loggedAt: Date;
+    notes: string | null;
+  }[];
+}): HealthTodayDoseRow[] {
+  const now = input.now ?? new Date();
+  const today = todayIsoDateInTz(input.timeZone);
+  const rows: HealthTodayDoseRow[] = [];
+  const logsByMed = new Map<string, typeof input.logs>();
+  for (const log of input.logs) {
+    const list = logsByMed.get(log.medicationId) ?? [];
+    list.push(log);
+    logsByMed.set(log.medicationId, list);
+  }
+
+  const pushRow = (
+    med: (typeof input.meds)[number],
+    status: HealthTodayDoseStatus,
+    scheduledAt: Date | null,
+    loggedAt: Date | null,
+    notes: string | null,
+    scheduledLabel?: string,
+  ) => {
+    rows.push({
+      medicationId: med.id,
+      medicationName: med.name,
+      dosage: med.dosage,
+      memberId: med.memberId,
+      memberLabel: med.memberLabel,
+      scheduleKind: med.scheduleKind,
+      status,
+      statusLabel: todayDoseStatusLabel(status),
+      scheduledAt: scheduledAt?.toISOString() ?? null,
+      scheduledAtLabel:
+        scheduledLabel ??
+        (scheduledAt ? formatHealthWhenLabel(scheduledAt, input.timeZone) : "—"),
+      loggedAt: loggedAt?.toISOString() ?? null,
+      loggedAtLabel: loggedAt ? formatHealthInstantLabel(loggedAt, input.timeZone) : null,
+      notes,
+    });
+  };
+
+  for (const med of input.meds) {
+    if (!med.enabled) continue;
+    if (med.startDate && input.date < med.startDate) continue;
+    if (med.endDate && input.date > med.endDate) continue;
+    const logs = logsByMed.get(med.id) ?? [];
+
+    if (med.scheduleKind === "scheduled") {
+      const expected = enumerateScheduledDoseInstants({
+        scheduleJson: med.scheduleJson,
+        startDate: med.startDate,
+        endDate: med.endDate,
+        from: input.date,
+        to: input.date,
+        timeZone: input.timeZone,
+      });
+      const byIso = new Map<string, (typeof logs)[number]>();
+      for (const log of logs) {
+        if (log.scheduledAt) byIso.set(log.scheduledAt.toISOString(), log);
+      }
+      for (const instant of expected) {
+        const log = byIso.get(instant.toISOString());
+        if (log) {
+          const status: HealthTodayDoseStatus =
+            log.status === "skipped" ? "skipped" : log.status === "missed" ? "missed" : "taken";
+          pushRow(med, status, instant, log.loggedAt, log.notes);
+          continue;
+        }
+        if (instant.getTime() > now.getTime()) {
+          pushRow(med, "pending", instant, null, null);
+        } else {
+          pushRow(med, "missed", instant, null, null);
+        }
+      }
+      continue;
+    }
+
+    if (med.scheduleKind === "prn") {
+      for (const log of logs) {
+        if (log.scheduledAt != null) continue;
+        if (localDateOfInstant(log.loggedAt, input.timeZone) !== input.date) continue;
+        pushRow(med, "prn", null, log.loggedAt, log.notes, formatHealthInstantLabel(log.loggedAt, input.timeZone));
+      }
+      continue;
+    }
+
+    if (med.scheduleKind === "interval") {
+      for (const log of logs) {
+        const when = log.scheduledAt ?? log.loggedAt;
+        if (localDateOfInstant(when, input.timeZone) !== input.date) continue;
+        const status: HealthTodayDoseStatus =
+          log.status === "skipped" ? "skipped" : log.status === "missed" ? "missed" : "taken";
+        pushRow(med, status, log.scheduledAt, log.loggedAt, log.notes);
+      }
+      if (input.date === today) {
+        const schedule = parseIntervalSchedule(med.scheduleJson);
+        if (schedule) {
+          const pending = nextIntervalPending({
+            schedule,
+            tz: input.timeZone,
+            date: input.date,
+            now,
+            logs: logs.map((l) => ({
+              scheduledAt: l.scheduledAt,
+              loggedAt: l.loggedAt,
+              status: l.status,
+            })),
+          });
+          if (pending) {
+            pushRow(
+              med,
+              "pending",
+              pending.scheduledAt,
+              null,
+              null,
+              pending.awaitingFirst ? "First dose" : pending.scheduledTimeLabel,
+            );
+          }
+        }
+      }
+    }
+  }
+
+  rows.sort((a, b) => {
+    const aKey = a.scheduledAt ?? a.loggedAt ?? "";
+    const bKey = b.scheduledAt ?? b.loggedAt ?? "";
+    return aKey.localeCompare(bKey) || a.memberLabel.localeCompare(b.memberLabel);
+  });
+  return rows;
+}
 
 export function isoDatesInInclusiveRange(from: string, to: string): string[] {
   if (from > to) return [];
@@ -267,14 +544,15 @@ export async function buildHealthReports(
   db: Database,
   env: Env,
   auth: { householdId: string; userId: string; memberId: string; role: string },
-  from: string,
-  to: string,
+  fromInput: string,
+  toInput: string,
   opts?: {
     memberId?: string | null;
     eventType?: string | null;
     groupBy?: string | null;
     medicationId?: string | null;
     scheduleKind?: string | null;
+    pinToToday?: boolean;
   },
 ) {
   const memberFilter = opts?.memberId?.trim() || null;
@@ -290,6 +568,8 @@ export async function buildHealthReports(
     .limit(1);
   const timezone = household?.timezone ?? "UTC";
   const today = todayIsoDateInTz(timezone);
+  const from = opts?.pinToToday ? today : fromInput;
+  const to = opts?.pinToToday ? today : toInput;
   const now = new Date();
   const adherenceTo = to < today ? to : today;
 
@@ -340,6 +620,10 @@ export async function buildHealthReports(
   }
 
   const medIds = medRows.map((m) => m.id);
+  const logFrom = new Date(`${from}T00:00:00.000Z`);
+  logFrom.setUTCDate(logFrom.getUTCDate() - 1);
+  const logTo = new Date(`${to}T23:59:59.999Z`);
+  logTo.setUTCDate(logTo.getUTCDate() + 1);
   const logRows: HealthLogRow[] =
     medIds.length === 0
       ? []
@@ -349,15 +633,19 @@ export async function buildHealthReports(
           .where(
             and(
               inArray(healthMedicationLogs.medicationId, medIds),
-              gte(healthMedicationLogs.loggedAt, new Date(`${from}T00:00:00.000Z`)),
-              lte(healthMedicationLogs.loggedAt, new Date(`${to}T23:59:59.999Z`)),
+              gte(healthMedicationLogs.loggedAt, logFrom),
+              lte(healthMedicationLogs.loggedAt, logTo),
             ),
           )
           .orderBy(desc(healthMedicationLogs.loggedAt));
 
   const medById = new Map(medRows.map((m) => [m.id, m]));
+  const logsInLocalRange = logRows.filter((log) => {
+    const date = localDateOfInstant(log.loggedAt, timezone);
+    return date >= from && date <= to;
+  });
   const logsByMed = new Map<string, HealthLogRow[]>();
-  for (const log of logRows) {
+  for (const log of logsInLocalRange) {
     const list = logsByMed.get(log.medicationId) ?? [];
     list.push(log);
     logsByMed.set(log.medicationId, list);
@@ -430,7 +718,7 @@ export async function buildHealthReports(
   medicationAdherence.sort((a, b) => b.scheduledTotal + b.prn - (a.scheduledTotal + a.prn));
 
   const prnFrequency = buildPrnFrequencyByDay({
-    logs: logRows,
+    logs: logsInLocalRange,
     medById,
     memberLabel,
     timeZone: timezone,
@@ -447,7 +735,9 @@ export async function buildHealthReports(
       memberLabel: memberLabel.get(row.memberId) ?? "Member",
       notes: decryptHealthFieldOrPassthrough(row.notes, env),
       startedAt: row.startedAt?.toISOString() ?? null,
+      startedAtLabel: formatHealthWhenLabel(row.startedAt ?? row.createdAt, timezone),
       endedAt: row.endedAt?.toISOString() ?? null,
+      endedAtLabel: row.endedAt ? formatHealthWhenLabel(row.endedAt, timezone) : null,
       durationKind: row.durationKind,
       ongoing: row.durationKind === "ongoing" && !row.endedAt,
       localDate: localDateOfInstant(anchor, timezone),
@@ -459,7 +749,7 @@ export async function buildHealthReports(
   /** @deprecated Prefer eventHistory — kept for older clients */
   const recentEvents = eventHistory.slice(0, 12);
 
-  const medicationLogHistory = logRows.slice(0, HEALTH_MED_LOG_HISTORY_CAP).map((log) => {
+  const medicationLogHistory = logsInLocalRange.slice(0, HEALTH_MED_LOG_HISTORY_CAP).map((log) => {
     const med = medById.get(log.medicationId);
     return {
       id: log.id,
@@ -471,10 +761,57 @@ export async function buildHealthReports(
       memberLabel: med ? (memberLabel.get(med.memberId) ?? "Member") : "Member",
       status: log.status,
       scheduledAt: log.scheduledAt?.toISOString() ?? null,
+      scheduledAtLabel: log.scheduledAt ? formatHealthInstantLabel(log.scheduledAt, timezone) : null,
       loggedAt: log.loggedAt.toISOString(),
+      loggedAtLabel: formatHealthInstantLabel(log.loggedAt, timezone),
       notes: decryptHealthFieldOrPassthrough(log.notes, env),
       prn: log.scheduledAt == null,
     };
+  });
+
+  const medicationList = medRows.map((m) => ({
+    id: m.id,
+    name: decryptHealthFieldOrPassthrough(m.name, env) ?? "Medication",
+    dosage: decryptHealthFieldOrPassthrough(m.dosage, env),
+    instructions: decryptHealthFieldOrPassthrough(m.instructions, env),
+    scheduleKind: m.scheduleKind,
+    scheduleSummary: formatMedScheduleSummary(m.scheduleKind, m.scheduleJson, timezone),
+    memberId: m.memberId,
+    memberLabel: memberLabel.get(m.memberId) ?? "Member",
+    enabled: m.enabled,
+    startDate: m.startDate,
+    endDate: m.endDate,
+  }));
+  medicationList.sort((a, b) =>
+    a.memberLabel === b.memberLabel
+      ? a.name.localeCompare(b.name)
+      : a.memberLabel.localeCompare(b.memberLabel),
+  );
+
+  const todayDoseDate = from === to ? from : today;
+  const todayDoses = buildTodayDoseRows({
+    date: todayDoseDate,
+    timeZone: timezone,
+    now,
+    meds: medRows.map((m) => ({
+      id: m.id,
+      name: decryptHealthFieldOrPassthrough(m.name, env) ?? "Medication",
+      dosage: decryptHealthFieldOrPassthrough(m.dosage, env),
+      memberId: m.memberId,
+      memberLabel: memberLabel.get(m.memberId) ?? "Member",
+      scheduleKind: m.scheduleKind,
+      scheduleJson: m.scheduleJson,
+      startDate: m.startDate,
+      endDate: m.endDate,
+      enabled: m.enabled,
+    })),
+    logs: logRows.map((l) => ({
+      medicationId: l.medicationId,
+      status: l.status,
+      scheduledAt: l.scheduledAt,
+      loggedAt: l.loggedAt,
+      notes: decryptHealthFieldOrPassthrough(l.notes, env),
+    })),
   });
 
   return {
@@ -495,7 +832,7 @@ export async function buildHealthReports(
       intervalMedications: medRows.filter((m) => m.enabled && m.scheduleKind === "interval")
         .length,
       prnMedications: medRows.filter((m) => m.enabled && m.scheduleKind === "prn").length,
-      dosesLogged: logRows.length,
+      dosesLogged: logsInLocalRange.length,
     },
     eventsByType: Object.entries(byType).map(([type, count]) => ({
       type,
@@ -509,17 +846,12 @@ export async function buildHealthReports(
     })),
     medicationAdherence,
     prnFrequency,
-    medications: medRows.map((m) => ({
-      id: m.id,
-      name: decryptHealthFieldOrPassthrough(m.name, env) ?? "Medication",
-      scheduleKind: m.scheduleKind,
-      memberId: m.memberId,
-      memberLabel: memberLabel.get(m.memberId) ?? "Member",
-      enabled: m.enabled,
-    })),
+    medications: medicationList,
     eventHistory,
     eventGroups,
     medicationLogHistory,
+    todayDoses,
+    todayDoseDate,
     recentEvents,
   };
 }
