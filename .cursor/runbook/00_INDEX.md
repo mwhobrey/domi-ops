@@ -48,8 +48,8 @@
 
 ## Repo facts (grounded)
 
-- **Node:** `>=20` (`package.json` `engines`)
-- **Package manager:** npm 10.9.2 workspaces + Turborepo (`@domi-ops/*` scope)
+- **Node:** **22** (`mise.toml`; CI `setup-node` + Docker `node:22-alpine`). `package.json` `engines` remains `>=20`.
+- **Package manager:** npm 10.9.2 workspaces + Turborepo (`@domi-ops/*` scope). Agent/CI shells without mise shims: `mise exec -- npm …`
 - **Commits on `master`:** `a96a368` (cutover baseline), `4b67280` (initial platform)
 - **CI:** GitHub Actions on push/PR (`typecheck`, `build`, `test`)
 - **Tests:** Vitest — `npm run test`

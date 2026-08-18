@@ -190,9 +190,10 @@ This repo often uses hand-written numbered migrations (`0007_home_status_presenc
 12. **LICENSE** — MIT in repo root.
 13. **`packages/db/dist/`** — May be committed or built locally; migrations run from `dist/migrate.js` in Docker.
 14. **Drizzle journal** — Unlisted `.sql` files are not applied; see **Database migrations (Drizzle)** above.
-15. **better-sqlite3** — Rebuild after Node version change: `npm rebuild better-sqlite3 -w @domi-ops/import-homehub`.
+15. **better-sqlite3** — Rebuild after Node version change: `npm rebuild better-sqlite3 -w @domi-ops/import-homehub`. Do not run `npm` under Node 26 / mise `latest` — no Windows prebuilds; `node-gyp` then needs VS C++ tools.
 16. **API Docker `node_modules`** — `apps/api/Dockerfile` must copy `apps/api/node_modules`; npm workspaces nest `better-auth` there (not hoisted to root).
 17. **Browser file uploads** — Presign returns same-origin `PUT /api/core/upload/:id?token=…`; API streams to MinIO. No public MinIO/Caddy `/s3` route required. `S3_PUBLIC_URL` optional for direct object URLs.
+18. **mise / Node PATH** — Root `mise.toml` pins Node 22. Cursor agent shells and some terminals do not activate mise shims (`npm` missing from PATH). Use `mise exec -- npm …` (or `mise activate` in an interactive shell). Do not hunt for `node.exe` on disk.
 
 ## Commit message convention (project lead preference)
 

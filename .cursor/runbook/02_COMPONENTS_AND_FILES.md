@@ -22,6 +22,7 @@ domi-ops/
 ├── docker-compose.prod.yml
 ├── turbo.json
 ├── tsconfig.json     # Root strict, noEmit
+├── mise.toml         # Pins Node 22 (matches CI/Docker)
 └── .env.example
 ```
 
