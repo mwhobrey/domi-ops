@@ -115,4 +115,4 @@ Global: CORS to `PUBLIC_APP_URL` with credentials; auth middleware on all routes
 
 ## Product tiers (design vs code)
 
-`docs/ARCHITECTURE.md` describes OSS self-host, Hosted Starter (shared Postgres + RLS), Hosted Family (Neon per household). **Default dogfood path:** `DEPLOYMENT_MODE=single`. **Hosted Starter foundation** shipped (RLS, tenant context, entitlements, QA compose) — `HOSTED_TIER` optional in `@domi-ops/config`; Stripe provisioning is M5.
+`docs/ARCHITECTURE.md` describes OSS self-host, Hosted Starter (shared Postgres + RLS), Hosted Family (Neon per household). **Default dogfood path:** `DEPLOYMENT_MODE=single`. **Hosted Starter foundation** shipped (RLS, tenant context, entitlements, QA compose) — `HOSTED_TIER` optional in `@domi-ops/config`; Stripe provisioning is M5. **Launch sequencing** (near-simultaneous OSS + hosted): [07_LAUNCH.md](./07_LAUNCH.md) and [ADR 001](../../docs/adr/001-public-launch-scope.md).

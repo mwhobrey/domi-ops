@@ -186,7 +186,7 @@ This repo often uses hand-written numbered migrations (`0007_home_status_presenc
 8. **Post-import auth** — Google/email login joins imported household; claim emails from HomeHub `config.yml` import; profile display name + home/away.
 9. **`registerSyncHandler` in calendar-sync** — Dead code path; worker calls `runCalendarSyncJob` directly.
 10. **OAuth state** — Better Auth login uses `ba_verifications` + signed `better-auth.state` cookie; calendar connect uses Redis (`oauth:calendar:*`). Both require matching browser host with `PUBLIC_APP_URL`.
-11. **RLS / hosted tiers** — Documented only; schema has `deployment_tier` enum but no policies.
+11. **RLS / hosted tiers** — Policies shipped (`0038`/`0039`); API tenant middleware + entitlements on `DEPLOYMENT_MODE=shared`. Stripe provisioning and subscription-status lockout still M5 — [07_LAUNCH.md](./07_LAUNCH.md).
 12. **LICENSE** — MIT in repo root.
 13. **`packages/db/dist/`** — May be committed or built locally; migrations run from `dist/migrate.js` in Docker.
 14. **Drizzle journal** — Unlisted `.sql` files are not applied; see **Database migrations (Drizzle)** above.

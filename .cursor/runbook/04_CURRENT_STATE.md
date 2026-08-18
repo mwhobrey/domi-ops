@@ -1,6 +1,6 @@
 # Current state
 
-*Updated after WHO-192 rename (`whome` → `domi-ops` identifiers). Prod deploy on `https://whome.whobrey.me` (GHCR pull, Google OAuth, Drive uploads). Local dogfood QA phases 0–5 pass (`06_DOGFOOD_TEST_PHASES.md`).*
+*Household dogfood stable on `https://whome.whobrey.me` (GHCR, Google OAuth, Drive). Local QA phases 0–5 pass (`06_DOGFOOD_TEST_PHASES.md`). **Focus is launch platform** (billing, legal, marketing deploy, OSS flip) — [07_LAUNCH.md](./07_LAUNCH.md) — not new module polish unless a dogfood bug.*
 
 ## What is working (implemented paths)
 
@@ -15,7 +15,7 @@
 - `npm run db:migrate` and API Docker entrypoint apply migrations. New SQL must be registered in `packages/db/drizzle/meta/_journal.json` (see `03_RULES_AND_STANDARDS.md` â†’ Database migrations).
 - **Demo seed (WHO-190 Phase 1):** `npm run db:seed-demo` — wipes/recreates `rivera-demo` household (Maria owner `demo@domi-ops.com`, default password `DemoRivera2026!`); Chicago-relative dates for calendar/school/chores; safety gate (`DEMO_MODE` / non-production / `--force`). Spec: `docs/marketing/demo-household-spec.md`.
 - **Marketing screenshots (WHO-190 Phase 2):** `npm run marketing:capture-screenshots` — Playwright light+dark PNGs → `docs/marketing/screenshots/` + `apps/www/public/marketing/screenshots/`; landing on `apps/www` uses `@domi-ops/marketing-ui` `ThemeAwareScreenshot` (`<picture>` + `prefers-color-scheme`). Preview: `npm run dev:www` → `http://localhost:3002`.
-- **Marketing site (WHO-134 / WHO-183):** `apps/www` on apex (`domi-ops.com`) — landing, `/pricing`, footer links to `app.domi-ops.com` login/privacy; shared UI in `packages/marketing-ui`. Deploy: `docker-compose.marketing.yml` + `deploy/Caddyfile.domi-ops.example`. ADR: `docs/adr/002-marketing-site-topology.md`.
+- **Marketing site (WHO-134 / WHO-183):** `apps/www` code-complete (landing, `/pricing`, `packages/marketing-ui`) — **not deployed**; `domi-ops.com` DNS cutover not done. Do not point apex DNS at www until hosted-ready `/privacy` + `/terms` on www ([WHO-182](https://linear.app/mikewhob-whome/issue/WHO-182)). Preview: `npm run dev:www` → `http://localhost:3002`. Deploy recipe (after legal): `docker-compose.marketing.yml` + `deploy/Caddyfile.domi-ops.example`. ADR: `docs/adr/002-marketing-site-topology.md`.
 - Zod env validation with production guards (`@domi-ops/config`).
 - Docker Compose dev stack: postgres, redis, minio, api, worker, web.
 - Native `npm run dev` (default): `.env.example` / `DOMI_OPS_DEV_PROFILE=native` / `PORT=3000` / `PUBLIC_APP_URL=http://localhost:3000`; dev boot warns on OAuth port mismatch; `.env.docker.example` for compose web on :3001.
@@ -138,15 +138,24 @@
 |------|----------|--------|
 | Recurring (advanced) | DAILY/WEEKLY/MONTHLY materialize + HomeHub `recurring_reminder` import; partial RRULE subset | Full RRULE edge cases + exotic recurrence rules |
 | Hosted multi-tenant | WHO-195–198, WHO-178 shipped | RLS + tenant context + entitlements + hosted compose/seed + leak tests (`npm run test:hosted`); Stripe provisioning still M5 |
+| Hosted billing (M5) | No `/api/billing/webhook`; `hostedCheckoutEnabled: false` | Cannot provision paying households; see [07_LAUNCH.md](./07_LAUNCH.md) |
+| Subscription status | `household_subscriptions.status` unused in `getHouseholdModuleContext` | `past_due` / `canceled` would not lock the app |
+| Legal (WHO-182) | www `/terms` placeholder; app `/privacy` is self-host operator copy | Blocks marketing deploy |
+| Marketing deploy | `apps/www` not on `domi-ops.com` | Apex still undeployed |
+| `test:hosted` CI | Documented as future in `HOSTED_TENANT_TESTS.md` | Leak matrix is local-only |
 | `/api/core/files` legacy route | superseded by Drive | Use `/api/core/drive/*`; import blobs still under `imports/` until WHO-120 |
-| **Production cutover on droplet** | **Live** at `https://whome.whobrey.me` (GHCR images, Caddy → `domi-ops-web`); HomeHub parallel on `home.whobrey.me` | Full import soak + HomeHub retirement still operator-run |
+| **Production cutover on droplet** | **Live** at `https://whome.whobrey.me` (GHCR images, Caddy → `domi-ops-web`); HomeHub parallel on `home.whobrey.me` | Full import soak + HomeHub retirement still operator-run (not the default queue) |
 | Real `app.db` import counts | validated on **extended fixture** + **local dogfood `data/app.db`** | Droplet staging/prod import still operator-run |
 
-## Immediate next steps (operator)
+## Immediate next steps
 
-1. Staging rehearsal: `docker compose -f docker-compose.prod.yml -f docker-compose.staging.yml up` â†’ `./scripts/smoke-cutover.sh` â†’ browser module smoke.
-2. Prod import + Caddy swap per `deploy/CUTOVER.md`; copy droplet `app.db` + **`config.yml`** + `uploads/`.
-3. 48h soak before stopping HomeHub.
+Launch platform — full order in [07_LAUNCH.md](./07_LAUNCH.md):
+
+1. Hosted-ready legal on `apps/www` (`/privacy` + `/terms`) before any marketing DNS — WHO-182; fill `docs/marketing/LAUNCH_DECISIONS.md` entity name first.
+2. M5 billing: WHO-185 SKUs → WHO-199/179 webhook provision → WHO-184 hosted wizard → WHO-186 quota + subscription status.
+3. Shared-mode staging (`DEPLOYMENT_MODE=shared`) + `npm run test:hosted` on that DB.
+
+Optional leftover (not the default queue): HomeHub retirement on `home.whobrey.me` per `deploy/CUTOVER.md`.
 
 ## Module enablement (default)
 

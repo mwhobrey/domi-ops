@@ -1,5 +1,7 @@
 # Dogfood test phases — operator checklist
 
+**Status:** Phases 0–5 passed on household dogfood. For public launch work (billing, legal, marketing), use [07_LAUNCH.md](./07_LAUNCH.md) instead of extending this checklist.
+
 **For:** Mike (and any agent resuming QA mid-session)  
 **Context:** Post–`WHO-88` platform commit — Better Auth, username kids, single-pass import, school role views.  
 **Companion docs:** [05_SCHOOL_QA.md](./05_SCHOOL_QA.md) (school detail matrix), [04_CURRENT_STATE.md](./04_CURRENT_STATE.md) (what ships), `docs/HOMEHUB_IMPORT.md` (cutover import).
