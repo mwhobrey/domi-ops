@@ -44,7 +44,7 @@
 - `deploy/HOSTED_OPS.md` — hosted monitoring, backups, incidents (WHO-180)
 - `docs/TROUBLESHOOTING.md` — self-host failure index (WHO-175)
 - `docs/marketing/PRICING_TIERS.md` — hosted SKU / price lock
-- `docs/marketing/LAUNCH_DECISIONS.md` — pre-launch sign-off (entity name still blank)
+- `docs/marketing/LAUNCH_DECISIONS.md` — pre-launch sign-off (entity: DBA Domi Ops, sole proprietor)
 
 ## Repo facts (grounded)
 

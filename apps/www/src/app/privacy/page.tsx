@@ -1,22 +1,22 @@
 import {
   LegalArticleHeader,
   MarketingShell,
+  PrivacyPolicyContent,
   resolveMarketingUrls,
-  TermsOfServiceContent,
 } from "@domi-ops/marketing-ui";
 
 export const metadata = {
-  title: "Terms of Service — Domi Ops",
+  title: "Privacy Policy — Domi Ops",
 };
 
-export default function TermsPage() {
+export default function PrivacyPage() {
   const urls = resolveMarketingUrls();
 
   return (
     <MarketingShell urls={urls}>
       <article className="mx-auto max-w-2xl px-4 py-12 sm:px-6">
-        <LegalArticleHeader title="Terms of Service" />
-        <TermsOfServiceContent privacyHref="/privacy" />
+        <LegalArticleHeader title="Privacy Policy" />
+        <PrivacyPolicyContent termsHref="/terms" />
       </article>
     </MarketingShell>
   );

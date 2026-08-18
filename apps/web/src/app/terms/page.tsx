@@ -1,15 +1,15 @@
 import Link from "next/link";
-import { LegalArticleHeader, PrivacyPolicyContent } from "@domi-ops/marketing-ui";
+import { LegalArticleHeader, TermsOfServiceContent } from "@domi-ops/marketing-ui";
 
 export const metadata = {
-  title: "Privacy Policy — Domi Ops",
+  title: "Terms of Service — Domi Ops",
 };
 
-export default function PrivacyPage() {
+export default function TermsPage() {
   return (
     <main className="mx-auto max-w-2xl px-6 py-12">
-      <LegalArticleHeader title="Privacy Policy" />
-      <PrivacyPolicyContent termsHref="/terms" />
+      <LegalArticleHeader title="Terms of Service" />
+      <TermsOfServiceContent privacyHref="/privacy" />
       <p className="mt-10 text-sm">
         <Link href="/login" className="text-[var(--color-accent)] underline hover:text-[var(--color-text)]">
           Back to sign in

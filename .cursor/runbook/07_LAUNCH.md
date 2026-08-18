@@ -24,28 +24,22 @@ Pricing locked: [PRICING_TIERS.md](../../docs/marketing/PRICING_TIERS.md) — $1
 
 ## Do not deploy marketing yet
 
-`apps/www` (landing + `/pricing`) is **code-complete, not deployed**. DNS cutover for `domi-ops.com` is not done — [DNS_CUTOVER.md](../../docs/marketing/DNS_CUTOVER.md).
+`apps/www` (landing, `/pricing`, `/privacy`, `/terms`) is **code-complete, not deployed**. DNS cutover for `domi-ops.com` is not done — [DNS_CUTOVER.md](../../docs/marketing/DNS_CUTOVER.md).
 
-**Blocker:** hosted-ready legal on **www** ([WHO-182](https://linear.app/mikewhob-whome/issue/WHO-182)):
-
-- Canonical pages: `apps/www` `/privacy` and `/terms` (today `/terms` is a placeholder; footer Privacy links to **app** `/privacy`, which is self-host operator copy).
-- Copy must cover Domi Ops as **cloud data controller**, Stripe, SMTP, S3, Google OAuth / Calendar / Drive, Web Push, **not HIPAA**, school **not a school of record**, and the self-host vs hosted split.
-- After copy exists, app `/privacy` may stay for Google OAuth or redirect to www.
-- Fill blank rows in [LAUNCH_DECISIONS.md](../../docs/marketing/LAUNCH_DECISIONS.md) first (legal entity name, demo subdomain, hosting vs dogfood VPS).
+Legal copy is in repo ([WHO-182](https://linear.app/mikewhob-whome/issue/WHO-182)): shared `@domi-ops/marketing-ui` content on www and app. Operator is DBA Domi Ops (sole proprietor). Contact `privacy@domi-ops.com` (mailbox not necessarily live). Not lawyer-reviewed.
 
 Checkout stays off until Stripe: `hostedCheckoutEnabled` in `apps/www/src/lib/pricing-display.ts`.
 
-Deploy recipe (after legal): `docker-compose.marketing.yml` + `deploy/Caddyfile.domi-ops.example`.
+Deploy recipe: `docker-compose.marketing.yml` + `deploy/Caddyfile.domi-ops.example`.
 
 ## Workstreams (order)
 
-Do not start the OSS public flip before hosted billing + legal + shared-mode staging.
+Do not start the OSS public flip before hosted billing + shared-mode staging.
 
 ```
-WHO-182 legal on www
-  → marketing deploy + DNS (www only; checkout still off)
 M5 billing (see below)
   → shared-mode staging + npm run test:hosted
+marketing deploy + DNS (www; checkout still off)
 WHO-174 public repo + GHCR
   → WHO-187 go/no-go (both tracks)
 ```
@@ -65,6 +59,7 @@ Hosted ops notes: [HOSTED_OPS.md](../../deploy/HOSTED_OPS.md). Leak matrix: [HOS
 - OSS bootstrap + stranger docs: WHO-176, WHO-175, [SETUP.md](../../docs/SETUP.md)
 - Security review for **self-host**: [SECURITY_REVIEW.md](../../docs/SECURITY_REVIEW.md) (hosted Stripe still N/A)
 - Marketing site + pricing UI in repo: WHO-134, WHO-181 (`apps/www`)
+- Legal pages: WHO-182 — shared Privacy/Terms on www + app (`packages/marketing-ui/src/legal.tsx`)
 
 ## Operator leftover (not the default queue)
 

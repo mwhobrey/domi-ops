@@ -9,7 +9,7 @@ One-page checklist before hosted launch and public pricing go live. Link: [ADR 0
 | 3 | Module bundle (all in base) vs à-la-carte add-ons? | **All modules in Starter ($12/mo).** No per-module SKUs at launch. Single “module extensions” add-on deferred — bundle wins on simplicity and perceived value. |
 | 4 | Demo subdomain `demo.domi-ops.com` confirmed? | |
 | 5 | Hosting: same VPS as dogfood or new infrastructure? | |
-| 6 | Legal entity name for Terms/Privacy (Domi Ops / LLC name?) | |
+| 6 | Legal entity name for Terms/Privacy (Domi Ops / LLC name?) | **DBA Domi Ops** — sole proprietor, no LLC. Operator draft (not lawyer-reviewed). Contact: `privacy@domi-ops.com` (mailbox to create). |
 | 7 | GitHub public URL at launch (`mwhobrey/domi-ops`) | |
 | 8 | Community: GitHub Issues only vs Discord/other? | |
 | 9 | Neon vs DigitalOcean Postgres for Family tier (WHO-177)? | |

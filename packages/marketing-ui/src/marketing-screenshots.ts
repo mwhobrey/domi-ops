@@ -67,7 +67,6 @@ export function marketingScreenshotPath(
 
 export type MarketingUrls = {
   appLogin: string;
-  appPrivacy: string;
   demo?: string;
   github: string;
   setupDocs: string;
@@ -75,7 +74,6 @@ export type MarketingUrls = {
 
 export const DEFAULT_MARKETING_URLS: MarketingUrls = {
   appLogin: "https://app.domi-ops.com/login",
-  appPrivacy: "https://app.domi-ops.com/privacy",
   demo: "https://demo.domi-ops.com",
   github: "https://github.com/mwhobrey/domi-ops",
   setupDocs: "https://github.com/mwhobrey/domi-ops/blob/master/docs/SETUP.md",
@@ -87,7 +85,6 @@ export function resolveMarketingUrls(): MarketingUrls {
   const demoBase = process.env.NEXT_PUBLIC_DEMO_URL?.replace(/\/$/, "") ?? "https://demo.domi-ops.com";
   return {
     appLogin: `${appBase}/login`,
-    appPrivacy: `${appBase}/privacy`,
     demo: demoBase,
     github: process.env.NEXT_PUBLIC_GITHUB_URL ?? DEFAULT_MARKETING_URLS.github,
     setupDocs: process.env.NEXT_PUBLIC_SETUP_DOCS_URL ?? DEFAULT_MARKETING_URLS.setupDocs,

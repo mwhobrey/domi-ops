@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@domi-ops/marketing-ui": "*",
     "@tiptap/extension-link": "^3.26.0",
     "@tiptap/markdown": "^3.26.0",
     "@tiptap/pm": "^3.26.0",

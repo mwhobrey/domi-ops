@@ -46,12 +46,12 @@ export function MarketingShell({
                 Try demo
               </AnchorButton>
             )}
-            <a href={urls.appPrivacy} className="min-h-11 inline-flex items-center hover:text-[var(--color-text)]">
+            <Link href="/privacy" className="min-h-11 inline-flex items-center hover:text-[var(--color-text)]">
               Privacy
-            </a>
-            <a href="/terms" className="min-h-11 inline-flex items-center hover:text-[var(--color-text)]">
+            </Link>
+            <Link href="/terms" className="min-h-11 inline-flex items-center hover:text-[var(--color-text)]">
               Terms
-            </a>
+            </Link>
             <a
               href={urls.github}
               target="_blank"

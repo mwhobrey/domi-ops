@@ -10,3 +10,10 @@ export {
   type MarketingUrls,
 } from "./marketing-screenshots";
 export { ThemeAwareScreenshot } from "./ThemeAwareScreenshot";
+export {
+  LEGAL_CONTACT_EMAIL,
+  LEGAL_LAST_UPDATED,
+  LegalArticleHeader,
+  PrivacyPolicyContent,
+  TermsOfServiceContent,
+} from "./legal";

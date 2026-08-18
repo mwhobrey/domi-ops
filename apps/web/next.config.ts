@@ -32,6 +32,7 @@ const publicAppUrl = process.env.PUBLIC_APP_URL ?? "http://localhost:3000";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  transpilePackages: ["@domi-ops/marketing-ui"],
   /** Suppress Next dev cross-origin warnings when browsing via 127.0.0.1 before redirect. */
   allowedDevOrigins: ["127.0.0.1", "[::1]"],
   env: {

@@ -114,7 +114,14 @@ export default async function LoginPage({
             href="/privacy"
             className="underline underline-offset-2 hover:text-[var(--color-text)]"
           >
-            Privacy policy
+            Privacy
+          </Link>
+          {" · "}
+          <Link
+            href="/terms"
+            className="underline underline-offset-2 hover:text-[var(--color-text)]"
+          >
+            Terms
           </Link>
         </p>
       </div>
