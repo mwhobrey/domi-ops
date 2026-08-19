@@ -32,9 +32,16 @@ HOSTED_TEST_DATABASE_URL=postgresql://domi_ops:domi_ops@localhost:5432/domi_ops 
 3. PATCH settings with module above entitlement ceiling → `400 invalid_modules`.
 4. Authenticated user without household membership on hosted → `500 tenant_context_required`.
 
-## CI (future)
+## CI
 
-Run `npm run test:hosted` in GitHub Actions with a service Postgres container, migrations, and seed — gated on `HOSTED_TEST_DATABASE_URL` in workflow env.
+GitHub Actions job `test-hosted` in `.github/workflows/ci.yml`:
+
+1. Postgres 16 service container (`domi_ops` / `domi_ops` / `domi_ops`)
+2. `npm run db:migrate`
+3. `npm run db:seed-hosted-qa`
+4. `npm run test:hosted` with `HOSTED_TEST_DATABASE_URL` set
+
+Runs on push/PR to `master`/`main` alongside the main CI build job.
 
 ## Security review linkage
 
