@@ -64,11 +64,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Build packages
+        run: npm run build
+
       - name: Migrate database
-        run: npm run db:migrate
+        run: npm run migrate:run -w @domi-ops/db
 
       - name: Seed hosted QA households
-        run: npm run db:seed-hosted-qa
+        run: npm run seed:hosted-qa -w @domi-ops/db
 
       - name: Hosted tenant isolation tests
         run: npm run test:hosted
