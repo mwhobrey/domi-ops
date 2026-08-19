@@ -17,6 +17,7 @@ type HouseholdSettings = {
   timezone: string;
   modulesEnabled: string[];
   availableModules: string[];
+  modulesEntitled?: string[] | null;
   drivePermissions?: DriveRolePermissions;
   drivePermissionDefaults?: DriveRolePermissions;
   driveStorage?: DriveStorageInfo | null;
@@ -72,6 +73,14 @@ export function HouseholdSettingsEditor({ initial }: { initial: HouseholdSetting
     : ([...HOUSEHOLD_TIMEZONE_OPTIONS, timezone] as const);
 
   const toggleableModules = initial.availableModules.filter((m) => m !== "core");
+
+  // Modules known to the client but not in the entitlement ceiling (hosted only)
+  const lockedModules =
+    initial.modulesEntitled !== undefined && initial.modulesEntitled !== null
+      ? Object.keys(MODULE_META).filter(
+          (m) => m !== "core" && !initial.availableModules.includes(m),
+        )
+      : [];
 
   function toggleModule(module: string, checked: boolean) {
     setModulesEnabled((prev) => {
@@ -162,7 +171,35 @@ export function HouseholdSettingsEditor({ initial }: { initial: HouseholdSetting
                 </li>
               );
             })}
-            {toggleableModules.length === 0 ? (
+            {lockedModules.map((module) => {
+              const meta = MODULE_META[module] ?? { label: module, description: "" };
+              return (
+                <li key={module} className="opacity-50">
+                  <Checkbox
+                    id={`module-locked-${module}`}
+                    label={
+                      <span>
+                        <span className="inline-flex items-center gap-2 font-medium">
+                          {meta.label}
+                          <span className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface-subtle)] px-2 py-0.5 text-xs font-normal text-[var(--color-text-muted)]">
+                            Not in your plan
+                          </span>
+                        </span>
+                        {meta.description ? (
+                          <span className="mt-0.5 block text-xs text-[var(--color-text-muted)]">
+                            {meta.description}
+                          </span>
+                        ) : null}
+                      </span>
+                    }
+                    checked={false}
+                    disabled
+                    onChange={() => undefined}
+                  />
+                </li>
+              );
+            })}
+            {toggleableModules.length === 0 && lockedModules.length === 0 ? (
               <li className="text-sm text-[var(--color-text-muted)]">
                 No optional modules are available on this server.
               </li>

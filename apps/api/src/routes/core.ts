@@ -30,6 +30,7 @@ import {
   homeStatus,
   households,
   householdMembers,
+  householdSubscriptions,
   noticeReads,
   noteShares,
   notes,
@@ -2297,6 +2298,8 @@ export function coreRoutes(db: Database, env: Env) {
       drivePermissionsJson?: string | null;
       storageQuotaBytes?: number | null;
       storageUsedBytes?: number;
+      subscriptionStatus?: "trialing" | "active" | "past_due" | "canceled" | null;
+      trialEndsAt?: Date | null;
     },
     modulesEntitled: string[] | null,
   ) {
@@ -2319,6 +2322,8 @@ export function coreRoutes(db: Database, env: Env) {
             }
           : null,
       drivePublicSharesEnabled: env.DRIVE_PUBLIC_SHARES_ENABLED,
+      subscriptionStatus: row.subscriptionStatus ?? null,
+      trialEndsAt: row.trialEndsAt?.toISOString() ?? null,
     };
   }
 
@@ -2345,12 +2350,18 @@ export function coreRoutes(db: Database, env: Env) {
         drivePermissionsJson: households.drivePermissionsJson,
         storageQuotaBytes: households.storageQuotaBytes,
         storageUsedBytes: households.storageUsedBytes,
+        modulesEntitled: householdSubscriptions.modulesEntitled,
+        subscriptionStatus: householdSubscriptions.status,
+        trialEndsAt: householdSubscriptions.trialEndsAt,
       })
       .from(households)
+      .leftJoin(householdSubscriptions, eq(householdSubscriptions.householdId, households.id))
       .where(eq(households.id, auth.householdId))
       .limit(1);
     if (!row) return c.json({ error: "not_found" }, 404);
-    const { modulesEntitled } = await getHouseholdModuleContext(db, auth.householdId);
+    const modulesEntitled = row.modulesEntitled
+      ? (JSON.parse(row.modulesEntitled) as string[])
+      : null;
     return c.json(serializeHouseholdSettings(row, modulesEntitled));
   });
 

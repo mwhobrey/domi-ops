@@ -138,8 +138,8 @@
 |------|----------|--------|
 | Recurring (advanced) | DAILY/WEEKLY/MONTHLY materialize + HomeHub `recurring_reminder` import; partial RRULE subset | Full RRULE edge cases + exotic recurrence rules |
 | Hosted multi-tenant | WHO-195–198, WHO-178 shipped | RLS + tenant context + entitlements + hosted compose/seed + leak tests (`npm run test:hosted`); Stripe provisioning still M5 |
-| Hosted billing (M5) | `POST /api/billing/webhook` implemented (WHO-185/199); `hostedCheckoutEnabled: false` | Stripe keys not yet in prod env; checkout still off; owner invite (WHO-184) + status gating (WHO-186) pending |
-| Subscription status | `household_subscriptions.status` unused in `getHouseholdModuleContext` | `past_due` / `canceled` would not lock the app — WHO-186 |
+| Hosted billing (M5) | `POST /api/billing/webhook` implemented (WHO-185/199); `hostedCheckoutEnabled: false` | Stripe keys not yet in prod env; checkout still off; hosted setup wizard (WHO-184) + subscription plan gating UI (WHO-186) shipped |
+| Subscription status | `household_subscriptions.status` surfaced via `/api/core/household/settings` | `past_due` / `canceled` messaging is UI-only; module entitlements are still driven by `modules_entitled` ceiling — WHO-186 |
 | Legal (WHO-182) | Operator draft on www + app (`packages/marketing-ui` legal content) | Not lawyer-reviewed; `privacy@domi-ops.com` mailbox TBD |
 | Marketing deploy | `apps/www` not on `domi-ops.com` | Apex still undeployed (legal copy no longer the blocker) |
 | `test:hosted` CI | Documented as future in `HOSTED_TENANT_TESTS.md` | Leak matrix is local-only |
@@ -152,7 +152,7 @@
 Launch platform — full order in [07_LAUNCH.md](./07_LAUNCH.md):
 
 1. ~~M5 billing: WHO-185 SKUs + WHO-199 webhook~~ **Done** — Stripe env in config, `POST /api/billing/webhook`, `stripe_events` idempotency (migration `0054`). Paste real Stripe Price IDs into env before deploy.
-2. WHO-184 hosted setup wizard (post-payment owner invite + household config) + WHO-186 subscription status gating.
+2. ~~WHO-184 hosted setup wizard (post-payment owner invite + household config) + WHO-186 subscription status gating~~ **Done** — hosted `/setup?session_id=...` validates Stripe checkout and provisions the owner; settings show subscription status + lock module toggles at your entitled ceiling.
 3. Shared-mode staging (`DEPLOYMENT_MODE=shared`) + `npm run test:hosted` on that DB.
 3. Marketing DNS cutover after you are ready to put `domi-ops.com` live (`deploy/Caddyfile.domi-ops.example`).
 
