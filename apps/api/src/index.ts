@@ -20,6 +20,7 @@ import { drivePublicRoutes } from "./routes/drive-public.js";
 import { googleDocsAuthRoutes } from "./routes/google-docs-auth.js";
 import { weeklyReportRoutes } from "./routes/weekly-reports.js";
 import { reportRoutes } from "./routes/reports.js";
+import { billingRoutes } from "./routes/billing.js";
 import { setupRoutes } from "./routes/setup.js";
 import { ensureS3ReadyOnce } from "./lib/s3.js";
 import {
@@ -116,6 +117,7 @@ app.route("/s", drivePublicRoutes(db, env));
 app.route("/api/school", schoolRoutes(db, env));
 app.route("/api/school/upload", schoolUploadRoutes(db, env));
 app.route("/api/health", householdHealthRoutes(db, env));
+app.route("/api/billing", billingRoutes(db, env));
 
 app.get("/api/modules", (c) =>
   c.json({

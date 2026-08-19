@@ -379,6 +379,13 @@
       "when": 1780495027000,
       "tag": "0053_personal_expense_budgets",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1780495028000,
+      "tag": "0054_stripe_events",
+      "breakpoints": true
     }
   ]
 }

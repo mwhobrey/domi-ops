@@ -132,6 +132,16 @@ export const envSchema = z
       .transform((v) => v === "true" || v === "1"),
     /** One-time greenfield owner bootstrap (min 16 chars). See /setup and bootstrap:owner CLI. */
     SETUP_TOKEN: z.string().min(16).optional(),
+    /** Stripe secret key (sk_live_… or sk_test_…). Required on hosted in production. */
+    STRIPE_SECRET_KEY: z.string().optional(),
+    /** Stripe webhook signing secret (whsec_…). Required on hosted in production. */
+    STRIPE_WEBHOOK_SECRET: z.string().optional(),
+    /** Stripe publishable key — exposed to browser via NEXT_PUBLIC_. */
+    NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().optional(),
+    /** Stripe Price id for Starter monthly ($12/mo). */
+    STRIPE_PRICE_STARTER_MONTHLY: z.string().optional(),
+    /** Stripe Price id for Starter annual ($120/yr). */
+    STRIPE_PRICE_STARTER_ANNUAL: z.string().optional(),
   })
   .superRefine((data, ctx) => {
     if (data.NODE_ENV === "production") {
@@ -154,6 +164,22 @@ export const envSchema = z
           code: z.ZodIssueCode.custom,
           message: "AUTH_REQUIRED cannot be disabled in production",
           path: ["AUTH_REQUIRED"],
+        });
+      }
+    }
+    if (data.NODE_ENV === "production" && data.DEPLOYMENT_MODE === "shared") {
+      if (!data.STRIPE_SECRET_KEY) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "STRIPE_SECRET_KEY is required in production hosted (DEPLOYMENT_MODE=shared)",
+          path: ["STRIPE_SECRET_KEY"],
+        });
+      }
+      if (!data.STRIPE_WEBHOOK_SECRET) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "STRIPE_WEBHOOK_SECRET is required in production hosted (DEPLOYMENT_MODE=shared)",
+          path: ["STRIPE_WEBHOOK_SECRET"],
         });
       }
     }
@@ -329,4 +355,8 @@ export {
 
 export function isSmtpConfigured(env: Env): boolean {
   return Boolean(env.SMTP_HOST && env.SMTP_FROM);
+}
+
+export function isStripeConfigured(env: Pick<Env, "STRIPE_SECRET_KEY" | "STRIPE_WEBHOOK_SECRET">): boolean {
+  return Boolean(env.STRIPE_SECRET_KEY && env.STRIPE_WEBHOOK_SECRET);
 }

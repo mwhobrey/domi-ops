@@ -138,8 +138,8 @@
 |------|----------|--------|
 | Recurring (advanced) | DAILY/WEEKLY/MONTHLY materialize + HomeHub `recurring_reminder` import; partial RRULE subset | Full RRULE edge cases + exotic recurrence rules |
 | Hosted multi-tenant | WHO-195–198, WHO-178 shipped | RLS + tenant context + entitlements + hosted compose/seed + leak tests (`npm run test:hosted`); Stripe provisioning still M5 |
-| Hosted billing (M5) | No `/api/billing/webhook`; `hostedCheckoutEnabled: false` | Cannot provision paying households; see [07_LAUNCH.md](./07_LAUNCH.md) |
-| Subscription status | `household_subscriptions.status` unused in `getHouseholdModuleContext` | `past_due` / `canceled` would not lock the app |
+| Hosted billing (M5) | `POST /api/billing/webhook` implemented (WHO-185/199); `hostedCheckoutEnabled: false` | Stripe keys not yet in prod env; checkout still off; owner invite (WHO-184) + status gating (WHO-186) pending |
+| Subscription status | `household_subscriptions.status` unused in `getHouseholdModuleContext` | `past_due` / `canceled` would not lock the app — WHO-186 |
 | Legal (WHO-182) | Operator draft on www + app (`packages/marketing-ui` legal content) | Not lawyer-reviewed; `privacy@domi-ops.com` mailbox TBD |
 | Marketing deploy | `apps/www` not on `domi-ops.com` | Apex still undeployed (legal copy no longer the blocker) |
 | `test:hosted` CI | Documented as future in `HOSTED_TENANT_TESTS.md` | Leak matrix is local-only |
@@ -151,8 +151,9 @@
 
 Launch platform — full order in [07_LAUNCH.md](./07_LAUNCH.md):
 
-1. M5 billing: WHO-185 SKUs → WHO-199/179 webhook provision → WHO-184 hosted wizard → WHO-186 quota + subscription status.
-2. Shared-mode staging (`DEPLOYMENT_MODE=shared`) + `npm run test:hosted` on that DB.
+1. ~~M5 billing: WHO-185 SKUs + WHO-199 webhook~~ **Done** — Stripe env in config, `POST /api/billing/webhook`, `stripe_events` idempotency (migration `0054`). Paste real Stripe Price IDs into env before deploy.
+2. WHO-184 hosted setup wizard (post-payment owner invite + household config) + WHO-186 subscription status gating.
+3. Shared-mode staging (`DEPLOYMENT_MODE=shared`) + `npm run test:hosted` on that DB.
 3. Marketing DNS cutover after you are ready to put `domi-ops.com` live (`deploy/Caddyfile.domi-ops.example`).
 
 Optional leftover (not the default queue): HomeHub retirement on `home.whobrey.me` per `deploy/CUTOVER.md`.

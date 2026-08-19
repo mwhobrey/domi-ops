@@ -35,3 +35,10 @@ export const householdSubscriptions = pgTable(
   },
   (t) => [uniqueIndex("household_subscriptions_household_id").on(t.householdId)],
 );
+
+/** Stripe event idempotency — prevents double-processing on webhook retries */
+export const stripeEvents = pgTable("stripe_events", {
+  id: varchar("id", { length: 256 }).primaryKey(),
+  type: varchar("type", { length: 128 }).notNull(),
+  processedAt: timestamp("processed_at", { withTimezone: true }).notNull().defaultNow(),
+});
