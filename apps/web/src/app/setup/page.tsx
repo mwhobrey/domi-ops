@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { SetupForm } from "./SetupForm";
+import { HostedSetupForm } from "./HostedSetupForm";
 
 type SetupStatus = {
   needsSetup: boolean;
@@ -20,12 +21,57 @@ async function fetchSetupStatus(): Promise<SetupStatus | null> {
   }
 }
 
+type ValidateResult =
+  | { valid: true; householdId: string; email: string; householdName: string }
+  | { valid: false; reason: string };
+
+async function fetchValidate(sessionId: string): Promise<ValidateResult> {
+  try {
+    const apiBase = process.env.API_URL ?? "http://localhost:4000";
+    const res = await fetch(
+      `${apiBase}/api/billing/hosted-setup/validate?session_id=${encodeURIComponent(sessionId)}`,
+      { cache: "no-store" },
+    );
+    return (await res.json()) as ValidateResult;
+  } catch {
+    return { valid: false, reason: "error" };
+  }
+}
+
 export default async function SetupPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; session_id?: string }>;
 }) {
   const params = await searchParams;
+
+  // Hosted post-checkout path
+  if (params.session_id) {
+    const validated = await fetchValidate(params.session_id);
+
+    return (
+      <main className="relative flex min-h-dvh flex-col items-center justify-center px-4 py-8 pb-[max(2rem,env(safe-area-inset-bottom))] sm:px-6">
+        <div className="bg-page-gradient pointer-events-none absolute inset-0 opacity-40" aria-hidden />
+        <div className="relative w-full max-w-[26rem] space-y-6 rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-surface-elevated)] p-6 shadow-[var(--shadow-card)] sm:p-8">
+          <header className="space-y-1 text-center">
+            <p className="font-display text-3xl font-semibold tracking-tight">Domi Ops</p>
+            <h1 className="text-base font-medium text-[var(--color-text-muted)]">Set up your household</h1>
+          </header>
+
+          <HostedSetupForm sessionId={params.session_id} initialData={validated} />
+
+          <p className="text-center text-sm text-[var(--color-text-muted)]">
+            Already have an account?{" "}
+            <Link href="/login" className="font-medium text-[var(--color-accent)] underline-offset-2 hover:underline">
+              Sign in
+            </Link>
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  // Self-host setup path
   const status = await fetchSetupStatus();
 
   if (status && !status.needsSetup) {

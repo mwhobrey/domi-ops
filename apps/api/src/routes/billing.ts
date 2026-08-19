@@ -2,13 +2,17 @@ import { Hono } from "hono";
 import Stripe from "stripe";
 import { eq } from "drizzle-orm";
 import type { Env } from "@domi-ops/config";
-import { isHostedDeployment, isStripeConfigured, parseHouseholdModulesJson } from "@domi-ops/config";
+import { isHostedDeployment, isStripeConfigured } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
 import {
+  baAccounts,
   households,
+  householdMembers,
   householdSubscriptions,
   stripeEvents,
+  users,
 } from "@domi-ops/db";
+import { hashPassword } from "@domi-ops/auth";
 
 const ALL_MODULES = JSON.stringify(["core", "school", "calendar_sync", "drive", "health"]);
 const STARTER_QUOTA_BYTES = 26_843_545_600; // 25 GB
@@ -224,6 +228,153 @@ export function billingRoutes(db: Database, env: Env) {
     } catch (err) {
       console.error("[billing] webhook handler error:", err);
       return c.json({ error: "handler_error" }, 500);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Hosted Setup Wizard — validate Stripe session
+  // ---------------------------------------------------------------------------
+  app.get("/hosted-setup/validate", async (c) => {
+    const env = c.env as Env;
+    if (!isHostedDeployment(env) || !isStripeConfigured(env)) {
+      return c.json({ valid: false, reason: "not_hosted" });
+    }
+
+    const sessionId = c.req.query("session_id");
+    if (!sessionId) return c.json({ valid: false, reason: "missing_session_id" });
+
+    try {
+      const stripe = makeStripe(env.STRIPE_SECRET_KEY!);
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+      if (session.payment_status !== "paid" && session.payment_status !== "no_payment_required") {
+        return c.json({ valid: false, reason: "not_paid" });
+      }
+
+      const customerId = typeof session.customer === "string" ? session.customer : session.customer?.id;
+      if (!customerId) return c.json({ valid: false, reason: "no_customer" });
+
+      const [sub] = await db
+        .select({ householdId: householdSubscriptions.householdId })
+        .from(householdSubscriptions)
+        .where(eq(householdSubscriptions.stripeCustomerId, customerId))
+        .limit(1);
+
+      if (!sub) return c.json({ valid: false, reason: "no_household" });
+
+      const [household] = await db
+        .select({ name: households.name })
+        .from(households)
+        .where(eq(households.id, sub.householdId))
+        .limit(1);
+
+      return c.json({
+        valid: true,
+        householdId: sub.householdId,
+        email: session.customer_email,
+        householdName: household?.name ?? "",
+      });
+    } catch (err) {
+      console.error("[billing] hosted-setup/validate error:", err);
+      return c.json({ valid: false, reason: "error" });
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Hosted Setup Wizard — complete account creation
+  // ---------------------------------------------------------------------------
+  app.post("/hosted-setup/complete", async (c) => {
+    const env = c.env as Env;
+    if (!isHostedDeployment(env) || !isStripeConfigured(env)) {
+      return c.json({ ok: false, error: "not_hosted" }, 400);
+    }
+
+    let body: { session_id?: string; password?: string; householdName?: string; timezone?: string };
+    try {
+      body = (await c.req.json()) as typeof body;
+    } catch {
+      return c.json({ ok: false, error: "invalid_json" }, 400);
+    }
+
+    const { session_id, password, householdName, timezone } = body;
+    if (!session_id || !password || !householdName) {
+      return c.json({ ok: false, error: "missing_fields" }, 400);
+    }
+
+    try {
+      const stripe = makeStripe(env.STRIPE_SECRET_KEY!);
+      const session = await stripe.checkout.sessions.retrieve(session_id);
+
+      if (session.payment_status !== "paid" && session.payment_status !== "no_payment_required") {
+        return c.json({ ok: false, error: "not_paid" }, 400);
+      }
+
+      const customerId = typeof session.customer === "string" ? session.customer : session.customer?.id;
+      if (!customerId) return c.json({ ok: false, error: "no_customer" }, 400);
+
+      const email = (session.customer_email ?? "").trim().toLowerCase();
+      if (!email) return c.json({ ok: false, error: "no_email" }, 400);
+
+      const [sub] = await db
+        .select({ householdId: householdSubscriptions.householdId })
+        .from(householdSubscriptions)
+        .where(eq(householdSubscriptions.stripeCustomerId, customerId))
+        .limit(1);
+
+      if (!sub) return c.json({ ok: false, error: "no_household" }, 400);
+
+      const { householdId } = sub;
+
+      // Idempotency: if user already exists and is a member of this household, return ok
+      const [existingUser] = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.email, email))
+        .limit(1);
+
+      if (existingUser) {
+        const [existingMember] = await db
+          .select({ id: householdMembers.id })
+          .from(householdMembers)
+          .where(eq(householdMembers.userId, existingUser.id))
+          .limit(1);
+        if (existingMember) return c.json({ ok: true });
+        return c.json({ ok: false, error: "email_taken" }, 400);
+      }
+
+      const displayName = (email.split("@")[0] || "Owner").slice(0, 128);
+      const passwordHash = await hashPassword(password);
+
+      const [createdUser] = await db
+        .insert(users)
+        .values({ email, displayName, emailVerified: true })
+        .returning({ id: users.id });
+
+      await db.insert(baAccounts).values({
+        userId: createdUser.id,
+        providerId: "credential",
+        accountId: email,
+        password: passwordHash,
+      });
+
+      await db.insert(householdMembers).values({
+        householdId,
+        userId: createdUser.id,
+        role: "owner",
+      });
+
+      await db
+        .update(households)
+        .set({
+          name: householdName.trim().slice(0, 128),
+          timezone: timezone ?? "UTC",
+        })
+        .where(eq(households.id, householdId));
+
+      return c.json({ ok: true });
+    } catch (err) {
+      console.error("[billing] hosted-setup/complete error:", err);
+      return c.json({ ok: false, error: "server_error" }, 500);
     }
   });
 
