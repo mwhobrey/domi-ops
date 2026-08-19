@@ -51,7 +51,6 @@ jobs:
 
     env:
       DATABASE_URL: postgresql://domi_ops:domi_ops@localhost:5432/domi_ops
-      HOSTED_TEST_DATABASE_URL: postgresql://domi_ops:domi_ops@localhost:5432/domi_ops
 
     steps:
       - uses: actions/checkout@v4
@@ -73,5 +72,10 @@ jobs:
       - name: Seed hosted QA households
         run: npm run seed:hosted-qa -w @domi-ops/db
 
+      - name: Create RLS-enforced app role
+        run: npm run db:create-app-role
+
       - name: Hosted tenant isolation tests
         run: npm run test:hosted
+        env:
+          HOSTED_TEST_DATABASE_URL: postgresql://domi_ops_app:domi_ops_app@localhost:5432/domi_ops

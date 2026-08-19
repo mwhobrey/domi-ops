@@ -142,7 +142,7 @@
 | Subscription status | `household_subscriptions.status` surfaced via `/api/core/household/settings` | `past_due` / `canceled` messaging is UI-only; module entitlements are still driven by `modules_entitled` ceiling — WHO-186 |
 | Legal (WHO-182) | Operator draft on www + app (`packages/marketing-ui` legal content) | Not lawyer-reviewed; `privacy@domi-ops.com` mailbox TBD |
 | Marketing deploy | `apps/www` not on `domi-ops.com` | Apex still undeployed (legal copy no longer the blocker) |
-| `test:hosted` CI | `test-hosted` job in `.github/workflows/ci.yml` (WHO-249) | Postgres service + migrate + seed + tenant isolation Vitest on push/PR; local Docker still needed for manual API checks |
+| `test:hosted` CI | `test-hosted` job in `.github/workflows/ci.yml` (WHO-249) | Postgres service + migrate + seed + `domi_ops_app` role + tenant isolation Vitest on push/PR; local Docker still needed for manual API checks |
 | `/api/core/files` legacy route | superseded by Drive | Use `/api/core/drive/*`; import blobs still under `imports/` until WHO-120 |
 | **Production cutover on droplet** | **Live** at `https://whome.whobrey.me` (GHCR images, Caddy → `domi-ops-web`); HomeHub parallel on `home.whobrey.me` | Full import soak + HomeHub retirement still operator-run (not the default queue) |
 | Real `app.db` import counts | validated on **extended fixture** + **local dogfood `data/app.db`** | Droplet staging/prod import still operator-run |
