@@ -18,7 +18,7 @@ import {
   listHealthMedReminderRecipients,
   type HealthMedReminderRecipient,
 } from "./health-med-reminder-recipients.js";
-import { addDaysIso, todayIsoDateInTz, zonedLocalToUtc } from "./household-time.js";
+import { addDaysIso, formatTimeLabelInTz, todayIsoDateInTz, zonedLocalToUtc } from "./household-time.js";
 import { nextIntervalPending, parseIntervalSchedule } from "./med-interval-schedule.js";
 import {
   deliverUserNotificationToSubscriptions,
@@ -120,15 +120,57 @@ function datesAround(tz: string): string[] {
 function medReminderBody(input: {
   medName: string;
   minutesUntil: number;
+  scheduledAt: Date;
+  timeZone: string;
   isSubject: boolean;
   subjectLabel: string;
 }): string {
+  const whenLabel = (() => {
+    try {
+      return input.scheduledAt.toLocaleString("en-US", {
+        timeZone: input.timeZone,
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      });
+    } catch {
+      return `${input.scheduledAt.toISOString().slice(0, 10)} ${input.scheduledAt
+        .toISOString()
+        .slice(11, 16)}`;
+    }
+  })();
+
   const core =
-    input.minutesUntil <= 0
-      ? `Time to take ${input.medName}`
-      : `${input.medName} in ${input.minutesUntil} min`;
+    input.minutesUntil <= 0 ? `Time to take ${input.medName} at ${whenLabel}` : `${input.medName} at ${whenLabel}`;
+
+  // OS notification title has only the time; body has full “take at” context.
+  // (keeps iOS readable while still being explicit about the scheduled slot)
   if (input.isSubject) return core;
   return `${input.subjectLabel} — ${core}`;
+}
+
+export function buildMedReminderCopy(input: {
+  medName: string;
+  minutesUntil: number;
+  scheduledAt: Date;
+  timeZone: string;
+  isSubject: boolean;
+  subjectLabel: string;
+}): { title: string; body: string } {
+  const timeLabel = formatTimeLabelInTz(input.scheduledAt, input.timeZone);
+  return {
+    title: `Medication reminder • ${timeLabel}`,
+    body: medReminderBody({
+      medName: input.medName,
+      minutesUntil: input.minutesUntil,
+      scheduledAt: input.scheduledAt,
+      timeZone: input.timeZone,
+      isSubject: input.isSubject,
+      subjectLabel: input.subjectLabel,
+    }),
+  };
 }
 
 type DeliveryTarget = {
@@ -203,9 +245,11 @@ async function deliverOneMedReminder(
     0,
     Math.round((input.scheduledAt.getTime() - input.now.getTime()) / 60000),
   );
-  const body = medReminderBody({
+  const { title, body } = buildMedReminderCopy({
     medName: input.medName,
     minutesUntil,
+    scheduledAt: input.scheduledAt,
+    timeZone: input.target.timezone,
     isSubject: input.recipient.isSubject,
     subjectLabel: input.subjectLabel,
   });
@@ -225,7 +269,7 @@ async function deliverOneMedReminder(
     await deliverUserNotificationToSubscriptions(db, env, {
       userId: input.recipient.userId,
       householdId: input.householdId,
-      title: "Medication reminder",
+      title,
       body,
       url,
       tag: input.tag,
@@ -245,7 +289,7 @@ async function deliverOneMedReminder(
     await persistUserNotificationOnce(db, {
       userId: input.recipient.userId,
       householdId: input.householdId,
-      title: "Medication reminder",
+      title,
       body,
       url,
       tag: input.tag,
