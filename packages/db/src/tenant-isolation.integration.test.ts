@@ -17,17 +17,16 @@ maybeDescribe("tenant isolation (integration)", () => {
     if (!TEST_URL) return;
     db = createDb(TEST_URL);
 
-    const rows = await db
-      .select({ id: households.id, slug: households.slug })
-      .from(households)
-      .where(eq(households.slug, "alpha-hosted"));
-
-    const alpha = rows[0];
-    const [beta] = await db
-      .select({ id: households.id })
-      .from(households)
-      .where(eq(households.slug, "beta-hosted"))
-      .limit(1);
+    const [alpha] = await withWorkerScanContext(db, (tx) =>
+      tx
+        .select({ id: households.id, slug: households.slug })
+        .from(households)
+        .where(eq(households.slug, "alpha-hosted"))
+        .limit(1),
+    );
+    const [beta] = await withWorkerScanContext(db, (tx) =>
+      tx.select({ id: households.id }).from(households).where(eq(households.slug, "beta-hosted")).limit(1),
+    );
 
     if (!alpha || !beta) {
       throw new Error("Run npm run db:seed-hosted-qa before tenant isolation tests");
