@@ -52,6 +52,25 @@ PgBouncer in **transaction mode** for Starter prod (see ADR 003). Migrations run
 2. Run `npm run test:hosted` against prod read replica (read-only) or staging clone.
 3. File incident; rotate `SESSION_SECRET` if session forgery suspected.
 
+### Break-glass owner access (support/admin)
+
+Use only when a hosted household owner cannot complete checkout setup/login and normal recovery fails.
+
+1. Open incident ticket with household id, operator, reason, and expiration window.
+2. Verify requestor identity through existing support verification policy.
+3. Grant temporary access by running an operator-scoped recovery action (never by enabling global public signup):
+   - preferred: recover specific owner account credentials/session for that household
+   - fallback: create a temporary owner credential for the affected household only
+4. Confirm owner can sign in and recover normal credentials.
+5. Revoke temporary access immediately after recovery:
+   - expire temporary credential/session
+   - rotate any one-time token used
+6. Post-incident audit log must include:
+   - who executed access
+   - exact command/procedure used
+   - start/end timestamps
+   - verification and revocation evidence
+
 ## Secret rotation
 
 | Secret | Impact | Procedure |
