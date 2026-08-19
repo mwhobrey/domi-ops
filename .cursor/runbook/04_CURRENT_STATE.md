@@ -138,7 +138,7 @@
 |------|----------|--------|
 | Recurring (advanced) | DAILY/WEEKLY/MONTHLY materialize + HomeHub `recurring_reminder` import; partial RRULE subset | Full RRULE edge cases + exotic recurrence rules |
 | Hosted multi-tenant | WHO-195–198, WHO-178 shipped | RLS + tenant context + entitlements + hosted compose/seed + leak tests (`npm run test:hosted`); Stripe provisioning still M5 |
-| Hosted billing (M5) | `POST /api/billing/webhook` implemented (WHO-185/199); `hostedCheckoutEnabled: false` | Stripe keys not yet in prod env; checkout still off; hosted setup wizard (WHO-184) + subscription plan gating UI (WHO-186) shipped |
+| Hosted billing (M5) | `POST /api/billing/webhook` implemented (WHO-185/199); `hostedCheckoutEnabled: false` | Stripe keys not yet in prod env; checkout still off; hosted setup wizard (WHO-184) + subscription plan gating UI (WHO-186) shipped; hosted `/auth/sign-up/*` now hard-blocked in API regardless of `ALLOW_PUBLIC_SIGNUP` (WHO-248) |
 | Subscription status | `household_subscriptions.status` surfaced via `/api/core/household/settings` | `past_due` / `canceled` messaging is UI-only; module entitlements are still driven by `modules_entitled` ceiling — WHO-186 |
 | Legal (WHO-182) | Operator draft on www + app (`packages/marketing-ui` legal content) | Not lawyer-reviewed; `privacy@domi-ops.com` mailbox TBD |
 | Marketing deploy | `apps/www` not on `domi-ops.com` | Apex still undeployed (legal copy no longer the blocker) |

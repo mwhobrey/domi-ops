@@ -2,7 +2,7 @@ import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { createBetterAuth } from "@domi-ops/auth";
-import { loadEnv, isModuleEnabled } from "@domi-ops/config";
+import { loadEnv, isHostedDeployment, isModuleEnabled } from "@domi-ops/config";
 import { createDb, createScopedDb } from "@domi-ops/db";
 import { createAuthMiddleware, type AppVariables } from "./middleware/auth.js";
 import { createTenantMiddleware } from "./middleware/tenant.js";
@@ -63,6 +63,9 @@ app.on(["POST", "GET"], "/auth/*", async (c) => {
   if (path.includes("/sign-up")) {
     if (env.DEMO_MODE) {
       return c.json({ message: "Sign-up is disabled on the demo instance" }, 403);
+    }
+    if (isHostedDeployment(env)) {
+      return c.json({ message: "Public sign-up is disabled on hosted deployments" }, 403);
     }
     if (env.ALLOW_PUBLIC_SIGNUP) {
       return betterAuth.handler(c.req.raw);
