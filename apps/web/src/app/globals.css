@@ -31,6 +31,21 @@
   --header-height: calc(3.5rem + env(safe-area-inset-top, 0px));
   /* Page header + sticky calendar toolbar (compact filter row + nav; measured at runtime). */
   --calendar-chrome-height: 10rem;
+
+  /* Charts (apps/web/src/components/charts) — validated categorical palette, dataviz skill
+     reference instance. Fixed hue order, never cycled — see references/palette.md. Dark
+     values here (this block is the dark-first default); light override below. */
+  --chart-series-1: #3987e5; /* blue */
+  --chart-series-2: #d95926; /* orange */
+  --chart-series-3: #199e70; /* aqua */
+  --chart-series-4: #c98500; /* yellow */
+  --chart-series-5: #d55181; /* magenta */
+  --chart-series-6: #008300; /* green */
+  --chart-series-7: #9085e9; /* violet */
+  --chart-series-8: #e66767; /* red */
+  --chart-sequential: #3987e5;
+  --chart-grid: var(--color-border);
+  --chart-axis: var(--color-text-muted);
 }
 
 @utility text-label {
@@ -72,6 +87,16 @@ html {
     --shadow-card: 0 1px 3px rgb(15 23 42 / 0.08);
     --shadow-elevated: 0 8px 32px rgb(15 23 42 / 0.1);
     --ring-focus: #2563eb;
+
+    --chart-series-1: #2a78d6;
+    --chart-series-2: #eb6834;
+    --chart-series-3: #1baf7a;
+    --chart-series-4: #eda100;
+    --chart-series-5: #e87ba4;
+    --chart-series-6: #008300;
+    --chart-series-7: #4a3aa7;
+    --chart-series-8: #e34948;
+    --chart-sequential: #2a78d6;
   }
 
   dialog::backdrop {

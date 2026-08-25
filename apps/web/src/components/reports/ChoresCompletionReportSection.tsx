@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, apiClient } from "../../lib/client-api";
 import { ReportExportSheet } from "./ReportExportSheet";
 import { Alert, Button, Input, Spinner } from "../ui";
+import { LazyCategoryBarChart as CategoryBarChart } from "../charts/lazy";
 
 interface ChoreMemberReport {
   memberId: string;
@@ -153,6 +154,14 @@ export function ChoresCompletionReportSection({ driveEnabled = true }: { driveEn
               No completed chores in this date range.
             </p>
           ) : (
+            <>
+            <div className="print:hidden">
+              <CategoryBarChart
+                data={report.byMember.map((m) => ({ label: m.label, completions: m.totalCompletions }))}
+                series={[{ key: "completions", label: "Completions" }]}
+                height={Math.max(120, report.byMember.length * 36)}
+              />
+            </div>
             <div className="overflow-x-auto rounded-[var(--radius-lg)] border border-[var(--color-border)]">
               <table className="w-full min-w-[640px] text-left text-sm">
                 <thead className="border-b border-[var(--color-border)] bg-[var(--color-surface-subtle)]">
@@ -195,6 +204,7 @@ export function ChoresCompletionReportSection({ driveEnabled = true }: { driveEn
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </div>
       ) : null}

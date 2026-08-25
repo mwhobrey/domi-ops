@@ -1,16 +1,40 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ApiError, apiClient } from "../../lib/client-api";
 import type { ReportCatalogEntry, ReportKind, ReportModule } from "../../lib/reports";
 import { WeeklyReportPanel } from "../WeeklyReportPanel";
-import { ChoresCompletionReportSection } from "./ChoresCompletionReportSection";
-import { ExpenseMonthlyReportSection } from "./ExpenseMonthlyReportSection";
-import { HealthOverviewReportSection } from "./HealthOverviewReportSection";
-import { SchoolReportsSection } from "./SchoolReportsSection";
-import { ShoppingTripReportSection } from "./ShoppingTripReportSection";
 import { Alert, Card, CardBody, Select, Spinner } from "../ui";
+
+// Code-split per module — several of these pull in recharts (apps/web/src/components/charts),
+// which shouldn't be in every report tab's initial bundle just because one tab uses it.
+const loading = () => (
+  <div className="flex justify-center py-12">
+    <Spinner />
+  </div>
+);
+const ChoresCompletionReportSection = dynamic(
+  () => import("./ChoresCompletionReportSection").then((m) => m.ChoresCompletionReportSection),
+  { loading },
+);
+const ExpenseMonthlyReportSection = dynamic(
+  () => import("./ExpenseMonthlyReportSection").then((m) => m.ExpenseMonthlyReportSection),
+  { loading },
+);
+const HealthOverviewReportSection = dynamic(
+  () => import("./HealthOverviewReportSection").then((m) => m.HealthOverviewReportSection),
+  { loading },
+);
+const SchoolReportsSection = dynamic(
+  () => import("./SchoolReportsSection").then((m) => m.SchoolReportsSection),
+  { loading },
+);
+const ShoppingTripReportSection = dynamic(
+  () => import("./ShoppingTripReportSection").then((m) => m.ShoppingTripReportSection),
+  { loading },
+);
 
 function parseModule(value: string | null): ReportModule | null {
   if (

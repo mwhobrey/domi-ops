@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, apiClient } from "../../lib/client-api";
 import { ReportExportSheet } from "./ReportExportSheet";
 import { Alert, Badge, Button, EmptyState, Input, Spinner } from "../ui";
+import { LazyCategoryBarChart as CategoryBarChart, LazyTrendLineChart as TrendLineChart } from "../charts/lazy";
 
 interface ExpenseReportCategoryRow {
   category: string;
@@ -46,6 +47,12 @@ function formatMonthLabel(monthKey: string): string {
   const [year, month] = monthKey.split("-");
   const date = new Date(Number(year), Number(month) - 1, 1);
   return date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+}
+
+function formatMonthShort(monthKey: string): string {
+  const [year, month] = monthKey.split("-");
+  const date = new Date(Number(year), Number(month) - 1, 1);
+  return date.toLocaleDateString(undefined, { month: "short", year: "2-digit" });
 }
 
 function currentMonthValue(): string {
@@ -183,9 +190,34 @@ export function ExpenseMonthlyReportSection({
             <StatCard label="Expenses logged" value={report.expenseCount} />
           </div>
 
+          {report.monthlyTrend.length > 1 ? (
+            <section className="space-y-3 print:hidden">
+              <h2 className="text-sm font-semibold">Spending trend</h2>
+              <TrendLineChart
+                data={report.monthlyTrend.map((row) => ({
+                  month: formatMonthShort(row.month),
+                  total: row.total,
+                }))}
+                series={[{ key: "total", label: "Spend" }]}
+                xKey="month"
+                valueFormatter={(v) => formatMoney(Number(v))}
+                height={200}
+              />
+            </section>
+          ) : null}
+
           {report.byCategory.length > 0 ? (
             <section className="space-y-3">
               <h2 className="text-sm font-semibold">By category</h2>
+              <div className="print:hidden">
+                <CategoryBarChart
+                  data={report.byCategory.map((row) => ({ category: row.category, spend: row.spend }))}
+                  series={[{ key: "spend", label: "Spend" }]}
+                  xKey="category"
+                  valueFormatter={(v) => formatMoney(Number(v))}
+                  height={Math.max(120, report.byCategory.length * 36)}
+                />
+              </div>
               <ul className="space-y-4">
                 {report.byCategory.map((row) => (
                   <li

@@ -8,6 +8,7 @@ import type {
   HealthReportFocus,
 } from "../../lib/health-report-export";
 import { SectionHeader } from "../ui";
+import { LazyCategoryBarChart as CategoryBarChart, LazyTrendLineChart as TrendLineChart } from "../charts/lazy";
 
 function formatReportDate(iso: string): string {
   const [year, month, day] = iso.split("-").map(Number);
@@ -167,6 +168,13 @@ export function HealthOverviewReportBody({
           {report.eventsByType.length > 0 ? (
             <section className="space-y-2">
               <SectionHeader title="Events by type" />
+              <div className="print:hidden">
+                <CategoryBarChart
+                  data={report.eventsByType.map((row) => ({ label: row.label, count: row.count }))}
+                  series={[{ key: "count", label: "Events" }]}
+                  height={Math.max(120, report.eventsByType.length * 36)}
+                />
+              </div>
               <ReportTable
                 columns={["Type", "Count"]}
                 rows={report.eventsByType.map((row) => [row.label, row.count])}
@@ -180,6 +188,36 @@ export function HealthOverviewReportBody({
                 columns={["Member", "Count"]}
                 rows={report.eventsByMember.map((row) => [row.label, row.count])}
               />
+            </section>
+          ) : null}
+          {(report.vitalsTrend ?? []).length > 0 ? (
+            <section className="space-y-4">
+              <SectionHeader title="Vitals trend" />
+              {(report.vitalsTrend ?? []).map((trend) => (
+                <div key={trend.metric} className="space-y-2">
+                  <h3 className="text-sm font-medium text-[var(--color-text)]">
+                    {trend.metricLabel}
+                    <span className="ml-2 font-normal text-[var(--color-text-muted)]">
+                      ({trend.points.length} reading{trend.points.length === 1 ? "" : "s"})
+                    </span>
+                  </h3>
+                  <div className="print:hidden">
+                    <TrendLineChart
+                      data={trend.points.map((p) => ({ date: formatReportDate(p.date), value: p.value }))}
+                      series={[{ key: "value", label: trend.metricLabel }]}
+                      valueFormatter={(v) => `${v} ${trend.points[0]?.unit ?? ""}`.trim()}
+                      height={180}
+                    />
+                  </div>
+                  <ReportTable
+                    columns={["Date", "Value"]}
+                    rows={trend.points.map((p) => [
+                      formatReportDate(p.date),
+                      `${p.value} ${p.unit}`,
+                    ])}
+                  />
+                </div>
+              ))}
             </section>
           ) : null}
           {eventGroups.length > 0 ? (
