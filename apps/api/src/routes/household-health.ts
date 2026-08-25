@@ -44,14 +44,17 @@ import {
   encryptHealthTextFields,
   enrichHealthEvents,
   enrichHealthMedications,
+  loadVitalsReadingsForEvents,
   normalizeMedSchedule,
   parseMedSchedule,
+  replaceVitalsReadings,
   resolveEventInstant,
   serializeHealthEvent,
   serializeHealthLog,
   serializeHealthMedication,
+  type SerializedVitalsReading,
 } from "../lib/health-serialize.js";
-import { buildHealthReports } from "../lib/health-reports.js";
+import { buildHealthReports, VITALS_METRICS } from "../lib/health-reports.js";
 import { decryptHealthFieldOrPassthrough, encryptHealthField } from "../lib/health-crypto.js";
 
 function encryptionErrorResponse(c: { json: (body: unknown, status?: number) => Response }, e: unknown) {
@@ -63,6 +66,32 @@ function encryptionErrorResponse(c: { json: (body: unknown, status?: number) => 
 
 function normalizeDurationKind(value: unknown): "single_day" | "ongoing" {
   return value === "ongoing" ? "ongoing" : "single_day";
+}
+
+type VitalsReadingInput = { metric: string; value: number; unit: string };
+
+/** Drop malformed entries rather than reject the whole request — mirrors reminderOffsets filtering. */
+function normalizeVitalsReadings(value: unknown): VitalsReadingInput[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const out: VitalsReadingInput[] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue;
+    const metric = (entry as { metric?: unknown }).metric;
+    const rawValue = (entry as { value?: unknown }).value;
+    const unit = (entry as { unit?: unknown }).unit;
+    if (
+      typeof metric !== "string" ||
+      !VITALS_METRICS.includes(metric) ||
+      typeof rawValue !== "number" ||
+      !Number.isFinite(rawValue) ||
+      typeof unit !== "string" ||
+      !unit.trim()
+    ) {
+      continue;
+    }
+    out.push({ metric, value: rawValue, unit: unit.trim() });
+  }
+  return out;
 }
 
 function normalizePushActionStatus(value: unknown): HealthMedPushActionStatus | null {
@@ -515,6 +544,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
       visibility?: string;
       sharedMemberIds?: string[];
       medicationId?: string;
+      readings?: unknown;
     }>();
 
     if (!body.memberId || !body.title?.trim()) {
@@ -581,12 +611,20 @@ export function householdHealthRoutes(db: Database, env: Env) {
         await replaceHealthEventShares(db, row.id, sharedMemberIds);
       }
 
+      let readings: SerializedVitalsReading[] | undefined;
+      const readingsInput = normalizeVitalsReadings(body.readings);
+      if (readingsInput) {
+        await replaceVitalsReadings(db, env, row.id, readingsInput);
+        readings = (await loadVitalsReadingsForEvents(db, env, [row.id])).get(row.id) ?? [];
+      }
+
       return c.json(
         {
           event: serializeHealthEvent(row, env, {
             sharedMemberIds,
             isOwnedByMe: true,
             canEdit: true,
+            readings,
           }, tz),
         },
         201,
@@ -629,6 +667,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
       visibility?: string;
       sharedMemberIds?: string[];
       memberId?: string;
+      readings?: unknown;
     }>();
 
     try {
@@ -696,6 +735,15 @@ export function householdHealthRoutes(db: Database, env: Env) {
         await replaceHealthEventShares(db, row.id, []);
       }
 
+      let readings: SerializedVitalsReading[] | undefined;
+      const readingsInput = normalizeVitalsReadings(body.readings);
+      if (readingsInput !== undefined) {
+        await replaceVitalsReadings(db, env, row.id, readingsInput);
+      }
+      if (row.type === "vitals") {
+        readings = (await loadVitalsReadingsForEvents(db, env, [row.id])).get(row.id) ?? [];
+      }
+
       const shareMap = await loadHealthEventShareMap(
         db,
         row.visibility === "private" ? [row.id] : [],
@@ -705,6 +753,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
           sharedMemberIds: shareMap.get(row.id),
           isOwnedByMe: row.createdByUserId === auth.userId,
           canEdit: true,
+          readings,
         }, tz),
       });
     } catch (e) {

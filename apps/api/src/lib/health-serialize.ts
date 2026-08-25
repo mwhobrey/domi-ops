@@ -5,7 +5,7 @@ import type {
   healthMedicationLogs,
   healthMedications,
 } from "@domi-ops/db";
-import { households } from "@domi-ops/db";
+import { households, healthVitalsReadings } from "@domi-ops/db";
 import {
   isMidnightInTz,
   localDateOfInstant,
@@ -13,7 +13,7 @@ import {
   normalizeIntervalSchedule,
   zonedLocalToUtc,
 } from "@domi-ops/calendar-sync";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import {
   decryptHealthFieldOrPassthrough,
   encryptHealthField,
@@ -30,6 +30,68 @@ import {
 type HealthEventRow = typeof healthEvents.$inferSelect;
 type HealthMedicationRow = typeof healthMedications.$inferSelect;
 type HealthLogRow = typeof healthMedicationLogs.$inferSelect;
+type HealthVitalsReadingRow = typeof healthVitalsReadings.$inferSelect;
+
+export type SerializedVitalsReading = {
+  id: string;
+  metric: string;
+  value: number | null;
+  unit: string;
+  createdAt: string;
+};
+
+export function serializeHealthVitalsReading(
+  row: HealthVitalsReadingRow,
+  env: Env,
+): SerializedVitalsReading {
+  const decrypted = decryptHealthFieldOrPassthrough(row.value, env);
+  const parsed = decrypted != null ? Number(decrypted) : null;
+  return {
+    id: row.id,
+    metric: row.metric,
+    value: parsed != null && Number.isFinite(parsed) ? parsed : null,
+    unit: row.unit,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+/** Batch-load and decrypt readings for a set of health_events ids, grouped by eventId. */
+export async function loadVitalsReadingsForEvents(
+  db: Database,
+  env: Env,
+  eventIds: string[],
+): Promise<Map<string, SerializedVitalsReading[]>> {
+  const map = new Map<string, SerializedVitalsReading[]>();
+  if (eventIds.length === 0) return map;
+  const rows = await db
+    .select()
+    .from(healthVitalsReadings)
+    .where(inArray(healthVitalsReadings.eventId, eventIds));
+  for (const row of rows) {
+    const list = map.get(row.eventId) ?? [];
+    list.push(serializeHealthVitalsReading(row, env));
+    map.set(row.eventId, list);
+  }
+  return map;
+}
+
+export async function replaceVitalsReadings(
+  db: Database,
+  env: Env,
+  eventId: string,
+  readings: Array<{ metric: string; value: number; unit: string }>,
+): Promise<void> {
+  await db.delete(healthVitalsReadings).where(eq(healthVitalsReadings.eventId, eventId));
+  if (readings.length === 0) return;
+  await db.insert(healthVitalsReadings).values(
+    readings.map((r) => ({
+      eventId,
+      metric: r.metric as typeof healthVitalsReadings.$inferInsert.metric,
+      value: encryptHealthField(String(r.value), env)!,
+      unit: r.unit,
+    })),
+  );
+}
 
 export function serializeHealthEvent(
   row: HealthEventRow,
@@ -39,6 +101,7 @@ export function serializeHealthEvent(
     isOwnedByMe?: boolean;
     sharedWithMe?: boolean;
     canEdit?: boolean;
+    readings?: SerializedVitalsReading[];
   },
   timeZone?: string,
 ) {
@@ -60,6 +123,7 @@ export function serializeHealthEvent(
     isOwnedByMe: extras?.isOwnedByMe,
     sharedWithMe: extras?.sharedWithMe,
     canEdit: extras?.canEdit,
+    readings: row.type === "vitals" ? (extras?.readings ?? []) : undefined,
     startDate: null as string | null,
     startTime: null as string | null,
     endDate: null as string | null,
@@ -169,6 +233,8 @@ export async function enrichHealthEvents(
   const privateIds = rows.filter((r) => r.visibility === "private").map((r) => r.id);
   const shareMap = await loadHealthEventShareMap(db, privateIds);
   const aclBySubject = await loadHealthAclBySubjectForGrantee(db, auth.householdId, auth.memberId);
+  const vitalsEventIds = rows.filter((r) => r.type === "vitals").map((r) => r.id);
+  const readingsMap = await loadVitalsReadingsForEvents(db, env, vitalsEventIds);
   return rows.map((row) => {
     const sharedMemberIds = shareMap.get(row.id) ?? [];
     const isOwnedByMe = row.createdByUserId === auth.userId;
@@ -188,6 +254,7 @@ export async function enrichHealthEvents(
       sharedMemberIds: isOwnedByMe ? sharedMemberIds : undefined,
       isOwnedByMe,
       sharedWithMe,
+      readings: readingsMap.get(row.id),
       canEdit,
     }, tz);
   });

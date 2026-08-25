@@ -21,6 +21,20 @@ export const healthEventTypeEnum = pgEnum("health_event_type", [
   "appointment",
   "symptom",
   "medication",
+  "vitals",
+  "other",
+]);
+
+export const healthVitalsMetricEnum = pgEnum("health_vitals_metric", [
+  "weight",
+  "height",
+  "blood_pressure_systolic",
+  "blood_pressure_diastolic",
+  "heart_rate",
+  "temperature",
+  "blood_oxygen",
+  "blood_glucose",
+  "respiratory_rate",
   "other",
 ]);
 
@@ -58,6 +72,24 @@ export const healthEvents = pgTable("health_events", {
   }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * One row per numeric reading on a `type: "vitals"` health_events row — a single vitals
+ * check-in (e.g. "Morning vitals") can log several (weight + BP systolic + BP diastolic +
+ * heart rate) as separate rows sharing one eventId. `value` is encrypted text (same
+ * house convention as title/notes/name/dosage — see health-crypto.ts), parsed back to a
+ * number after decryption for reports; `unit` is plain text, not PHI.
+ */
+export const healthVitalsReadings = pgTable("health_vitals_readings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  eventId: uuid("event_id")
+    .notNull()
+    .references(() => healthEvents.id, { onDelete: "cascade" }),
+  metric: healthVitalsMetricEnum("metric").notNull(),
+  value: text("value").notNull(),
+  unit: text("unit").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const healthEventShares = pgTable(

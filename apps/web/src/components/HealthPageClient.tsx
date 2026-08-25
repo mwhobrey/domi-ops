@@ -31,7 +31,27 @@ export type HealthEventType =
   | "appointment"
   | "symptom"
   | "medication"
+  | "vitals"
   | "other";
+
+export type VitalsMetric =
+  | "weight"
+  | "height"
+  | "blood_pressure_systolic"
+  | "blood_pressure_diastolic"
+  | "heart_rate"
+  | "temperature"
+  | "blood_oxygen"
+  | "blood_glucose"
+  | "respiratory_rate"
+  | "other";
+
+export interface VitalsReading {
+  id?: string;
+  metric: VitalsMetric;
+  value: number;
+  unit: string;
+}
 
 export interface HealthEvent {
   id: string;
@@ -52,6 +72,7 @@ export interface HealthEvent {
   isOwnedByMe?: boolean;
   sharedWithMe?: boolean;
   canEdit?: boolean;
+  readings?: VitalsReading[];
 }
 
 export interface HealthMedication {
@@ -147,8 +168,55 @@ const EVENT_TYPES: { value: HealthEventType; label: string }[] = [
   { value: "appointment", label: "Appointment" },
   { value: "symptom", label: "Symptom" },
   { value: "medication", label: "Medication" },
+  { value: "vitals", label: "Vitals" },
   { value: "other", label: "Other" },
 ];
+
+const VITALS_METRICS: { value: VitalsMetric; label: string; defaultUnit: string }[] = [
+  { value: "weight", label: "Weight", defaultUnit: "lb" },
+  { value: "height", label: "Height", defaultUnit: "in" },
+  { value: "blood_pressure_systolic", label: "Blood pressure (systolic)", defaultUnit: "mmHg" },
+  { value: "blood_pressure_diastolic", label: "Blood pressure (diastolic)", defaultUnit: "mmHg" },
+  { value: "heart_rate", label: "Heart rate", defaultUnit: "bpm" },
+  { value: "temperature", label: "Temperature", defaultUnit: "°F" },
+  { value: "blood_oxygen", label: "Blood oxygen", defaultUnit: "%" },
+  { value: "blood_glucose", label: "Blood glucose", defaultUnit: "mg/dL" },
+  { value: "respiratory_rate", label: "Respiratory rate", defaultUnit: "breaths/min" },
+  { value: "other", label: "Other", defaultUnit: "" },
+];
+
+function vitalsMetricLabel(metric: string): string {
+  return VITALS_METRICS.find((m) => m.value === metric)?.label ?? metric;
+}
+
+function formatReadingsSummary(readings: VitalsReading[] | undefined): string | null {
+  if (!readings || readings.length === 0) return null;
+  return readings.map((r) => `${vitalsMetricLabel(r.metric)}: ${r.value} ${r.unit}`).join(", ");
+}
+
+function defaultUnitFor(metric: VitalsMetric): string {
+  return VITALS_METRICS.find((m) => m.value === metric)?.defaultUnit ?? "";
+}
+
+let vitalsDraftKey = 0;
+function nextVitalsDraftKey(): string {
+  vitalsDraftKey += 1;
+  return `draft-${vitalsDraftKey}`;
+}
+
+type VitalsReadingDraft = { key: string; metric: VitalsMetric; value: string; unit: string };
+
+function readingsToDrafts(readings: VitalsReading[] | undefined): VitalsReadingDraft[] {
+  if (!readings || readings.length === 0) {
+    return [{ key: nextVitalsDraftKey(), metric: "weight", value: "", unit: defaultUnitFor("weight") }];
+  }
+  return readings.map((r) => ({
+    key: nextVitalsDraftKey(),
+    metric: r.metric,
+    value: String(r.value),
+    unit: r.unit,
+  }));
+}
 
 function memberLabel(members: NoteShareMember[], memberId: string): string {
   return members.find((m) => m.memberId === memberId)?.label ?? "Member";
@@ -686,6 +754,7 @@ export function HealthPageClient({
                   memberLabel(members, ev.memberId),
                   when,
                   ev.durationKind === "ongoing" && !ev.endedAt ? "Ongoing" : null,
+                  ev.type === "vitals" ? formatReadingsSummary(ev.readings) : null,
                 ]
                   .filter(Boolean)
                   .join(" · ")}
@@ -837,6 +906,9 @@ function HealthEventSheet({
   const [sharedMemberIds, setSharedMemberIds] = useState<string[]>(
     event?.sharedMemberIds ?? [],
   );
+  const [readingDrafts, setReadingDrafts] = useState<VitalsReadingDraft[]>(() =>
+    readingsToDrafts(event?.readings),
+  );
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -854,6 +926,7 @@ function HealthEventSheet({
     setHasEndTime(Boolean(event?.endTime));
     setDurationKind(event?.durationKind ?? "single_day");
     setVisibility(event?.visibility ?? "private");
+    setReadingDrafts(readingsToDrafts(event?.readings));
     setSharedMemberIds(event?.sharedMemberIds ?? []);
   }, [open, event, defaultMemberId, householdTimezone]);
 
@@ -861,6 +934,12 @@ function HealthEventSheet({
     if (readOnly || !title.trim()) return;
     setBusy(true);
     setErr(null);
+    const readings =
+      type === "vitals"
+        ? readingDrafts
+            .filter((d) => d.value.trim() && d.unit.trim() && Number.isFinite(Number(d.value)))
+            .map((d) => ({ metric: d.metric, value: Number(d.value), unit: d.unit.trim() }))
+        : undefined;
     const body = {
       memberId,
       type,
@@ -877,6 +956,7 @@ function HealthEventSheet({
       durationKind,
       visibility,
       sharedMemberIds: visibility === "private" ? sharedMemberIds : undefined,
+      readings,
     };
     try {
       if (event) {
@@ -928,6 +1008,88 @@ function HealthEventSheet({
           <span>Notes</span>
           <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
         </label>
+        {type === "vitals" ? (
+          <div className="space-y-2">
+            <span className="text-sm">Readings</span>
+            <div className="space-y-2">
+              {readingDrafts.map((draft) => (
+                <div key={draft.key} className="flex items-end gap-2">
+                  <label className="flex-1 space-y-1 text-xs">
+                    <span className="text-[var(--color-text-muted)]">Metric</span>
+                    <Select
+                      value={draft.metric}
+                      onChange={(e) => {
+                        const metric = e.target.value as VitalsMetric;
+                        setReadingDrafts((prev) =>
+                          prev.map((d) =>
+                            d.key === draft.key
+                              ? { ...d, metric, unit: d.unit.trim() ? d.unit : defaultUnitFor(metric) }
+                              : d,
+                          ),
+                        );
+                      }}
+                    >
+                      {VITALS_METRICS.map((m) => (
+                        <option key={m.value} value={m.value}>
+                          {m.label}
+                        </option>
+                      ))}
+                    </Select>
+                  </label>
+                  <label className="w-24 space-y-1 text-xs">
+                    <span className="text-[var(--color-text-muted)]">Value</span>
+                    <Input
+                      type="number"
+                      inputMode="decimal"
+                      value={draft.value}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setReadingDrafts((prev) =>
+                          prev.map((d) => (d.key === draft.key ? { ...d, value } : d)),
+                        );
+                      }}
+                    />
+                  </label>
+                  <label className="w-20 space-y-1 text-xs">
+                    <span className="text-[var(--color-text-muted)]">Unit</span>
+                    <Input
+                      value={draft.unit}
+                      onChange={(e) => {
+                        const unit = e.target.value;
+                        setReadingDrafts((prev) =>
+                          prev.map((d) => (d.key === draft.key ? { ...d, unit } : d)),
+                        );
+                      }}
+                    />
+                  </label>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() =>
+                      setReadingDrafts((prev) => prev.filter((d) => d.key !== draft.key))
+                    }
+                  >
+                    Remove
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() =>
+                setReadingDrafts((prev) => [
+                  ...prev,
+                  { key: nextVitalsDraftKey(), metric: "weight", value: "", unit: defaultUnitFor("weight") },
+                ])
+              }
+            >
+              Add reading
+            </Button>
+          </div>
+        ) : null}
         <label className="block space-y-1 text-sm">
           <span>Start date</span>
           <Input

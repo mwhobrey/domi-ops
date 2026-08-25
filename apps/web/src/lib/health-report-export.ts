@@ -69,6 +69,11 @@ export interface HealthReportExport {
   };
   eventsByType: { type: string; label: string; count: number }[];
   eventsByMember: { memberId: string; label: string; count: number }[];
+  vitalsTrend?: {
+    metric: string;
+    metricLabel: string;
+    points: { eventId: string; date: string; value: number; unit: string }[];
+  }[];
   medicationAdherence: {
     medicationId: string;
     name: string;
@@ -116,6 +121,7 @@ export const HEALTH_REPORT_EVENT_TYPES: { value: string; label: string }[] = [
   { value: "appointment", label: "Appointment" },
   { value: "symptom", label: "Symptom" },
   { value: "medication", label: "Medication" },
+  { value: "vitals", label: "Vitals" },
   { value: "other", label: "Other" },
 ];
 

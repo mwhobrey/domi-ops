@@ -24,7 +24,7 @@ import {
   healthMedicationReportsVisibleWhere,
 } from "./health-access.js";
 import { decryptHealthFieldOrPassthrough } from "./health-crypto.js";
-import { parseMedSchedule } from "./health-serialize.js";
+import { loadVitalsReadingsForEvents, parseMedSchedule } from "./health-serialize.js";
 
 export const HEALTH_EVENT_TYPE_LABELS: Record<string, string> = {
   sickness: "Sickness",
@@ -32,10 +32,26 @@ export const HEALTH_EVENT_TYPE_LABELS: Record<string, string> = {
   appointment: "Appointment",
   symptom: "Symptom",
   medication: "Medication",
+  vitals: "Vitals",
   other: "Other",
 };
 
 export const HEALTH_EVENT_TYPES = Object.keys(HEALTH_EVENT_TYPE_LABELS);
+
+export const VITALS_METRIC_LABELS: Record<string, string> = {
+  weight: "Weight",
+  height: "Height",
+  blood_pressure_systolic: "Blood pressure (systolic)",
+  blood_pressure_diastolic: "Blood pressure (diastolic)",
+  heart_rate: "Heart rate",
+  temperature: "Temperature",
+  blood_oxygen: "Blood oxygen",
+  blood_glucose: "Blood glucose",
+  respiratory_rate: "Respiratory rate",
+  other: "Other",
+};
+
+export const VITALS_METRICS = Object.keys(VITALS_METRIC_LABELS);
 
 export type HealthReportGroupBy = "date" | "eventType" | "none";
 export type HealthReportScheduleKind = "scheduled" | "prn" | "interval";
@@ -595,6 +611,37 @@ export async function buildHealthReports(
   }
   eventsInRange = applyHealthEventTypeFilter(eventsInRange, eventTypeFilter);
 
+  const vitalsEventsInRange = eventsInRange.filter((row) => row.type === "vitals");
+  const vitalsReadingsByEvent = await loadVitalsReadingsForEvents(
+    db,
+    env,
+    vitalsEventsInRange.map((row) => row.id),
+  );
+  const vitalsTrendBuckets = new Map<
+    string,
+    { metric: string; metricLabel: string; points: { eventId: string; date: string; value: number; unit: string }[] }
+  >();
+  for (const event of vitalsEventsInRange) {
+    const anchor = event.startedAt ?? event.createdAt;
+    const date = localDateOfInstant(anchor, timezone);
+    for (const reading of vitalsReadingsByEvent.get(event.id) ?? []) {
+      if (reading.value == null) continue;
+      const bucket = vitalsTrendBuckets.get(reading.metric) ?? {
+        metric: reading.metric,
+        metricLabel: VITALS_METRIC_LABELS[reading.metric] ?? reading.metric,
+        points: [],
+      };
+      bucket.points.push({ eventId: event.id, date, value: reading.value, unit: reading.unit });
+      vitalsTrendBuckets.set(reading.metric, bucket);
+    }
+  }
+  const vitalsTrend = [...vitalsTrendBuckets.values()]
+    .map((bucket) => ({
+      ...bucket,
+      points: bucket.points.sort((a, b) => a.date.localeCompare(b.date)),
+    }))
+    .sort((a, b) => a.metricLabel.localeCompare(b.metricLabel));
+
   const byType: Record<string, number> = {};
   const byMember: Record<string, number> = {};
   let ongoingCount = 0;
@@ -834,6 +881,7 @@ export async function buildHealthReports(
       prnMedications: medRows.filter((m) => m.enabled && m.scheduleKind === "prn").length,
       dosesLogged: logsInLocalRange.length,
     },
+    vitalsTrend,
     eventsByType: Object.entries(byType).map(([type, count]) => ({
       type,
       label: HEALTH_EVENT_TYPE_LABELS[type] ?? type,

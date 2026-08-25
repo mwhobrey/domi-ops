@@ -24,6 +24,7 @@ const sample = {
     prnMedications: 0,
     dosesLogged: 1,
   },
+  vitalsTrend: [],
   eventsByType: [{ type: "appointment", label: "Appointment", count: 1 }],
   eventsByMember: [{ memberId: "a", label: "Alex", count: 1 }],
   medicationAdherence: [
