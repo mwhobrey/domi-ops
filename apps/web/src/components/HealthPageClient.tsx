@@ -218,9 +218,22 @@ function nextVitalsDraftKey(): string {
 
 type VitalsReadingDraft = { key: string; metric: VitalsMetric; value: string; unit: string };
 
+/** Most-logged vitals, pre-filled empty so the common case is just typing numbers. */
+const DEFAULT_VITALS_METRICS: VitalsMetric[] = [
+  "blood_pressure_systolic",
+  "blood_pressure_diastolic",
+  "heart_rate",
+  "temperature",
+];
+
 function readingsToDrafts(readings: VitalsReading[] | undefined): VitalsReadingDraft[] {
   if (!readings || readings.length === 0) {
-    return [{ key: nextVitalsDraftKey(), metric: "weight", value: "", unit: defaultUnitFor("weight") }];
+    return DEFAULT_VITALS_METRICS.map((metric) => ({
+      key: nextVitalsDraftKey(),
+      metric,
+      value: "",
+      unit: defaultUnitFor(metric),
+    }));
   }
   return readings.map((r) => ({
     key: nextVitalsDraftKey(),
@@ -251,9 +264,7 @@ function VitalsReadingsEditor({
                   const metric = e.target.value as VitalsMetric;
                   onChange(
                     drafts.map((d) =>
-                      d.key === draft.key
-                        ? { ...d, metric, unit: d.unit.trim() ? d.unit : defaultUnitFor(metric) }
-                        : d,
+                      d.key === draft.key ? { ...d, metric, unit: defaultUnitFor(metric) } : d,
                     ),
                   );
                 }}
