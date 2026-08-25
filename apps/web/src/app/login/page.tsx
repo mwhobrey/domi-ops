@@ -7,7 +7,7 @@ import { LoginForm } from "./LoginForm";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; next?: string }>;
+  searchParams: Promise<{ error?: string; next?: string; hosted?: string }>;
 }) {
   const params = await searchParams;
   const nextPath = params.next?.startsWith("/") ? params.next : "/dashboard";
@@ -62,6 +62,15 @@ export default async function LoginPage({
           <p className="font-display text-3xl font-semibold tracking-tight">Domi Ops</p>
           <h1 className="text-base font-medium text-[var(--color-text-muted)]">Sign in</h1>
         </header>
+
+        {params.hosted === "1" && (
+          <p
+            className="rounded-[var(--radius-lg)] border border-[var(--color-accent)]/40 bg-[var(--color-accent-subtle)] px-3 py-2.5 text-sm leading-relaxed text-[var(--color-text)]"
+            role="status"
+          >
+            Your household is ready — sign in with the email and password you just set.
+          </p>
+        )}
 
         {params.error === "oauth" && (
           <p

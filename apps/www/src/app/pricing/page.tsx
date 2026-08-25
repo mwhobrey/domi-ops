@@ -2,17 +2,57 @@ import {
   AnchorButton,
   LinkButton,
   MarketingShell,
+  SubmitButton,
   resolveMarketingUrls,
 } from "@domi-ops/marketing-ui";
-import { PRICING_DISPLAY } from "@/lib/pricing-display";
+import { getPricingDisplay, type PricingTier } from "@/lib/pricing-display";
 
 export const metadata = {
   title: "Pricing — Domi Ops",
   description: "Self-host free or choose a Domi Ops cloud plan.",
 };
 
+function TierCta({
+  cta,
+  checkoutUrl,
+  size = "sm",
+}: {
+  cta: PricingTier["cta"];
+  checkoutUrl: string;
+  size?: "sm" | "md";
+}) {
+  if (cta.kind === "disabled") {
+    return <span className="text-sm text-[var(--color-text-muted)]">{cta.label}</span>;
+  }
+  if (cta.kind === "checkout") {
+    return (
+      <div className="flex flex-col items-start gap-2">
+        {cta.options.map((option) => (
+          <form key={option.plan} action={checkoutUrl} method="POST">
+            <input type="hidden" name="plan" value={option.plan} />
+            <SubmitButton size={size} variant={option.plan === "monthly" ? "primary" : "secondary"}>
+              {option.label}
+            </SubmitButton>
+          </form>
+        ))}
+      </div>
+    );
+  }
+  return cta.external ? (
+    <AnchorButton href={cta.href} variant="secondary" size={size} target="_blank" rel="noopener noreferrer">
+      {cta.label}
+    </AnchorButton>
+  ) : (
+    <LinkButton href={cta.href} size={size}>
+      {cta.label}
+    </LinkButton>
+  );
+}
+
 export default function PricingPage() {
   const urls = resolveMarketingUrls();
+  const pricing = getPricingDisplay();
+  const checkoutUrl = `${(process.env.NEXT_PUBLIC_APP_URL ?? "https://app.domi-ops.com").replace(/\/$/, "")}/api/billing/checkout`;
 
   return (
     <MarketingShell urls={urls}>
@@ -23,7 +63,7 @@ export default function PricingPage() {
             Self-host the full OSS bundle for free. Hosted plans include managed infrastructure and
             support for household operations at scale.
           </p>
-          {!PRICING_DISPLAY.hostedCheckoutEnabled && (
+          {!pricing.hostedCheckoutEnabled && (
             <p className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-elevated)] px-4 py-3 text-sm text-[var(--color-text-muted)]">
               Hosted checkout opens soon — $12/mo or $120/yr after a 14-day trial. See{" "}
               <code className="text-xs">docs/marketing/PRICING_TIERS.md</code> for Stripe setup.
@@ -57,7 +97,7 @@ export default function PricingPage() {
               </tr>
             </thead>
             <tbody>
-              {PRICING_DISPLAY.tiers.map((tier) => (
+              {pricing.tiers.map((tier) => (
                 <tr key={tier.id} className="border-b border-[var(--color-border)]">
                   <th scope="row" className="py-4 pr-4 align-top font-semibold">
                     {tier.name}
@@ -76,23 +116,7 @@ export default function PricingPage() {
                     {tier.isolation}
                   </td>
                   <td className="py-4 pl-4 align-top">
-                    {tier.cta.disabled ? (
-                      <span className="text-[var(--color-text-muted)]">{tier.cta.label}</span>
-                    ) : tier.cta.external ? (
-                      <AnchorButton
-                        href={tier.cta.href}
-                        variant="secondary"
-                        size="sm"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        {tier.cta.label}
-                      </AnchorButton>
-                    ) : (
-                      <LinkButton href={tier.cta.href} size="sm">
-                        {tier.cta.label}
-                      </LinkButton>
-                    )}
+                    <TierCta cta={tier.cta} checkoutUrl={checkoutUrl} />
                   </td>
                 </tr>
               ))}
@@ -101,7 +125,7 @@ export default function PricingPage() {
         </div>
 
         <div className="mt-10 grid gap-6 md:hidden">
-          {PRICING_DISPLAY.tiers.map((tier) => (
+          {pricing.tiers.map((tier) => (
             <article
               key={tier.id}
               className="rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-surface-elevated)] p-5"
@@ -124,20 +148,7 @@ export default function PricingPage() {
                 </div>
               </dl>
               <div className="mt-4">
-                {tier.cta.disabled ? (
-                  <span className="text-sm text-[var(--color-text-muted)]">{tier.cta.label}</span>
-                ) : tier.cta.external ? (
-                  <AnchorButton
-                    href={tier.cta.href}
-                    variant="secondary"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    {tier.cta.label}
-                  </AnchorButton>
-                ) : (
-                  <LinkButton href={tier.cta.href}>{tier.cta.label}</LinkButton>
-                )}
+                <TierCta cta={tier.cta} checkoutUrl={checkoutUrl} size="md" />
               </div>
             </article>
           ))}

@@ -44,6 +44,32 @@ export function LinkButton({
   );
 }
 
+export function SubmitButton({
+  variant = "primary",
+  size = "md",
+  className,
+  children,
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: Variant;
+  size?: Size;
+}) {
+  return (
+    <button
+      type="submit"
+      className={cn(
+        "inline-flex items-center justify-center gap-2 rounded-[var(--radius-lg)] font-medium transition",
+        variantClass[variant],
+        sizeClass[size],
+        className,
+      )}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+}
+
 export function AnchorButton({
   href,
   variant = "primary",

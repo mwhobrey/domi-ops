@@ -11,6 +11,7 @@ import {
   householdSubscriptions,
   stripeEvents,
   users,
+  withSystemContext,
 } from "@domi-ops/db";
 import { hashPassword } from "@domi-ops/auth";
 
@@ -67,6 +68,15 @@ async function upsertSubscription(
       },
     });
 }
+
+/**
+ * These three helpers all touch `households` / `household_subscriptions` before any
+ * `householdId` is known to the caller (looked up by Stripe customer id instead) — on hosted,
+ * that means RLS's normal `household_isolation` policy can never pass (there's no tenant
+ * context to set yet). Callers MUST run them inside `withSystemContext` (matches the
+ * `system_bootstrap` policy on all three tables — households/household_members from 0039,
+ * household_subscriptions from 0056). Self-host isn't RLS-enforced so this is a no-op there.
+ */
 
 /** Find or create a household for this Stripe customer. Returns householdId. */
 async function resolveOrProvisionHousehold(
@@ -132,102 +142,154 @@ export function billingRoutes(db: Database, env: Env) {
     }
 
     try {
-      switch (event.type) {
-        case "checkout.session.completed": {
-          const session = event.data.object as Stripe.Checkout.Session;
-          if (session.mode !== "subscription" || !session.subscription || !session.customer) break;
+      // See the comment above resolveOrProvisionHousehold — none of these rows have a
+      // household_id context yet, so every write here needs the system_bootstrap RLS policy.
+      await withSystemContext(db, async (tx) => {
+        switch (event.type) {
+          case "checkout.session.completed": {
+            const session = event.data.object as Stripe.Checkout.Session;
+            if (session.mode !== "subscription" || !session.subscription || !session.customer) break;
 
-          const customerId = typeof session.customer === "string" ? session.customer : session.customer.id;
-          const subscriptionId = typeof session.subscription === "string" ? session.subscription : session.subscription.id;
+            const customerId = typeof session.customer === "string" ? session.customer : session.customer.id;
+            const subscriptionId = typeof session.subscription === "string" ? session.subscription : session.subscription.id;
 
-          const sub = await stripe.subscriptions.retrieve(subscriptionId);
-          const trialEnd = sub.trial_end ? new Date(sub.trial_end * 1000) : null;
-          const status = sub.status === "trialing" ? "trialing" : sub.status === "active" ? "active" : "trialing";
+            const sub = await stripe.subscriptions.retrieve(subscriptionId);
+            const trialEnd = sub.trial_end ? new Date(sub.trial_end * 1000) : null;
+            const status = sub.status === "trialing" ? "trialing" : sub.status === "active" ? "active" : "trialing";
 
-          const householdId = await resolveOrProvisionHousehold(db, customerId, session.customer_email);
+            const householdId = await resolveOrProvisionHousehold(tx, customerId, session.customer_email);
 
-          await upsertSubscription(db, {
-            householdId,
-            stripeCustomerId: customerId,
-            stripeSubscriptionId: subscriptionId,
-            status,
-            trialEndsAt: trialEnd,
-          });
+            await upsertSubscription(tx, {
+              householdId,
+              stripeCustomerId: customerId,
+              stripeSubscriptionId: subscriptionId,
+              status,
+              trialEndsAt: trialEnd,
+            });
 
-          // Stamp the household storage quota and tier.
-          await db
-            .update(households)
-            .set({ tier: "hosted_starter", storageQuotaBytes: STARTER_QUOTA_BYTES, updatedAt: new Date() })
-            .where(eq(households.id, householdId));
+            // Stamp the household storage quota and tier.
+            await tx
+              .update(households)
+              .set({ tier: "hosted_starter", storageQuotaBytes: STARTER_QUOTA_BYTES, updatedAt: new Date() })
+              .where(eq(households.id, householdId));
 
-          break;
+            break;
+          }
+
+          case "customer.subscription.updated": {
+            const sub = event.data.object as Stripe.Subscription;
+            const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
+
+            const existing = await tx
+              .select({ householdId: householdSubscriptions.householdId })
+              .from(householdSubscriptions)
+              .where(eq(householdSubscriptions.stripeCustomerId, customerId));
+
+            if (existing.length === 0) break;
+
+            const stripeStatus = sub.status;
+            const mapped =
+              stripeStatus === "trialing" ? "trialing"
+              : stripeStatus === "active" ? "active"
+              : stripeStatus === "past_due" ? "past_due"
+              : "canceled";
+
+            await tx
+              .update(householdSubscriptions)
+              .set({
+                status: mapped,
+                trialEndsAt: sub.trial_end ? new Date(sub.trial_end * 1000) : null,
+                stripeSubscriptionId: sub.id,
+                updatedAt: new Date(),
+              })
+              .where(eq(householdSubscriptions.stripeCustomerId, customerId));
+
+            break;
+          }
+
+          case "customer.subscription.deleted": {
+            const sub = event.data.object as Stripe.Subscription;
+            const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
+
+            await tx
+              .update(householdSubscriptions)
+              .set({ status: "canceled", updatedAt: new Date() })
+              .where(eq(householdSubscriptions.stripeCustomerId, customerId));
+
+            break;
+          }
+
+          case "invoice.payment_failed": {
+            const invoice = event.data.object as Stripe.Invoice;
+            const customerId = typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id;
+            if (!customerId) break;
+
+            await tx
+              .update(householdSubscriptions)
+              .set({ status: "past_due", updatedAt: new Date() })
+              .where(eq(householdSubscriptions.stripeCustomerId, customerId));
+
+            break;
+          }
+
+          default:
+            break;
         }
-
-        case "customer.subscription.updated": {
-          const sub = event.data.object as Stripe.Subscription;
-          const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
-
-          const existing = await db
-            .select({ householdId: householdSubscriptions.householdId })
-            .from(householdSubscriptions)
-            .where(eq(householdSubscriptions.stripeCustomerId, customerId));
-
-          if (existing.length === 0) break;
-
-          const stripeStatus = sub.status;
-          const mapped =
-            stripeStatus === "trialing" ? "trialing"
-            : stripeStatus === "active" ? "active"
-            : stripeStatus === "past_due" ? "past_due"
-            : "canceled";
-
-          await db
-            .update(householdSubscriptions)
-            .set({
-              status: mapped,
-              trialEndsAt: sub.trial_end ? new Date(sub.trial_end * 1000) : null,
-              stripeSubscriptionId: sub.id,
-              updatedAt: new Date(),
-            })
-            .where(eq(householdSubscriptions.stripeCustomerId, customerId));
-
-          break;
-        }
-
-        case "customer.subscription.deleted": {
-          const sub = event.data.object as Stripe.Subscription;
-          const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
-
-          await db
-            .update(householdSubscriptions)
-            .set({ status: "canceled", updatedAt: new Date() })
-            .where(eq(householdSubscriptions.stripeCustomerId, customerId));
-
-          break;
-        }
-
-        case "invoice.payment_failed": {
-          const invoice = event.data.object as Stripe.Invoice;
-          const customerId = typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id;
-          if (!customerId) break;
-
-          await db
-            .update(householdSubscriptions)
-            .set({ status: "past_due", updatedAt: new Date() })
-            .where(eq(householdSubscriptions.stripeCustomerId, customerId));
-
-          break;
-        }
-
-        default:
-          break;
-      }
+      });
 
       await markProcessed(db, event.id, event.type);
       return c.json({ ok: true });
     } catch (err) {
       console.error("[billing] webhook handler error:", err);
       return c.json({ error: "handler_error" }, 500);
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Checkout — create a Stripe Checkout Session for Starter (from the marketing pricing page)
+  // ---------------------------------------------------------------------------
+  app.post("/checkout", async (c) => {
+    if (!isHostedDeployment(env) || !isStripeConfigured(env)) {
+      return c.json({ error: "not_hosted" }, 404);
+    }
+
+    let plan = "monthly";
+    try {
+      const body = await c.req.parseBody();
+      if (body.plan === "annual") plan = "annual";
+    } catch {
+      // No body / unparseable — default to monthly.
+    }
+
+    const priceId = plan === "annual" ? env.STRIPE_PRICE_STARTER_ANNUAL : env.STRIPE_PRICE_STARTER_MONTHLY;
+    if (!priceId) {
+      console.error(`[billing] checkout: no price configured for plan=${plan}`);
+      return c.json({ error: "price_not_configured" }, 500);
+    }
+
+    const appUrl = (env.PUBLIC_APP_URL ?? "https://app.domi-ops.com").replace(/\/$/, "");
+    const marketingUrl = (env.PUBLIC_MARKETING_URL ?? "https://domi-ops.com").replace(/\/$/, "");
+
+    try {
+      const stripe = makeStripe(env.STRIPE_SECRET_KEY!);
+      const session = await stripe.checkout.sessions.create({
+        mode: "subscription",
+        line_items: [{ price: priceId, quantity: 1 }],
+        subscription_data: { trial_period_days: 14 },
+        allow_promotion_codes: true,
+        success_url: `${appUrl}/setup?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${marketingUrl}/pricing`,
+      });
+
+      if (!session.url) {
+        console.error("[billing] checkout: Stripe session created with no URL");
+        return c.json({ error: "session_create_failed" }, 500);
+      }
+
+      return c.redirect(session.url, 303);
+    } catch (err) {
+      console.error("[billing] checkout error:", err);
+      return c.json({ error: "server_error" }, 500);
     }
   });
 
@@ -254,19 +316,26 @@ export function billingRoutes(db: Database, env: Env) {
       const customerId = typeof session.customer === "string" ? session.customer : session.customer?.id;
       if (!customerId) return c.json({ valid: false, reason: "no_customer" });
 
-      const [sub] = await db
-        .select({ householdId: householdSubscriptions.householdId })
-        .from(householdSubscriptions)
-        .where(eq(householdSubscriptions.stripeCustomerId, customerId))
-        .limit(1);
+      // No household_id known yet — same system_bootstrap requirement as the webhook.
+      const { sub, household } = await withSystemContext(db, async (tx) => {
+        const [sub] = await tx
+          .select({ householdId: householdSubscriptions.householdId })
+          .from(householdSubscriptions)
+          .where(eq(householdSubscriptions.stripeCustomerId, customerId))
+          .limit(1);
+
+        if (!sub) return { sub: null, household: null };
+
+        const [household] = await tx
+          .select({ name: households.name })
+          .from(households)
+          .where(eq(households.id, sub.householdId))
+          .limit(1);
+
+        return { sub, household };
+      });
 
       if (!sub) return c.json({ valid: false, reason: "no_household" });
-
-      const [household] = await db
-        .select({ name: households.name })
-        .from(households)
-        .where(eq(households.id, sub.householdId))
-        .limit(1);
 
       return c.json({
         valid: true,
@@ -315,63 +384,72 @@ export function billingRoutes(db: Database, env: Env) {
       const email = (session.customer_email ?? "").trim().toLowerCase();
       if (!email) return c.json({ ok: false, error: "no_email" }, 400);
 
-      const [sub] = await db
-        .select({ householdId: householdSubscriptions.householdId })
-        .from(householdSubscriptions)
-        .where(eq(householdSubscriptions.stripeCustomerId, customerId))
-        .limit(1);
-
-      if (!sub) return c.json({ ok: false, error: "no_household" }, 400);
-
-      const { householdId } = sub;
-
-      // Idempotency: if user already exists and is a member of this household, return ok
-      const [existingUser] = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(eq(users.email, email))
-        .limit(1);
-
-      if (existingUser) {
-        const [existingMember] = await db
-          .select({ id: householdMembers.id })
-          .from(householdMembers)
-          .where(eq(householdMembers.userId, existingUser.id))
-          .limit(1);
-        if (existingMember) return c.json({ ok: true });
-        return c.json({ ok: false, error: "email_taken" }, 400);
-      }
-
-      const displayName = (email.split("@")[0] || "Owner").slice(0, 128);
+      // hashPassword is CPU-bound and doesn't touch the DB — do it outside the transaction.
       const passwordHash = await hashPassword(password);
 
-      const [createdUser] = await db
-        .insert(users)
-        .values({ email, displayName, emailVerified: true })
-        .returning({ id: users.id });
+      // No household_id known yet until the first query resolves it — same system_bootstrap
+      // requirement as the webhook. users/ba_accounts aren't RLS-protected (auth tables,
+      // excluded per 0038's header comment) so they're fine inside this context too.
+      const result = await withSystemContext(db, async (tx) => {
+        const [sub] = await tx
+          .select({ householdId: householdSubscriptions.householdId })
+          .from(householdSubscriptions)
+          .where(eq(householdSubscriptions.stripeCustomerId, customerId))
+          .limit(1);
 
-      await db.insert(baAccounts).values({
-        userId: createdUser.id,
-        providerId: "credential",
-        accountId: email,
-        password: passwordHash,
+        if (!sub) return { ok: false as const, error: "no_household" as const };
+
+        const { householdId } = sub;
+
+        // Idempotency: if user already exists and is a member of this household, return ok
+        const [existingUser] = await tx
+          .select({ id: users.id })
+          .from(users)
+          .where(eq(users.email, email))
+          .limit(1);
+
+        if (existingUser) {
+          const [existingMember] = await tx
+            .select({ id: householdMembers.id })
+            .from(householdMembers)
+            .where(eq(householdMembers.userId, existingUser.id))
+            .limit(1);
+          if (existingMember) return { ok: true as const };
+          return { ok: false as const, error: "email_taken" as const };
+        }
+
+        const displayName = (email.split("@")[0] || "Owner").slice(0, 128);
+
+        const [createdUser] = await tx
+          .insert(users)
+          .values({ email, displayName, emailVerified: true })
+          .returning({ id: users.id });
+
+        await tx.insert(baAccounts).values({
+          userId: createdUser.id,
+          providerId: "credential",
+          accountId: email,
+          password: passwordHash,
+        });
+
+        await tx.insert(householdMembers).values({
+          householdId,
+          userId: createdUser.id,
+          role: "owner",
+        });
+
+        await tx
+          .update(households)
+          .set({
+            name: householdName.trim().slice(0, 128),
+            timezone: timezone ?? "UTC",
+          })
+          .where(eq(households.id, householdId));
+
+        return { ok: true as const };
       });
 
-      await db.insert(householdMembers).values({
-        householdId,
-        userId: createdUser.id,
-        role: "owner",
-      });
-
-      await db
-        .update(households)
-        .set({
-          name: householdName.trim().slice(0, 128),
-          timezone: timezone ?? "UTC",
-        })
-        .where(eq(households.id, householdId));
-
-      return c.json({ ok: true });
+      return c.json(result, result.ok ? 200 : 400);
     } catch (err) {
       console.error("[billing] hosted-setup/complete error:", err);
       return c.json({ ok: false, error: "server_error" }, 500);

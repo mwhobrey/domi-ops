@@ -1,5 +1,5 @@
 export { cn } from "./cn";
-export { AnchorButton, LinkButton } from "./LinkButton";
+export { AnchorButton, LinkButton, SubmitButton } from "./LinkButton";
 export { MarketingShell } from "./MarketingShell";
 export {
   DEFAULT_MARKETING_URLS,

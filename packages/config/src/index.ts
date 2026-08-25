@@ -25,6 +25,8 @@ export const envSchema = z
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
     PUBLIC_APP_URL: z.string().url(),
     API_URL: z.string().url(),
+    /** Marketing site origin — Stripe Checkout cancel_url target. Defaults to https://domi-ops.com. */
+    PUBLIC_MARKETING_URL: z.string().url().optional(),
     AUTH_REQUIRED: z
       .string()
       .optional()

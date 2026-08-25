@@ -19,14 +19,20 @@ export function MarketingShell({
             Domi Ops
           </Link>
           <nav className="flex items-center gap-2 sm:gap-3" aria-label="Site">
-            <AnchorButton
-              href={urls.setupDocs}
-              variant="ghost"
-              size="sm"
-              className="hidden sm:inline-flex"
-            >
-              Docs
-            </AnchorButton>
+            {urls.ossRepoPublic ? (
+              <AnchorButton
+                href={urls.setupDocs}
+                variant="ghost"
+                size="sm"
+                className="hidden sm:inline-flex"
+              >
+                Docs
+              </AnchorButton>
+            ) : (
+              <span className="hidden text-sm text-[var(--color-text-muted)] sm:inline-flex">
+                Docs (coming soon)
+              </span>
+            )}
             <LinkButton href="/pricing" variant="ghost" size="sm" className="hidden sm:inline-flex">
               Pricing
             </LinkButton>
@@ -52,22 +58,28 @@ export function MarketingShell({
             <Link href="/terms" className="min-h-11 inline-flex items-center hover:text-[var(--color-text)]">
               Terms
             </Link>
-            <a
-              href={urls.github}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="min-h-11 inline-flex items-center hover:text-[var(--color-text)]"
-            >
-              GitHub
-            </a>
-            <a
-              href={urls.setupDocs}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="min-h-11 inline-flex items-center hover:text-[var(--color-text)]"
-            >
-              Self-host guide
-            </a>
+            {urls.ossRepoPublic ? (
+              <>
+                <a
+                  href={urls.github}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="min-h-11 inline-flex items-center hover:text-[var(--color-text)]"
+                >
+                  GitHub
+                </a>
+                <a
+                  href={urls.setupDocs}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="min-h-11 inline-flex items-center hover:text-[var(--color-text)]"
+                >
+                  Self-host guide
+                </a>
+              </>
+            ) : (
+              <span className="min-h-11 inline-flex items-center">Self-host guide (coming soon)</span>
+            )}
           </div>
         </div>
       </footer>

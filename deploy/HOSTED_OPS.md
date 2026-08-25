@@ -91,6 +91,7 @@ Use only when a hosted household owner cannot complete checkout setup/login and 
 
 ## Related docs
 
+- [HOSTED_BETA_SETUP.md](./HOSTED_BETA_SETUP.md) — first stand-up of this stack (provisioning, not day-2 ops)
 - [HOSTED_RLS.md](../docs/HOSTED_RLS.md) — tenant context helpers
 - [HOSTED_TENANT_TESTS.md](../docs/HOSTED_TENANT_TESTS.md) — leak matrix
 - [ADR 003](../docs/adr/003-hosted-db-architecture.md) — architecture decisions

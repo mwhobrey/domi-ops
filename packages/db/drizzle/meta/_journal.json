@@ -386,6 +386,48 @@
       "when": 1780495028000,
       "tag": "0054_stripe_events",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1780495029000,
+      "tag": "0055_onboarding_checklist",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1780495030000,
+      "tag": "0056_billing_system_bootstrap",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1780495031000,
+      "tag": "0057_health_vitals_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1780495032000,
+      "tag": "0058_health_vitals_readings",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1780495033000,
+      "tag": "0059_telemetry_opt_in",
+      "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1780495034000,
+      "tag": "0060_telemetry_events",
+      "breakpoints": true
     }
   ]
 }

@@ -43,6 +43,9 @@ export const households = pgTable("households", {
   driveQuotaWarnSentAt: timestamp("drive_quota_warn_sent_at", { withTimezone: true }),
   /** Per-role Drive access: member/child/guest → none|read|write (owner/admin always write) */
   drivePermissionsJson: text("drive_permissions_json"),
+  /** Opt-in, anonymized product/technical metrics — off by default on every deployment mode.
+   * See packages/db/src/schema/telemetry.ts. Owner/admin toggles via Settings → Privacy. */
+  telemetryOptIn: boolean("telemetry_opt_in").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -127,6 +130,10 @@ export const householdMembers = pgTable(
     legacyExternalId: varchar("legacy_external_id", { length: 128 }),
     /** S3 object key under household-scoped `avatars/` prefix */
     avatarKey: varchar("avatar_key", { length: 512 }),
+    /** First-login checklist (OnboardingChecklist.tsx) — JSON string array of completed step keys. */
+    onboardingStepsDone: text("onboarding_steps_done").notNull().default("[]"),
+    /** Set when the member dismisses the first-login checklist. Null = still showing. */
+    onboardingDismissedAt: timestamp("onboarding_dismissed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("household_members_household_user").on(t.householdId, t.userId)],

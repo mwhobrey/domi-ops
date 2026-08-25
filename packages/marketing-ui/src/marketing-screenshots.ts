@@ -70,6 +70,8 @@ export type MarketingUrls = {
   demo?: string;
   github: string;
   setupDocs: string;
+  /** False until the repo is public (WHO-174 flip) — self-host links render as "Coming soon" instead of linking out. */
+  ossRepoPublic: boolean;
 };
 
 export const DEFAULT_MARKETING_URLS: MarketingUrls = {
@@ -77,6 +79,7 @@ export const DEFAULT_MARKETING_URLS: MarketingUrls = {
   demo: "https://demo.domi-ops.com",
   github: "https://github.com/mwhobrey/domi-ops",
   setupDocs: "https://github.com/mwhobrey/domi-ops/blob/master/docs/SETUP.md",
+  ossRepoPublic: false,
 };
 
 export function resolveMarketingUrls(): MarketingUrls {
@@ -88,5 +91,6 @@ export function resolveMarketingUrls(): MarketingUrls {
     demo: demoBase,
     github: process.env.NEXT_PUBLIC_GITHUB_URL ?? DEFAULT_MARKETING_URLS.github,
     setupDocs: process.env.NEXT_PUBLIC_SETUP_DOCS_URL ?? DEFAULT_MARKETING_URLS.setupDocs,
+    ossRepoPublic: process.env.NEXT_PUBLIC_OSS_REPO_PUBLIC === "true",
   };
 }

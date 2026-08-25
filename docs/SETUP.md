@@ -612,6 +612,7 @@ Paste into `.env`, then `set -a && source .env && set +a` before `docker compose
 | Doc | Contents |
 |-----|----------|
 | [SELF_HOST.md](./SELF_HOST.md) | Technical self-host reference |
+| [ONBOARDING_GUIDE.md](./ONBOARDING_GUIDE.md) | First-login walkthrough for the household owner and members |
 | [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) | Common failures index |
 | [SECURITY_REVIEW.md](./SECURITY_REVIEW.md) | Pre-launch security checklist |
 | [GOOGLE_OAUTH_SETUP.md](./GOOGLE_OAUTH_SETUP.md) | Google Cloud step-by-step |

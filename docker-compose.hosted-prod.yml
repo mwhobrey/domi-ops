@@ -1,0 +1,108 @@
+# Hosted Starter production — split infrastructure (ADR 003, "the right way").
+#
+# This droplet runs compute only: API + worker + web + Redis + (Caddy joins separately).
+# NOT here, both external/managed:
+#   - Postgres  → DigitalOcean Managed Postgres (RLS + daily backups + PITR)
+#   - Object storage → DigitalOcean Spaces (S3-compatible)
+#
+# Redis stays a local container — it is ephemeral (BullMQ queues, OAuth state only,
+# see deploy/HOSTED_OPS.md backups table), so it does not need managed durability.
+#
+# Full provisioning steps: deploy/HOSTED_BETA_SETUP.md
+#
+# Usage:
+#   cp .env.hosted-prod.example .env   # fill in DO Postgres / Spaces / Stripe live values
+#   docker compose -f docker-compose.hosted-prod.yml -f docker-compose.marketing.yml up -d --build
+#
+# One-time, against the DO Managed Postgres admin connection string (not this compose file):
+#   DATABASE_URL=<DO admin connection string> npm run db:create-app-role
+#
+# Caddy is NOT defined here — same pattern as docker-compose.prod.yml. Run Caddy separately
+# joined to the `domi_ops_proxy` network (see deploy/Caddyfile.domi-ops.example — drop the
+# `/s3/*` → minio proxy block, DO Spaces serves files directly over its own HTTPS endpoint).
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - domi_ops_hosted_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - domi_ops_internal
+
+  api:
+    image: ghcr.io/mwhobrey/domi-ops-api:${DOMI_OPS_IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DEPLOYMENT_MODE: shared
+      HOSTED_TIER: starter
+      DRIVE_QUOTA_ENFORCE: "true"
+      REDIS_URL: redis://redis:6379
+      # DATABASE_URL, S3_* come from .env — DO Managed Postgres + DO Spaces (external, not containers here).
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - domi_ops_internal
+      - proxy
+
+  worker:
+    image: ghcr.io/mwhobrey/domi-ops-worker:${DOMI_OPS_IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DEPLOYMENT_MODE: shared
+      HOSTED_TIER: starter
+      DRIVE_QUOTA_ENFORCE: "true"
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - domi_ops_internal
+
+  web:
+    container_name: domiops-web
+    image: ghcr.io/mwhobrey/domi-ops-web:${DOMI_OPS_IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        API_URL: http://api:4000
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      API_URL: http://api:4000
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-https://app.domi-ops.com}
+      ALLOW_PUBLIC_SIGNUP: "false"
+    depends_on:
+      api:
+        condition: service_started
+    networks:
+      - proxy
+
+networks:
+  domi_ops_internal:
+    driver: bridge
+  proxy:
+    name: domi_ops_proxy
+    driver: bridge
+
+volumes:
+  domi_ops_hosted_redis:

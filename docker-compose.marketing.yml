@@ -1,9 +1,12 @@
 # Marketing + demo overlay for Domi Ops public launch (WHO-183 / WHO-190).
 #
-# Usage with prod stack:
-#   docker compose -f docker-compose.prod.yml -f docker-compose.marketing.yml up -d --build
+# Usage — pick the base stack matching your deployment:
+#   Self-host (single-tenant, DB in this compose):
+#     docker compose -f docker-compose.prod.yml -f docker-compose.marketing.yml up -d --build
+#   Hosted Starter (split infra — DO Managed Postgres + Spaces, see deploy/HOSTED_BETA_SETUP.md):
+#     docker compose -f docker-compose.hosted-prod.yml -f docker-compose.marketing.yml up -d --build
 #
-# Demo profile (separate web container + nightly reset cron on host):
+# Demo profile (separate web container + nightly reset cron on host) — self-host base only:
 #   docker compose -f docker-compose.prod.yml -f docker-compose.marketing.yml \
 #     --profile demo up -d --build
 
@@ -19,6 +22,13 @@ services:
       NODE_ENV: production
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-https://app.domi-ops.com}
       NEXT_PUBLIC_DEMO_URL: ${NEXT_PUBLIC_DEMO_URL:-https://demo.domi-ops.com}
+      # Flip to "true" only after the WHO-174 public repo flip — self-host links render
+      # "Coming soon" until then (repo is private; see .cursor/runbook/07_LAUNCH.md).
+      NEXT_PUBLIC_OSS_REPO_PUBLIC: ${NEXT_PUBLIC_OSS_REPO_PUBLIC:-false}
+      # Flip to "true" once Stripe live keys + the hosted instance are both up
+      # (deploy/HOSTED_BETA_SETUP.md) — pricing page CTA creates a real Checkout Session
+      # via POST {NEXT_PUBLIC_APP_URL}/api/billing/checkout until then it shows "Coming soon".
+      NEXT_PUBLIC_HOSTED_CHECKOUT_ENABLED: ${NEXT_PUBLIC_HOSTED_CHECKOUT_ENABLED:-false}
     networks:
       - proxy
 
