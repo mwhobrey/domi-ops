@@ -1,6 +1,7 @@
 import { AccountSettingsNav } from "../../components/AccountSettingsNav";
 import { AppShell } from "../../components/AppShell";
 import { FeedbackCard } from "../../components/FeedbackCard";
+import { OnboardingReplayCard } from "../../components/OnboardingReplayCard";
 import { ProfileEditor } from "../../components/ProfileEditor";
 import { ScrollToTopFab } from "../../components/ScrollToTopFab";
 import { apiFetch } from "../../lib/api";
@@ -86,6 +87,7 @@ export default async function ProfilePage() {
               calendarIntegration={calendarIntegration ?? undefined}
               modulesEnabled={modulesEnabled}
             />
+            <OnboardingReplayCard />
             <FeedbackCard
               endpoint={process.env.TELEMETRY_ENDPOINT ?? "https://app.domi-ops.com/api/telemetry"}
               deploymentMode={process.env.DEPLOYMENT_MODE ?? "single"}
