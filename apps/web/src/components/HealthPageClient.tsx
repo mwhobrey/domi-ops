@@ -175,8 +175,8 @@ const EVENT_TYPES: { value: HealthEventType; label: string }[] = [
 const VITALS_METRICS: { value: VitalsMetric; label: string; defaultUnit: string }[] = [
   { value: "weight", label: "Weight", defaultUnit: "lb" },
   { value: "height", label: "Height", defaultUnit: "in" },
-  { value: "blood_pressure_systolic", label: "Blood pressure (systolic)", defaultUnit: "mmHg" },
-  { value: "blood_pressure_diastolic", label: "Blood pressure (diastolic)", defaultUnit: "mmHg" },
+  { value: "blood_pressure_systolic", label: "BP systolic", defaultUnit: "mmHg" },
+  { value: "blood_pressure_diastolic", label: "BP diastolic", defaultUnit: "mmHg" },
   { value: "heart_rate", label: "Heart rate", defaultUnit: "bpm" },
   { value: "temperature", label: "Temperature", defaultUnit: "°F" },
   { value: "blood_oxygen", label: "Blood oxygen", defaultUnit: "%" },
@@ -255,8 +255,11 @@ function VitalsReadingsEditor({
       <span className="text-sm">Readings</span>
       <div className="space-y-2">
         {drafts.map((draft) => (
-          <div key={draft.key} className="flex items-end gap-2">
-            <label className="flex-1 space-y-1 text-xs">
+          <div
+            key={draft.key}
+            className="space-y-2 rounded-[var(--radius-lg)] border border-[var(--color-border)] p-3"
+          >
+            <label className="block space-y-1 text-xs">
               <span className="text-[var(--color-text-muted)]">Metric</span>
               <Select
                 value={draft.metric}
@@ -276,36 +279,38 @@ function VitalsReadingsEditor({
                 ))}
               </Select>
             </label>
-            <label className="w-24 space-y-1 text-xs">
-              <span className="text-[var(--color-text-muted)]">Value</span>
-              <Input
-                type="number"
-                inputMode="decimal"
-                value={draft.value}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  onChange(drafts.map((d) => (d.key === draft.key ? { ...d, value } : d)));
-                }}
-              />
-            </label>
-            <label className="w-20 space-y-1 text-xs">
-              <span className="text-[var(--color-text-muted)]">Unit</span>
-              <Input
-                value={draft.unit}
-                onChange={(e) => {
-                  const unit = e.target.value;
-                  onChange(drafts.map((d) => (d.key === draft.key ? { ...d, unit } : d)));
-                }}
-              />
-            </label>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() => onChange(drafts.filter((d) => d.key !== draft.key))}
-            >
-              Remove
-            </Button>
+            <div className="flex items-end gap-2">
+              <label className="flex-1 space-y-1 text-xs">
+                <span className="text-[var(--color-text-muted)]">Value</span>
+                <Input
+                  type="number"
+                  inputMode="decimal"
+                  value={draft.value}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    onChange(drafts.map((d) => (d.key === draft.key ? { ...d, value } : d)));
+                  }}
+                />
+              </label>
+              <label className="w-20 space-y-1 text-xs">
+                <span className="text-[var(--color-text-muted)]">Unit</span>
+                <Input
+                  value={draft.unit}
+                  onChange={(e) => {
+                    const unit = e.target.value;
+                    onChange(drafts.map((d) => (d.key === draft.key ? { ...d, unit } : d)));
+                  }}
+                />
+              </label>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => onChange(drafts.filter((d) => d.key !== draft.key))}
+              >
+                Remove
+              </Button>
+            </div>
           </div>
         ))}
       </div>

@@ -41,8 +41,8 @@ export const HEALTH_EVENT_TYPES = Object.keys(HEALTH_EVENT_TYPE_LABELS);
 export const VITALS_METRIC_LABELS: Record<string, string> = {
   weight: "Weight",
   height: "Height",
-  blood_pressure_systolic: "Blood pressure (systolic)",
-  blood_pressure_diastolic: "Blood pressure (diastolic)",
+  blood_pressure_systolic: "BP systolic",
+  blood_pressure_diastolic: "BP diastolic",
   heart_rate: "Heart rate",
   temperature: "Temperature",
   blood_oxygen: "Blood oxygen",
