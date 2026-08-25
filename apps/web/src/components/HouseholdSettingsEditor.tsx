@@ -22,6 +22,7 @@ type HouseholdSettings = {
   drivePermissionDefaults?: DriveRolePermissions;
   driveStorage?: DriveStorageInfo | null;
   drivePublicSharesEnabled?: boolean;
+  telemetryOptIn?: boolean;
 };
 
 const DRIVE_ROLE_LABELS: Record<"member" | "child" | "guest", string> = {
@@ -62,6 +63,7 @@ export function HouseholdSettingsEditor({ initial }: { initial: HouseholdSetting
   const [drivePermissions, setDrivePermissions] = useState<DriveRolePermissions>(
     initial.drivePermissions ?? initial.drivePermissionDefaults ?? {},
   );
+  const [telemetryOptIn, setTelemetryOptIn] = useState(initial.telemetryOptIn ?? false);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [variant, setVariant] = useState<"success" | "error" | null>(null);
@@ -247,6 +249,36 @@ export function HouseholdSettingsEditor({ initial }: { initial: HouseholdSetting
           </div>
         ) : null}
 
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <p className="text-sm font-medium">Privacy</p>
+            <p className="text-xs text-[var(--color-text-muted)]">
+              Off by default — no data leaves this household unless you turn this on.
+            </p>
+          </div>
+          <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] p-3">
+            <Checkbox
+              id="telemetry-opt-in"
+              label={
+                <span>
+                  <span className="font-medium">Help improve Domi Ops</span>
+                  <span className="mt-0.5 block text-xs text-[var(--color-text-muted)]">
+                    Sends anonymized technical and usage metrics (page load speed, errors,
+                    which features get used) — never note/health/expense content, never linked
+                    back to your household or account, never sold. Read more in the{" "}
+                    <a href="/privacy" className="underline">
+                      Privacy Policy
+                    </a>
+                    .
+                  </span>
+                </span>
+              }
+              checked={telemetryOptIn}
+              onChange={(e) => setTelemetryOptIn(e.target.checked)}
+            />
+          </div>
+        </div>
+
         <Button
           loading={loading}
           onClick={async () => {
@@ -263,6 +295,7 @@ export function HouseholdSettingsEditor({ initial }: { initial: HouseholdSetting
                 timezone: timezone.trim(),
                 modulesEnabled,
                 drivePermissions,
+                telemetryOptIn,
               });
               setName(res.household.name);
               setSlug(res.household.slug ?? "");
@@ -271,6 +304,7 @@ export function HouseholdSettingsEditor({ initial }: { initial: HouseholdSetting
               if (res.household.drivePermissions) {
                 setDrivePermissions(res.household.drivePermissions);
               }
+              setTelemetryOptIn(res.household.telemetryOptIn ?? false);
               setMsg("Household settings saved");
               setVariant("success");
             } catch (err) {

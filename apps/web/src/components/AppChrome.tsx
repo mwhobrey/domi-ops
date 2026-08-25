@@ -63,13 +63,21 @@ function NavLink({
   );
 }
 
+export type ShellTelemetry = {
+  enabled: boolean;
+  endpoint: string;
+  deploymentMode: string;
+};
+
 export function AppChrome({
   user,
   modulesEnabled,
+  telemetry,
   children,
 }: {
   user: ShellUser | null;
   modulesEnabled?: string[];
+  telemetry?: ShellTelemetry;
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -80,6 +88,15 @@ export function AppChrome({
   const userRef = useRef<HTMLDivElement>(null);
   const userTriggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!telemetry?.enabled) return;
+    // Lazy-import so telemetry.ts (and its web-vitals dependency) never lands in anyone's
+    // bundle unless their household actually opted in — same lesson as the chart chunks.
+    void import("../lib/telemetry").then(({ initTelemetry }) =>
+      initTelemetry({ endpoint: telemetry.endpoint, deploymentMode: telemetry.deploymentMode }),
+    );
+  }, [telemetry?.enabled, telemetry?.endpoint, telemetry?.deploymentMode]);
 
   const closeUserMenu = useCallback(() => setUserOpen(false), []);
   const closeModulesDrawer = useCallback(() => setModulesOpen(false), []);

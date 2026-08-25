@@ -27,6 +27,7 @@ export default async function SettingsPage() {
     modulesEntitled: null as string[] | null,
     subscriptionStatus: null as "trialing" | "active" | "past_due" | "canceled" | null,
     trialEndsAt: null as string | null,
+    telemetryOptIn: false,
   };
   let integrations: HouseholdIntegrationsStatus | null = null;
   let loadError: string | null = null;

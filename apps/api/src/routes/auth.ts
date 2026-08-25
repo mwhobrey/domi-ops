@@ -3,7 +3,7 @@ import { resolveAuthContext, type WhomeBetterAuth } from "@domi-ops/auth";
 import { filterActiveHouseholdModules } from "@domi-ops/config";
 import type { Env } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
-import { householdMembers } from "@domi-ops/db";
+import { households, householdMembers } from "@domi-ops/db";
 import { eq } from "drizzle-orm";
 import { memberAvatarUrl } from "../lib/avatar-url.js";
 import { getHouseholdModuleContext } from "../lib/household-entitlements.js";
@@ -30,12 +30,19 @@ export function whomeSessionRoutes(db: Database, env: Env, auth: WhomeBetterAuth
       .where(eq(householdMembers.id, authCtx.memberId))
       .limit(1);
 
+    const [householdRow] = await db
+      .select({ telemetryOptIn: households.telemetryOptIn })
+      .from(households)
+      .where(eq(households.id, authCtx.householdId))
+      .limit(1);
+
     const { modules, modulesEntitled } = await getHouseholdModuleContext(db, authCtx.householdId);
 
     return c.json({
       authenticated: true,
       modulesEnabled: filterActiveHouseholdModules(env, modules, modulesEntitled),
       modulesEntitled,
+      telemetryOptIn: householdRow?.telemetryOptIn ?? false,
       user: {
         id: authCtx.userId,
         email: authCtx.email,

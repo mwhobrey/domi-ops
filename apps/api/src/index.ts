@@ -21,6 +21,8 @@ import { googleDocsAuthRoutes } from "./routes/google-docs-auth.js";
 import { weeklyReportRoutes } from "./routes/weekly-reports.js";
 import { reportRoutes } from "./routes/reports.js";
 import { billingRoutes } from "./routes/billing.js";
+import { onboardingRoutes } from "./routes/onboarding.js";
+import { telemetryRoutes } from "./routes/telemetry.js";
 import { setupRoutes } from "./routes/setup.js";
 import { ensureS3ReadyOnce } from "./lib/s3.js";
 import {
@@ -36,6 +38,16 @@ const db = createScopedDb(baseDb);
 const betterAuth = createBetterAuth(baseDb, env);
 
 const app = new Hono<{ Variables: AppVariables }>();
+
+// Telemetry is the one endpoint meant to be called cross-origin from arbitrary self-host
+// domains (opt-in metrics phoning home to the central collector) — no cookies/credentials
+// involved, so a wide-open origin here doesn't touch the auth-cookie CORS lockdown below.
+// MUST be registered before the global cors() call: Hono's cors middleware answers
+// OPTIONS preflight requests itself without calling next(), so a later, more specific
+// cors() can never override an earlier general one for preflight — order is the fix,
+// not specificity (confirmed by hand: a self-host-origin preflight got the locked-down
+// PUBLIC_APP_URL response, silently, until this was reordered).
+app.use("/api/telemetry/*", cors({ origin: "*" }));
 
 app.use(
   "*",
@@ -116,11 +128,13 @@ app.route("/api/core", weeklyReportRoutes(db, env));
 app.route("/api/core", reportRoutes(db, env));
 app.route("/api/core/upload", browserUploadRoutes(env));
 app.route("/api/core/drive", driveRoutes(db, env));
+app.route("/api/core/onboarding", onboardingRoutes(db, env));
 app.route("/s", drivePublicRoutes(db, env));
 app.route("/api/school", schoolRoutes(db, env));
 app.route("/api/school/upload", schoolUploadRoutes(db, env));
 app.route("/api/health", householdHealthRoutes(db, env));
 app.route("/api/billing", billingRoutes(db, env));
+app.route("/api/telemetry", telemetryRoutes(db));
 
 app.get("/api/modules", (c) =>
   c.json({

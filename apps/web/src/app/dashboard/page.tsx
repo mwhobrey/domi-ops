@@ -1,6 +1,7 @@
 import { AppShell } from "../../components/AppShell";
 import { DashboardBoard } from "../../components/DashboardBoard";
 import type { SelfStatus, StatusRow } from "../../components/HouseholdPanel";
+import type { OnboardingState } from "../../components/OnboardingChecklist";
 import { apiFetch } from "../../lib/api";
 import { Alert } from "../../components/ui";
 
@@ -11,9 +12,11 @@ export default async function DashboardPage() {
 
   let schoolModuleEnabled = false;
   let healthModuleEnabled = false;
+  let role: string | null = null;
+  let onboarding: OnboardingState | null = null;
 
   try {
-    const [dashboard, profile, session] = await Promise.all([
+    const [dashboard, profile, session, onboardingRes] = await Promise.all([
       apiFetch<{ whosHome: StatusRow[] }>("/api/core/dashboard"),
       apiFetch<{
         shownLabel: string;
@@ -22,13 +25,20 @@ export default async function DashboardPage() {
         statusMessage: string | null;
         avatarUrl: string | null;
       }>("/api/core/profile"),
-      apiFetch<{ modulesEnabled?: string[] }>("/auth/session").catch(() => ({
+      apiFetch<{
+        modulesEnabled?: string[];
+        user?: { memberId: string; role: string };
+      }>("/auth/session").catch(() => ({
         modulesEnabled: [] as string[],
+        user: undefined,
       })),
+      apiFetch<OnboardingState>("/api/core/onboarding").catch(() => null),
     ]);
     whosHome = dashboard.whosHome;
     schoolModuleEnabled = (session.modulesEnabled ?? []).includes("school");
     healthModuleEnabled = (session.modulesEnabled ?? []).includes("health");
+    role = session.user?.role ?? null;
+    onboarding = onboardingRes;
     if (profile.homeStatusId) {
       self = {
         homeStatusId: profile.homeStatusId,
@@ -54,6 +64,8 @@ export default async function DashboardPage() {
           self={self}
           schoolModuleEnabled={schoolModuleEnabled}
           healthModuleEnabled={healthModuleEnabled}
+          role={role}
+          onboarding={onboarding}
         />
       )}
     </AppShell>

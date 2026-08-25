@@ -1,5 +1,6 @@
 import { AccountSettingsNav } from "../../components/AccountSettingsNav";
 import { AppShell } from "../../components/AppShell";
+import { FeedbackCard } from "../../components/FeedbackCard";
 import { ProfileEditor } from "../../components/ProfileEditor";
 import { ScrollToTopFab } from "../../components/ScrollToTopFab";
 import { apiFetch } from "../../lib/api";
@@ -79,11 +80,15 @@ export default async function ProfilePage() {
       ) : (
         <>
           <AccountSettingsNav canManage={canManage} />
-          <div className="mx-auto w-full max-w-2xl lg:max-w-4xl">
+          <div className="mx-auto w-full max-w-2xl space-y-8 lg:max-w-4xl">
             <ProfileEditor
               initial={profile}
               calendarIntegration={calendarIntegration ?? undefined}
               modulesEnabled={modulesEnabled}
+            />
+            <FeedbackCard
+              endpoint={process.env.TELEMETRY_ENDPOINT ?? "https://app.domi-ops.com/api/telemetry"}
+              deploymentMode={process.env.DEPLOYMENT_MODE ?? "single"}
             />
           </div>
           <ScrollToTopFab className="bottom-[max(5rem,env(safe-area-inset-bottom))] lg:bottom-[max(1.5rem,env(safe-area-inset-bottom))]" />

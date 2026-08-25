@@ -2300,6 +2300,7 @@ export function coreRoutes(db: Database, env: Env) {
       storageUsedBytes?: number;
       subscriptionStatus?: "trialing" | "active" | "past_due" | "canceled" | null;
       trialEndsAt?: Date | null;
+      telemetryOptIn?: boolean;
     },
     modulesEntitled: string[] | null,
   ) {
@@ -2311,6 +2312,7 @@ export function coreRoutes(db: Database, env: Env) {
       timezone: row.timezone,
       modulesEnabled,
       modulesEntitled,
+      telemetryOptIn: row.telemetryOptIn ?? false,
       availableModules: householdModuleCeiling(env, modulesEntitled),
       drivePermissions: parseDrivePermissionsJson(row.drivePermissionsJson),
       drivePermissionDefaults: DEFAULT_DRIVE_ROLE_PERMISSIONS,
@@ -2350,6 +2352,7 @@ export function coreRoutes(db: Database, env: Env) {
         drivePermissionsJson: households.drivePermissionsJson,
         storageQuotaBytes: households.storageQuotaBytes,
         storageUsedBytes: households.storageUsedBytes,
+        telemetryOptIn: households.telemetryOptIn,
         modulesEntitled: householdSubscriptions.modulesEntitled,
         subscriptionStatus: householdSubscriptions.status,
         trialEndsAt: householdSubscriptions.trialEndsAt,
@@ -2376,6 +2379,7 @@ export function coreRoutes(db: Database, env: Env) {
       timezone?: string;
       modulesEnabled?: string[];
       drivePermissions?: DriveRolePermissions;
+      telemetryOptIn?: boolean;
     }>();
 
     const patch: {
@@ -2384,6 +2388,7 @@ export function coreRoutes(db: Database, env: Env) {
       timezone?: string;
       modulesEnabled?: string;
       drivePermissionsJson?: string;
+      telemetryOptIn?: boolean;
       updatedAt?: Date;
     } = {};
 
@@ -2428,6 +2433,9 @@ export function coreRoutes(db: Database, env: Env) {
       if (!delta) return c.json({ error: "invalid_drive_permissions" }, 400);
       patch.drivePermissionsJson = serializeDrivePermissionsJson({ ...current, ...delta });
     }
+    if (body.telemetryOptIn !== undefined) {
+      patch.telemetryOptIn = Boolean(body.telemetryOptIn);
+    }
 
     if (Object.keys(patch).length === 0) {
       return c.json({ error: "no_changes" }, 400);
@@ -2446,6 +2454,7 @@ export function coreRoutes(db: Database, env: Env) {
         drivePermissionsJson: households.drivePermissionsJson,
         storageQuotaBytes: households.storageQuotaBytes,
         storageUsedBytes: households.storageUsedBytes,
+        telemetryOptIn: households.telemetryOptIn,
       });
     if (!row) return c.json({ error: "not_found" }, 404);
     const { modulesEntitled } = await getHouseholdModuleContext(db, auth.householdId);

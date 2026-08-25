@@ -1,4 +1,4 @@
-export const LEGAL_LAST_UPDATED = "August 18, 2026";
+export const LEGAL_LAST_UPDATED = "August 25, 2026";
 export const LEGAL_CONTACT_EMAIL = "privacy@domi-ops.com";
 
 const bodyClass =
@@ -133,6 +133,37 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
       </section>
 
       <section>
+        <h2>Optional anonymized metrics</h2>
+        <p>
+          Off by default on every household, self-hosted or Cloud. An owner or admin can turn it on
+          in <strong className="text-[var(--color-text)]">Settings → Privacy</strong>. When on, we
+          collect:
+        </p>
+        <ul>
+          <li>Technical health — page load speed, JavaScript errors, API response times</li>
+          <li>
+            Feature usage — which modules and actions get used (e.g. &quot;a chore was
+            completed&quot;), never the content of what you created
+          </li>
+        </ul>
+        <p>
+          These events carry a randomly generated id stored in your browser — not your account,
+          household, name, or email — and nothing in our metrics storage links back to household
+          data. Turning it off stops collection immediately; turning it on later starts a new random
+          id, not a resumed history.{" "}
+          <strong className="text-[var(--color-text)]">
+            We do not sell this data, or any data, to anyone, ever
+          </strong>{" "}
+          — it is used only to find bugs and decide what to build next.
+        </p>
+        <p>
+          Separately, anyone can send a bug report or feedback from their Profile page at any time,
+          regardless of this setting — that message (and an optional reply email, if you choose to
+          leave one) is sent because you chose to send it, not collected passively.
+        </p>
+      </section>
+
+      <section>
         <h2>Retention and deletion</h2>
         <p>
           <strong className="text-[var(--color-text)]">Cloud:</strong> email{" "}
@@ -150,9 +181,9 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
       <section>
         <h2>Your choices</h2>
         <p>
-          You can disconnect Google Calendar or Docs, disable Web Push, and turn off optional
-          modules in household settings (within what the instance enables). See also the{" "}
-          <a href={termsHref}>Terms of Service</a>.
+          You can disconnect Google Calendar or Docs, disable Web Push, turn off optional modules
+          (within what the instance enables), and turn anonymized metrics on or off — all in
+          household settings. See also the <a href={termsHref}>Terms of Service</a>.
         </p>
       </section>
 
