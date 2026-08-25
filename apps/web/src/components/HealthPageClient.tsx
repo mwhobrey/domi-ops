@@ -194,6 +194,18 @@ function formatReadingsSummary(readings: VitalsReading[] | undefined): string | 
   return readings.map((r) => `${vitalsMetricLabel(r.metric)}: ${r.value} ${r.unit}`).join(", ");
 }
 
+/** Short, human title for a vitals event when the user hasn't typed one — "Weight, Heart rate". */
+function defaultVitalsTitle(drafts: VitalsReadingDraft[]): string {
+  const labels = drafts.filter((d) => d.value.trim()).map((d) => vitalsMetricLabel(d.metric));
+  return labels.length > 0 ? labels.join(", ") : "Vitals";
+}
+
+function draftsToReadings(drafts: VitalsReadingDraft[]): { metric: VitalsMetric; value: number; unit: string }[] {
+  return drafts
+    .filter((d) => d.value.trim() && d.unit.trim() && Number.isFinite(Number(d.value)))
+    .map((d) => ({ metric: d.metric, value: Number(d.value), unit: d.unit.trim() }));
+}
+
 function defaultUnitFor(metric: VitalsMetric): string {
   return VITALS_METRICS.find((m) => m.value === metric)?.defaultUnit ?? "";
 }
@@ -216,6 +228,91 @@ function readingsToDrafts(readings: VitalsReading[] | undefined): VitalsReadingD
     value: String(r.value),
     unit: r.unit,
   }));
+}
+
+function VitalsReadingsEditor({
+  drafts,
+  onChange,
+}: {
+  drafts: VitalsReadingDraft[];
+  onChange: (drafts: VitalsReadingDraft[]) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <span className="text-sm">Readings</span>
+      <div className="space-y-2">
+        {drafts.map((draft) => (
+          <div key={draft.key} className="flex items-end gap-2">
+            <label className="flex-1 space-y-1 text-xs">
+              <span className="text-[var(--color-text-muted)]">Metric</span>
+              <Select
+                value={draft.metric}
+                onChange={(e) => {
+                  const metric = e.target.value as VitalsMetric;
+                  onChange(
+                    drafts.map((d) =>
+                      d.key === draft.key
+                        ? { ...d, metric, unit: d.unit.trim() ? d.unit : defaultUnitFor(metric) }
+                        : d,
+                    ),
+                  );
+                }}
+              >
+                {VITALS_METRICS.map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            <label className="w-24 space-y-1 text-xs">
+              <span className="text-[var(--color-text-muted)]">Value</span>
+              <Input
+                type="number"
+                inputMode="decimal"
+                value={draft.value}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  onChange(drafts.map((d) => (d.key === draft.key ? { ...d, value } : d)));
+                }}
+              />
+            </label>
+            <label className="w-20 space-y-1 text-xs">
+              <span className="text-[var(--color-text-muted)]">Unit</span>
+              <Input
+                value={draft.unit}
+                onChange={(e) => {
+                  const unit = e.target.value;
+                  onChange(drafts.map((d) => (d.key === draft.key ? { ...d, unit } : d)));
+                }}
+              />
+            </label>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => onChange(drafts.filter((d) => d.key !== draft.key))}
+            >
+              Remove
+            </Button>
+          </div>
+        ))}
+      </div>
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        onClick={() =>
+          onChange([
+            ...drafts,
+            { key: nextVitalsDraftKey(), metric: "weight", value: "", unit: defaultUnitFor("weight") },
+          ])
+        }
+      >
+        Add reading
+      </Button>
+    </div>
+  );
 }
 
 function memberLabel(members: NoteShareMember[], memberId: string): string {
@@ -410,6 +507,7 @@ export function HealthPageClient({
   const [error, setError] = useState<string | null>(null);
   const [pushActionNotice, setPushActionNotice] = useState<string | null>(null);
   const [eventSheetOpen, setEventSheetOpen] = useState(false);
+  const [vitalsSheetOpen, setVitalsSheetOpen] = useState(false);
   const [medSheetOpen, setMedSheetOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<HealthEvent | null>(null);
   const [editingMed, setEditingMed] = useState<HealthMedication | null>(null);
@@ -724,7 +822,10 @@ export function HealthPageClient({
       {tab === "events" ? (
         <div className="space-y-4">
           {canAddEvent ? (
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="secondary" onClick={() => setVitalsSheetOpen(true)}>
+              Log vitals
+            </Button>
             <Button
               size="sm"
               onClick={() => {
@@ -836,6 +937,20 @@ export function HealthPageClient({
         }}
       />
 
+      <LogVitalsSheet
+        open={vitalsSheetOpen}
+        members={members}
+        currentMemberId={currentMemberId}
+        writableMemberIds={members
+          .filter((m) => capabilities[m.memberId]?.events === "write")
+          .map((m) => m.memberId)}
+        onClose={() => setVitalsSheetOpen(false)}
+        onSaved={() => {
+          setVitalsSheetOpen(false);
+          void load();
+        }}
+      />
+
       <HealthMedicationSheet
         open={medSheetOpen}
         medication={editingMed}
@@ -858,6 +973,131 @@ export function HealthPageClient({
       />
 
     </div>
+  );
+}
+
+/**
+ * Fast path for the common case — a few numbers, logged right now. No title, no
+ * duration/ongoing, no type picker; timestamp is "now" (use "Add event" with type
+ * Vitals for backdating). See HealthEventSheet for the full editor.
+ */
+function LogVitalsSheet({
+  open,
+  members,
+  currentMemberId,
+  writableMemberIds,
+  onClose,
+  onSaved,
+}: {
+  open: boolean;
+  members: NoteShareMember[];
+  currentMemberId: string;
+  writableMemberIds: string[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const memberChoices = members.filter((m) => writableMemberIds.includes(m.memberId));
+  const defaultMemberId = resolveDefaultMemberId(
+    currentMemberId,
+    memberChoices.length > 0 ? memberChoices : members,
+  );
+  const [memberId, setMemberId] = useState(defaultMemberId);
+  const [readingDrafts, setReadingDrafts] = useState<VitalsReadingDraft[]>(() => readingsToDrafts(undefined));
+  const [notes, setNotes] = useState("");
+  const [visibility, setVisibility] = useState<"household" | "private">("private");
+  const [sharedMemberIds, setSharedMemberIds] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setMemberId(defaultMemberId);
+    setReadingDrafts(readingsToDrafts(undefined));
+    setNotes("");
+    setVisibility("private");
+    setSharedMemberIds([]);
+    setErr(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, defaultMemberId]);
+
+  const readings = draftsToReadings(readingDrafts);
+
+  async function save() {
+    if (readings.length === 0) {
+      setErr("Add at least one reading.");
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    try {
+      await apiClient.post("/api/health/events", {
+        memberId,
+        type: "vitals",
+        title: defaultVitalsTitle(readingDrafts),
+        notes: notes.trim() || undefined,
+        startedAt: new Date().toISOString(),
+        durationKind: "single_day",
+        visibility,
+        sharedMemberIds: visibility === "private" ? sharedMemberIds : undefined,
+        readings,
+      });
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Sheet open={open} onClose={onClose} title="Log vitals">
+      <fieldset className="space-y-4 px-6 py-4">
+        {err ? <Alert variant="error">{err}</Alert> : null}
+        <label className="block space-y-1 text-sm">
+          <span>Member</span>
+          <Select value={memberId} onChange={(e) => setMemberId(e.target.value)}>
+            {(memberChoices.length > 0 ? memberChoices : members).map((m) => (
+              <option key={m.memberId} value={m.memberId}>
+                {m.label}
+              </option>
+            ))}
+          </Select>
+        </label>
+        <VitalsReadingsEditor drafts={readingDrafts} onChange={setReadingDrafts} />
+        <label className="block space-y-1 text-sm">
+          <span>Notes (optional)</span>
+          <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
+        </label>
+        <label className="block space-y-1 text-sm">
+          <span>Visibility</span>
+          <Select
+            value={visibility}
+            onChange={(e) => setVisibility(e.target.value as "household" | "private")}
+          >
+            <option value="private">Private</option>
+            <option value="household">Household</option>
+          </Select>
+        </label>
+        {visibility === "private" ? (
+          <NoteSharePicker
+            members={members}
+            currentMemberId={currentMemberId}
+            value={sharedMemberIds}
+            onChange={setSharedMemberIds}
+            namePrefix="health-vitals-share"
+            hint="Private by default. Share with selected members so they can read this. You and the subject always have access."
+          />
+        ) : null}
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={() => void save()} disabled={busy || readings.length === 0}>
+            Save
+          </Button>
+        </div>
+      </fieldset>
+    </Sheet>
   );
 }
 
@@ -934,12 +1174,7 @@ function HealthEventSheet({
     if (readOnly || !title.trim()) return;
     setBusy(true);
     setErr(null);
-    const readings =
-      type === "vitals"
-        ? readingDrafts
-            .filter((d) => d.value.trim() && d.unit.trim() && Number.isFinite(Number(d.value)))
-            .map((d) => ({ metric: d.metric, value: Number(d.value), unit: d.unit.trim() }))
-        : undefined;
+    const readings = type === "vitals" ? draftsToReadings(readingDrafts) : undefined;
     const body = {
       memberId,
       type,
@@ -1009,86 +1244,7 @@ function HealthEventSheet({
           <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
         </label>
         {type === "vitals" ? (
-          <div className="space-y-2">
-            <span className="text-sm">Readings</span>
-            <div className="space-y-2">
-              {readingDrafts.map((draft) => (
-                <div key={draft.key} className="flex items-end gap-2">
-                  <label className="flex-1 space-y-1 text-xs">
-                    <span className="text-[var(--color-text-muted)]">Metric</span>
-                    <Select
-                      value={draft.metric}
-                      onChange={(e) => {
-                        const metric = e.target.value as VitalsMetric;
-                        setReadingDrafts((prev) =>
-                          prev.map((d) =>
-                            d.key === draft.key
-                              ? { ...d, metric, unit: d.unit.trim() ? d.unit : defaultUnitFor(metric) }
-                              : d,
-                          ),
-                        );
-                      }}
-                    >
-                      {VITALS_METRICS.map((m) => (
-                        <option key={m.value} value={m.value}>
-                          {m.label}
-                        </option>
-                      ))}
-                    </Select>
-                  </label>
-                  <label className="w-24 space-y-1 text-xs">
-                    <span className="text-[var(--color-text-muted)]">Value</span>
-                    <Input
-                      type="number"
-                      inputMode="decimal"
-                      value={draft.value}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setReadingDrafts((prev) =>
-                          prev.map((d) => (d.key === draft.key ? { ...d, value } : d)),
-                        );
-                      }}
-                    />
-                  </label>
-                  <label className="w-20 space-y-1 text-xs">
-                    <span className="text-[var(--color-text-muted)]">Unit</span>
-                    <Input
-                      value={draft.unit}
-                      onChange={(e) => {
-                        const unit = e.target.value;
-                        setReadingDrafts((prev) =>
-                          prev.map((d) => (d.key === draft.key ? { ...d, unit } : d)),
-                        );
-                      }}
-                    />
-                  </label>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={() =>
-                      setReadingDrafts((prev) => prev.filter((d) => d.key !== draft.key))
-                    }
-                  >
-                    Remove
-                  </Button>
-                </div>
-              ))}
-            </div>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() =>
-                setReadingDrafts((prev) => [
-                  ...prev,
-                  { key: nextVitalsDraftKey(), metric: "weight", value: "", unit: defaultUnitFor("weight") },
-                ])
-              }
-            >
-              Add reading
-            </Button>
-          </div>
+          <VitalsReadingsEditor drafts={readingDrafts} onChange={setReadingDrafts} />
         ) : null}
         <label className="block space-y-1 text-sm">
           <span>Start date</span>
