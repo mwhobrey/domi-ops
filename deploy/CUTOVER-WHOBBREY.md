@@ -255,7 +255,7 @@ To verify packages are reachable after login:
 docker pull ghcr.io/mwhobrey/domi-ops-api:latest
 ```
 
-**Publish** (automatic): `.github/workflows/publish-images.yml` pushes on every `main`/`master` push and on `v*` tags:
+**Publish** (automatic): `.github/workflows/publish-images.yml` pushes on every `main` push and on `v*` tags:
 
 | Image | Tag examples |
 |-------|----------------|

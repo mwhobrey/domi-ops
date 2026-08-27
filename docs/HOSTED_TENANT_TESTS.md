@@ -53,7 +53,7 @@ GitHub Actions job `test-hosted` in `.github/workflows/ci.yml`:
 3. `npm run db:create-app-role` (non-superuser `domi_ops_app` for RLS-enforced tests)
 4. `npm run test:hosted` with `HOSTED_TEST_DATABASE_URL=postgresql://domi_ops_app:domi_ops_app@localhost:5432/domi_ops` — runs both `tenant-isolation.integration.test.ts` and `billing-system-bootstrap.integration.test.ts`
 
-Runs on push/PR to `master`/`main` alongside the main CI build job.
+Runs on push/PR to `main` alongside the main CI build job.
 
 ## Security review linkage
 

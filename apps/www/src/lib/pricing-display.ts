@@ -47,7 +47,7 @@ export function getPricingDisplay(): {
           ? {
               kind: "link",
               label: "Self-host guide",
-              href: "https://github.com/mwhobrey/domi-ops/blob/master/docs/SETUP.md",
+              href: "https://github.com/mwhobrey/domi-ops/blob/main/docs/SETUP.md",
               external: true,
             }
           : { kind: "disabled", label: "Coming soon" },

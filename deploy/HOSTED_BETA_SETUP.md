@@ -21,7 +21,7 @@ Matches the "~$30–40/mo fixed infra" already budgeted in [PRICING_TIERS.md](..
 - [ ] `domi-ops.com` registrar access (for DNS records)
 - [ ] GHCR pull access — classic PAT with `read:packages` scope (same as [SETUP.md Path C](../docs/SETUP.md#path-c-production-with-pre-built-images))
 - [ ] Stripe account (existing per [ADR 001](../docs/adr/001-public-launch-scope.md)) — dashboard access
-- [ ] CI publishing images to GHCR on `master` — already true ([publish-images.yml](../.github/workflows/publish-images.yml))
+- [ ] CI publishing images to GHCR on `main` — already true ([publish-images.yml](../.github/workflows/publish-images.yml))
 
 You do **not** need to `git clone` the private repo onto the droplet — pull pre-built GHCR images and copy just the compose files + `.env` over. Simpler and matches the Path C pattern you already use for the dogfood box.
 

@@ -106,7 +106,7 @@ export const DEFAULT_MARKETING_URLS: MarketingUrls = {
   appLogin: "https://app.domi-ops.com/login",
   demo: "https://demo.domi-ops.com",
   github: "https://github.com/mwhobrey/domi-ops",
-  setupDocs: "https://github.com/mwhobrey/domi-ops/blob/master/docs/SETUP.md",
+  setupDocs: "https://github.com/mwhobrey/domi-ops/blob/main/docs/SETUP.md",
   ossRepoPublic: false,
 };
 
