@@ -23,7 +23,11 @@ Matches the "~$30–40/mo fixed infra" already budgeted in [PRICING_TIERS.md](..
 - [ ] Stripe account (existing per [ADR 001](../docs/adr/001-public-launch-scope.md)) — dashboard access
 - [ ] CI publishing images to GHCR on `main` — already true ([publish-images.yml](../.github/workflows/publish-images.yml))
 
-You do **not** need to `git clone` the private repo onto the droplet — pull pre-built GHCR images and copy just the compose files + `.env` over. Simpler and matches the Path C pattern you already use for the dogfood box.
+The droplet runs a real `git clone` of this repo, authenticated with a **read-only deploy key**
+(`gh repo deploy-key add` — repo → Settings → Deploy keys) so `deploy/deploy-hosted.sh` can
+`git pull` before each redeploy instead of someone hand-copying compose files whenever they
+change. It still never builds images — only pulls pre-built GHCR ones (`--no-build`). `.env` and
+`Caddyfile` are untracked, live only on the droplet, and survive a `git pull` untouched.
 
 ---
 
@@ -79,10 +83,25 @@ Trusted Sources: once the droplet exists (step 3), add its private/public IP to 
 
 1. Create a droplet — Ubuntu 22.04+, 2GB/1vCPU (Basic), same region as Postgres/Spaces to keep latency and egress low.
 2. Install Docker Engine + Compose plugin ([docs.docker.com/engine/install](https://docs.docker.com/engine/install/)).
-3. Copy these files to the droplet (`scp` or paste — no repo clone needed):
-   - `docker-compose.hosted-prod.yml`
-   - `docker-compose.marketing.yml`
-   - `.env` (filled from `.env.hosted-prod.example`)
+3. Generate a deploy-key keypair **on the droplet** and register the public half as a read-only
+   GitHub deploy key, then clone:
+
+   ```bash
+   ssh-keygen -t ed25519 -f ~/.ssh/domi_ops_deploy -N "" -C "domi-ops-hosted-droplet-readonly"
+   cat ~/.ssh/domi_ops_deploy.pub   # add via: gh repo deploy-key add - --repo <owner>/domi-ops --title hosted-droplet
+
+   cat >> ~/.ssh/config <<'CFG'
+   Host github.com
+     IdentityFile ~/.ssh/domi_ops_deploy
+     IdentitiesOnly yes
+   CFG
+
+   git clone git@github.com:<owner>/domi-ops.git ~/domi-ops
+   ```
+
+   Then drop `.env` (filled from `.env.hosted-prod.example`) and `Caddyfile`
+   (from `deploy/Caddyfile.domi-ops.example`) into `~/domi-ops` — both are `.gitignore`d, stay
+   droplet-only, and survive every future `git pull`.
 4. Log in to GHCR and pull:
 
    ```bash
@@ -93,6 +112,10 @@ Trusted Sources: once the droplet exists (step 3), add its private/public IP to 
    ```
 
 5. Check logs for clean boot (`docker compose logs api worker web www --tail 50`). The API/worker entrypoint **does** still run `migrate.js` on boot (same image as self-host) — with everything already applied via step 1 and `domi_ops_app` granted read access to the migration ledger, it should log `Applying database migrations...` followed by no pending migrations, then start normally. If it instead fails with a permission error here, stop and re-check step 1's order (migrate as admin, *then* create the app role) before doing anything else — don't work around it by pointing `DATABASE_URL` at the admin role, see the "why not just run as admin" note in step 1.
+
+For every deploy after this first stand-up, use `deploy/deploy-hosted.sh` (from `~/domi-ops`) —
+it does the `git pull` + `docker compose pull` + `up` + health-check sequence above in one step.
+See [HOSTED_OPS.md](./HOSTED_OPS.md#routine-updates).
 
 ---
 

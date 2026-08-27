@@ -32,13 +32,35 @@ PgBouncer in **transaction mode** for Starter prod (see ADR 003). Migrations run
 | S3 / MinIO | Versioning or daily bucket sync | Keys are household-scoped; partial restore per prefix possible |
 | Redis | **Ephemeral** — OAuth state, job queue | No user data restore required; workers reschedule scans |
 
+## Routine updates
+
+On the droplet, from `~/domi-ops` (a real git clone — read-only deploy key, see
+[HOSTED_BETA_SETUP.md](./HOSTED_BETA_SETUP.md#3-droplet-compute)):
+
+```bash
+deploy/deploy-hosted.sh
+```
+
+`git pull`s the compose files/scripts, pulls the latest GHCR images (`DOMI_OPS_IMAGE_TAG`,
+default `latest`), and recreates only the containers whose image actually changed, then
+smoke-checks `/health` and the marketing site. See the script's own header comment for the one
+thing it can't do for you: if the deploy includes a **new migration**, apply it via the admin
+Postgres connection string first (the droplet has no build tooling — that step happens from a
+machine that does), or `api`/`worker` will crash-loop on a permission error against the
+restricted `domi_ops_app` role. The script pauses 5s before touching containers specifically so
+there's a window to catch a forgotten migration. `.env` and `Caddyfile` are untracked and
+untouched by `git pull`.
+
+To pin a specific build instead of `latest`: `DOMI_OPS_IMAGE_TAG=<sha> deploy/deploy-hosted.sh`.
+
 ## Incidents
 
 ### Bad deploy
 
-1. Pin `DOMI_OPS_IMAGE_TAG` to last known-good SHA in compose/env.
-2. `docker compose pull && docker compose up -d api worker web`.
-3. Verify health + login smoke (WHO-187 checklist).
+1. `DOMI_OPS_IMAGE_TAG=<last-known-good-sha> deploy/deploy-hosted.sh` from the droplet (this
+   still does a `git pull` first — if the bad compose/script change also needs reverting,
+   `git checkout <last-known-good-sha> -- docker-compose.hosted-prod.yml docker-compose.marketing.yml deploy/deploy-hosted.sh` first).
+2. Verify health + login smoke (WHO-187 checklist).
 
 ### Migration failure
 
