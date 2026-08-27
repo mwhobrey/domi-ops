@@ -42,13 +42,15 @@ deploy/deploy-hosted.sh
 ```
 
 `git pull`s the compose files/scripts, pulls the latest GHCR images (`DOMI_OPS_IMAGE_TAG`,
-default `latest`), and recreates only the containers whose image actually changed, then
-smoke-checks `/health` and the marketing site. See the script's own header comment for the one
-thing it can't do for you: if the deploy includes a **new migration**, apply it via the admin
-Postgres connection string first (the droplet has no build tooling — that step happens from a
-machine that does), or `api`/`worker` will crash-loop on a permission error against the
-restricted `domi_ops_app` role. The script pauses 5s before touching containers specifically so
-there's a window to catch a forgotten migration. `.env` and `Caddyfile` are untracked and
+default `latest`), then runs a **read-only pending-migrations check**
+(`packages/db/scripts/check-pending-migrations.mjs`, using the same restricted role the app
+already connects as — it only needs `SELECT`) and **aborts before touching any container** if
+anything's unapplied, rather than trusting a human to remember. If it blocks you, apply the
+migration via the admin Postgres connection string first (the droplet has no build tooling —
+that step happens from a machine that does):
+`DATABASE_URL="<admin connection string>" npm run db:migrate`, then re-run the script. Once
+that check passes, it recreates only the containers whose image actually changed and
+smoke-checks `/health` and the marketing site. `.env` and `Caddyfile` are untracked and
 untouched by `git pull`.
 
 To pin a specific build instead of `latest`: `DOMI_OPS_IMAGE_TAG=<sha> deploy/deploy-hosted.sh`.

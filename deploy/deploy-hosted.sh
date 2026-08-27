@@ -16,13 +16,13 @@
 # `domi_ops_app` role this stack's DATABASE_URL uses, NOBYPASSRLS/no DDL grants per
 # packages/db/scripts/create-hosted-app-role.mjs, crash-loops on that unconditionally,
 # even with nothing pending — confirmed live 2026-08-27, see HOSTED_BETA_SETUP.md.)
-# That means this stack has NO automatic migration check at all — if this deploy ships
-# a new migration and you don't apply it first, containers will start up FINE and just
-# serve requests against a stale schema. Apply it via the ADMIN connection string FIRST,
-# from any machine with this repo checked out (npm isn't installed on the droplet):
+# Before touching any container, this script runs a read-only pending-migrations check
+# (packages/db/scripts/check-pending-migrations.mjs, using the same restricted role — it only
+# needs SELECT) and ABORTS if anything's unapplied, rather than trusting a human to remember.
+# If it blocks you, apply the pending migration(s) via the ADMIN connection string FIRST, from
+# any machine with this repo checked out (npm isn't installed on the droplet):
 #     DATABASE_URL="<DO admin connection string>" npm run db:migrate
-# This script only pauses to give you a chance to back out — it cannot detect or apply
-# a pending migration for you.
+# then re-run this script.
 
 set -euo pipefail
 
@@ -51,12 +51,18 @@ echo "==> git pull"
 git pull --ff-only
 
 echo "==> Domi Ops hosted update (tag: ${DOMI_OPS_IMAGE_TAG})"
-echo "==> If this deploy includes a NEW migration, it must already be applied via"
-echo "    the admin connection string (see script header) — 5s to Ctrl+C if not."
-sleep 5
 
 echo "==> docker compose pull"
 "${COMPOSE[@]}" pull
+
+echo "==> checking for pending migrations"
+if ! docker run --rm --env-file .env --entrypoint node \
+    "ghcr.io/mwhobrey/domi-ops-api:${DOMI_OPS_IMAGE_TAG}" \
+    packages/db/scripts/check-pending-migrations.mjs; then
+  echo "" >&2
+  echo "ABORTING deploy — containers were NOT touched. See message above." >&2
+  exit 1
+fi
 
 echo "==> docker compose up (recreate changed containers only)"
 "${COMPOSE[@]}" up -d --no-build --remove-orphans

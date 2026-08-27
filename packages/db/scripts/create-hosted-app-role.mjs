@@ -35,11 +35,13 @@ GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO domi_ops_app;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA app TO domi_ops_app;
 
 -- Drizzle's migrator (drizzle-orm/postgres-js/migrator) tracks applied migrations in
--- "drizzle"."__drizzle_migrations" (not schema "public"). The API/worker Docker image's
--- ENTRYPOINT runs migrate.js unconditionally on every boot — with DATABASE_URL pointed at
--- this restricted role in a real DEPLOYMENT_MODE=shared deploy, it needs read access to that
--- table so an already-fully-migrated boot sees "nothing pending" and just starts the server,
--- instead of failing closed with permission denied before ever reaching the app.
+-- "drizzle"."__drizzle_migrations" (not schema "public"). This role needs read access to that
+-- table for two things: docker-compose.hosted-prod.yml's `api` service skips the image's
+-- migrate.js-on-boot entrypoint entirely (confirmed live 2026-08-27: even a no-op
+-- CREATE SCHEMA IF NOT EXISTS gets permission-checked against CREATE-on-database regardless
+-- of whether the schema exists, so this restricted role can never pass it, pending or not —
+-- see deploy/HOSTED_BETA_SETUP.md), and deploy-hosted.sh's check-pending-migrations.mjs reads
+-- this table directly to block a deploy that has an unapplied migration.
 -- Run this script AFTER migrations have been applied (as the admin role) — this schema and
 -- table must already exist, or these two grants below no-op nothing / error on a fresh DB.
 GRANT USAGE ON SCHEMA drizzle TO domi_ops_app;
