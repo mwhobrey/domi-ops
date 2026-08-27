@@ -31,7 +31,7 @@ export function browserUploadRoutes(env: Env) {
 
     const contentType = c.req.header("content-type")?.trim() || grant.contentType;
     try {
-      await putObject(env, grant.key, buf, contentType);
+      await putObject(env, grant.key, buf, contentType, { public: grant.public });
     } catch {
       return c.json({ error: "upload_failed" }, 500);
     }

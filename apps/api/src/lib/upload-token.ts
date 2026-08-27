@@ -8,6 +8,8 @@ export type BrowserUploadGrant = {
   contentType: string;
   maxBytes: number | null;
   exp: number;
+  /** Object gets public-read ACL on upload — only School materials use this; Drive/avatars stay private. */
+  public?: boolean;
 };
 
 function signBody(secret: string, body: string): string {

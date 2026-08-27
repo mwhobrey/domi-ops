@@ -42,6 +42,7 @@ export function schoolUploadRoutes(_db: Database, env: Env) {
         memberId: auth.memberId,
         contentType,
         maxBytes: null,
+        public: true,
       },
       PRESIGN_EXPIRY_SEC,
     );

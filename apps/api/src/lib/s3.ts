@@ -117,6 +117,7 @@ export async function putObject(
   key: string,
   body: Buffer,
   contentType: string,
+  opts?: { public?: boolean },
 ): Promise<void> {
   const client = createS3Client(env);
   if (!client || !env.S3_BUCKET) throw new Error("s3_not_configured");
@@ -126,6 +127,7 @@ export async function putObject(
       Key: key,
       Body: body,
       ContentType: contentType,
+      ...(opts?.public ? { ACL: "public-read" } : {}),
     }),
   );
 }

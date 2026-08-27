@@ -18,11 +18,15 @@ const statements = `
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'domi_ops_app') THEN
-    CREATE ROLE domi_ops_app LOGIN PASSWORD '${appPassword}' NOSUPERUSER NOBYPASSRLS;
+    -- No NOSUPERUSER/NOBYPASSRLS clause: both are already Postgres's default for a brand-new
+    -- role, and DigitalOcean's "doadmin" isn't a true superuser — even explicitly setting the
+    -- *default* value on those clauses can hit "permission denied to alter role" on managed
+    -- Postgres. Omitting them reaches the identical end state without touching that check.
+    CREATE ROLE domi_ops_app LOGIN PASSWORD '${appPassword}';
   END IF;
 END
 $$;
-ALTER ROLE domi_ops_app WITH LOGIN PASSWORD '${appPassword}' NOSUPERUSER NOBYPASSRLS;
+ALTER ROLE domi_ops_app WITH LOGIN PASSWORD '${appPassword}';
 GRANT CONNECT ON DATABASE domi_ops TO domi_ops_app;
 GRANT USAGE ON SCHEMA public TO domi_ops_app;
 GRANT USAGE ON SCHEMA app TO domi_ops_app;

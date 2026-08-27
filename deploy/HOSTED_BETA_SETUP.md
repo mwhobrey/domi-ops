@@ -29,7 +29,7 @@ You do **not** need to `git clone` the private repo onto the droplet — pull pr
 
 ## 1. DigitalOcean Managed Postgres
 
-1. Create a cluster: **Postgres 16**, 1GB Basic plan, same region you'll put the droplet in.
+1. Create a cluster: **Postgres 18** (no version-specific SQL in this app's migrations — Drizzle, plain enums, standard RLS — so there's no compatibility reason to pin older; newer buys a longer runway before a forced major-version upgrade), 1GB Basic plan, same region you'll put the droplet in. Note: self-host's `docker-compose.prod.yml` still pins `postgres:16-alpine` — a follow-up to bump for consistency, not blocking.
 2. In the DO panel, note the **admin connection string** (shown as "Connection Details" → "Connection string" — includes `sslmode=require`).
 3. Create the database `domi_ops` if it isn't the default.
 4. From your local machine (or any box with network access to the cluster — DO lets you allowlist your IP under "Trusted Sources"), **in this exact order**:
@@ -45,6 +45,8 @@ You do **not** need to `git clone` the private repo onto the droplet — pull pr
 
    Order matters: step 2 grants `domi_ops_app` read access to schemas/tables that must already exist from step 1 (see next paragraph) — running it first will fail or under-grant.
 
+   **DigitalOcean's `doadmin` is not a true Postgres superuser** — `ALTER ROLE ... [NO]SUPERUSER` (or `[NO]BYPASSRLS`) fails with `permission denied to alter role` even when the value isn't actually changing, because touching those clauses at all requires real superuser. `create-hosted-app-role.mjs` no longer specifies them — omitting a clause reaches the same default (`NOSUPERUSER`/`NOBYPASSRLS`) without hitting that check. Hit and fixed live against a real DO cluster (2026-08-25); `rolsuper: false, rolbypassrls: false, rolcanlogin: true` confirmed after.
+
 5. Build the **app** connection string using the `domi_ops_app` role and the password you just generated, and put it in `.env` as `DATABASE_URL`.
 
 **Why this matters more than it looks like:** the API/worker Docker image's `ENTRYPOINT` runs `migrate.js` **unconditionally on every container boot**, using whatever `DATABASE_URL` is in its env — this isn't a self-host-only behavior, it's baked into the image (`apps/api/Dockerfile` / `apps/worker/Dockerfile`). That means the *running app* — connected as the restricted `domi_ops_app` role, precisely so RLS actually protects something at runtime — will also try to run the migrator on every restart. Drizzle tracks applied migrations in `"drizzle"."__drizzle_migrations"`, a schema `create-hosted-app-role.mjs` did **not** grant access to until this was caught during setup — fixed now (grants `USAGE` on schema `drizzle` + `SELECT` on its tables), so a fully-migrated boot just sees "nothing pending" and starts normally instead of failing closed on a permission error before the app ever comes up.
@@ -55,20 +57,21 @@ You do **not** need to `git clone` the private repo onto the droplet — pull pr
 
 Trusted Sources: once the droplet exists (step 3), add its private/public IP to the Postgres cluster's trusted sources list — don't leave the database open to `0.0.0.0/0`.
 
-**Untested here, flagging rather than guessing:** `packages/db` connects via `postgres.js` with no explicit SSL options — it relies entirely on `?sslmode=require` in the connection string DO gives you. This is very likely fine (DO's cert chain is publicly trusted, postgres.js honors `sslmode` in the URL), but neither this repo nor this session has actually connected to a DO Managed Postgres instance. If `db:migrate` / `db:create-app-role` fail with a TLS/certificate error, that's the first place to look — not something to debug blind in a doc.
+**Confirmed 2026-08-25:** `packages/db`'s `postgres.js` connection with no explicit SSL options, relying only on `?sslmode=require` in DO's connection string, works with no TLS/certificate issues — `npm run db:migrate` applied all 58 migrations cleanly against a live DO cluster.
 
 ---
 
 ## 2. DigitalOcean Spaces (object storage)
 
-1. Create a Space (bucket) — e.g. `domi-ops-hosted`, same region as the droplet.
+1. Create a Space (bucket) — named **`domi-ops-storage`** in **nyc3** (matches `.env.hosted-prod.example`; created 2026-08-25).
 2. Generate a Spaces access key + secret (API → Spaces Keys).
-3. CORS: Drive uploads go **browser → S3 directly** via presigned PUT (`packages/db`/API generates the presign; see `docs/SECURITY_REVIEW.md` §4). Add a CORS rule on the Space:
+3. **Enable CDN** on the Space. Almost nothing in this app is served directly from Spaces — Drive downloads and avatars are proxied through the API (`/api/core/avatars/:memberId`, etc.), so CDN doesn't touch them either way. The one exception is School material uploads (`apps/api/src/routes/school-upload.ts`, `publicObjectUrl()` in `apps/api/src/lib/s3.ts`), which return a direct public Spaces URL — genuinely public, repeat-accessed, and safe to cache since each upload gets a unique timestamped key (no stale-cache risk from re-uploads). CDN is free on top of the existing Spaces plan, so there's no reason not to. DO gives you a CDN-specific endpoint (`https://domi-ops-storage.nyc3.cdn.digitaloceanspaces.com`) — **that** goes in `.env` as `S3_PUBLIC_URL`, not the plain origin endpoint (`S3_ENDPOINT` stays the origin — CDN is edge-cache read-only, not an S3 API surface, so presign/PUT/GET calls still need the real one).
+4. CORS: Drive uploads go **browser → S3 directly** via presigned PUT (`packages/db`/API generates the presign; see `docs/SECURITY_REVIEW.md` §4). Add a CORS rule on the Space:
    - Allowed origin: `https://app.domi-ops.com`
    - Allowed methods: `GET`, `PUT`, `HEAD`
    - Allowed headers: `*`
-4. Fill `S3_*` vars in `.env` — see `.env.hosted-prod.example` for the exact shape (Spaces uses virtual-hosted-style URLs, so `S3_FORCE_PATH_STYLE=false`, unlike the MinIO self-host default).
-5. **Bucket read policy:** most Drive files stay private (served through authenticated API proxy routes — Drive downloads, avatars). But `publicObjectUrl()` (`apps/api/src/lib/s3.ts`) builds a direct-to-Spaces URL for School material links (`apps/api/src/routes/school-upload.ts`), which needs those specific object keys publicly readable. Simplest: set the Space itself to **public read** at creation (DO's "File Listing: Restricted, Object Access: Public" option) — this matches what self-host MinIO already does today (unauthenticated bucket, only reachable through Caddy's `/s3/*` block, not exposed on the open internet). Don't rely on per-object ACLs; they're easy to get wrong per-upload.
+5. Fill `S3_*` vars in `.env` — see `.env.hosted-prod.example` for the exact shape (Spaces uses virtual-hosted-style URLs, so `S3_FORCE_PATH_STYLE=false`, unlike the MinIO self-host default).
+6. **Bucket read policy:** leave the Space at **File Listing: Restricted** — don't look for a bucket-wide "Object Access: Public" toggle, DO's current console doesn't have one, and this app doesn't need it. **Corrected 2026-08-25** (the original version of this doc was wrong on two counts): uploads never went through a raw S3 presigned PUT from the browser — the browser PUTs to the Domi Ops API itself (`apps/api/src/routes/browser-upload.ts`, HMAC-signed grant, same-origin, no CORS needed on the Space at all), which then calls S3 server-side. And `putObject()` never set an object ACL, so a bucket-wide public setting wouldn't have made School material links work anyway — the object itself still needed its own ACL. Fixed properly instead: `BrowserUploadGrant.public` (`apps/api/src/lib/upload-token.ts`) flows from `school-upload.ts`'s presign (the only caller that sets it) through to `putObject(..., { public: true })`, which sets `ACL: "public-read"` **per object** on that `PutObjectCommand`. Drive and avatar uploads never set the flag, so they stay private regardless of any bucket-level setting. The CORS rule you already added is harmless but not load-bearing for this — nothing makes a cross-origin browser request to Spaces.
 
 ---
 
