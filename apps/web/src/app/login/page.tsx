@@ -93,8 +93,8 @@ export default async function LoginPage({
 
         {!allowPublicSignup && !isDemoMode && !needsSetup && (
           <p className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm leading-relaxed text-[var(--color-text-muted)]">
-            Members join after HomeHub import (Google claim) or via a username from Household
-            settings.
+            New here? Ask your household owner to invite you by email or Google, or to set you up
+            with a username from Household settings.
           </p>
         )}
 

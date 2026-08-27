@@ -16,17 +16,18 @@ export function LandingPage() {
       <section className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16 lg:py-20">
         <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-14">
           <div className="space-y-6">
-            <p className="text-label text-[var(--color-accent)]">Homeschool household hub</p>
+            <p className="text-label text-[var(--color-accent)]">Household operations hub</p>
             <h1 className="font-display text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">
-              The homeschool household hub
+              One app for the whole household
             </h1>
             <p className="max-w-xl text-lg leading-relaxed text-[var(--color-text-muted)]">
-              Calendar, classes, chores, budgets, and files — one household, one app. Self-host
-              free or run on Domi Ops cloud.
+              Calendar, chores, shopping, notes, and expenses — with homeschool tracking built in
+              when you need it. Self-host free or run on Domi Ops cloud.
             </p>
             <p className="text-sm leading-relaxed text-[var(--color-text-muted)]">
-              Stop duct-taping Cozi, a gradebook, and a spreadsheet. Domi Ops is household
-              operations software for families who live in their calendar and their curriculum.
+              Stop duct-taping Cozi, a chore chart, and a budget spreadsheet. Domi Ops is
+              household operations software for families who live in their calendar — homeschool
+              curriculum included, not required.
             </p>
             <div className="flex flex-wrap gap-3">
               <LinkButton href="/pricing">Get hosted</LinkButton>
@@ -62,15 +63,63 @@ export function LandingPage() {
         </div>
       </section>
 
+      <section className="border-t border-[var(--color-border)]">
+        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
+          <div className="max-w-2xl">
+            <p className="text-label text-[var(--color-accent)]">Why Domi Ops</p>
+            <h2 className="mt-2 font-display text-2xl font-semibold tracking-tight sm:text-3xl">
+              Built for the tracking a calendar app can&apos;t do
+            </h2>
+            <p className="mt-3 text-[var(--color-text-muted)]">
+              Most family organizers stop at reminders. Two things in a household need more than
+              that — your kids&apos; education and your family&apos;s health — because neither is
+              a box you check once. Both are ongoing records, and that&apos;s what we built Domi
+              Ops to actually hold.
+            </p>
+          </div>
+
+          <div className="mt-10 grid gap-8 lg:grid-cols-2">
+            <div className="space-y-4">
+              <ThemeAwareScreenshot
+                {...MARKETING_SCREENSHOTS.school}
+                alt="Domi Ops school module showing classes, assignments, and gradebook"
+                className="w-full"
+              />
+              <div>
+                <h3 className="text-lg font-semibold">A full homeschool LMS</h3>
+                <p className="mt-1 text-sm leading-relaxed text-[var(--color-text-muted)]">
+                  Classes, assignments, submissions, and a real gradebook — student progress
+                  tracked over the whole year, not a to-do list that resets every week.
+                </p>
+              </div>
+            </div>
+            <div className="space-y-4">
+              <ThemeAwareScreenshot
+                {...MARKETING_SCREENSHOTS.health}
+                alt="Domi Ops health module showing medications, events, and vitals"
+                className="w-full"
+              />
+              <div>
+                <h3 className="text-lg font-semibold">Encrypted health tracking</h3>
+                <p className="mt-1 text-sm leading-relaxed text-[var(--color-text-muted)]">
+                  Medications, appointments, and vitals (blood pressure, weight, heart rate) —
+                  encrypted at rest, with per-person sharing so only the right people see it.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section className="border-t border-[var(--color-border)] bg-[var(--color-surface-elevated)]/50">
         <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
           <div className="mb-10 max-w-2xl">
             <h2 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">
-              Everything a homeschool household runs on
+              Everything a household runs on
             </h2>
             <p className="mt-3 text-[var(--color-text-muted)]">
-              School and calendar up front; add drive, chores, shopping, expenses, health, and
-              notes when you need them.
+              Calendar and chores up front; turn on school, drive, shopping, expenses, and health
+              as your household needs them.
             </p>
           </div>
 

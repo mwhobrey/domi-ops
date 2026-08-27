@@ -99,12 +99,19 @@ async function hideDevChrome(page) {
   });
 }
 
+/**
+ * Sign in via the API directly rather than driving the login form's UI — the cookie Better
+ * Auth sets lands in this page's context automatically (same request machinery, same cookie
+ * jar), and it isn't fragile to the login form's exact fields/button text changing over time.
+ */
 async function signIn(page, baseUrl, email, password) {
-  await page.goto(`${baseUrl}/login`, { waitUntil: "networkidle" });
-  await page.locator('input[name="email"]').fill(email);
-  await page.locator('input[name="password"]').fill(password);
-  await page.getByRole("button", { name: /sign in with email/i }).click();
-  await page.waitForURL((url) => !url.pathname.startsWith("/login"), { timeout: 30_000 });
+  const res = await page.request.post(`${baseUrl}/auth/sign-in/email`, {
+    data: { email, password },
+    headers: { Origin: baseUrl },
+  });
+  if (!res.ok()) {
+    throw new Error(`Sign-in failed: ${res.status()} ${await res.text()}`);
+  }
 }
 
 async function applyDemoPrefs(page, { calendarView } = {}) {
@@ -114,11 +121,18 @@ async function applyDemoPrefs(page, { calendarView } = {}) {
   });
 
   await page.evaluate(
-    ({ memberId, view }) => {
+    async ({ memberId, view }) => {
       if (view) localStorage.setItem("domi-ops:calendar-view", view);
       localStorage.setItem("domi-ops:calendar-setup-dismissed", "1");
       if (memberId) {
         localStorage.setItem(`domi-ops:profile-onboarding-dismissed:${memberId}`, "1");
+      }
+      // The PWA service worker's "Update available" banner is real UI, but it's an artifact
+      // of whatever dev-server restarts happened during this script's own session — not
+      // something a real user would see mid-visit. Unregister so it can't show up mid-capture.
+      if ("serviceWorker" in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister()));
       }
     },
     { memberId: session?.user?.memberId ?? null, view: calendarView ?? "week" },
@@ -140,6 +154,17 @@ async function fetchMathClassId(page) {
   return math.id;
 }
 
+/**
+ * "networkidle" is unreliable under Next.js dev mode — its HMR websocket stays open
+ * indefinitely, which some Playwright/browser combinations count as ongoing network
+ * activity, so networkidle can simply never fire. Soft: try it, but don't fail the
+ * capture if it times out — by then the page's own data fetches have long since
+ * resolved via the more specific waits below.
+ */
+async function waitForNetworkIdleSoft(page, timeout = 5_000) {
+  await page.waitForLoadState("networkidle", { timeout }).catch(() => {});
+}
+
 async function waitForRoute(page, route, { calendarView } = {}) {
   if (route.startsWith("/calendar")) {
     const tabName = calendarView === "week" ? "Week" : "Agenda";
@@ -148,7 +173,7 @@ async function waitForRoute(page, route, { calendarView } = {}) {
     if ((await tab.getAttribute("aria-selected")) !== "true") {
       await tab.click();
     }
-    await page.waitForLoadState("networkidle");
+    await waitForNetworkIdleSoft(page);
     await page.waitForTimeout(800);
     return;
   }
@@ -158,12 +183,12 @@ async function waitForRoute(page, route, { calendarView } = {}) {
       .getByRole("heading", { name: /school|math|gradebook/i })
       .first()
       .waitFor({ state: "visible", timeout: 30_000 })
-      .catch(() => page.waitForLoadState("networkidle"));
+      .catch(() => waitForNetworkIdleSoft(page));
     return;
   }
 
-  await page.waitForLoadState("networkidle");
-  await page.waitForTimeout(400);
+  await waitForNetworkIdleSoft(page);
+  await page.waitForTimeout(600);
 }
 
 async function captureViewport(page, fileName) {
@@ -227,6 +252,30 @@ const SHOTS = [
     routes: [{ suffix: "desktop", viewport: DESKTOP }],
     path: "/drive",
   },
+  {
+    id: "health",
+    priority: "p1",
+    routes: [{ suffix: "desktop", viewport: DESKTOP }],
+    path: "/health",
+  },
+  {
+    id: "shopping",
+    priority: "p2",
+    routes: [{ suffix: "desktop", viewport: DESKTOP }],
+    path: "/shopping",
+  },
+  {
+    id: "expenses",
+    priority: "p2",
+    routes: [{ suffix: "desktop", viewport: DESKTOP }],
+    path: "/expenses",
+  },
+  {
+    id: "notes",
+    priority: "p2",
+    routes: [{ suffix: "desktop", viewport: DESKTOP }],
+    path: "/notes",
+  },
 ];
 
 async function captureTheme(browser, theme, shots, baseUrl, email, password) {
@@ -240,6 +289,9 @@ async function captureTheme(browser, theme, shots, baseUrl, email, password) {
 
   try {
     await signIn(page, baseUrl, email, password);
+    // applyDemoPrefs runs fetch()/localStorage in the page — needs a real origin loaded first
+    // (signIn no longer navigates; it authenticates via a bare API request).
+    await page.goto(`${baseUrl}/dashboard`, { waitUntil: "domcontentloaded" });
     const session = await applyDemoPrefs(page, { calendarView: "week" });
     if (!session?.authenticated) {
       throw new Error("Login failed — /auth/session not authenticated");

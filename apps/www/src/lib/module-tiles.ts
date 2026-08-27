@@ -1,14 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import {
-  BookOpen,
-  Calendar,
-  FolderOpen,
-  Heart,
-  ListChecks,
-  NotebookPen,
-  Receipt,
-  ShoppingCart,
-} from "lucide-react";
+import { BookOpen, Calendar, ListChecks } from "lucide-react";
 import type { MarketingScreenshot } from "@domi-ops/marketing-ui";
 import { MARKETING_SCREENSHOTS } from "@domi-ops/marketing-ui";
 
@@ -28,27 +19,18 @@ export type ModuleTile =
       icon: LucideIcon;
     };
 
+/**
+ * The "everything else, included" grid — completeness proof, not the headline pitch.
+ * School and Health get their own dedicated narrative section above this (LandingPage.tsx,
+ * "why Domi Ops" callout) instead of a tile here, so they aren't shown twice.
+ */
 export const MODULE_TILES: ModuleTile[] = [
-  {
-    key: "school",
-    title: "Homeschool LMS",
-    description: "Classes, assignments, gradebook, and student progress beside chores and calendar.",
-    kind: "screenshot",
-    shot: MARKETING_SCREENSHOTS.school,
-  },
   {
     key: "calendar",
     title: "Calendar + Google sync",
     description: "Week view, recurring events, school overlays, and optional Google import.",
     kind: "screenshot",
     shot: MARKETING_SCREENSHOTS.heroCalendarWeek,
-  },
-  {
-    key: "drive",
-    title: "Household Drive",
-    description: "Files, folders, and links shared across school, notes, and notices.",
-    kind: "screenshot",
-    shot: MARKETING_SCREENSHOTS.drive,
   },
   {
     key: "chores",
@@ -61,29 +43,29 @@ export const MODULE_TILES: ModuleTile[] = [
     key: "shopping",
     title: "Shopping lists",
     description: "Aisle grouping, recurring items, and trip history with optional receipt capture.",
-    kind: "icon",
-    icon: ShoppingCart,
+    kind: "screenshot",
+    shot: MARKETING_SCREENSHOTS.shopping,
+  },
+  {
+    key: "drive",
+    title: "Household Drive",
+    description: "Files, folders, and links shared across school, notes, and notices.",
+    kind: "screenshot",
+    shot: MARKETING_SCREENSHOTS.drive,
   },
   {
     key: "expenses",
     title: "Expenses & budgets",
     description: "Monthly budgets, spend alerts, and household expense reports.",
-    kind: "icon",
-    icon: Receipt,
-  },
-  {
-    key: "health",
-    title: "Health tracker",
-    description: "Encrypted meds and events with calendar overlays and reminders.",
-    kind: "icon",
-    icon: Heart,
+    kind: "screenshot",
+    shot: MARKETING_SCREENSHOTS.expenses,
   },
   {
     key: "notes",
     title: "Notes",
     description: "Markdown notes with pins, tags, sharing, and Drive embeds.",
-    kind: "icon",
-    icon: NotebookPen,
+    kind: "screenshot",
+    shot: MARKETING_SCREENSHOTS.notes,
   },
 ];
 

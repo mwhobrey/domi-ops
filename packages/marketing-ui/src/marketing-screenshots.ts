@@ -56,6 +56,34 @@ export const MARKETING_SCREENSHOTS = {
     width: 1280,
     height: 800,
   },
+  health: {
+    priority: "p1",
+    id: "health",
+    suffix: "desktop",
+    width: 1280,
+    height: 800,
+  },
+  shopping: {
+    priority: "p2",
+    id: "shopping",
+    suffix: "desktop",
+    width: 1280,
+    height: 800,
+  },
+  expenses: {
+    priority: "p2",
+    id: "expenses",
+    suffix: "desktop",
+    width: 1280,
+    height: 800,
+  },
+  notes: {
+    priority: "p2",
+    id: "notes",
+    suffix: "desktop",
+    width: 1280,
+    height: 800,
+  },
 } as const satisfies Record<string, MarketingScreenshot>;
 
 export function marketingScreenshotPath(
