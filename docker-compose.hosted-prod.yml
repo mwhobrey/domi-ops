@@ -60,6 +60,11 @@ services:
       HOSTED_TIER: starter
       DRIVE_QUOTA_ENFORCE: "true"
       REDIS_URL: redis://redis:6379
+      # packages/config's env schema requires API_URL for every app, api included, even
+      # though api never calls itself with it — confirmed live (2026-08-27), same gap as
+      # worker below just masked until the migrate.js entrypoint override above stopped
+      # crashing first.
+      API_URL: http://api:4000
       # DATABASE_URL, S3_* come from .env — DO Managed Postgres + DO Spaces (external, not containers here).
     depends_on:
       redis:
