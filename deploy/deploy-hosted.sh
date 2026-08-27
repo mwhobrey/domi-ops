@@ -72,7 +72,16 @@ done
 echo "==> app health"
 if command -v curl >/dev/null 2>&1 && [[ -n "${PUBLIC_APP_URL:-}" ]]; then
   app_url="${PUBLIC_APP_URL%/}/health"
-  app_json="$(curl -sf "$app_url" 2>/dev/null || true)"
+  app_json=""
+  # api needs a moment to bind its listener after the container starts — redis is
+  # already healthy from a prior deploy so the wait loop above exits almost instantly,
+  # giving api no grace period. Retry instead of a single attempt (confirmed live
+  # 2026-08-27: a bare single curl here false-positived on every clean deploy).
+  for _ in $(seq 1 10); do
+    app_json="$(curl -sf "$app_url" 2>/dev/null || true)"
+    [[ -n "$app_json" ]] && break
+    sleep 2
+  done
   if [[ -n "$app_json" ]]; then
     echo "    $app_json"
   else

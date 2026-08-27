@@ -136,6 +136,20 @@ docker run -d --name caddy --restart unless-stopped \
   caddy:2-alpine
 ```
 
+**After editing `Caddyfile`, use `docker restart caddy`, not `docker exec caddy caddy reload`.**
+Confirmed live (2026-08-27): `caddy reload` printed a clean "adapted config to JSON" with no
+errors, but the change (a `handle /health` block) never actually took effect — querying the
+admin API (`docker exec caddy wget -qO- http://127.0.0.1:2019/config/apps/http/servers`) showed
+the *old* routes still loaded. A full `docker restart caddy` picked up the same file correctly.
+Never got to the bottom of why `reload` no-ops here; `restart` is a few seconds of TLS
+handshake disruption for in-flight connections, not worth chasing further for how rarely this
+file changes.
+
+Also: within one site block, don't mix a bare top-level `reverse_proxy` with a `handle {}`
+block for a different path — Caddy's automatic directive ordering doesn't reliably interleave
+them. Use two `handle` blocks instead (one path-matched, one bare as the catch-all) — see
+`Caddyfile.domi-ops.example`'s `app.domi-ops.com` stanza for the pattern.
+
 ---
 
 ## 5. DNS cutover
