@@ -9,6 +9,12 @@ import { NoteSharePicker } from "./NoteSharePicker";
 import type { HealthAclGrants } from "./HealthPeopleAccessPanel";
 import { ModuleReportsLink } from "./reports/ModuleReportsLink";
 import {
+  MedScheduleEditor,
+  medicationToScheduleDraft,
+  scheduleDraftToRequestBody,
+  type MedScheduleDraft,
+} from "./health/MedScheduleEditor";
+import {
   Alert,
   Badge,
   Button,
@@ -78,6 +84,7 @@ export interface HealthEvent {
 export interface HealthMedication {
   id: string;
   memberId: string;
+  groupId?: string | null;
   name: string;
   dosage: string | null;
   instructions: string | null;
@@ -112,6 +119,16 @@ interface PendingDose {
   scheduledTimeLabel: string;
   memberId: string;
   awaitingFirst?: boolean;
+}
+
+interface PendingGroupDose {
+  groupId: string;
+  name: string;
+  scheduledAt: string;
+  scheduledTime: string;
+  scheduledTimeLabel: string;
+  memberId: string;
+  medications: { medicationId: string; name: string; dosage: string | null; alreadyLogged: boolean }[];
 }
 
 function scheduleKindLabel(kind: HealthMedication["scheduleKind"]): string {
@@ -160,6 +177,35 @@ function groupMedsByMember(meds: HealthMedication[]): Array<{
     byMember.set(med.memberId, list);
   }
   return [...byMember.entries()].map(([memberId, list]) => ({ memberId, meds: list }));
+}
+
+function groupPendingGroupDosesByMember(doses: PendingGroupDose[]): Map<string, PendingGroupDose[]> {
+  const map = new Map<string, PendingGroupDose[]>();
+  for (const dose of doses) {
+    const list = map.get(dose.memberId) ?? [];
+    list.push(dose);
+    map.set(dose.memberId, list);
+  }
+  return map;
+}
+
+type TodayEntry =
+  | { kind: "adhoc"; scheduledTime: string; timeGroup: { scheduledTime: string; label: string; doses: PendingDose[] } }
+  | { kind: "group"; scheduledTime: string; group: PendingGroupDose };
+
+/** Real persisted groups (pendingGroupDoses) and ad-hoc same-time-string doses (pendingDoses,
+ *  unchanged logic) interleaved by time within one member's section — matches how someone
+ *  actually thinks about "what's due at 8am" rather than showing all groups before everything
+ *  else. */
+function mergeTodayEntriesForMember(
+  adhocTimes: Array<{ scheduledTime: string; label: string; doses: PendingDose[] }>,
+  groupDoses: PendingGroupDose[],
+): TodayEntry[] {
+  const entries: TodayEntry[] = [
+    ...adhocTimes.map((t) => ({ kind: "adhoc" as const, scheduledTime: t.scheduledTime, timeGroup: t })),
+    ...groupDoses.map((g) => ({ kind: "group" as const, scheduledTime: g.scheduledTime, group: g })),
+  ];
+  return entries.sort((a, b) => a.scheduledTime.localeCompare(b.scheduledTime));
 }
 
 const EVENT_TYPES: { value: HealthEventType; label: string }[] = [
@@ -331,11 +377,11 @@ function VitalsReadingsEditor({
   );
 }
 
-function memberLabel(members: NoteShareMember[], memberId: string): string {
+export function memberLabel(members: NoteShareMember[], memberId: string): string {
   return members.find((m) => m.memberId === memberId)?.label ?? "Member";
 }
 
-function resolveDefaultMemberId(currentMemberId: string, members: NoteShareMember[]): string {
+export function resolveDefaultMemberId(currentMemberId: string, members: NoteShareMember[]): string {
   if (currentMemberId && members.some((m) => m.memberId === currentMemberId)) {
     return currentMemberId;
   }
@@ -348,66 +394,6 @@ function todayInTz(timeZone: string): string {
   } catch {
     return new Date().toISOString().slice(0, 10);
   }
-}
-
-function MedTimesEditor({
-  times,
-  onChange,
-}: {
-  times: string[];
-  onChange: (times: string[]) => void;
-}) {
-  // Stable row ids — keying by value remounts the input on every change and eats focus.
-  const rowIdsRef = useRef<string[]>([]);
-  if (rowIdsRef.current.length < times.length) {
-    for (let i = rowIdsRef.current.length; i < times.length; i++) {
-      rowIdsRef.current.push(`med-time-${i}-${Math.random().toString(36).slice(2, 9)}`);
-    }
-  } else if (rowIdsRef.current.length > times.length) {
-    rowIdsRef.current = rowIdsRef.current.slice(0, times.length);
-  }
-
-  return (
-    <div className="space-y-2">
-      <span className="text-sm font-medium text-[var(--color-text)]">Times</span>
-      <ul className="space-y-2">
-        {times.map((time, index) => (
-          <li key={rowIdsRef.current[index]} className="flex items-center gap-2">
-            <Input
-              type="time"
-              className="flex-1"
-              value={time.slice(0, 5)}
-              onChange={(e) => {
-                const next = [...times];
-                next[index] = e.target.value;
-                onChange(next);
-              }}
-            />
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              disabled={times.length <= 1}
-              onClick={() => {
-                rowIdsRef.current = rowIdsRef.current.filter((_, i) => i !== index);
-                onChange(times.filter((_, i) => i !== index));
-              }}
-            >
-              Remove
-            </Button>
-          </li>
-        ))}
-      </ul>
-      <Button
-        type="button"
-        size="sm"
-        variant="secondary"
-        onClick={() => onChange([...times, "08:00"])}
-      >
-        + Add time
-      </Button>
-    </div>
-  );
 }
 
 function formatEventWhen(ev: HealthEvent): string | null {
@@ -487,6 +473,83 @@ function HealthRow({
   );
 }
 
+function MedGroupDoseCard({
+  group,
+  canLog,
+  expanded,
+  onToggleExpand,
+  onTakeAll,
+  takingAll,
+  onLogOne,
+  highlightTakeKey,
+  highlightTakeRef,
+}: {
+  group: PendingGroupDose;
+  canLog: boolean;
+  expanded: boolean;
+  onToggleExpand: () => void;
+  onTakeAll: () => void;
+  takingAll: boolean;
+  onLogOne: (medicationId: string, status?: "skipped") => void;
+  highlightTakeKey: string | null;
+  highlightTakeRef: React.Ref<HTMLDivElement>;
+}) {
+  const pendingCount = group.medications.filter((m) => !m.alreadyLogged).length;
+  return (
+    <div className="space-y-2 rounded-lg border border-[var(--color-border)] p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-semibold text-[var(--color-text)]">{group.name}</p>
+          <p className="text-xs uppercase tracking-wide text-[var(--color-text-muted)]">
+            {group.scheduledTimeLabel} · {group.medications.length} meds
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {canLog && pendingCount > 1 ? (
+            <Button size="sm" disabled={takingAll} onClick={onTakeAll}>
+              {takingAll ? "Saving…" : "Take all"}
+            </Button>
+          ) : null}
+          <Button size="sm" variant="secondary" onClick={onToggleExpand}>
+            {expanded ? "Hide" : "Show"} meds
+          </Button>
+        </div>
+      </div>
+      {expanded ? (
+        <ul className="space-y-2 pt-1">
+          {group.medications.map((med) => {
+            const doseKey = `${med.medicationId}-${group.scheduledAt}`;
+            const highlighted = highlightTakeKey === doseKey || highlightTakeKey === med.medicationId;
+            return (
+              <HealthRow
+                key={med.medicationId}
+                rowRef={highlighted ? highlightTakeRef : undefined}
+                highlighted={highlighted}
+                title={med.name}
+                subtitle={med.dosage?.trim() || undefined}
+                trailing={
+                  med.alreadyLogged ? (
+                    <Badge tone="success">Logged</Badge>
+                  ) : canLog ? (
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={() => onLogOne(med.medicationId)}>
+                        Taken
+                      </Button>
+                      <Button size="sm" variant="secondary" onClick={() => onLogOne(med.medicationId, "skipped")}>
+                        Skip
+                      </Button>
+                    </div>
+                  ) : null
+                }
+              />
+            );
+          })}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 export function HealthPageClient({
   members,
   currentMemberId,
@@ -518,6 +581,7 @@ export function HealthPageClient({
   const [events, setEvents] = useState<HealthEvent[]>([]);
   const [medications, setMedications] = useState<HealthMedication[]>([]);
   const [pendingDoses, setPendingDoses] = useState<PendingDose[]>([]);
+  const [pendingGroupDoses, setPendingGroupDoses] = useState<PendingGroupDose[]>([]);
   const [prnMeds, setPrnMeds] = useState<HealthMedication[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -529,6 +593,7 @@ export function HealthPageClient({
   const [editingMed, setEditingMed] = useState<HealthMedication | null>(null);
   const [capabilities, setCapabilities] = useState<Record<string, HealthAclGrants>>({});
   const [loggingAllKey, setLoggingAllKey] = useState<string | null>(null);
+  const [expandedGroupDoses, setExpandedGroupDoses] = useState<Set<string>>(new Set());
   const [highlightTakeKey, setHighlightTakeKey] = useState<string | null>(null);
   const pushActionHandled = useRef(false);
   const takeHandled = useRef(false);
@@ -543,6 +608,7 @@ export function HealthPageClient({
         apiClient.get<{ medications: HealthMedication[] }>("/api/health/medications"),
         apiClient.get<{
           pendingDoses: PendingDose[];
+          pendingGroupDoses: PendingGroupDose[];
           prnMedications: HealthMedication[];
         }>("/api/health/glance"),
         apiClient.get<{ bySubject: Record<string, HealthAclGrants> }>("/api/health/capabilities"),
@@ -550,6 +616,7 @@ export function HealthPageClient({
       setEvents(eventsRes.events);
       setMedications(medsRes.medications);
       setPendingDoses(glanceRes.pendingDoses);
+      setPendingGroupDoses(glanceRes.pendingGroupDoses ?? []);
       setPrnMeds(glanceRes.prnMedications);
       setCapabilities(capsRes.bySubject ?? {});
     } catch (err) {
@@ -673,6 +740,34 @@ export function HealthPageClient({
     }
   }
 
+  /** Persisted-group "Take all" — one batch request to /medication-groups/:id/log-all, unlike
+   *  the ad-hoc logAllTaken above which still loops N individual requests client-side. */
+  async function logGroupAllTaken(group: PendingGroupDose) {
+    const key = `group:${group.groupId}:${group.scheduledAt}`;
+    if (loggingAllKey) return;
+    setError(null);
+    setLoggingAllKey(key);
+    try {
+      await apiClient.post(`/api/health/medication-groups/${group.groupId}/log-all`, {
+        scheduledAt: group.scheduledAt,
+      });
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not log group doses");
+    } finally {
+      setLoggingAllKey(null);
+    }
+  }
+
+  function toggleGroupDoseExpanded(key: string) {
+    setExpandedGroupDoses((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
   const canAddEvent = members.some((m) => capabilities[m.memberId]?.events === "write");
   const canAddMed = members.some((m) => capabilities[m.memberId]?.medications === "write");
 
@@ -713,89 +808,126 @@ export function HealthPageClient({
               <SectionHeader title="Scheduled doses" />
               {loading ? (
                 <p className="text-sm text-[var(--color-text-muted)]">Loading…</p>
-              ) : pendingDoses.length === 0 ? (
+              ) : pendingDoses.length === 0 && pendingGroupDoses.length === 0 ? (
                 <p className="text-sm text-[var(--color-text-muted)]">No pending doses today.</p>
               ) : (
-                groupPendingDosesByMemberThenTime(pendingDoses).map((memberGroup) => (
-                  <div key={memberGroup.memberId} className="space-y-3">
-                    <h3 className="text-sm font-semibold text-[var(--color-text)]">
-                      {memberLabel(members, memberGroup.memberId)}
-                    </h3>
-                    {memberGroup.times.map((timeGroup) => {
-                      const loggable = timeGroup.doses.filter((d) => canLogForMember(d.memberId));
-                      const groupKey = `${memberGroup.memberId}:${timeGroup.scheduledTime}`;
-                      return (
-                      <div key={timeGroup.scheduledTime} className="space-y-2">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <p className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]">
-                            {timeGroup.label}
-                            {timeGroup.doses.length > 1
-                              ? ` · ${timeGroup.doses.length} meds`
-                              : null}
-                          </p>
-                          {loggable.length > 1 ? (
-                            <Button
-                              size="sm"
-                              disabled={loggingAllKey !== null}
-                              onClick={() => void logAllTaken(groupKey, loggable)}
-                            >
-                              {loggingAllKey === groupKey ? "Saving…" : "Taken all"}
-                            </Button>
-                          ) : null}
-                        </div>
-                        <ul className="space-y-2">
-                          {timeGroup.doses.map((dose) => {
-                            const doseKey = `${dose.medicationId}-${dose.scheduledAt}`;
-                            const highlighted =
-                              highlightTakeKey === doseKey ||
-                              highlightTakeKey === dose.medicationId;
+                (() => {
+                  const adhocByMember = groupPendingDosesByMemberThenTime(pendingDoses);
+                  const groupByMember = groupPendingGroupDosesByMember(pendingGroupDoses);
+                  const memberIds = [
+                    ...new Set([...adhocByMember.map((m) => m.memberId), ...groupByMember.keys()]),
+                  ];
+                  return memberIds.map((memberId) => {
+                    const adhocTimes = adhocByMember.find((m) => m.memberId === memberId)?.times ?? [];
+                    const groupDoses = groupByMember.get(memberId) ?? [];
+                    const merged = mergeTodayEntriesForMember(adhocTimes, groupDoses);
+                    return (
+                      <div key={memberId} className="space-y-3">
+                        <h3 className="text-sm font-semibold text-[var(--color-text)]">
+                          {memberLabel(members, memberId)}
+                        </h3>
+                        {merged.map((entry) => {
+                          if (entry.kind === "group") {
+                            const group = entry.group;
+                            const doseKey = `group:${group.groupId}:${group.scheduledAt}`;
                             return (
-                            <HealthRow
-                              key={doseKey}
-                              rowRef={highlighted ? highlightTakeRef : undefined}
-                              highlighted={highlighted}
-                              title={dose.name}
-                              subtitle={dose.dosage?.trim() || undefined}
-                              trailing={
-                                canLogForMember(dose.memberId) ? (
-                                  <div className="flex gap-2">
-                                    <Button
-                                      size="sm"
-                                      onClick={() =>
-                                        void logDose(dose.medicationId, {
-                                          scheduledAt: dose.scheduledAt,
-                                          alsoCreateEvent: false,
-                                        })
-                                      }
-                                    >
-                                      {dose.awaitingFirst ? "Start" : "Taken"}
-                                    </Button>
-                                    {!dose.awaitingFirst ? (
-                                    <Button
-                                      size="sm"
-                                      variant="secondary"
-                                      onClick={() =>
-                                        void logDose(dose.medicationId, {
-                                          scheduledAt: dose.scheduledAt,
-                                          status: "skipped",
-                                        })
-                                      }
-                                    >
-                                      Skip
-                                    </Button>
-                                    ) : null}
-                                  </div>
-                                ) : null
-                              }
-                            />
+                              <MedGroupDoseCard
+                                key={doseKey}
+                                group={group}
+                                canLog={canLogForMember(group.memberId)}
+                                expanded={expandedGroupDoses.has(doseKey)}
+                                onToggleExpand={() => toggleGroupDoseExpanded(doseKey)}
+                                onTakeAll={() => void logGroupAllTaken(group)}
+                                takingAll={loggingAllKey === `group:${group.groupId}:${group.scheduledAt}`}
+                                onLogOne={(medicationId, status) =>
+                                  void logDose(medicationId, {
+                                    scheduledAt: group.scheduledAt,
+                                    alsoCreateEvent: false,
+                                    status,
+                                  })
+                                }
+                                highlightTakeKey={highlightTakeKey}
+                                highlightTakeRef={highlightTakeRef}
+                              />
                             );
-                          })}
-                        </ul>
+                          }
+                          const timeGroup = entry.timeGroup;
+                          const loggable = timeGroup.doses.filter((d) => canLogForMember(d.memberId));
+                          const groupKey = `${memberId}:${timeGroup.scheduledTime}`;
+                          return (
+                            <div key={timeGroup.scheduledTime} className="space-y-2">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <p className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]">
+                                  {timeGroup.label}
+                                  {timeGroup.doses.length > 1
+                                    ? ` · ${timeGroup.doses.length} meds`
+                                    : null}
+                                </p>
+                                {loggable.length > 1 ? (
+                                  <Button
+                                    size="sm"
+                                    disabled={loggingAllKey !== null}
+                                    onClick={() => void logAllTaken(groupKey, loggable)}
+                                  >
+                                    {loggingAllKey === groupKey ? "Saving…" : "Taken all"}
+                                  </Button>
+                                ) : null}
+                              </div>
+                              <ul className="space-y-2">
+                                {timeGroup.doses.map((dose) => {
+                                  const doseKey = `${dose.medicationId}-${dose.scheduledAt}`;
+                                  const highlighted =
+                                    highlightTakeKey === doseKey ||
+                                    highlightTakeKey === dose.medicationId;
+                                  return (
+                                    <HealthRow
+                                      key={doseKey}
+                                      rowRef={highlighted ? highlightTakeRef : undefined}
+                                      highlighted={highlighted}
+                                      title={dose.name}
+                                      subtitle={dose.dosage?.trim() || undefined}
+                                      trailing={
+                                        canLogForMember(dose.memberId) ? (
+                                          <div className="flex gap-2">
+                                            <Button
+                                              size="sm"
+                                              onClick={() =>
+                                                void logDose(dose.medicationId, {
+                                                  scheduledAt: dose.scheduledAt,
+                                                  alsoCreateEvent: false,
+                                                })
+                                              }
+                                            >
+                                              {dose.awaitingFirst ? "Start" : "Taken"}
+                                            </Button>
+                                            {!dose.awaitingFirst ? (
+                                              <Button
+                                                size="sm"
+                                                variant="secondary"
+                                                onClick={() =>
+                                                  void logDose(dose.medicationId, {
+                                                    scheduledAt: dose.scheduledAt,
+                                                    status: "skipped",
+                                                  })
+                                                }
+                                              >
+                                                Skip
+                                              </Button>
+                                            ) : null}
+                                          </div>
+                                        ) : null
+                                      }
+                                    />
+                                  );
+                                })}
+                              </ul>
+                            </div>
+                          );
+                        })}
                       </div>
-                      );
-                    })}
-                  </div>
-                ))
+                    );
+                  });
+                })()
               )}
             </CardBody>
           </Card>
@@ -891,19 +1023,26 @@ export function HealthPageClient({
 
       {tab === "medications" ? (
         <div className="space-y-4">
-          {canAddMed ? (
-          <div className="flex justify-end">
-            <Button
-              size="sm"
-              onClick={() => {
-                setEditingMed(null);
-                setMedSheetOpen(true);
-              }}
-            >
-              Add medication
-            </Button>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <LinkButton href="/health/medications" size="sm" variant="secondary">
+              Open medication manager
+            </LinkButton>
+            {canAddMed ? (
+              <Button
+                size="sm"
+                onClick={() => {
+                  setEditingMed(null);
+                  setMedSheetOpen(true);
+                }}
+              >
+                Add medication
+              </Button>
+            ) : null}
           </div>
-          ) : null}
+          <p className="text-sm text-[var(--color-text-muted)]">
+            This list is for quick edits. Use the medication manager to set up reminder groups and see
+            everyone&apos;s schedule at a glance.
+          </p>
           {medications.length === 0 && !loading ? (
             <EmptyState
               icon={<Heart className="h-8 w-8" aria-hidden />}
@@ -1368,7 +1507,7 @@ function HealthEventSheet({
   );
 }
 
-function HealthMedicationSheet({
+export function HealthMedicationSheet({
   open,
   medication,
   members,
@@ -1396,44 +1535,9 @@ function HealthMedicationSheet({
   const [name, setName] = useState(medication?.name ?? "");
   const [dosage, setDosage] = useState(medication?.dosage ?? "");
   const [instructions, setInstructions] = useState(medication?.instructions ?? "");
-  const [scheduleKind, setScheduleKind] = useState<"scheduled" | "prn" | "interval">(
-    medication?.scheduleKind ?? "scheduled",
+  const [scheduleDraft, setScheduleDraft] = useState<MedScheduleDraft>(() =>
+    medicationToScheduleDraft(medication),
   );
-  const [scheduleTimes, setScheduleTimes] = useState<string[]>(
-    medication?.schedule?.times?.length ? medication.schedule.times : ["08:00"],
-  );
-  const [everyAmount, setEveryAmount] = useState(() => {
-    const m = medication?.schedule?.everyMinutes;
-    if (!m) return "";
-    if (m % (24 * 60) === 0) return String(m / (24 * 60));
-    if (m % 60 === 0) return String(m / 60);
-    return String(m);
-  });
-  const [everyUnit, setEveryUnit] = useState<"minutes" | "hours" | "days">(() => {
-    const m = medication?.schedule?.everyMinutes;
-    if (!m) return "hours";
-    if (m % (24 * 60) === 0) return "days";
-    if (m % 60 === 0) return "hours";
-    return "minutes";
-  });
-  const [intervalAnchor, setIntervalAnchor] = useState<"first_taken" | "fixed_start">(
-    medication?.schedule?.anchor === "fixed_start" ? "fixed_start" : "first_taken",
-  );
-  const [fixedStartTime, setFixedStartTime] = useState(
-    medication?.schedule?.fixedStartTime ?? "08:00",
-  );
-  const [intervalFrom, setIntervalFrom] = useState<"last_taken" | "schedule_grid">(
-    medication?.schedule?.intervalFrom === "schedule_grid" ? "schedule_grid" : "last_taken",
-  );
-  const [stopMode, setStopMode] = useState<"max_doses" | "end_time" | "midnight">(
-    medication?.schedule?.stop?.mode === "end_time" || medication?.schedule?.stop?.mode === "midnight"
-      ? medication.schedule.stop.mode
-      : "max_doses",
-  );
-  const [maxDoses, setMaxDoses] = useState(
-    medication?.schedule?.stop?.maxDoses != null ? String(medication.schedule.stop.maxDoses) : "",
-  );
-  const [endTime, setEndTime] = useState(medication?.schedule?.stop?.endTime ?? "22:00");
   const [visibility, setVisibility] = useState<"household" | "private">(
     medication?.visibility ?? "private",
   );
@@ -1450,40 +1554,7 @@ function HealthMedicationSheet({
     setName(medication?.name ?? "");
     setDosage(medication?.dosage ?? "");
     setInstructions(medication?.instructions ?? "");
-    setScheduleKind(medication?.scheduleKind ?? "scheduled");
-    setScheduleTimes(
-      medication?.schedule?.times?.length ? medication.schedule.times : ["08:00"],
-    );
-    const m = medication?.schedule?.everyMinutes;
-    if (!m) {
-      setEveryAmount("");
-      setEveryUnit("hours");
-    } else if (m % (24 * 60) === 0) {
-      setEveryAmount(String(m / (24 * 60)));
-      setEveryUnit("days");
-    } else if (m % 60 === 0) {
-      setEveryAmount(String(m / 60));
-      setEveryUnit("hours");
-    } else {
-      setEveryAmount(String(m));
-      setEveryUnit("minutes");
-    }
-    setIntervalAnchor(
-      medication?.schedule?.anchor === "fixed_start" ? "fixed_start" : "first_taken",
-    );
-    setFixedStartTime(medication?.schedule?.fixedStartTime ?? "08:00");
-    setIntervalFrom(
-      medication?.schedule?.intervalFrom === "schedule_grid" ? "schedule_grid" : "last_taken",
-    );
-    setStopMode(
-      medication?.schedule?.stop?.mode === "end_time" || medication?.schedule?.stop?.mode === "midnight"
-        ? medication.schedule.stop.mode
-        : "max_doses",
-    );
-    setMaxDoses(
-      medication?.schedule?.stop?.maxDoses != null ? String(medication.schedule.stop.maxDoses) : "",
-    );
-    setEndTime(medication?.schedule?.stop?.endTime ?? "22:00");
+    setScheduleDraft(medicationToScheduleDraft(medication));
     setVisibility(medication?.visibility ?? "private");
     setSharedMemberIds(medication?.sharedMemberIds ?? []);
     setEnabled(medication?.enabled ?? true);
@@ -1493,48 +1564,19 @@ function HealthMedicationSheet({
     if (readOnly || !name.trim()) return;
     setBusy(true);
     setErr(null);
-    const scheduleTimesNormalized = scheduleTimes
-      .map((t) => t.trim())
-      .filter(Boolean)
-      .map((t) => (t.length >= 5 ? t.slice(0, 5) : t));
-    let everyMinutes: number | undefined;
-    if (scheduleKind === "interval") {
-      const amount = Number(everyAmount);
-      if (!Number.isFinite(amount) || amount <= 0) {
-        setErr("Enter how often doses repeat");
-        setBusy(false);
-        return;
-      }
-      everyMinutes =
-        everyUnit === "days" ? amount * 24 * 60 : everyUnit === "hours" ? amount * 60 : amount;
-      if (stopMode === "max_doses" && (!maxDoses.trim() || Number(maxDoses) < 1)) {
-        setErr("Enter max doses per day");
-        setBusy(false);
-        return;
-      }
+    const scheduleResult = scheduleDraftToRequestBody(scheduleDraft);
+    if (!scheduleResult.ok) {
+      setErr(scheduleResult.error);
+      setBusy(false);
+      return;
     }
     const body = {
       memberId,
       name: name.trim(),
       dosage: dosage.trim() || undefined,
       instructions: instructions.trim() || undefined,
-      scheduleKind,
-      schedule:
-        scheduleKind === "scheduled"
-          ? { times: scheduleTimesNormalized }
-          : scheduleKind === "interval"
-            ? {
-                everyMinutes,
-                anchor: intervalAnchor,
-                fixedStartTime: intervalAnchor === "fixed_start" ? fixedStartTime : undefined,
-                intervalFrom,
-                stop: {
-                  mode: stopMode,
-                  maxDoses: stopMode === "max_doses" ? Number(maxDoses) : undefined,
-                  endTime: stopMode === "end_time" ? endTime : undefined,
-                },
-              }
-            : undefined,
+      scheduleKind: scheduleResult.scheduleKind,
+      schedule: scheduleResult.schedule,
       enabled,
       visibility,
       sharedMemberIds: visibility === "private" ? sharedMemberIds : undefined,
@@ -1587,113 +1629,7 @@ function HealthMedicationSheet({
             rows={2}
           />
         </label>
-        <label className="block space-y-1 text-sm">
-          <span>Schedule</span>
-          <Select
-            value={scheduleKind}
-            onChange={(e) => setScheduleKind(e.target.value as "scheduled" | "prn" | "interval")}
-          >
-            <option value="scheduled">Scheduled times</option>
-            <option value="interval">Every N (interval)</option>
-            <option value="prn">PRN (as needed)</option>
-          </Select>
-        </label>
-        {scheduleKind === "scheduled" ? (
-          <MedTimesEditor times={scheduleTimes} onChange={setScheduleTimes} />
-        ) : null}
-        {scheduleKind === "interval" ? (
-          <div className="space-y-3 rounded-lg border border-[var(--color-border)] p-3">
-            <div className="flex flex-wrap gap-2">
-              <label className="block flex-1 space-y-1 text-sm">
-                <span>Every</span>
-                <Input
-                  type="number"
-                  min={1}
-                  value={everyAmount}
-                  onChange={(e) => setEveryAmount(e.target.value)}
-                  placeholder="e.g. 3"
-                />
-              </label>
-              <label className="block w-32 space-y-1 text-sm">
-                <span>Unit</span>
-                <Select
-                  value={everyUnit}
-                  onChange={(e) => setEveryUnit(e.target.value as "minutes" | "hours" | "days")}
-                >
-                  <option value="minutes">Minutes</option>
-                  <option value="hours">Hours</option>
-                  <option value="days">Days</option>
-                </Select>
-              </label>
-            </div>
-            <label className="block space-y-1 text-sm">
-              <span>Start</span>
-              <Select
-                value={intervalAnchor}
-                onChange={(e) =>
-                  setIntervalAnchor(e.target.value as "first_taken" | "fixed_start")
-                }
-              >
-                <option value="first_taken">When first dose is Taken</option>
-                <option value="fixed_start">At a set morning time</option>
-              </Select>
-            </label>
-            {intervalAnchor === "fixed_start" ? (
-              <label className="block space-y-1 text-sm">
-                <span>Start time</span>
-                <Input
-                  type="time"
-                  value={fixedStartTime}
-                  onChange={(e) => setFixedStartTime(e.target.value)}
-                />
-              </label>
-            ) : null}
-            <label className="block space-y-1 text-sm">
-              <span>After that, next due is</span>
-              <Select
-                value={intervalFrom}
-                onChange={(e) =>
-                  setIntervalFrom(e.target.value as "last_taken" | "schedule_grid")
-                }
-              >
-                <option value="last_taken">Last Taken + interval</option>
-                <option value="schedule_grid">Fixed grid from start (even if late)</option>
-              </Select>
-            </label>
-            <label className="block space-y-1 text-sm">
-              <span>Stop for the day</span>
-              <Select
-                value={stopMode}
-                onChange={(e) =>
-                  setStopMode(e.target.value as "max_doses" | "end_time" | "midnight")
-                }
-              >
-                <option value="max_doses">Max doses</option>
-                <option value="end_time">After an end time</option>
-                <option value="midnight">Local midnight</option>
-              </Select>
-            </label>
-            {stopMode === "max_doses" ? (
-              <label className="block space-y-1 text-sm">
-                <span>Max doses / day</span>
-                <Input
-                  type="number"
-                  min={1}
-                  max={24}
-                  value={maxDoses}
-                  onChange={(e) => setMaxDoses(e.target.value)}
-                  placeholder="e.g. 5"
-                />
-              </label>
-            ) : null}
-            {stopMode === "end_time" ? (
-              <label className="block space-y-1 text-sm">
-                <span>End time</span>
-                <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
-              </label>
-            ) : null}
-          </div>
-        ) : null}
+        <MedScheduleEditor draft={scheduleDraft} onChange={setScheduleDraft} />
         <Checkbox checked={enabled} onChange={(e) => setEnabled(e.target.checked)} label="Enabled" />
         <label className="block space-y-1 text-sm">
           <span>Visibility</span>

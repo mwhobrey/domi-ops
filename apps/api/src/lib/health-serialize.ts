@@ -180,6 +180,7 @@ export function serializeHealthMedication(
   return {
     id: row.id,
     memberId: row.memberId,
+    groupId: row.groupId,
     name: decryptHealthFieldOrPassthrough(row.name, env) ?? "",
     dosage: decryptHealthFieldOrPassthrough(row.dosage, env),
     instructions: decryptHealthFieldOrPassthrough(row.instructions, env),

@@ -119,6 +119,13 @@ export const healthMedications = pgTable("health_medications", {
   scheduleKind: medScheduleKindEnum("schedule_kind").notNull().default("scheduled"),
   scheduleJson: text("schedule_json").default("{}"),
   reminderOffsetsJson: text("reminder_offsets_json").default("[0]"),
+  /**
+   * When set, this medication's own schedule fields above are preserved-but-inert — the
+   * reminder worker skips it entirely and evaluates the group's schedule instead. Removing
+   * it from the group (or the group being deleted, via ON DELETE SET NULL) restores its
+   * standalone schedule with no data loss.
+   */
+  groupId: uuid("group_id").references(() => healthMedicationGroups.id, { onDelete: "set null" }),
   startDate: date("start_date"),
   endDate: date("end_date"),
   enabled: boolean("enabled").notNull().default(true),
@@ -141,6 +148,49 @@ export const healthMedicationShares = pgTable(
       .references(() => householdMembers.id, { onDelete: "cascade" }),
   },
   (t) => [primaryKey({ columns: [t.medicationId, t.memberId] })],
+);
+
+/**
+ * A user-configured bundle of medications that share one schedule, so recipients get a single
+ * consolidated reminder instead of one per medication (WHO-medgroups). Same schedule shape as
+ * healthMedications ("prn" is rejected at the API layer — a PRN group has no shared due time to
+ * consolidate around). Scoped to a single member, mirroring healthMedications and the existing
+ * per-member ACL/recipient-resolution code.
+ */
+export const healthMedicationGroups = pgTable("health_medication_groups", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  householdId: uuid("household_id")
+    .notNull()
+    .references(() => households.id, { onDelete: "cascade" }),
+  memberId: uuid("member_id")
+    .notNull()
+    .references(() => householdMembers.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  scheduleKind: medScheduleKindEnum("schedule_kind").notNull().default("scheduled"),
+  scheduleJson: text("schedule_json").default("{}"),
+  reminderOffsetsJson: text("reminder_offsets_json").default("[0]"),
+  startDate: date("start_date"),
+  endDate: date("end_date"),
+  enabled: boolean("enabled").notNull().default(true),
+  visibility: noteVisibilityEnum("visibility").notNull().default("private"),
+  createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const healthMedicationGroupShares = pgTable(
+  "health_medication_group_shares",
+  {
+    groupId: uuid("group_id")
+      .notNull()
+      .references(() => healthMedicationGroups.id, { onDelete: "cascade" }),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => householdMembers.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.groupId, t.memberId] })],
 );
 
 /** Per-grantee segment ACL for a subject's health data (WHO-229). */
@@ -208,6 +258,32 @@ export const healthMedReminderSent = pgTable(
       .where(sql`${t.subscriptionId} is not null`),
     uniqueIndex("health_med_reminder_sent_nosub_unique")
       .on(t.medicationId, t.scheduledAt, t.offsetMinutes, t.userId)
+      .where(sql`${t.subscriptionId} is null`),
+  ],
+);
+
+/** Same dedupe/idempotency shape as healthMedReminderSent, keyed by group instead of medication. */
+export const healthMedGroupReminderSent = pgTable(
+  "health_med_group_reminder_sent",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    groupId: uuid("group_id")
+      .notNull()
+      .references(() => healthMedicationGroups.id, { onDelete: "cascade" }),
+    scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull(),
+    offsetMinutes: integer("offset_minutes").notNull(),
+    subscriptionId: uuid("subscription_id").references(() => pushSubscriptions.id, {
+      onDelete: "cascade",
+    }),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("health_med_group_reminder_sent_sub_unique")
+      .on(t.groupId, t.scheduledAt, t.offsetMinutes, t.subscriptionId)
+      .where(sql`${t.subscriptionId} is not null`),
+    uniqueIndex("health_med_group_reminder_sent_nosub_unique")
+      .on(t.groupId, t.scheduledAt, t.offsetMinutes, t.userId)
       .where(sql`${t.subscriptionId} is null`),
   ],
 );

@@ -2,6 +2,8 @@ import type { Database } from "@domi-ops/db";
 import {
   healthEventShares,
   healthEvents,
+  healthMedicationGroupShares,
+  healthMedicationGroups,
   healthMedicationShares,
   healthMedications,
   healthMemberAcl,
@@ -136,6 +138,38 @@ export async function replaceHealthMedicationShares(
   if (memberIds.length === 0) return;
   await db.insert(healthMedicationShares).values(
     memberIds.map((memberId) => ({ medicationId, memberId })),
+  );
+}
+
+export async function loadHealthMedicationGroupShareMap(db: Database, groupIds: string[]) {
+  const map = new Map<string, string[]>();
+  if (groupIds.length === 0) return map;
+  const rows = await db
+    .select({
+      groupId: healthMedicationGroupShares.groupId,
+      memberId: healthMedicationGroupShares.memberId,
+    })
+    .from(healthMedicationGroupShares)
+    .where(inArray(healthMedicationGroupShares.groupId, groupIds));
+  for (const row of rows) {
+    const list = map.get(row.groupId) ?? [];
+    list.push(row.memberId);
+    map.set(row.groupId, list);
+  }
+  return map;
+}
+
+export async function replaceHealthMedicationGroupShares(
+  db: Database,
+  groupId: string,
+  memberIds: string[],
+) {
+  await db
+    .delete(healthMedicationGroupShares)
+    .where(eq(healthMedicationGroupShares.groupId, groupId));
+  if (memberIds.length === 0) return;
+  await db.insert(healthMedicationGroupShares).values(
+    memberIds.map((memberId) => ({ groupId, memberId })),
   );
 }
 
@@ -370,6 +404,49 @@ export function healthEventReportsVisibleWhere(db: Database, auth: {
       ]),
       aclExistsSql(db, auth.memberId, healthEvents.memberId, healthMemberAcl.reportsAccess, [
         "read",
+        "write",
+      ]),
+    ),
+  );
+}
+
+/** Same visibility rules as healthMedicationVisibleWhere, for medication groups. */
+export function healthMedicationGroupVisibleWhere(db: Database, auth: {
+  householdId: string;
+  userId: string;
+  memberId: string;
+}) {
+  return and(
+    eq(healthMedicationGroups.householdId, auth.householdId),
+    or(
+      eq(healthMedicationGroups.visibility, "household"),
+      eq(healthMedicationGroups.memberId, auth.memberId),
+      and(
+        eq(healthMedicationGroups.visibility, "private"),
+        eq(healthMedicationGroups.createdByUserId, auth.userId),
+      ),
+      and(
+        eq(healthMedicationGroups.visibility, "private"),
+        exists(
+          db
+            .select({ groupId: healthMedicationGroupShares.groupId })
+            .from(healthMedicationGroupShares)
+            .where(
+              and(
+                eq(healthMedicationGroupShares.groupId, healthMedicationGroups.id),
+                eq(healthMedicationGroupShares.memberId, auth.memberId),
+              ),
+            ),
+        ),
+      ),
+      aclExistsSql(
+        db,
+        auth.memberId,
+        healthMedicationGroups.memberId,
+        healthMemberAcl.medicationsAccess,
+        ["read", "write"],
+      ),
+      aclExistsSql(db, auth.memberId, healthMedicationGroups.memberId, healthMemberAcl.dosesAccess, [
         "write",
       ]),
     ),
