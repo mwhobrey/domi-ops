@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { closeDb, createDb } from "./client.js";
+import { withHouseholdContext, withSystemContext } from "./tenant-context.js";
 import { DEMO_MEMBER_PASSWORD_DEFAULT, DEMO_OWNER_EMAIL } from "./seed-demo/constants.js";
 import { insertDemoHousehold, seedDemoContent } from "./seed-demo/content.js";
 import { createDemoMembers, wipeDemoHousehold } from "./seed-demo/members.js";
@@ -75,17 +76,29 @@ async function main() {
   const db = createDb(url);
 
   try {
-    console.log("Wiping prior Rivera demo household…");
-    await wipeDemoHousehold(db);
+    // Household/member bootstrap runs under app.system_access (household doesn't exist yet, so
+    // there's no app.current_household_id to scope under) — matches the same "greenfield
+    // bootstrap" context the setup wizard uses, required so this script also works against the
+    // restricted domi_ops_app role hosted-prod runs as (NOBYPASSRLS — see HOSTED_BETA_SETUP.md).
+    const { householdId, ctx } = await withSystemContext(db, async (tx) => {
+      console.log("Wiping prior Rivera demo household…");
+      await wipeDemoHousehold(tx);
 
-    console.log("Creating household…");
-    const householdId = await insertDemoHousehold(db);
+      console.log("Creating household…");
+      const householdId = await insertDemoHousehold(tx);
 
-    console.log("Creating members…");
-    const ctx = await createDemoMembers(db, householdId, password);
+      console.log("Creating members…");
+      const ctx = await createDemoMembers(tx, householdId, password);
 
+      return { householdId, ctx };
+    });
+
+    // Content tables (calendar, chores, school, health, …) are gated by household_isolation, not
+    // system_bootstrap — same scoping every real API request runs under.
     console.log("Seeding module content…");
-    await seedDemoContent(db, ctx, encryptionKey);
+    await withHouseholdContext(db, householdId, async (tx) => {
+      await seedDemoContent(tx, ctx, encryptionKey);
+    });
 
     console.log("\nDemo household ready.");
     console.log(`  Household: ${householdId} (slug: rivera-demo)`);

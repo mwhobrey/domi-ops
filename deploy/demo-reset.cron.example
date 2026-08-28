@@ -3,11 +3,18 @@
 #
 # Install on the host running the demo stack:
 #   crontab -e
-#   # paste the line below (adjust REPO path and compose files)
+#   # paste the line below (adjust REPO path and compose file(s) for your stack — self-host
+#   # uses docker-compose.prod.yml, hosted uses docker-compose.hosted-prod.yml)
 #
-# Requires DEMO_RESET_ENABLED=true in .env and demo profile running.
+# Requires DEMO_RESET_ENABLED=true in .env and the demo profile already running.
+#
+# --force is required on hosted: the api container's own DATABASE_URL is the restricted
+# domi_ops_app role (NOBYPASSRLS, shared with real production traffic), not DEMO_MODE=true —
+# seed-demo.ts's own RLS-context wrapping (withSystemContext/withHouseholdContext) is what
+# actually makes this safe to run against that role. See HOSTED_BETA_SETUP.md.
 
-0 9 * * * cd /opt/domi-ops && docker compose -f docker-compose.prod.yml -f docker-compose.marketing.yml --profile demo exec -T api sh -c 'npm run seed:demo -w @domi-ops/db' >> /var/log/domi-ops-demo-reset.log 2>&1
+0 9 * * * cd /root/domi-ops && docker compose -f docker-compose.hosted-prod.yml -f docker-compose.marketing.yml exec -T api sh -c 'node packages/db/dist/seed-demo.js --force' >> /var/log/domi-ops-demo-reset.log 2>&1
 
-# Alternative: run seed from host (needs node + built packages on host):
-# 0 9 * * * cd /opt/domi-ops && DEMO_MODE=true npm run db:seed-demo >> /var/log/domi-ops-demo-reset.log 2>&1
+# Self-host variant (docker-compose.prod.yml — DEMO_MODE=true already set on that stack's api
+# service, so --force isn't needed, though it's harmless to include):
+# 0 9 * * * cd /opt/domi-ops && docker compose -f docker-compose.prod.yml -f docker-compose.marketing.yml exec -T api sh -c 'npm run seed:demo -w @domi-ops/db' >> /var/log/domi-ops-demo-reset.log 2>&1
