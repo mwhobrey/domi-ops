@@ -63,7 +63,7 @@ export function LandingPage() {
                 )}
               </div>
               <p className="text-xs text-[var(--color-text-muted)]">
-                Open source · MIT · Docker Compose · Every module included
+                Open source · Every module included
               </p>
             </div>
 
