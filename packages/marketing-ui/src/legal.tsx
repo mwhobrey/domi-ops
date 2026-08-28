@@ -7,9 +7,9 @@ const bodyClass =
 function Disclaimer() {
   return (
     <p className="mt-4 text-sm text-[var(--color-text-muted)]">
-      Operator draft. This is not legal advice and has not been reviewed by a lawyer. The operator
-      is a sole proprietor doing business as <strong className="text-[var(--color-text)]">Domi Ops</strong>{" "}
-      (no limited liability company).
+      The operator is a sole proprietor doing business as{" "}
+      <strong className="text-[var(--color-text)]">Domi Ops</strong> (no limited liability
+      company).
     </p>
   );
 }

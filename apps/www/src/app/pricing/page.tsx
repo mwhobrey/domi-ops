@@ -13,6 +13,10 @@ export const metadata = {
   description: "Self-host free or choose a Domi Ops cloud plan.",
 };
 
+// Reads NEXT_PUBLIC_* env vars (hostedCheckoutEnabled, ossRepoPublic) at render time — see
+// app/page.tsx for why this has to be forced dynamic or those values freeze at build time.
+export const dynamic = "force-dynamic";
+
 const TIER_ICON: Record<string, typeof Server> = {
   "self-host": Server,
   starter: Cloud,

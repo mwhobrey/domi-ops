@@ -5,6 +5,10 @@ export const metadata = {
   description: "Common questions about self-hosting, Domi Ops Cloud, privacy, and pricing.",
 };
 
+// Reads NEXT_PUBLIC_* env vars at render time — see app/page.tsx for why this has to be forced
+// dynamic or those values freeze at build time.
+export const dynamic = "force-dynamic";
+
 const FAQ_ITEMS: { q: string; a: string }[] = [
   {
     q: "Is self-hosting actually free, or is there a catch?",
