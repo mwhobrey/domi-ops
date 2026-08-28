@@ -121,6 +121,14 @@ interface PendingDose {
   awaitingFirst?: boolean;
 }
 
+/** Minimal shape HealthMedicationSheet's group picker needs — full MedicationGroup type lives
+ *  in components/health/MedicationManagerClient.tsx, this avoids a circular import. */
+export interface MedicationGroupOption {
+  id: string;
+  memberId: string;
+  name: string;
+}
+
 interface PendingGroupDose {
   groupId: string;
   name: string;
@@ -580,6 +588,7 @@ export function HealthPageClient({
   const [tab, setTab] = useState<"today" | "events" | "medications">("today");
   const [events, setEvents] = useState<HealthEvent[]>([]);
   const [medications, setMedications] = useState<HealthMedication[]>([]);
+  const [groups, setGroups] = useState<MedicationGroupOption[]>([]);
   const [pendingDoses, setPendingDoses] = useState<PendingDose[]>([]);
   const [pendingGroupDoses, setPendingGroupDoses] = useState<PendingGroupDose[]>([]);
   const [prnMeds, setPrnMeds] = useState<HealthMedication[]>([]);
@@ -603,9 +612,10 @@ export function HealthPageClient({
     setLoading(true);
     setError(null);
     try {
-      const [eventsRes, medsRes, glanceRes, capsRes] = await Promise.all([
+      const [eventsRes, medsRes, groupsRes, glanceRes, capsRes] = await Promise.all([
         apiClient.get<{ events: HealthEvent[] }>("/api/health/events"),
         apiClient.get<{ medications: HealthMedication[] }>("/api/health/medications"),
+        apiClient.get<{ groups: MedicationGroupOption[] }>("/api/health/medication-groups"),
         apiClient.get<{
           pendingDoses: PendingDose[];
           pendingGroupDoses: PendingGroupDose[];
@@ -615,6 +625,7 @@ export function HealthPageClient({
       ]);
       setEvents(eventsRes.events);
       setMedications(medsRes.medications);
+      setGroups(groupsRes.groups ?? []);
       setPendingDoses(glanceRes.pendingDoses);
       setPendingGroupDoses(glanceRes.pendingGroupDoses ?? []);
       setPrnMeds(glanceRes.prnMedications);
@@ -1114,6 +1125,7 @@ export function HealthPageClient({
         writableMemberIds={members
           .filter((m) => capabilities[m.memberId]?.medications === "write")
           .map((m) => m.memberId)}
+        groups={groups}
         readOnly={Boolean(editingMed && editingMed.canEdit === false)}
         onClose={() => {
           setMedSheetOpen(false);
@@ -1513,6 +1525,7 @@ export function HealthMedicationSheet({
   members,
   currentMemberId,
   writableMemberIds,
+  groups = [],
   readOnly = false,
   onClose,
   onSaved,
@@ -1522,6 +1535,9 @@ export function HealthMedicationSheet({
   members: NoteShareMember[];
   currentMemberId: string;
   writableMemberIds: string[];
+  /** Existing groups available to assign into — filtered to the selected member as you go.
+   *  Pass [] (default) to hide the group picker entirely (e.g. read-only contexts). */
+  groups?: MedicationGroupOption[];
   readOnly?: boolean;
   onClose: () => void;
   onSaved: () => void;
@@ -1538,6 +1554,12 @@ export function HealthMedicationSheet({
   const [scheduleDraft, setScheduleDraft] = useState<MedScheduleDraft>(() =>
     medicationToScheduleDraft(medication),
   );
+  /** "none" | "new" | <existing group id> — the group picker doubles as quick-create: picking
+   *  "new" reveals a name field and the group inherits this medication's own schedule/offsets
+   *  on save, so setting up "these meds go together" doesn't require a trip to the medication
+   *  manager page. */
+  const [groupSelection, setGroupSelection] = useState<string>(medication?.groupId ?? "none");
+  const [newGroupName, setNewGroupName] = useState("");
   const [visibility, setVisibility] = useState<"household" | "private">(
     medication?.visibility ?? "private",
   );
@@ -1555,10 +1577,21 @@ export function HealthMedicationSheet({
     setDosage(medication?.dosage ?? "");
     setInstructions(medication?.instructions ?? "");
     setScheduleDraft(medicationToScheduleDraft(medication));
+    setGroupSelection(medication?.groupId ?? "none");
+    setNewGroupName("");
     setVisibility(medication?.visibility ?? "private");
     setSharedMemberIds(medication?.sharedMemberIds ?? []);
     setEnabled(medication?.enabled ?? true);
   }, [open, medication, defaultMemberId]);
+
+  // Groups are member-scoped — a selection from a previously-chosen member is invalid once
+  // memberId changes, so drop back to "none" rather than let save() send a mismatched pair.
+  useEffect(() => {
+    if (groupSelection === "none" || groupSelection === "new") return;
+    if (!groups.some((g) => g.id === groupSelection && g.memberId === memberId)) {
+      setGroupSelection("none");
+    }
+  }, [memberId, groups, groupSelection]);
 
   async function save() {
     if (readOnly || !name.trim()) return;
@@ -1570,6 +1603,12 @@ export function HealthMedicationSheet({
       setBusy(false);
       return;
     }
+    if (scheduleResult.scheduleKind !== "prn" && groupSelection === "new" && !newGroupName.trim()) {
+      setErr("Enter a name for the new group");
+      setBusy(false);
+      return;
+    }
+    const previousGroupId = medication?.groupId ?? "none";
     const body = {
       memberId,
       name: name.trim(),
@@ -1580,13 +1619,42 @@ export function HealthMedicationSheet({
       enabled,
       visibility,
       sharedMemberIds: visibility === "private" ? sharedMemberIds : undefined,
+      // Only sent when actually leaving a group — joining goes through the group endpoints
+      // below (group-side validation lives there, see health-medication-groups.ts).
+      ...(scheduleResult.scheduleKind !== "prn" && groupSelection === "none" && previousGroupId !== "none"
+        ? { groupId: null }
+        : {}),
     };
     try {
+      let medicationId = medication?.id;
       if (medication) {
         await apiClient.patch(`/api/health/medications/${medication.id}`, body);
       } else {
-        await apiClient.post("/api/health/medications", body);
+        const created = await apiClient.post<{ medication: { id: string } }>(
+          "/api/health/medications",
+          body,
+        );
+        medicationId = created.medication.id;
       }
+
+      // Quick-group: create-and-join or join-existing in one save, so grouping meds that
+      // belong together doesn't require a trip to the medication manager page.
+      if (scheduleResult.scheduleKind !== "prn" && medicationId) {
+        if (groupSelection === "new" && newGroupName.trim()) {
+          await apiClient.post("/api/health/medication-groups", {
+            memberId,
+            name: newGroupName.trim(),
+            scheduleKind: scheduleResult.scheduleKind,
+            schedule: scheduleResult.schedule,
+            medicationIds: [medicationId],
+          });
+        } else if (groupSelection !== "none" && groupSelection !== "new" && groupSelection !== previousGroupId) {
+          await apiClient.post(`/api/health/medication-groups/${groupSelection}/members`, {
+            medicationId,
+          });
+        }
+      }
+
       onSaved();
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "Save failed");
@@ -1630,6 +1698,32 @@ export function HealthMedicationSheet({
           />
         </label>
         <MedScheduleEditor draft={scheduleDraft} onChange={setScheduleDraft} />
+        {scheduleDraft.scheduleKind !== "prn" ? (
+          <label className="block space-y-1 text-sm">
+            <span>Group (reminders go out together)</span>
+            <Select value={groupSelection} onChange={(e) => setGroupSelection(e.target.value)}>
+              <option value="none">No group</option>
+              {groups
+                .filter((g) => g.memberId === memberId)
+                .map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name}
+                  </option>
+                ))}
+              <option value="new">+ New group…</option>
+            </Select>
+          </label>
+        ) : null}
+        {scheduleDraft.scheduleKind !== "prn" && groupSelection === "new" ? (
+          <label className="block space-y-1 text-sm">
+            <span>New group name</span>
+            <Input
+              value={newGroupName}
+              onChange={(e) => setNewGroupName(e.target.value)}
+              placeholder="Morning meds"
+            />
+          </label>
+        ) : null}
         <Checkbox checked={enabled} onChange={(e) => setEnabled(e.target.checked)} label="Enabled" />
         <label className="block space-y-1 text-sm">
           <span>Visibility</span>

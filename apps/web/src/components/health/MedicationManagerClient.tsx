@@ -603,6 +603,7 @@ export function MedicationManagerClient({
         members={members}
         currentMemberId={selectedMemberId}
         writableMemberIds={writableMemberIds}
+        groups={groups}
         onClose={() => {
           setMedSheetOpen(false);
           setEditingMed(null);
