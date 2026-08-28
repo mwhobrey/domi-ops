@@ -112,6 +112,10 @@ services:
       NODE_ENV: production
       API_URL: http://api:4000
       PUBLIC_APP_URL: ${PUBLIC_APP_URL:-https://app.domi-ops.com}
+      # Optional — the login page links back to this when set (docker-compose.marketing.yml's
+      # www overlay serves it). Omit entirely on a self-host install with no separate marketing
+      # site (e.g. docker-compose.prod.yml alone) so the login page just doesn't render the link.
+      PUBLIC_MARKETING_URL: ${PUBLIC_MARKETING_URL:-https://domi-ops.com}
       ALLOW_PUBLIC_SIGNUP: "false"
     depends_on:
       api:

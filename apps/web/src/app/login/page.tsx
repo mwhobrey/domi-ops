@@ -37,6 +37,7 @@ export default async function LoginPage({
     process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET,
   );
 
+  const marketingUrl = process.env.PUBLIC_MARKETING_URL;
   const allowPublicSignup = isPublicSignupAllowed();
   const isDemoMode = process.env.DEMO_MODE === "true" || process.env.NEXT_PUBLIC_DEMO_MODE === "true";
   const demoEmail = process.env.DEMO_OWNER_EMAIL ?? "demo@domi-ops.com";
@@ -59,11 +60,26 @@ export default async function LoginPage({
       <div className="bg-page-gradient pointer-events-none absolute inset-0 opacity-40" aria-hidden />
       <div className="relative w-full max-w-[26rem] space-y-6 rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-surface-elevated)] p-6 shadow-[var(--shadow-card)] sm:p-8">
         <header className="space-y-1 text-center">
-          <picture>
-            <source srcSet="/icon-on-light.svg" media="(prefers-color-scheme: light)" />
-            <img src="/icon-on-dark.svg" alt="" width={40} height={40} className="mx-auto h-10 w-10" aria-hidden />
-          </picture>
-          <p className="font-display text-3xl font-semibold tracking-tight">Domi Ops</p>
+          {(() => {
+            const brand = (
+              <>
+                <picture>
+                  <source srcSet="/icon-on-light.svg" media="(prefers-color-scheme: light)" />
+                  <img src="/icon-on-dark.svg" alt="" width={40} height={40} className="mx-auto h-10 w-10" aria-hidden />
+                </picture>
+                <p className="font-display text-3xl font-semibold tracking-tight">Domi Ops</p>
+              </>
+            );
+            // Only self-host installs with no separate marketing site (PUBLIC_MARKETING_URL
+            // unset, e.g. whome) fall through to the plain, non-linked version below.
+            return marketingUrl ? (
+              <a href={marketingUrl} className="inline-block transition hover:opacity-80">
+                {brand}
+              </a>
+            ) : (
+              brand
+            );
+          })()}
           <h1 className="text-base font-medium text-[var(--color-text-muted)]">Sign in</h1>
         </header>
 
