@@ -170,6 +170,20 @@ function MedGroupSheet({
     (m) => !m.groupId || (group && m.groupId === group.id),
   );
 
+  // As the group's own times are set, surface ungrouped meds that already share one — the
+  // actual point of grouping is consolidating pre-existing same-time reminders, so offer to
+  // bulk-add them instead of making the user hunt through the checklist to remember which ones.
+  const draftTimes = new Set(scheduleDraft.times.map((t) => t.slice(0, 5)));
+  const matchingTimeMeds =
+    scheduleDraft.scheduleKind === "scheduled" && draftTimes.size > 0
+      ? eligibleMeds.filter(
+          (m) =>
+            m.scheduleKind === "scheduled" &&
+            !selectedMedIds.has(m.id) &&
+            (m.schedule.times ?? []).some((t) => draftTimes.has(t.slice(0, 5))),
+        )
+      : [];
+
   async function save() {
     if (!name.trim()) {
       setErr("Enter a name");
@@ -267,6 +281,29 @@ function MedGroupSheet({
             hint="Private by default. Share with selected members so they can read this group."
           />
         ) : null}
+        {matchingTimeMeds.length > 0 ? (
+          <Alert variant="info">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span>
+                {matchingTimeMeds.length} medication{matchingTimeMeds.length > 1 ? "s" : ""} for{" "}
+                {memberLabelText} already scheduled at this time: {matchingTimeMeds.map((m) => m.name).join(", ")}.
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => {
+                  setSelectedMedIds((prev) => {
+                    const next = new Set(prev);
+                    for (const m of matchingTimeMeds) next.add(m.id);
+                    return next;
+                  });
+                }}
+              >
+                Add all
+              </Button>
+            </div>
+          </Alert>
+        ) : null}
         <div className="space-y-2">
           <span className="text-sm font-medium text-[var(--color-text)]">Medications in this group</span>
           {eligibleMeds.length === 0 ? (
@@ -276,7 +313,12 @@ function MedGroupSheet({
             </p>
           ) : (
             <ul className="space-y-1">
-              {eligibleMeds.map((med) => (
+              {eligibleMeds.map((med) => {
+                const sharesTime =
+                  scheduleDraft.scheduleKind === "scheduled" &&
+                  med.scheduleKind === "scheduled" &&
+                  (med.schedule.times ?? []).some((t) => draftTimes.has(t.slice(0, 5)));
+                return (
                 <li key={med.id}>
                   <Checkbox
                     checked={selectedMedIds.has(med.id)}
@@ -288,10 +330,17 @@ function MedGroupSheet({
                         return next;
                       });
                     }}
-                    label={`${med.name}${med.dosage ? ` · ${med.dosage}` : ""}`}
+                    label={
+                      <span className="inline-flex items-center gap-1.5">
+                        {med.name}
+                        {med.dosage ? ` · ${med.dosage}` : ""}
+                        {sharesTime ? <Badge tone="accent">Same time</Badge> : null}
+                      </span>
+                    }
                   />
                 </li>
-              ))}
+                );
+              })}
             </ul>
           )}
         </div>
