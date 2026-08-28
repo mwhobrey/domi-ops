@@ -297,7 +297,6 @@ export function billingRoutes(db: Database, env: Env) {
   // Hosted Setup Wizard — validate Stripe session
   // ---------------------------------------------------------------------------
   app.get("/hosted-setup/validate", async (c) => {
-    const env = c.env as Env;
     if (!isHostedDeployment(env) || !isStripeConfigured(env)) {
       return c.json({ valid: false, reason: "not_hosted" });
     }
@@ -353,7 +352,6 @@ export function billingRoutes(db: Database, env: Env) {
   // Hosted Setup Wizard — complete account creation
   // ---------------------------------------------------------------------------
   app.post("/hosted-setup/complete", async (c) => {
-    const env = c.env as Env;
     if (!isHostedDeployment(env) || !isStripeConfigured(env)) {
       return c.json({ ok: false, error: "not_hosted" }, 400);
     }
