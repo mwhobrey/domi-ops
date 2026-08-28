@@ -8,6 +8,9 @@ export type ModuleTile =
       key: string;
       title: string;
       description: string;
+      /** Bento sizing hint — "wide" spans 2 columns on desktop. Keep at most one or two "wide"
+       *  tiles so the grid still reads as a grid, not a second hero. */
+      span?: "wide";
       kind: "screenshot";
       shot: MarketingScreenshot;
     }
@@ -15,6 +18,7 @@ export type ModuleTile =
       key: string;
       title: string;
       description: string;
+      span?: "wide";
       kind: "icon";
       icon: LucideIcon;
     };
@@ -28,44 +32,47 @@ export const MODULE_TILES: ModuleTile[] = [
   {
     key: "calendar",
     title: "Calendar + Google sync",
-    description: "Week view, recurring events, school overlays, and optional Google import.",
+    description:
+      "The household's one shared week view — school overlays layer on top automatically, and Google import keeps outside calendars from becoming a second source of truth.",
+    span: "wide",
     kind: "screenshot",
     shot: MARKETING_SCREENSHOTS.heroCalendarWeek,
   },
   {
     key: "chores",
     title: "Chores & karma",
-    description: "Assignments, streaks, and redemption quests for the whole household.",
+    description: "Streaks that actually mean something, and quests worth redeeming.",
     kind: "screenshot",
     shot: MARKETING_SCREENSHOTS.chores,
   },
   {
     key: "shopping",
     title: "Shopping lists",
-    description: "Aisle grouping, recurring items, and trip history with optional receipt capture.",
+    description: "Grouped by aisle. Recurring items refill themselves. Snap a receipt when you're done.",
     kind: "screenshot",
     shot: MARKETING_SCREENSHOTS.shopping,
   },
   {
-    key: "drive",
-    title: "Household Drive",
-    description: "Files, folders, and links shared across school, notes, and notices.",
-    kind: "screenshot",
-    shot: MARKETING_SCREENSHOTS.drive,
-  },
-  {
     key: "expenses",
     title: "Expenses & budgets",
-    description: "Monthly budgets, spend alerts, and household expense reports.",
+    description:
+      "Set a monthly number per category, get a nudge before you blow past it — not a report a week later telling you what already happened.",
     kind: "screenshot",
     shot: MARKETING_SCREENSHOTS.expenses,
   },
   {
     key: "notes",
     title: "Notes",
-    description: "Markdown notes with pins, tags, sharing, and Drive embeds.",
+    description: "Markdown, pinned, tagged, and pulled straight into Drive when they need attachments.",
     kind: "screenshot",
     shot: MARKETING_SCREENSHOTS.notes,
+  },
+  {
+    key: "drive",
+    title: "Household Drive",
+    description: "Every file school, notes, and notices touch — one folder tree, not four.",
+    kind: "screenshot",
+    shot: MARKETING_SCREENSHOTS.drive,
   },
 ];
 

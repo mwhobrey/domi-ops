@@ -2,13 +2,15 @@
 
 @theme {
   --font-sans: var(--font-inter, "Segoe UI"), ui-sans-serif, system-ui, sans-serif;
-  --font-display: var(--font-inter, "Segoe UI"), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-space-grotesk, var(--font-inter, "Segoe UI")), ui-sans-serif, system-ui,
+    sans-serif;
   --color-surface: #0c0f14;
   --color-surface-elevated: #141a24;
   --color-surface-subtle: #101620;
   --color-border: #1f2937;
   --color-accent: #3b82f6;
   --color-accent-muted: #1d4ed8;
+  --color-accent-warm: #f59e0b;
   --color-text: #f1f5f9;
   --color-text-muted: #94a3b8;
   --radius-lg: 1rem;
@@ -54,4 +56,39 @@ body {
   font-weight: 500;
   letter-spacing: 0.05em;
   text-transform: uppercase;
+}
+
+.text-gradient {
+  background: linear-gradient(100deg, var(--color-accent) 0%, var(--color-accent-warm) 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+/* A faint dot grid behind the hero — visible enough to register as texture, not decoration
+   competing with the screenshot for attention. */
+.bg-dot-grid {
+  background-image: radial-gradient(var(--color-border) 1px, transparent 1px);
+  background-size: 22px 22px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, black 40%, transparent 100%);
+}
+
+@keyframes float-badge {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+.animate-float {
+  animation: float-badge 5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-float {
+    animation: none;
+  }
 }
