@@ -92,8 +92,7 @@ export default function PricingPage() {
             </p>
             {!pricing.hostedCheckoutEnabled && (
               <p className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-elevated)] px-4 py-3 text-sm text-[var(--color-text-muted)]">
-                Hosted checkout opens soon: $12/mo or $120/yr after a 14-day trial. See{" "}
-                <code className="text-xs">docs/marketing/PRICING_TIERS.md</code> for Stripe setup.
+                Hosted checkout opens soon. In the meantime, self-host is free and ready today.
               </p>
             )}
           </div>
