@@ -33,6 +33,9 @@ export function MarketingShell({
                 Docs (coming soon)
               </span>
             )}
+            <LinkButton href="/faq" variant="ghost" size="sm" className="hidden sm:inline-flex">
+              FAQ
+            </LinkButton>
             <LinkButton href="/pricing" variant="ghost" size="sm" className="hidden sm:inline-flex">
               Pricing
             </LinkButton>
