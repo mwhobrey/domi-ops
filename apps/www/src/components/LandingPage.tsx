@@ -1,4 +1,4 @@
-import { Lock, ShieldCheck, Ban, Sparkles } from "lucide-react";
+import { Lock, ShieldCheck, Ban } from "lucide-react";
 import {
   AnchorButton,
   LinkButton,
@@ -27,13 +27,9 @@ export function LandingPage() {
     <MarketingShell urls={urls}>
       <section className="relative overflow-hidden">
         <div className="bg-dot-grid pointer-events-none absolute inset-0" aria-hidden />
-        <div className="relative mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16 lg:py-24">
+        <div className="relative mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-12 lg:py-16">
           <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-14">
             <div className="space-y-6">
-              <p className="text-label inline-flex items-center gap-1.5 text-[var(--color-accent)]">
-                <Sparkles className="h-3.5 w-3.5" aria-hidden />
-                Household operations hub
-              </p>
               <h1 className="font-display text-4xl font-semibold leading-[1.05] tracking-tight sm:text-5xl lg:text-6xl">
                 Run your household like it&apos;s <span className="text-gradient">one system</span>,
                 not five apps
@@ -69,11 +65,6 @@ export function LandingPage() {
               <p className="text-xs text-[var(--color-text-muted)]">
                 Open source · MIT · Docker Compose · Every module included
               </p>
-              <p className="max-w-xl text-sm leading-relaxed text-[var(--color-text-muted)]">
-                Cozi for the calendar. A whiteboard for chores. A spreadsheet nobody opens for the
-                budget. That's not a system, it's duct tape. Domi Ops replaces it, homeschool
-                curriculum included, not required.
-              </p>
             </div>
 
             <div className="relative space-y-4 lg:justify-self-end">
@@ -105,6 +96,17 @@ export function LandingPage() {
               />
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="border-t border-[var(--color-border)]">
+        <div className="mx-auto max-w-3xl px-4 py-10 text-center sm:px-6 sm:py-14">
+          <p className="text-label text-[var(--color-accent)]">Why switch</p>
+          <p className="mt-3 text-lg leading-relaxed text-[var(--color-text-muted)]">
+            Cozi for the calendar. A whiteboard for chores. A spreadsheet nobody opens for the
+            budget. That's not a system, it's duct tape. Domi Ops replaces it, homeschool
+            curriculum included, not required.
+          </p>
         </div>
       </section>
 
