@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Home, LayoutGrid, Menu } from "lucide-react";
+import { LayoutGrid, Menu } from "lucide-react";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { filterVisibleNav } from "../lib/app-nav";
 import { cn } from "../lib/cn";
@@ -198,7 +198,7 @@ export function AppChrome({
               href="/dashboard"
               className="flex items-center gap-1.5 font-display text-base font-semibold tracking-tight"
             >
-              <Home className="h-4 w-4 text-[var(--color-accent)]" aria-hidden />
+              <img src="/icon.svg" alt="" width={18} height={18} className="h-[18px] w-[18px]" aria-hidden />
               Domi Ops
             </Link>
           </div>

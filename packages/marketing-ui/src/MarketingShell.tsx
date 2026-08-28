@@ -15,7 +15,9 @@ export function MarketingShell({
       <div className="bg-page-gradient pointer-events-none fixed inset-0 opacity-30" aria-hidden />
       <header className="relative z-10 border-b border-[var(--color-border)] bg-[var(--color-surface)]/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
-          <Link href="/" className="font-display text-xl font-semibold tracking-tight">
+          <Link href="/" className="flex items-center gap-2 font-display text-xl font-semibold tracking-tight">
+            {/* eslint-disable-next-line @next/next/no-img-element -- shared package, no next/image config to rely on */}
+            <img src="/icon.svg" alt="" width={28} height={28} className="h-7 w-7" aria-hidden />
             Domi Ops
           </Link>
           <nav className="flex items-center gap-2 sm:gap-3" aria-label="Site">
