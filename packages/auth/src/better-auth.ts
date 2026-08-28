@@ -5,7 +5,7 @@ import { username } from "better-auth/plugins";
 import type { Env } from "@domi-ops/config";
 import { devLoopbackOrigins } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
-import { baAccounts, baSessions, baVerifications, users } from "@domi-ops/db";
+import { baAccounts, baSessions, baVerifications, users, withUserLookupContext } from "@domi-ops/db";
 import { ensureHouseholdMembership } from "./household-membership.js";
 import { sendVerificationEmail } from "./mail.js";
 import { USERNAME_MAX_LENGTH, USERNAME_MIN_LENGTH, USERNAME_PATTERN } from "./username.js";
@@ -149,7 +149,14 @@ export function createBetterAuth(db: Database, env: Env): WhomeBetterAuth {
         create: {
           after: async (session) => {
             try {
-              await ensureHouseholdMembership(db, env, session.userId);
+              // Runs before any household context exists (we're figuring out household
+              // membership right here), so it needs the member_auth_lookup RLS policy — the
+              // same "resolve by user_id first" scope auth middleware uses elsewhere. Without
+              // this, every plain lookup here returns zero rows under the restricted hosted-prod
+              // role (NOBYPASSRLS), and every login gets treated as "user has no household."
+              await withUserLookupContext(db, session.userId, (tx) =>
+                ensureHouseholdMembership(tx, env, session.userId),
+              );
             } catch (err) {
               console.error("[domi-ops auth] ensureHouseholdMembership failed:", err);
               throw err;
