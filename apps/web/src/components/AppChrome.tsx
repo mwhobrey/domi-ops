@@ -198,7 +198,10 @@ export function AppChrome({
               href="/dashboard"
               className="flex items-center gap-1.5 font-display text-base font-semibold tracking-tight"
             >
-              <img src="/icon.svg" alt="" width={18} height={18} className="h-[18px] w-[18px]" aria-hidden />
+              <picture>
+                <source srcSet="/icon-on-light.svg" media="(prefers-color-scheme: light)" />
+                <img src="/icon-on-dark.svg" alt="" width={18} height={18} className="h-[18px] w-[18px]" aria-hidden />
+              </picture>
               Domi Ops
             </Link>
           </div>
