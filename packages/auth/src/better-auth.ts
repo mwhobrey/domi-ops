@@ -39,7 +39,10 @@ export function createBetterAuth(db: Database, env: Env): WhomeBetterAuth {
     trustedOrigins:
       env.NODE_ENV === "development"
         ? devLoopbackOrigins(env.PUBLIC_APP_URL)
-        : [env.PUBLIC_APP_URL],
+        : [
+            env.PUBLIC_APP_URL,
+            ...(env.EXTRA_TRUSTED_ORIGINS?.split(",").map((o) => o.trim()).filter(Boolean) ?? []),
+          ],
     database: drizzleAdapter(db, {
       provider: "pg",
       // Keys must match modelName below (not Better Auth defaults like "user"/"session").

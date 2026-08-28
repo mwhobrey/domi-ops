@@ -27,6 +27,9 @@ export const envSchema = z
     API_URL: z.string().url(),
     /** Marketing site origin — Stripe Checkout cancel_url target. Defaults to https://domi-ops.com. */
     PUBLIC_MARKETING_URL: z.string().url().optional(),
+    /** Comma-separated extra Better Auth trustedOrigins beyond PUBLIC_APP_URL — e.g. the demo
+     *  site (demo.domi-ops.com), which shares this API server but has its own public origin. */
+    EXTRA_TRUSTED_ORIGINS: z.string().optional(),
     AUTH_REQUIRED: z
       .string()
       .optional()
