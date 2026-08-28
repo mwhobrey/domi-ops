@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+/* Tailwind v4's automatic content detection only walks this app's own directory tree — the
+   privacy/terms pages render MarketingShell/LinkButton from @domi-ops/marketing-ui, and any
+   utility class that only appears as a literal string inside that package's own source (not
+   also somewhere in apps/web's own source) silently never gets generated. Same gap fixed in
+   apps/www/src/app/globals.css — see that file's comment for how this was found. */
+@source "../../../../packages/marketing-ui/src";
+
 @theme {
   --font-sans: var(--font-inter, "Segoe UI"), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-inter, "Segoe UI"), ui-sans-serif, system-ui, sans-serif;

@@ -1,2 +1,11 @@
 @import "tailwindcss";
+
+/* Tailwind v4's automatic content detection only walks this app's own directory tree — it never
+   reaches sibling workspace packages. marketing-ui's components (LinkButton, MarketingShell, …)
+   are the only place classes like px-8/py-3/min-h-12 appear as literal strings, so without this
+   they silently never get generated: the class still ends up in the DOM, there's just no CSS
+   rule for it. Confirmed live on domi-ops.com (2026-08-28) — every button's horizontal padding
+   was rendering as 0px sitewide, not just the ones touched in this session. */
+@source "../../../../packages/marketing-ui/src";
+
 @import "@domi-ops/marketing-ui/styles.css";
