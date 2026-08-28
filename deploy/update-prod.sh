@@ -107,6 +107,13 @@ else
   echo "    (skip: set PUBLIC_APP_URL and install curl for HTTP smoke test)"
 fi
 
+echo "==> pruning dangling images"
+# Every deploy pulls a new tag under the same "latest" name, leaving the previous image's layers
+# dangling (untagged, unused) — dangling-only, never touches tagged/in-use images. This is the
+# whome disk-space incident from earlier this session (96% full, all dangling layers) — same gap
+# now also hit and fixed in deploy-hosted.sh. Safe to run unconditionally.
+docker image prune -f
+
 echo "==> container status"
 "${COMPOSE[@]}" ps
 

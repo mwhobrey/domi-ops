@@ -105,6 +105,13 @@ if command -v curl >/dev/null 2>&1 && [[ -n "${PUBLIC_MARKETING_URL:-}" ]]; then
   fi
 fi
 
+echo "==> pruning dangling images"
+# Every deploy pulls a new tag under the same "latest" name, leaving the previous image's layers
+# dangling (untagged, unused) — dangling-only, never touches tagged/in-use images (confirmed live
+# 2026-08-28: reclaimed 43.8GB after a run of deploys with no prune in between filled the disk to
+# 99%, which then failed the api/worker image pull mid-deploy). Safe to run unconditionally.
+docker image prune -f
+
 echo "==> container status"
 "${COMPOSE[@]}" ps
 
