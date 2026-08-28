@@ -10,7 +10,7 @@ import {
 import { ALSO_STRIP_ICONS, MODULE_TILES } from "@/lib/module-tiles";
 
 const DAY_TIMELINE = [
-  { time: "6:45 AM", text: "Chore chart buzzes before the bus does — nobody's asking twice." },
+  { time: "6:45 AM", text: "Chore chart buzzes before the bus does. Nobody's asking twice." },
   { time: "8:15 AM", text: "Morning meds get checked off as one group card, not chased down pill by pill." },
   {
     time: "12:30 PM",
@@ -39,13 +39,13 @@ export function LandingPage() {
                 not five apps
               </h1>
               <p className="max-w-xl text-lg leading-relaxed text-[var(--color-text-muted)]">
-                Calendar, chores, shopping, notes, and expenses — with homeschool tracking built in
+                Calendar, chores, shopping, notes, and expenses, with homeschool tracking built in
                 when you need it. Self-host free or run on Domi Ops cloud.
               </p>
               <p className="text-sm leading-relaxed text-[var(--color-text-muted)]">
                 Cozi for the calendar. A whiteboard for chores. A spreadsheet nobody opens for the
-                budget. That's not a system, it's duct tape — and it's what Domi Ops replaces,
-                homeschool curriculum included, not required.
+                budget. That's not a system, it's duct tape. Domi Ops replaces it, homeschool
+                curriculum included, not required.
               </p>
               <div className="flex flex-wrap gap-3">
                 <LinkButton href="/pricing">Get hosted</LinkButton>
@@ -114,9 +114,9 @@ export function LandingPage() {
               Built for the tracking a calendar app can&apos;t do
             </h2>
             <p className="mt-3 text-[var(--color-text-muted)]">
-              Most family organizers stop at reminders. Two things in a household outgrow that fast
-              — your kids&apos; education and your family&apos;s health — because neither is a box
-              you check once. They're ongoing records. So that's what we built.
+              Most family organizers stop at reminders. Two things in a household outgrow that fast:
+              your kids&apos; education and your family&apos;s health. Neither is a box you check
+              once. They're ongoing records, so that's what we built.
             </p>
           </div>
 
@@ -133,7 +133,7 @@ export function LandingPage() {
                 <h3 className="text-lg font-semibold">A full homeschool LMS</h3>
                 <p className="mt-1 text-sm leading-relaxed text-[var(--color-text-muted)]">
                   Classes, assignments, submissions, a real gradebook. Progress tracked across the
-                  whole year — not a to-do list that resets every Monday.
+                  whole year, not a to-do list that resets every Monday.
                 </p>
               </div>
             </div>
@@ -149,8 +149,8 @@ export function LandingPage() {
                 <h3 className="text-lg font-semibold">Encrypted health tracking</h3>
                 <p className="mt-1 text-sm leading-relaxed text-[var(--color-text-muted)]">
                   Medications grouped by dose so nobody gets five pings for one pill organizer.
-                  Vitals, appointments, and history — encrypted at rest, shared with exactly who you
-                  choose.
+                  Vitals, appointments, and history, encrypted at rest and shared with exactly who
+                  you choose.
                 </p>
               </div>
             </div>
@@ -244,8 +244,8 @@ export function LandingPage() {
               <h2 className="text-xl font-semibold">And also</h2>
               <p className="text-sm leading-relaxed text-[var(--color-text-muted)]">
                 Dashboard presence, weather glance, notice board, Web Push reminders, and a PWA you
-                can install on family phones. We kept these off the front page — they're not the
-                pitch, they're just there when you reach for them.
+                can install on family phones. We kept these off the front page. They're not the
+                pitch, just there when you reach for them.
               </p>
               <ul className="flex flex-wrap gap-3 text-sm text-[var(--color-text-muted)]">
                 {ALSO_STRIP_ICONS.map((Icon, i) => (
@@ -266,7 +266,7 @@ export function LandingPage() {
             <div className="rounded-[var(--radius-xl)] border border-[var(--color-border)] p-6">
               <h3 className="text-lg font-semibold">Self-host</h3>
               <ul className="mt-3 list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-[var(--color-text-muted)]">
-                <li>MIT license — all modules in the OSS bundle</li>
+                <li>MIT license: all modules in the OSS bundle</li>
                 <li>Unlimited Drive on your MinIO/S3</li>
                 <li>Your Postgres, your rules</li>
                 <li>Docker Compose on a VPS or home server</li>
@@ -281,7 +281,7 @@ export function LandingPage() {
             <div className="rounded-[var(--radius-xl)] border border-[var(--color-border)] p-6">
               <h3 className="text-lg font-semibold">Domi Ops cloud</h3>
               <ul className="mt-3 list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-[var(--color-text-muted)]">
-                <li>Managed hosting — no server babysitting</li>
+                <li>Managed hosting: no server babysitting</li>
                 <li>Stripe subscription; setup wizard after checkout</li>
                 <li>Drive quotas by tier</li>
                 <li>Same app you'd self-host, we just run it</li>
@@ -303,7 +303,7 @@ export function LandingPage() {
                     Self-hosted means self-hosted
                   </strong>
                   <p className="mt-1.5 text-sm leading-relaxed text-[var(--color-text-muted)]">
-                    Run Domi Ops on your own server and the data never leaves it — no phone-home
+                    Run Domi Ops on your own server and the data never leaves it: no phone-home
                     telemetry, no vendor holding your family's calendar hostage. We built the hosted
                     version because setting up a VPS isn't for everyone, not because self-hosting is
                     a second-class option.

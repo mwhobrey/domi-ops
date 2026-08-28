@@ -60,12 +60,12 @@ export default function PricingPage() {
         <div className="max-w-2xl space-y-4">
           <h1 className="font-display text-4xl font-semibold tracking-tight">Pricing</h1>
           <p className="text-lg text-[var(--color-text-muted)]">
-            Self-host the full bundle for free, forever. Or let us run it — same app, no server to
+            Self-host the full bundle for free, forever. Or let us run it: same app, no server to
             patch at 11pm.
           </p>
           {!pricing.hostedCheckoutEnabled && (
             <p className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-elevated)] px-4 py-3 text-sm text-[var(--color-text-muted)]">
-              Hosted checkout opens soon — $12/mo or $120/yr after a 14-day trial. See{" "}
+              Hosted checkout opens soon: $12/mo or $120/yr after a 14-day trial. See{" "}
               <code className="text-xs">docs/marketing/PRICING_TIERS.md</code> for Stripe setup.
             </p>
           )}

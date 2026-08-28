@@ -33,7 +33,7 @@ export const MODULE_TILES: ModuleTile[] = [
     key: "calendar",
     title: "Calendar + Google sync",
     description:
-      "The household's one shared week view — school overlays layer on top automatically, and Google import keeps outside calendars from becoming a second source of truth.",
+      "The household's one shared week view. School overlays layer on top automatically, and Google import keeps outside calendars from becoming a second source of truth.",
     span: "wide",
     kind: "screenshot",
     shot: MARKETING_SCREENSHOTS.heroCalendarWeek,
@@ -56,7 +56,7 @@ export const MODULE_TILES: ModuleTile[] = [
     key: "expenses",
     title: "Expenses & budgets",
     description:
-      "Set a monthly number per category, get a nudge before you blow past it — not a report a week later telling you what already happened.",
+      "Set a monthly number per category, get a nudge before you blow past it. Not a report a week later telling you what already happened.",
     kind: "screenshot",
     shot: MARKETING_SCREENSHOTS.expenses,
   },
@@ -70,7 +70,7 @@ export const MODULE_TILES: ModuleTile[] = [
   {
     key: "drive",
     title: "Household Drive",
-    description: "Every file school, notes, and notices touch — one folder tree, not four.",
+    description: "Every file school, notes, and notices touch, in one folder tree instead of four.",
     kind: "screenshot",
     shot: MARKETING_SCREENSHOTS.drive,
   },

@@ -20,7 +20,7 @@ const spaceGrotesk = Space_Grotesk({
 export const metadata: Metadata = {
   title: "Domi Ops — Household operations, one app",
   description:
-    "Calendar, chores, shopping, notes, expenses, and homeschool — one household, one app. Self-host free or run on Domi Ops cloud.",
+    "Calendar, chores, shopping, notes, expenses, and homeschool: one household, one app. Self-host free or run on Domi Ops cloud.",
   applicationName: "Domi Ops",
 };
 
