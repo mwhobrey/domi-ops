@@ -166,9 +166,10 @@ function MedGroupSheet({
     setErr(null);
   }, [open, group]);
 
-  const eligibleMeds = candidateMedications.filter(
-    (m) => !m.groupId || (group && m.groupId === group.id),
-  );
+  // Groups are many-to-many — a medication already in other groups (e.g. its 8am dose grouped
+  // elsewhere) is still eligible to also join this one for a different dose/time, so nothing
+  // gets excluded here based on existing membership.
+  const eligibleMeds = candidateMedications;
 
   // As the group's own times are set, surface ungrouped meds that already share one — the
   // actual point of grouping is consolidating pre-existing same-time reminders, so offer to
@@ -406,7 +407,12 @@ export function MedicationManagerClient({
   const canWriteSelected = writableMemberIds.includes(selectedMemberId);
 
   const memberMeds = medications.filter((m) => m.memberId === selectedMemberId);
-  const ungroupedMeds = memberMeds.filter((m) => !m.groupId);
+  // Groups are many-to-many now — a med with some doses grouped and others not will show nested
+  // in whichever group(s) cover it, and simply won't reappear here even though part of its own
+  // schedule is still standalone. The underlying reminder behavior is correct either way (see
+  // household-health.ts's per-time-slot claiming); this is just a simplification of which of the
+  // two lists a medication with mixed membership visually appears in.
+  const ungroupedMeds = memberMeds.filter((m) => !m.groupIds || m.groupIds.length === 0);
   const memberGroups = groups.filter((g) => g.memberId === selectedMemberId);
 
   const timelineChips = useMemo<TimelineChip[]>(() => {

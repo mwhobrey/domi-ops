@@ -9,6 +9,7 @@ import type { Database } from "@domi-ops/db";
 import {
   healthMedGroupReminderSent,
   healthMedReminderSent,
+  healthMedicationGroupMembers,
   healthMedicationGroups,
   healthMedicationLogs,
   healthMedications,
@@ -591,6 +592,24 @@ export async function scanHealthMedReminders(db: Database, env: Env): Promise<nu
 
   for (const household of enabled) {
     const householdTz = household.timezone ?? "UTC";
+
+    // Groups are many-to-many with medications — a med taken multiple times a day can have
+    // different doses claimed by different groups. Loaded before the meds loop below since a
+    // medication's own reminder needs to know, per dose-time, whether some group already
+    // covers it. See the doc comment on healthMedicationGroups (packages/db/src/schema/health.ts)
+    // for the exact claiming rule.
+    const groups = await db
+      .select()
+      .from(healthMedicationGroups)
+      .where(
+        and(
+          eq(healthMedicationGroups.householdId, household.id),
+          eq(healthMedicationGroups.enabled, true),
+          inArray(healthMedicationGroups.scheduleKind, ["scheduled", "interval"]),
+        ),
+      );
+    const groupById = new Map(groups.map((g) => [g.id, g]));
+
     const meds = await db
       .select()
       .from(healthMedications)
@@ -599,13 +618,45 @@ export async function scanHealthMedReminders(db: Database, env: Env): Promise<nu
           eq(healthMedications.householdId, household.id),
           eq(healthMedications.enabled, true),
           inArray(healthMedications.scheduleKind, ["scheduled", "interval"]),
-          // A grouped medication's own schedule is preserved-but-inert — the group's schedule
-          // (below) is authoritative for it instead. This isNull guard is the entire mechanism.
-          isNull(healthMedications.groupId),
         ),
       );
 
+    const medGroupMembershipMap = new Map<string, string[]>();
+    if (meds.length > 0) {
+      const membershipRows = await db
+        .select({
+          medicationId: healthMedicationGroupMembers.medicationId,
+          groupId: healthMedicationGroupMembers.groupId,
+        })
+        .from(healthMedicationGroupMembers)
+        .where(inArray(healthMedicationGroupMembers.medicationId, meds.map((m) => m.id)));
+      for (const row of membershipRows) {
+        const list = medGroupMembershipMap.get(row.medicationId) ?? [];
+        list.push(row.groupId);
+        medGroupMembershipMap.set(row.medicationId, list);
+      }
+    }
+
+    function scheduledTimesClaimedByGroups(medId: string): Set<string> {
+      const claimed = new Set<string>();
+      for (const groupId of medGroupMembershipMap.get(medId) ?? []) {
+        const group = groupById.get(groupId);
+        if (!group || group.scheduleKind !== "scheduled") continue;
+        for (const t of (parseSchedule(group.scheduleJson).times ?? [])) {
+          claimed.add(t.slice(0, 5));
+        }
+      }
+      return claimed;
+    }
+
+    function isDelegatedToIntervalGroup(medId: string): boolean {
+      return (medGroupMembershipMap.get(medId) ?? []).some(
+        (groupId) => groupById.get(groupId)?.scheduleKind === "interval",
+      );
+    }
+
     for (const med of meds) {
+      if (med.scheduleKind === "interval" && isDelegatedToIntervalGroup(med.id)) continue;
       const offsets = parseOffsets(med.reminderOffsetsJson);
       const medName = decryptMedName(med.name, env);
 
@@ -679,6 +730,7 @@ export async function scanHealthMedReminders(db: Database, env: Env): Promise<nu
           const schedule = parseSchedule(med.scheduleJson);
           const times = schedule.times ?? [];
           if (times.length === 0) continue;
+          const claimedTimes = scheduledTimesClaimedByGroups(med.id);
 
           for (const date of datesAround(tz)) {
             if (med.startDate && date < med.startDate) continue;
@@ -690,6 +742,7 @@ export async function scanHealthMedReminders(db: Database, env: Env): Promise<nu
 
             for (const time of times) {
               const hhmm = time.length >= 5 ? time.slice(0, 5) : time;
+              if (claimedTimes.has(hhmm)) continue; // this dose belongs to a group instead
               const scheduledAt = zonedLocalToUtc(date, hhmm, tz);
 
               for (const offsetMinutes of offsets) {
@@ -733,24 +786,24 @@ export async function scanHealthMedReminders(db: Database, env: Env): Promise<nu
       }
     }
 
-    const groups = await db
-      .select()
-      .from(healthMedicationGroups)
-      .where(
-        and(
-          eq(healthMedicationGroups.householdId, household.id),
-          eq(healthMedicationGroups.enabled, true),
-          inArray(healthMedicationGroups.scheduleKind, ["scheduled", "interval"]),
-        ),
-      );
-
     for (const group of groups) {
-      const memberMeds = await db
-        .select()
-        .from(healthMedications)
-        .where(
-          and(eq(healthMedications.groupId, group.id), eq(healthMedications.householdId, household.id)),
-        );
+      const groupMembershipRows = await db
+        .select({ medicationId: healthMedicationGroupMembers.medicationId })
+        .from(healthMedicationGroupMembers)
+        .where(eq(healthMedicationGroupMembers.groupId, group.id));
+      const memberIds = groupMembershipRows.map((r) => r.medicationId);
+      const memberMeds =
+        memberIds.length > 0
+          ? await db
+              .select()
+              .from(healthMedications)
+              .where(
+                and(
+                  inArray(healthMedications.id, memberIds),
+                  eq(healthMedications.householdId, household.id),
+                ),
+              )
+          : [];
       if (memberMeds.length === 0) continue;
       const memberMedIds = memberMeds.map((m) => m.id);
       const medNames = memberMeds.map((m) => decryptMedName(m.name, env));
@@ -845,6 +898,17 @@ export async function scanHealthMedReminders(db: Database, env: Env): Promise<nu
               const hhmm = time.length >= 5 ? time.slice(0, 5) : time;
               const scheduledAt = zonedLocalToUtc(date, hhmm, tz);
 
+              // Which members actually have a dose at THIS specific time — belonging to the
+              // group doesn't mean every one of a member's own times matches every group time.
+              const membersAtThisTime = memberMeds.filter(
+                (m) =>
+                  m.scheduleKind === "scheduled" &&
+                  (parseSchedule(m.scheduleJson).times ?? []).some((t) => t.slice(0, 5) === hhmm),
+              );
+              if (membersAtThisTime.length === 0) continue;
+              const membersAtThisTimeIds = membersAtThisTime.map((m) => m.id);
+              const medNamesAtThisTime = membersAtThisTime.map((m) => decryptMedName(m.name, env));
+
               for (const offsetMinutes of offsets) {
                 const fireAt = new Date(scheduledAt.getTime() - offsetMinutes * 60 * 1000);
                 if (fireAt > windowEnd) continue;
@@ -858,11 +922,13 @@ export async function scanHealthMedReminders(db: Database, env: Env): Promise<nu
                   .from(healthMedicationLogs)
                   .where(
                     and(
-                      inArray(healthMedicationLogs.medicationId, memberMedIds),
+                      inArray(healthMedicationLogs.medicationId, membersAtThisTimeIds),
                       eq(healthMedicationLogs.scheduledAt, scheduledAt),
                     ),
                   );
-                if (new Set(loggedRows.map((r) => r.medicationId)).size >= memberMeds.length) continue;
+                if (new Set(loggedRows.map((r) => r.medicationId)).size >= membersAtThisTime.length) {
+                  continue;
+                }
 
                 const tag = `health-medgroup-${group.id}-${date}-${hhmm}-${offsetMinutes}`;
                 if (
@@ -870,7 +936,7 @@ export async function scanHealthMedReminders(db: Database, env: Env): Promise<nu
                     householdId: household.id,
                     groupId: group.id,
                     groupName,
-                    medNames,
+                    medNames: medNamesAtThisTime,
                     scheduledAt,
                     offsetMinutes,
                     tag,

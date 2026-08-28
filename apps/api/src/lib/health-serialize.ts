@@ -23,6 +23,7 @@ import {
   canAccessHealthSegment,
   loadHealthAclBySubjectForGrantee,
   loadHealthEventShareMap,
+  loadHealthMedicationGroupMembershipMap,
   loadHealthMedicationShareMap,
   managementGrantsForSubject,
 } from "./health-access.js";
@@ -175,12 +176,14 @@ export function serializeHealthMedication(
     sharedWithMe?: boolean;
     canEdit?: boolean;
     canLog?: boolean;
+    /** Groups this medication belongs to (many-to-many — see healthMedicationGroupMembers). */
+    groupIds?: string[];
   },
 ) {
   return {
     id: row.id,
     memberId: row.memberId,
-    groupId: row.groupId,
+    groupIds: extras?.groupIds ?? [],
     name: decryptHealthFieldOrPassthrough(row.name, env) ?? "",
     dosage: decryptHealthFieldOrPassthrough(row.dosage, env),
     instructions: decryptHealthFieldOrPassthrough(row.instructions, env),
@@ -269,6 +272,7 @@ export async function enrichHealthMedications(
 ) {
   const privateIds = rows.filter((r) => r.visibility === "private").map((r) => r.id);
   const shareMap = await loadHealthMedicationShareMap(db, privateIds);
+  const groupMembershipMap = await loadHealthMedicationGroupMembershipMap(db, rows.map((r) => r.id));
   const aclBySubject = await loadHealthAclBySubjectForGrantee(db, auth.householdId, auth.memberId);
   return rows.map((row) => {
     const sharedMemberIds = shareMap.get(row.id) ?? [];
@@ -292,6 +296,7 @@ export async function enrichHealthMedications(
       sharedWithMe,
       canEdit,
       canLog,
+      groupIds: groupMembershipMap.get(row.id) ?? [],
     });
   });
 }

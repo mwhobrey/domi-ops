@@ -119,13 +119,6 @@ export const healthMedications = pgTable("health_medications", {
   scheduleKind: medScheduleKindEnum("schedule_kind").notNull().default("scheduled"),
   scheduleJson: text("schedule_json").default("{}"),
   reminderOffsetsJson: text("reminder_offsets_json").default("[0]"),
-  /**
-   * When set, this medication's own schedule fields above are preserved-but-inert — the
-   * reminder worker skips it entirely and evaluates the group's schedule instead. Removing
-   * it from the group (or the group being deleted, via ON DELETE SET NULL) restores its
-   * standalone schedule with no data loss.
-   */
-  groupId: uuid("group_id").references(() => healthMedicationGroups.id, { onDelete: "set null" }),
   startDate: date("start_date"),
   endDate: date("end_date"),
   enabled: boolean("enabled").notNull().default(true),
@@ -156,6 +149,16 @@ export const healthMedicationShares = pgTable(
  * healthMedications ("prn" is rejected at the API layer — a PRN group has no shared due time to
  * consolidate around). Scoped to a single member, mirroring healthMedications and the existing
  * per-member ACL/recipient-resolution code.
+ *
+ * Membership is many-to-many (healthMedicationGroupMembers below), not a column on
+ * healthMedications — a medication taken multiple times a day can have different doses belong
+ * to different groups (e.g. an 8am dose in "Morning meds", an 8pm dose in "Evening meds").
+ * For scheduled-kind groups, a member medication's dose at time T only gets consolidated into
+ * this group's reminder when T is in BOTH the group's own times and that medication's own
+ * times — a medication merely listed as a "member" doesn't imply every one of its doses is
+ * covered, only the ones whose time actually matches. For interval-kind groups there's no
+ * discrete time to match against, so membership there works the simpler way it always did:
+ * the medication's whole interval schedule delegates to the group.
  */
 export const healthMedicationGroups = pgTable("health_medication_groups", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -191,6 +194,20 @@ export const healthMedicationGroupShares = pgTable(
       .references(() => householdMembers.id, { onDelete: "cascade" }),
   },
   (t) => [primaryKey({ columns: [t.groupId, t.memberId] })],
+);
+
+/** Many-to-many: a medication can belong to several groups (see healthMedicationGroups doc). */
+export const healthMedicationGroupMembers = pgTable(
+  "health_medication_group_members",
+  {
+    groupId: uuid("group_id")
+      .notNull()
+      .references(() => healthMedicationGroups.id, { onDelete: "cascade" }),
+    medicationId: uuid("medication_id")
+      .notNull()
+      .references(() => healthMedications.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.groupId, t.medicationId] })],
 );
 
 /** Per-grantee segment ACL for a subject's health data (WHO-229). */

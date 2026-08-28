@@ -29,12 +29,15 @@ import {
   healthEventVisibleWhere,
   healthMedicationGroupVisibleWhere,
   healthMedicationVisibleWhere,
+  loadGroupMemberMedicationIdsMap,
   loadHealthAclForSubject,
   loadHealthCapabilities,
   loadHealthEventShareMap,
+  loadHealthMedicationGroupMembershipMap,
   loadHealthMedicationShareMap,
   normalizeHealthAclLevel,
   normalizeHealthVisibility,
+  removeMedicationFromAllGroups,
   replaceHealthAclForSubject,
   replaceHealthEventShares,
   replaceHealthMedicationShares,
@@ -368,23 +371,49 @@ export function householdHealthRoutes(db: Database, env: Env) {
         and(healthMedicationVisibleWhere(db, auth), eq(healthMedications.enabled, true)),
       );
 
-    // Groups: a medication with a groupId pointing at one of these becomes "not independently
-    // due" — its own schedule is preserved-but-inert (see health.ts) while it belongs to an
-    // enabled group. Only applies to scheduled/interval kinds; a PRN medication that ended up
-    // with a groupId (groups themselves reject scheduleKind "prn") still behaves standalone,
-    // since a group's own due-time computation below has nothing to do with PRN logging.
+    // Groups are many-to-many with medications (health_medication_group_members) — a med taken
+    // multiple times a day can have different doses claimed by different groups. For a
+    // scheduled-kind group, a member medication's dose at time T is only "claimed" (excluded
+    // from its own standalone pendingDoses, folded into the group's pendingGroupDoses instead)
+    // when T is in BOTH the group's own times and that medication's own times — belonging to a
+    // group doesn't mean every one of a medication's doses is covered, only the matching ones.
+    // Interval-kind groups have no discrete time to match against, so membership there still
+    // works the simpler way it always did: the whole interval schedule delegates to the group.
     const groupRows = await db
       .select()
       .from(healthMedicationGroups)
       .where(and(healthMedicationGroupVisibleWhere(db, auth), eq(healthMedicationGroups.enabled, true)));
-    const enabledGroupIds = new Set(groupRows.map((g) => g.id));
+    const enabledGroupIds = groupRows.map((g) => g.id);
+    const groupById = new Map(groupRows.map((g) => [g.id, g]));
 
-    const standaloneMedRows = medRows.filter(
-      (m) => m.scheduleKind === "prn" || !(m.groupId && enabledGroupIds.has(m.groupId)),
+    const medGroupMembershipMap = await loadHealthMedicationGroupMembershipMap(
+      db,
+      medRows.map((m) => m.id),
     );
-    const scheduledMeds = standaloneMedRows.filter((m) => m.scheduleKind === "scheduled");
-    const intervalMeds = standaloneMedRows.filter((m) => m.scheduleKind === "interval");
-    const prnMeds = standaloneMedRows.filter((m) => m.scheduleKind === "prn");
+
+    function scheduledTimesClaimedByGroups(medId: string): Set<string> {
+      const claimed = new Set<string>();
+      for (const groupId of medGroupMembershipMap.get(medId) ?? []) {
+        const group = groupById.get(groupId);
+        if (!group || group.scheduleKind !== "scheduled") continue;
+        for (const t of parseMedSchedule(group.scheduleJson).times ?? []) {
+          claimed.add(t.slice(0, 5));
+        }
+      }
+      return claimed;
+    }
+
+    function isDelegatedToIntervalGroup(medId: string): boolean {
+      return (medGroupMembershipMap.get(medId) ?? []).some(
+        (groupId) => groupById.get(groupId)?.scheduleKind === "interval",
+      );
+    }
+
+    const scheduledMeds = medRows.filter((m) => m.scheduleKind === "scheduled");
+    const intervalMeds = medRows.filter(
+      (m) => m.scheduleKind === "interval" && !isDelegatedToIntervalGroup(m.id),
+    );
+    const prnMeds = medRows.filter((m) => m.scheduleKind === "prn");
 
     // Group member medications, keyed by groupId — fetched independent of each medication's own
     // visibility (the group's own visibility, already checked above, is what gates seeing it and
@@ -392,20 +421,22 @@ export function householdHealthRoutes(db: Database, env: Env) {
     // moot once it's part of a group).
     const groupMemberMedsMap = new Map<string, (typeof healthMedications.$inferSelect)[]>();
     if (groupRows.length > 0) {
-      const allGroupMemberMeds = await db
-        .select()
-        .from(healthMedications)
-        .where(
-          and(
-            eq(healthMedications.householdId, auth.householdId),
-            eq(healthMedications.enabled, true),
+      const [groupMemberIdsMap, allHouseholdMeds] = await Promise.all([
+        loadGroupMemberMedicationIdsMap(db, enabledGroupIds),
+        db
+          .select()
+          .from(healthMedications)
+          .where(
+            and(
+              eq(healthMedications.householdId, auth.householdId),
+              eq(healthMedications.enabled, true),
+            ),
           ),
-        );
-      for (const med of allGroupMemberMeds) {
-        if (!med.groupId || !enabledGroupIds.has(med.groupId)) continue;
-        const list = groupMemberMedsMap.get(med.groupId) ?? [];
-        list.push(med);
-        groupMemberMedsMap.set(med.groupId, list);
+      ]);
+      const medsById = new Map(allHouseholdMeds.map((m) => [m.id, m]));
+      for (const [groupId, medicationIds] of groupMemberIdsMap) {
+        const members = medicationIds.map((id) => medsById.get(id)).filter((m) => m !== undefined);
+        groupMemberMedsMap.set(groupId, members);
       }
     }
 
@@ -441,8 +472,10 @@ export function householdHealthRoutes(db: Database, env: Env) {
         const dow = new Date(`${today}T12:00:00Z`).getUTCDay();
         if (!schedule.daysOfWeek.includes(dow)) continue;
       }
+      const claimedTimes = scheduledTimesClaimedByGroups(med.id);
       for (const time of times) {
         const hhmm = time.length >= 5 ? time.slice(0, 5) : time;
+        if (claimedTimes.has(hhmm)) continue; // this specific dose belongs to a group instead
         const scheduledAt = zonedLocalToUtc(today, hhmm, tz);
         if (scheduledAt < dayStart || scheduledAt > dayEnd) continue;
         const [logged] = await db
@@ -529,7 +562,15 @@ export function householdHealthRoutes(db: Database, env: Env) {
         const hhmm = time.length >= 5 ? time.slice(0, 5) : time;
         const scheduledAt = zonedLocalToUtc(today, hhmm, tz);
         if (scheduledAt < dayStart || scheduledAt > dayEnd) continue;
-        const memberIds = members.map((m) => m.id);
+        // Which members actually have a dose at THIS specific time — belonging to the group
+        // doesn't mean every one of a member's own times matches every one of the group's.
+        const membersAtThisTime = members.filter(
+          (m) =>
+            m.scheduleKind === "scheduled" &&
+            (parseMedSchedule(m.scheduleJson).times ?? []).some((t) => t.slice(0, 5) === hhmm),
+        );
+        if (membersAtThisTime.length === 0) continue;
+        const memberIds = membersAtThisTime.map((m) => m.id);
         const loggedRows = await db
           .select({ medicationId: healthMedicationLogs.medicationId })
           .from(healthMedicationLogs)
@@ -543,7 +584,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
         // this instant, not just one — someone taking 2 of 3 meds early shouldn't make the
         // group's reminder disappear before the 3rd is handled.
         const loggedIds = new Set(loggedRows.map((r) => r.medicationId));
-        if (loggedIds.size >= members.length) continue;
+        if (loggedIds.size >= membersAtThisTime.length) continue;
         pendingGroupDoses.push({
           groupId: group.id,
           name,
@@ -551,7 +592,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
           scheduledTime: hhmm,
           scheduledTimeLabel: formatTimeLabelInTz(scheduledAt, tz),
           memberId: group.memberId,
-          medications: members.map((m) => ({
+          medications: membersAtThisTime.map((m) => ({
             medicationId: m.id,
             name: decryptHealthFieldOrPassthrough(m.name, env) ?? "Medication",
             dosage: decryptHealthFieldOrPassthrough(m.dosage, env),
@@ -1075,14 +1116,14 @@ export function householdHealthRoutes(db: Database, env: Env) {
       visibility?: string;
       sharedMemberIds?: string[];
       memberId?: string;
-      /** Only `null` is accepted here (ungroup) — joining a group goes through
-       *  POST /medication-groups/:id/members, which does the group-side validation. */
-      groupId?: null;
+      /** Remove this medication from every group it belongs to (many-to-many — see
+       *  health_medication_group_members). Leaving one specific group goes through
+       *  DELETE /medication-groups/:id/members/:medicationId instead. */
+      leaveAllGroups?: boolean;
     }>();
 
     try {
       const patch: Partial<typeof healthMedications.$inferInsert> = { updatedAt: new Date() };
-      if (body.groupId === null) patch.groupId = null;
       if (body.name !== undefined) patch.name = encryptHealthField(body.name, env) ?? "";
       if (body.dosage !== undefined) patch.dosage = encryptHealthField(body.dosage, env);
       if (body.instructions !== undefined) {
@@ -1137,16 +1178,21 @@ export function householdHealthRoutes(db: Database, env: Env) {
       if (row.visibility === "household") {
         await replaceHealthMedicationShares(db, row.id, []);
       }
+      if (body.leaveAllGroups) {
+        await removeMedicationFromAllGroups(db, row.id);
+      }
 
       const shareMap = await loadHealthMedicationShareMap(
         db,
         row.visibility === "private" ? [row.id] : [],
       );
+      const groupMembershipMap = await loadHealthMedicationGroupMembershipMap(db, [row.id]);
       return c.json({
         medication: serializeHealthMedication(row, env, {
           sharedMemberIds: shareMap.get(row.id),
           isOwnedByMe: row.createdByUserId === auth.userId,
           canEdit: true,
+          groupIds: groupMembershipMap.get(row.id) ?? [],
         }),
       });
     } catch (e) {

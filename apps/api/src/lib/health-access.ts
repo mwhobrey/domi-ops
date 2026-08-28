@@ -2,6 +2,7 @@ import type { Database } from "@domi-ops/db";
 import {
   healthEventShares,
   healthEvents,
+  healthMedicationGroupMembers,
   healthMedicationGroupShares,
   healthMedicationGroups,
   healthMedicationShares,
@@ -171,6 +172,74 @@ export async function replaceHealthMedicationGroupShares(
   await db.insert(healthMedicationGroupShares).values(
     memberIds.map((memberId) => ({ groupId, memberId })),
   );
+}
+
+/** medicationId -> the groupIds it belongs to (many-to-many — a med can be in several). */
+export async function loadHealthMedicationGroupMembershipMap(
+  db: Database,
+  medicationIds: string[],
+): Promise<Map<string, string[]>> {
+  const map = new Map<string, string[]>();
+  if (medicationIds.length === 0) return map;
+  const rows = await db
+    .select({
+      medicationId: healthMedicationGroupMembers.medicationId,
+      groupId: healthMedicationGroupMembers.groupId,
+    })
+    .from(healthMedicationGroupMembers)
+    .where(inArray(healthMedicationGroupMembers.medicationId, medicationIds));
+  for (const row of rows) {
+    const list = map.get(row.medicationId) ?? [];
+    list.push(row.groupId);
+    map.set(row.medicationId, list);
+  }
+  return map;
+}
+
+/** groupId -> the medicationIds that belong to it. */
+export async function loadGroupMemberMedicationIdsMap(
+  db: Database,
+  groupIds: string[],
+): Promise<Map<string, string[]>> {
+  const map = new Map<string, string[]>();
+  if (groupIds.length === 0) return map;
+  const rows = await db
+    .select({
+      groupId: healthMedicationGroupMembers.groupId,
+      medicationId: healthMedicationGroupMembers.medicationId,
+    })
+    .from(healthMedicationGroupMembers)
+    .where(inArray(healthMedicationGroupMembers.groupId, groupIds));
+  for (const row of rows) {
+    const list = map.get(row.groupId) ?? [];
+    list.push(row.medicationId);
+    map.set(row.groupId, list);
+  }
+  return map;
+}
+
+export async function addMedicationToGroup(db: Database, groupId: string, medicationId: string) {
+  await db
+    .insert(healthMedicationGroupMembers)
+    .values({ groupId, medicationId })
+    .onConflictDoNothing();
+}
+
+export async function removeMedicationFromGroup(db: Database, groupId: string, medicationId: string) {
+  await db
+    .delete(healthMedicationGroupMembers)
+    .where(
+      and(
+        eq(healthMedicationGroupMembers.groupId, groupId),
+        eq(healthMedicationGroupMembers.medicationId, medicationId),
+      ),
+    );
+}
+
+export async function removeMedicationFromAllGroups(db: Database, medicationId: string) {
+  await db
+    .delete(healthMedicationGroupMembers)
+    .where(eq(healthMedicationGroupMembers.medicationId, medicationId));
 }
 
 function rowToGrants(row: {

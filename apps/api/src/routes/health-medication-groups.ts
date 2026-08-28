@@ -8,21 +8,26 @@ import {
 } from "@domi-ops/crypto";
 import type { Database } from "@domi-ops/db";
 import {
+  healthMedicationGroupMembers,
   healthMedicationGroups,
   healthMedicationLogs,
   healthMedications,
   householdMembers,
 } from "@domi-ops/db";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 import { isHouseholdModuleEnabled, requireHouseholdModule } from "../lib/household-modules.js";
 import { decryptHealthFieldOrPassthrough, HealthEncryptionError } from "../lib/health-crypto.js";
 import {
+  addMedicationToGroup,
   hasHealthSegmentAccess,
   healthMedicationGroupVisibleWhere,
+  loadGroupMemberMedicationIdsMap,
+  loadHealthMedicationGroupMembershipMap,
   loadHealthMedicationGroupShareMap,
   normalizeHealthVisibility,
+  removeMedicationFromGroup,
   replaceHealthMedicationGroupShares,
   validateHealthShareMemberIds,
 } from "../lib/health-access.js";
@@ -101,15 +106,20 @@ async function logAllGroupMembers(
     alsoCreateEvent?: boolean;
   },
 ): Promise<LogAllResult[]> {
-  const memberMeds = await db
-    .select()
-    .from(healthMedications)
-    .where(
-      and(
-        eq(healthMedications.groupId, input.group.id),
-        eq(healthMedications.householdId, input.group.householdId),
-      ),
-    );
+  const groupMemberIdsMap = await loadGroupMemberMedicationIdsMap(db, [input.group.id]);
+  const memberIds = groupMemberIdsMap.get(input.group.id) ?? [];
+  const memberMeds =
+    memberIds.length > 0
+      ? await db
+          .select()
+          .from(healthMedications)
+          .where(
+            and(
+              inArray(healthMedications.id, memberIds),
+              eq(healthMedications.householdId, input.group.householdId),
+            ),
+          )
+      : [];
 
   const results: LogAllResult[] = [];
   for (const med of memberMeds) {
@@ -260,16 +270,22 @@ export function healthMedicationGroupRoutes(db: Database, env: Env) {
       db,
       groups.filter((g) => g.visibility === "private").map((g) => g.id),
     );
+    const groupMemberIdsMap = await loadGroupMemberMedicationIdsMap(
+      db,
+      groups.map((g) => g.id),
+    );
+    const allMemberIds = [...new Set([...groupMemberIdsMap.values()].flat())];
     const allMemberMeds =
-      groups.length > 0
-        ? await db.select().from(healthMedications).where(eq(healthMedications.householdId, auth.householdId))
+      allMemberIds.length > 0
+        ? await db.select().from(healthMedications).where(inArray(healthMedications.id, allMemberIds))
         : [];
+    const medsById = new Map(allMemberMeds.map((m) => [m.id, m]));
     const membersByGroup = new Map<string, (typeof healthMedications.$inferSelect)[]>();
-    for (const med of allMemberMeds) {
-      if (!med.groupId) continue;
-      const list = membersByGroup.get(med.groupId) ?? [];
-      list.push(med);
-      membersByGroup.set(med.groupId, list);
+    for (const [groupId, medicationIds] of groupMemberIdsMap) {
+      membersByGroup.set(
+        groupId,
+        medicationIds.map((id) => medsById.get(id)).filter((m) => m !== undefined),
+      );
     }
     const result = groups.map((g) => {
       const isOwnedByMe = g.createdByUserId === auth.userId;
@@ -355,6 +371,8 @@ export function healthMedicationGroupRoutes(db: Database, env: Env) {
 
       const members: SerializedHealthMedication[] = [];
       if (Array.isArray(body.medicationIds) && body.medicationIds.length > 0) {
+        // Membership is many-to-many — a medication already in other groups (e.g. its 8am dose
+        // grouped elsewhere) is still eligible to also join this one for a different dose/time.
         const candidates = await db
           .select()
           .from(healthMedications)
@@ -362,17 +380,12 @@ export function healthMedicationGroupRoutes(db: Database, env: Env) {
             and(
               eq(healthMedications.householdId, auth.householdId),
               eq(healthMedications.memberId, body.memberId),
-              isNull(healthMedications.groupId),
             ),
           );
         const allowed = new Set(body.medicationIds);
         for (const med of candidates.filter((m) => allowed.has(m.id))) {
-          const [updated] = await db
-            .update(healthMedications)
-            .set({ groupId: row.id, updatedAt: new Date() })
-            .where(eq(healthMedications.id, med.id))
-            .returning();
-          members.push(serializeHealthMedication(updated, env));
+          await addMedicationToGroup(db, row.id, med.id);
+          members.push(serializeHealthMedication(med, env));
         }
       }
 
@@ -470,7 +483,12 @@ export function healthMedicationGroupRoutes(db: Database, env: Env) {
         await replaceHealthMedicationGroupShares(db, row.id, []);
       }
 
-      const members = await db.select().from(healthMedications).where(eq(healthMedications.groupId, row.id));
+      const groupMemberIdsMap = await loadGroupMemberMedicationIdsMap(db, [row.id]);
+      const memberIds = groupMemberIdsMap.get(row.id) ?? [];
+      const members =
+        memberIds.length > 0
+          ? await db.select().from(healthMedications).where(inArray(healthMedications.id, memberIds))
+          : [];
       const shareMap = await loadHealthMedicationGroupShareMap(
         db,
         row.visibility === "private" ? [row.id] : [],
@@ -502,7 +520,8 @@ export function healthMedicationGroupRoutes(db: Database, env: Env) {
       existing.createdByUserId === auth.userId ||
       (await hasHealthSegmentAccess(db, auth, existing.memberId, "medications", "write"));
     if (!canDelete) return c.json({ error: "forbidden" }, 403);
-    // ON DELETE SET NULL on health_medications.group_id ungroups member meds automatically.
+    // ON DELETE CASCADE on health_medication_group_members cleans up membership rows for this
+    // group automatically — member medications' OTHER group memberships are untouched.
     await db.delete(healthMedicationGroups).where(eq(healthMedicationGroups.id, id));
     return c.json({ ok: true });
   });
@@ -535,18 +554,30 @@ export function healthMedicationGroupRoutes(db: Database, env: Env) {
     if (med.memberId !== group.memberId) {
       return c.json({ error: "member_mismatch" }, 400);
     }
-    const [updated] = await db
-      .update(healthMedications)
-      .set({ groupId: group.id, updatedAt: new Date() })
-      .where(eq(healthMedications.id, med.id))
-      .returning();
-    return c.json({ medication: serializeHealthMedication(updated, env) });
+    await addMedicationToGroup(db, group.id, med.id);
+    const groupMembershipMap = await loadHealthMedicationGroupMembershipMap(db, [med.id]);
+    return c.json({
+      medication: serializeHealthMedication(med, env, {
+        groupIds: groupMembershipMap.get(med.id) ?? [],
+      }),
+    });
   });
 
   app.delete("/:id/members/:medicationId", async (c) => {
     const auth = c.get("auth")!;
     const groupId = c.req.param("id");
     const medicationId = c.req.param("medicationId");
+    const [membership] = await db
+      .select()
+      .from(healthMedicationGroupMembers)
+      .where(
+        and(
+          eq(healthMedicationGroupMembers.groupId, groupId),
+          eq(healthMedicationGroupMembers.medicationId, medicationId),
+        ),
+      )
+      .limit(1);
+    if (!membership) return c.json({ error: "not_found" }, 404);
     const [med] = await db
       .select()
       .from(healthMedications)
@@ -554,7 +585,6 @@ export function healthMedicationGroupRoutes(db: Database, env: Env) {
         and(
           eq(healthMedications.id, medicationId),
           eq(healthMedications.householdId, auth.householdId),
-          eq(healthMedications.groupId, groupId),
         ),
       )
       .limit(1);
@@ -562,12 +592,13 @@ export function healthMedicationGroupRoutes(db: Database, env: Env) {
     if (!(await hasHealthSegmentAccess(db, auth, med.memberId, "medications", "write"))) {
       return c.json({ error: "forbidden" }, 403);
     }
-    const [updated] = await db
-      .update(healthMedications)
-      .set({ groupId: null, updatedAt: new Date() })
-      .where(eq(healthMedications.id, med.id))
-      .returning();
-    return c.json({ medication: serializeHealthMedication(updated, env) });
+    await removeMedicationFromGroup(db, groupId, med.id);
+    const groupMembershipMap = await loadHealthMedicationGroupMembershipMap(db, [med.id]);
+    return c.json({
+      medication: serializeHealthMedication(med, env, {
+        groupIds: groupMembershipMap.get(med.id) ?? [],
+      }),
+    });
   });
 
   app.post("/:id/log-all", async (c) => {
