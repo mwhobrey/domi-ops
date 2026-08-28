@@ -29,6 +29,20 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
+# git pull can change this script's own content — a plain `bash deploy-hosted.sh` invocation may
+# keep executing whatever it had already buffered from the pre-pull version, silently skipping
+# anything the pull just added (confirmed live 2026-08-28: a newly-added step below was skipped
+# entirely on the first deploy that pulled it in). Re-exec once, immediately after the pull and
+# before anything else runs, so the rest of this script always comes from the file actually on
+# disk. $DOMI_OPS_IMAGE_TAG and any other env the caller set survive — exec inherits environment,
+# just not shell variables assigned below this point.
+if [[ -z "${DOMI_OPS_REEXECED:-}" ]]; then
+  echo "==> git pull"
+  git pull --ff-only
+  export DOMI_OPS_REEXECED=1
+  exec bash "$REPO_ROOT/deploy/deploy-hosted.sh" "$@"
+fi
+
 COMPOSE=(
   docker compose
   -f docker-compose.hosted-prod.yml
@@ -46,9 +60,6 @@ source .env
 set +a
 
 export DOMI_OPS_IMAGE_TAG="${DOMI_OPS_IMAGE_TAG:-latest}"
-
-echo "==> git pull"
-git pull --ff-only
 
 echo "==> Domi Ops hosted update (tag: ${DOMI_OPS_IMAGE_TAG})"
 

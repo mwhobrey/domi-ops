@@ -18,13 +18,6 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-COMPOSE=(
-  docker compose
-  -f docker-compose.prod.yml
-  -f docker-compose.proxy-external.yml
-  -f docker-compose.volumes-legacy.yml
-)
-
 DO_GIT_PULL=1
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -43,6 +36,25 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# git pull can change this script's own content — a plain `bash update-prod.sh` invocation may
+# keep executing whatever it had already buffered from the pre-pull version, silently skipping
+# anything the pull just added (same footgun fixed in deploy-hosted.sh, confirmed live
+# 2026-08-28: a newly-added step there was skipped entirely on the first deploy that pulled it
+# in). Re-exec once, immediately after the pull, with --no-git so the fresh process doesn't pull
+# again — everything after this point then always comes from the file actually on disk.
+if [[ "$DO_GIT_PULL" -eq 1 ]] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo "==> git pull"
+  git pull --ff-only
+  exec bash "$REPO_ROOT/deploy/update-prod.sh" --no-git "$@"
+fi
+
+COMPOSE=(
+  docker compose
+  -f docker-compose.prod.yml
+  -f docker-compose.proxy-external.yml
+  -f docker-compose.volumes-legacy.yml
+)
+
 if [[ ! -f .env ]]; then
   echo "Missing .env in $REPO_ROOT — copy from .env.example first." >&2
   exit 1
@@ -58,11 +70,6 @@ export PROXY_NETWORK
 export DOMI_OPS_IMAGE_TAG="${DOMI_OPS_IMAGE_TAG:-latest}"
 
 echo "==> Domi Ops prod update (tag: ${DOMI_OPS_IMAGE_TAG}, network: ${PROXY_NETWORK})"
-
-if [[ "$DO_GIT_PULL" -eq 1 ]] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  echo "==> git pull"
-  git pull --ff-only
-fi
 
 echo "==> docker compose pull (api, worker, web)"
 "${COMPOSE[@]}" pull api worker web
