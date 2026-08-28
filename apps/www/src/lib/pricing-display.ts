@@ -3,10 +3,14 @@ export type PricingTier = {
   id: string;
   name: string;
   priceLabel: string;
+  /** Shown next to priceLabel, e.g. "/mo" — omit for tiers without a recurring cadence. */
+  priceSuffix?: string;
   description: string;
   modules: string;
   drive: string;
   isolation: string;
+  /** Card gets an accent border + "Most households" badge. At most one tier should set this. */
+  highlight?: boolean;
   cta:
     | { kind: "link"; label: string; href: string; external?: boolean }
     | { kind: "disabled"; label: string }
@@ -55,8 +59,10 @@ export function getPricingDisplay(): {
       {
         id: "starter",
         name: "Domi Ops Cloud",
-        priceLabel: "$12/mo or $120/yr",
-        description: "Managed cloud on shared infrastructure. 14-day trial (card required).",
+        priceLabel: "$12",
+        priceSuffix: "/mo, or $120/yr",
+        description: "Managed cloud on shared infrastructure. 14-day trial, card required.",
+        highlight: true,
         modules: "All modules included",
         drive: "25 GB",
         isolation: "Shared Postgres + RLS",
@@ -64,8 +70,8 @@ export function getPricingDisplay(): {
           ? {
               kind: "checkout",
               options: [
-                { plan: "monthly", label: "Start trial — monthly" },
-                { plan: "annual", label: "Start trial — annual (2 months free)" },
+                { plan: "monthly", label: "Start trial: monthly" },
+                { plan: "annual", label: "Start trial: annual (2 months free)" },
               ],
             }
           : { kind: "disabled", label: "Coming soon" },
@@ -74,7 +80,7 @@ export function getPricingDisplay(): {
         id: "family",
         name: "Hosted Family",
         priceLabel: "Coming soon",
-        description: "Dedicated database per household — available after initial launch.",
+        description: "Dedicated database per household, available after initial launch.",
         modules: "All modules included",
         drive: "Higher quota TBD",
         isolation: "Dedicated Postgres",

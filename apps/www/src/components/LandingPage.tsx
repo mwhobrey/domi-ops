@@ -42,25 +42,37 @@ export function LandingPage() {
                 Calendar, chores, shopping, notes, and expenses, with homeschool tracking built in
                 when you need it. Self-host free or run on Domi Ops cloud.
               </p>
-              <p className="text-sm leading-relaxed text-[var(--color-text-muted)]">
-                Cozi for the calendar. A whiteboard for chores. A spreadsheet nobody opens for the
-                budget. That's not a system, it's duct tape. Domi Ops replaces it, homeschool
-                curriculum included, not required.
-              </p>
-              <div className="flex flex-wrap gap-3">
-                <LinkButton href="/pricing">Get hosted</LinkButton>
+              <div className="flex flex-wrap items-center gap-4">
+                <LinkButton
+                  href="/pricing"
+                  size="lg"
+                  className="shadow-[0_0_0_1px_var(--color-accent),0_8px_24px_-4px_var(--color-accent)]"
+                >
+                  Get hosted
+                </LinkButton>
                 {urls.ossRepoPublic ? (
-                  <AnchorButton href={urls.setupDocs} variant="secondary" target="_blank" rel="noopener noreferrer">
+                  <AnchorButton
+                    href={urls.setupDocs}
+                    variant="secondary"
+                    size="lg"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
                     Self-host free
                   </AnchorButton>
                 ) : (
-                  <LinkButton href="/pricing" variant="secondary">
+                  <LinkButton href="/pricing" variant="secondary" size="lg">
                     Self-host (coming soon)
                   </LinkButton>
                 )}
               </div>
               <p className="text-xs text-[var(--color-text-muted)]">
                 Open source · MIT · Docker Compose · Every module included
+              </p>
+              <p className="max-w-xl text-sm leading-relaxed text-[var(--color-text-muted)]">
+                Cozi for the calendar. A whiteboard for chores. A spreadsheet nobody opens for the
+                budget. That's not a system, it's duct tape. Domi Ops replaces it, homeschool
+                curriculum included, not required.
               </p>
             </div>
 
@@ -331,6 +343,36 @@ export function LandingPage() {
                 </p>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="relative overflow-hidden border-t border-[var(--color-border)]">
+        <div className="bg-dot-grid pointer-events-none absolute inset-0" aria-hidden />
+        <div className="relative mx-auto max-w-6xl px-4 py-16 text-center sm:px-6 sm:py-20">
+          <h2 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+            Stop running your household on <span className="text-gradient">five logins</span>
+          </h2>
+          <p className="mx-auto mt-3 max-w-xl text-[var(--color-text-muted)]">
+            Free to self-host, forever. Or skip the server and let us run it.
+          </p>
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
+            <LinkButton
+              href="/pricing"
+              size="lg"
+              className="shadow-[0_0_0_1px_var(--color-accent),0_8px_24px_-4px_var(--color-accent)]"
+            >
+              Get hosted
+            </LinkButton>
+            {urls.ossRepoPublic ? (
+              <AnchorButton href={urls.setupDocs} variant="secondary" size="lg" target="_blank" rel="noopener noreferrer">
+                Self-host free
+              </AnchorButton>
+            ) : (
+              <LinkButton href="/pricing" variant="secondary" size="lg">
+                Self-host (coming soon)
+              </LinkButton>
+            )}
           </div>
         </div>
       </section>
