@@ -22,6 +22,19 @@ function makeStripe(secretKey: string) {
   return new Stripe(secretKey);
 }
 
+/**
+ * `session.customer_email` is only populated when the email was known *before* Checkout (e.g.
+ * passed in at session creation, or `customer_email` on the customer object) — for a plain
+ * subscription session where the customer types their email into Checkout itself, it stays
+ * `null` and the real value only shows up under `customer_details.email` once payment
+ * completes. Confirmed live 2026-08-29: a real completed checkout had `customer_email: null`,
+ * which meant `/hosted-setup/complete` always failed with "no_email" — this is the difference
+ * between account creation actually working and every real signup dead-ending after payment.
+ */
+function sessionCustomerEmail(session: Stripe.Checkout.Session): string | null {
+  return session.customer_details?.email ?? session.customer_email ?? null;
+}
+
 async function alreadyProcessed(db: Database, eventId: string): Promise<boolean> {
   const rows = await db.select().from(stripeEvents).where(eq(stripeEvents.id, eventId));
   return rows.length > 0;
@@ -157,7 +170,7 @@ export function billingRoutes(db: Database, env: Env) {
             const trialEnd = sub.trial_end ? new Date(sub.trial_end * 1000) : null;
             const status = sub.status === "trialing" ? "trialing" : sub.status === "active" ? "active" : "trialing";
 
-            const householdId = await resolveOrProvisionHousehold(tx, customerId, session.customer_email);
+            const householdId = await resolveOrProvisionHousehold(tx, customerId, sessionCustomerEmail(session));
 
             await upsertSubscription(tx, {
               householdId,
@@ -339,7 +352,7 @@ export function billingRoutes(db: Database, env: Env) {
       return c.json({
         valid: true,
         householdId: sub.householdId,
-        email: session.customer_email,
+        email: sessionCustomerEmail(session),
         householdName: household?.name ?? "",
       });
     } catch (err) {
@@ -379,7 +392,7 @@ export function billingRoutes(db: Database, env: Env) {
       const customerId = typeof session.customer === "string" ? session.customer : session.customer?.id;
       if (!customerId) return c.json({ ok: false, error: "no_customer" }, 400);
 
-      const email = (session.customer_email ?? "").trim().toLowerCase();
+      const email = (sessionCustomerEmail(session) ?? "").trim().toLowerCase();
       if (!email) return c.json({ ok: false, error: "no_email" }, 400);
 
       // hashPassword is CPU-bound and doesn't touch the DB — do it outside the transaction.
