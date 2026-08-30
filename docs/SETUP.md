@@ -532,7 +532,7 @@ docker compose -f docker-compose.prod.yml -f docker-compose.staging.yml up -d
 # Test on host port 3002
 ```
 
-See `deploy/CUTOVER.md` for a generic cutover checklist. Operator-specific migration notes live under `deploy/CUTOVER-*.md` (not required for greenfield installs).
+See `deploy/CUTOVER.md` for a generic cutover checklist (not required for greenfield installs).
 
 ### One household per database
 
