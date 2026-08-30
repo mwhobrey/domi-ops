@@ -174,6 +174,7 @@ See **[TROUBLESHOOTING.md](./TROUBLESHOOTING.md)** for a full index. Quick hits:
 
 - [SETUP.md](./SETUP.md) — step-by-step paths for household admins
 - [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) — common failures index
+- [ROLLBACK.md](./ROLLBACK.md) — backups and rolling back a bad update or migration
 - [SECURITY_REVIEW.md](./SECURITY_REVIEW.md) — pre-launch security checklist
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — system design
 - [CONTRIBUTING.md](../CONTRIBUTING.md) — dev workflow

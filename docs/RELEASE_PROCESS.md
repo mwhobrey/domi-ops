@@ -41,6 +41,8 @@ Any PR that adds a file to `packages/db/drizzle/` (a new migration) must:
    `.github/release.yml`; edit for clarity and paste in the matching CHANGELOG section.
 6. If the release includes a migration, say so at the top of the release notes.
 
+If a release goes bad, see [docs/ROLLBACK.md](ROLLBACK.md).
+
 ## GHCR image tags
 
 Published by `.github/workflows/publish-images.yml` on every push to `main` and on `v*` tags:
