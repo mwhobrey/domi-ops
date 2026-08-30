@@ -447,38 +447,47 @@ dialog.dialog-sheet::backdrop {
    driver.css with no CSS-variable hooks, so this app's dark theme has to override it directly
    rather than through driver's own theming API (there isn't one beyond a couple of animation
    vars). Kept minimal — just enough to stop a white card with dark text from looking like a
-   rendering bug against this app's dark surfaces. */
-.driver-popover {
+   rendering bug against this app's dark surfaces.
+
+   Every selector below is prefixed with `body` even though a bare class would normally do the
+   same job — driver.js's own stylesheet loads as a separate lazy chunk that Next.js injects
+   into <head> only when a tour first runs, which lands *after* this file in DOM order. Two
+   same-specificity class selectors resolve by source order, so a bare `.driver-popover` here
+   would silently lose to driver's own `.driver-popover{background-color:#fff}` half the time.
+   The extra `body` ancestor bumps specificity just enough to always win regardless of load
+   order (confirmed live: without it, .driver-popover-title took the override — driver.css sets
+   no color on it — while .driver-popover's background stayed driver's white). */
+body .driver-popover {
   background-color: var(--color-surface-elevated);
   color: var(--color-text);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
 }
-.driver-popover-title {
+body .driver-popover-title {
   color: var(--color-text);
 }
-.driver-popover-description {
+body .driver-popover-description {
   color: var(--color-text-muted);
 }
-.driver-popover-close-btn {
+body .driver-popover-close-btn {
   color: var(--color-text-muted);
 }
-.driver-popover-close-btn:hover,
-.driver-popover-close-btn:focus {
+body .driver-popover-close-btn:hover,
+body .driver-popover-close-btn:focus {
   color: var(--color-text);
 }
-.driver-popover-footer-btn {
+body .driver-popover-footer-btn {
   background-color: var(--color-surface);
   color: var(--color-text);
   border: 1px solid var(--color-border);
 }
-.driver-popover-footer-btn:hover,
-.driver-popover-footer-btn:focus {
+body .driver-popover-footer-btn:hover,
+body .driver-popover-footer-btn:focus {
   background-color: var(--color-border);
 }
-.driver-popover-progress-text {
+body .driver-popover-progress-text {
   color: var(--color-text-muted);
 }
-.driver-popover-arrow {
+body .driver-popover-arrow {
   border-color: var(--color-surface-elevated);
 }
