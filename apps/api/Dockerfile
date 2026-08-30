@@ -1,4 +1,4 @@
-FROM node:22-alpine AS builder
+FROM node:26-alpine AS builder
 WORKDIR /app
 RUN corepack enable
 COPY package.json package-lock.json* ./
@@ -15,7 +15,7 @@ RUN npm ci
 COPY . .
 RUN npx turbo run build --filter=@domi-ops/api...
 
-FROM node:22-alpine
+FROM node:26-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=builder --chown=node:node /app/apps/api/dist ./apps/api/dist
