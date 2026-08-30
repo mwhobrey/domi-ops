@@ -30,7 +30,7 @@
   "devDependencies": {
     "@types/node": "^22.15.30",
     "@types/web-push": "^3.6.4",
-    "tsx": "^4.19.4",
+    "tsx": "^4.23.12",
     "typescript": "^5.8.3"
   }
 }
