@@ -2,6 +2,14 @@
 
 Thanks for helping improve Domi Ops. This is a household operations monorepo — keep changes focused and match existing patterns.
 
+By participating, you're expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## Reporting bugs & requesting features
+
+Use the issue templates: [bug report](../../issues/new?template=bug_report.yml), [feature request](../../issues/new?template=feature_request.yml),
+or [self-host setup help](../../issues/new?template=self_host_help.yml). Open-ended questions belong in
+[Discussions](../../discussions) rather than Issues.
+
 ## Repository map
 
 | Path | Role |
@@ -76,6 +84,9 @@ Without a ticket, omit the bracket prefix. No commit trailers (`Co-authored-by`,
 1. Run `npm run typecheck` and `npm run test` on touched areas.
 2. Update `.cursor/runbook/04_CURRENT_STATE.md` if behavior changed.
 3. Describe manual test steps for UI or API changes.
+4. Add a `CHANGELOG.md` entry under `[Unreleased]` for any user-visible change — see
+   [docs/RELEASE_PROCESS.md](docs/RELEASE_PROCESS.md), including a migration note if the PR adds a
+   `packages/db/drizzle/` migration.
 
 ## Self-hosting
 

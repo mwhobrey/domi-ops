@@ -1,0 +1,38 @@
+name: Self-host setup help
+description: Trouble installing, configuring, or upgrading your own instance
+labels: ["question", "self-host"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check [docs/TROUBLESHOOTING.md](https://github.com/mwhobrey/domi-ops/blob/main/docs/TROUBLESHOOTING.md) and
+        [docs/SETUP.md](https://github.com/mwhobrey/domi-ops/blob/main/docs/SETUP.md) first — most setup issues are
+        covered there. Use this template for a specific, blocking problem; open-ended questions belong in Discussions.
+  - type: input
+    id: version
+    attributes:
+      label: Domi Ops version / image tag
+    validations:
+      required: true
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: Install method
+      options:
+        - docker-compose.prod.yml (pre-built images)
+        - Built from source
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What's not working?
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs / output
+      description: "`docker compose logs`, redacted `.env`, error messages"
+      render: shell

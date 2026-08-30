@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Self-host troubleshooting guide
+    url: https://github.com/mwhobrey/domi-ops/blob/main/docs/TROUBLESHOOTING.md
+    about: Check known issues and fixes before filing a setup problem.
+  - name: Ask a question (Discussions)
+    url: https://github.com/mwhobrey/domi-ops/discussions
+    about: Open-ended questions and "how do I…" go here instead of Issues.

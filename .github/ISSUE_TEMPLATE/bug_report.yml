@@ -1,0 +1,49 @@
+name: Bug report
+description: Something isn't working as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. Please search existing issues first.
+  - type: input
+    id: version
+    attributes:
+      label: Domi Ops version
+      description: Docker image tag or commit (`git rev-parse --short HEAD`)
+      placeholder: v0.2.0 / sha-abc1234
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Deployment
+      options:
+        - Self-hosted (docker-compose.prod.yml)
+        - Self-hosted (other)
+        - Domi Ops hosted (app.domi-ops.com)
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you expected vs. what actually happened.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: "`docker logs <container>` output or browser console errors. Redact secrets."
+      render: shell

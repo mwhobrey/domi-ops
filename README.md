@@ -100,6 +100,14 @@ npm run test
 
 Hosted multi-tenant code is not live yet; launch waits until self-host and hosted are both ready to ship.
 
+## Get help
+
+- **Setup problems:** [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) first, then open a
+  [self-host help issue](../../issues/new?template=self_host_help.yml).
+- **Bug?** [File a bug report](../../issues/new?template=bug_report.yml).
+- **Idea or request?** [File a feature request](../../issues/new?template=feature_request.yml).
+- **Open-ended question?** Use [Discussions](../../discussions) instead of an issue.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
