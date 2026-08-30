@@ -1,4 +1,4 @@
-import { AppShell } from "../../../../../components/AppShell";
+import { LoadingShell } from "../../../../../components/LoadingShell";
 import { PageLoading } from "../../../../../components/PageLoading";
 
 // breadcrumb must match page.tsx's shape (same item count), not just be "present in some
@@ -7,7 +7,7 @@ import { PageLoading } from "../../../../../components/PageLoading";
 // same shape, not the same text.
 export default function Loading() {
   return (
-    <AppShell
+    <LoadingShell
       title="Gradebook"
       breadcrumb={[
         { label: "School", href: "/school" },
@@ -16,6 +16,6 @@ export default function Loading() {
       ]}
     >
       <PageLoading />
-    </AppShell>
+    </LoadingShell>
   );
 }
