@@ -22,15 +22,13 @@ app.domi-ops.com {
         reverse_proxy minio:9000
     }
 
-    # API liveness check (apps/api/src/routes/health.ts) lives at the API's own bare
-    # `/health`, not under `/api/`, so it's NOT covered by web's Next.js rewrite
-    # (`/api/:path*` → API_URL — see apps/web/next.config.ts). Without this, /health
-    # falls through to web itself and its auth middleware 302s to /login instead of
-    # returning a liveness payload — confirmed live 2026-08-27.
-    handle /health {
-        reverse_proxy api:4000
-    }
-
+    # API liveness check lives at /api/healthz (apps/api/src/routes/health.ts), covered by
+    # web's own /api/:path* → API_URL rewrite (apps/web/next.config.ts) — no special Caddy
+    # rule needed. A prior version of this file special-cased a bare `/health` here to work
+    # around web's auth middleware 302ing an unauthenticated liveness check to /login; that
+    # bare path collided with the app's own /health page (the Health module) and silently
+    # shadowed it for every household. Fixed 2026-08-30 by moving the liveness route under
+    # /api instead of carving out a Caddy exception for it.
     reverse_proxy domiops-web:3000
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"

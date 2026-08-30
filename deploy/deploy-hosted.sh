@@ -88,7 +88,7 @@ done
 
 echo "==> app health"
 if command -v curl >/dev/null 2>&1 && [[ -n "${PUBLIC_APP_URL:-}" ]]; then
-  app_url="${PUBLIC_APP_URL%/}/health"
+  app_url="${PUBLIC_APP_URL%/}/api/healthz"
   app_json=""
   # api needs a moment to bind its listener after the container starts — redis is
   # already healthy from a prior deploy so the wait loop above exits almost instantly,

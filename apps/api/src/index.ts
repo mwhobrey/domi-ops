@@ -132,7 +132,7 @@ app.on(["POST", "GET"], "/auth/*", async (c) => {
   return betterAuth.handler(c.req.raw);
 });
 
-app.route("/", healthRoutes(db));
+app.route("/api", healthRoutes(db));
 app.route("/api/calendar", calendarRoutes(db, env));
 // Setup must mount before the routes below — they all apply requireAuth to every /api/core/*.
 app.route("/api/core/setup", setupRoutes(db, env));

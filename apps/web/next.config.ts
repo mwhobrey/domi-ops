@@ -59,10 +59,10 @@ const nextConfig: NextConfig = {
         source: "/api/:path*",
         destination: `${apiUrl}/api/:path*`,
       },
-      {
-        source: "/health",
-        destination: `${apiUrl}/health`,
-      },
+      // API liveness check lives at /api/healthz (apps/api/src/routes/health.ts), covered by
+      // the /api/:path* rewrite above. It used to be a bare "/health" with its own rewrite
+      // here — that collided with the app's own /health page (the Health module), which this
+      // rewrite silently shadowed. Moved + this dead entry removed 2026-08-30.
       // /auth/* is handled by app/auth/[[...path]]/route.ts (forwards Set-Cookie to browser origin)
     ];
   },
