@@ -2,7 +2,14 @@
  * Fernet-compatible encrypt/decrypt (port of HomeHub sensitive_store.py).
  * Uses SHA-256(ENCRYPTION_KEY) → url-safe base64 key for AES-128-CBC + HMAC.
  */
-import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from "node:crypto";
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  createHmac,
+  randomBytes,
+  timingSafeEqual,
+} from "node:crypto";
 
 const PREFIX = "enc:v1:";
 
@@ -112,6 +119,72 @@ function signHealthMedPayload(payloadB64: string, secret: string): string {
   return createHmac("sha256", secret).update(payloadB64).digest("base64url");
 }
 
+/** Fields every health-med reminder push token shares — a single medication's and a medication
+ *  group's tokens differ only in which id field names the thing the reminder is for
+ *  (medicationId vs. medicationGroupId). */
+type HealthMedPushActionClaimsBase = {
+  v: 1;
+  householdId: string;
+  userId: string;
+  scheduledAt: string;
+  actions: HealthMedPushActionStatus[];
+  exp: number;
+};
+
+/** Mint step shared by both token kinds below — sign an already-built claims object. */
+function mintHealthMedHmacToken(claims: Record<string, unknown>, secret: string): string {
+  if (!secret) throw new Error("health_med_push_token_secret_required");
+  const payloadB64 = Buffer.from(JSON.stringify(claims), "utf8").toString("base64url");
+  return `${payloadB64}.${signHealthMedPayload(payloadB64, secret)}`;
+}
+
+/**
+ * Verify step shared by both token kinds below: constant-time signature check, expiry, and
+ * every claims field the two shapes have in common. `checkSubject` validates the one field
+ * that differs (medicationId vs. medicationGroupId) — the only thing each public verify
+ * function below has to supply for itself.
+ */
+function verifyHealthMedHmacToken<T extends HealthMedPushActionClaimsBase>(
+  token: string,
+  secret: string,
+  nowMs: number,
+  checkSubject: (raw: Record<string, unknown>) => boolean,
+): T | null {
+  if (!token || !secret) return null;
+  const dot = token.indexOf(".");
+  if (dot <= 0 || dot === token.length - 1) return null;
+  const payloadB64 = token.slice(0, dot);
+  const sig = token.slice(dot + 1);
+  const expected = signHealthMedPayload(payloadB64, secret);
+  const sigBuf = Buffer.from(sig);
+  const expBuf = Buffer.from(expected);
+  if (sigBuf.length !== expBuf.length || !timingSafeEqual(sigBuf, expBuf)) return null;
+  let raw: Record<string, unknown>;
+  try {
+    raw = JSON.parse(Buffer.from(payloadB64, "base64url").toString("utf8")) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  if (
+    raw.v !== 1 ||
+    typeof raw.householdId !== "string" ||
+    typeof raw.userId !== "string" ||
+    typeof raw.scheduledAt !== "string" ||
+    typeof raw.exp !== "number" ||
+    !Array.isArray(raw.actions) ||
+    !checkSubject(raw)
+  ) {
+    return null;
+  }
+  if ((raw.exp as number) < Math.floor(nowMs / 1000)) return null;
+  if (Number.isNaN(Date.parse(raw.scheduledAt as string))) return null;
+  const actions = (raw.actions as unknown[]).filter(
+    (a): a is HealthMedPushActionStatus => a === "taken" || a === "skipped",
+  );
+  if (actions.length === 0) return null;
+  return { ...raw, actions } as T;
+}
+
 /**
  * Mint a short-lived HMAC token for med reminder push actions.
  * Prefer ENCRYPTION_KEY; SESSION_SECRET is an acceptable fallback in local/dev.
@@ -128,7 +201,6 @@ export function mintHealthMedPushActionToken(
   secret: string,
   nowMs = Date.now(),
 ): string {
-  if (!secret) throw new Error("health_med_push_token_secret_required");
   const ttl = input.ttlSeconds ?? HEALTH_MED_PUSH_TOKEN_TTL_SEC;
   const claims: HealthMedPushActionClaims = {
     v: 1,
@@ -139,9 +211,7 @@ export function mintHealthMedPushActionToken(
     actions: input.actions ?? ["taken", "skipped"],
     exp: Math.floor(nowMs / 1000) + ttl,
   };
-  const payloadB64 = Buffer.from(JSON.stringify(claims), "utf8").toString("base64url");
-  const sig = signHealthMedPayload(payloadB64, secret);
-  return `${payloadB64}.${sig}`;
+  return mintHealthMedHmacToken(claims, secret);
 }
 
 /** Verify signature + expiry; returns claims or null. */
@@ -150,39 +220,9 @@ export function verifyHealthMedPushActionToken(
   secret: string,
   nowMs = Date.now(),
 ): HealthMedPushActionClaims | null {
-  if (!token || !secret) return null;
-  const dot = token.indexOf(".");
-  if (dot <= 0 || dot === token.length - 1) return null;
-  const payloadB64 = token.slice(0, dot);
-  const sig = token.slice(dot + 1);
-  const expected = signHealthMedPayload(payloadB64, secret);
-  const sigBuf = Buffer.from(sig);
-  const expBuf = Buffer.from(expected);
-  if (sigBuf.length !== expBuf.length || !sigBuf.equals(expBuf)) return null;
-  let claims: HealthMedPushActionClaims;
-  try {
-    claims = JSON.parse(Buffer.from(payloadB64, "base64url").toString("utf8")) as HealthMedPushActionClaims;
-  } catch {
-    return null;
-  }
-  if (claims.v !== 1) return null;
-  if (
-    typeof claims.householdId !== "string" ||
-    typeof claims.userId !== "string" ||
-    typeof claims.medicationId !== "string" ||
-    typeof claims.scheduledAt !== "string" ||
-    typeof claims.exp !== "number" ||
-    !Array.isArray(claims.actions)
-  ) {
-    return null;
-  }
-  if (claims.exp < Math.floor(nowMs / 1000)) return null;
-  if (Number.isNaN(Date.parse(claims.scheduledAt))) return null;
-  const actions = claims.actions.filter(
-    (a): a is HealthMedPushActionStatus => a === "taken" || a === "skipped",
+  return verifyHealthMedHmacToken<HealthMedPushActionClaims>(token, secret, nowMs, (raw) =>
+    typeof raw.medicationId === "string",
   );
-  if (actions.length === 0) return null;
-  return { ...claims, actions };
 }
 
 /** Same claims shape as HealthMedPushActionClaims, for a medication *group*'s one-tap reminder action. */
@@ -215,7 +255,6 @@ export function mintHealthMedGroupPushActionToken(
   secret: string,
   nowMs = Date.now(),
 ): string {
-  if (!secret) throw new Error("health_med_push_token_secret_required");
   const ttl = input.ttlSeconds ?? HEALTH_MED_PUSH_TOKEN_TTL_SEC;
   const claims: HealthMedGroupPushActionClaims = {
     v: 1,
@@ -226,9 +265,7 @@ export function mintHealthMedGroupPushActionToken(
     actions: input.actions ?? ["taken", "skipped"],
     exp: Math.floor(nowMs / 1000) + ttl,
   };
-  const payloadB64 = Buffer.from(JSON.stringify(claims), "utf8").toString("base64url");
-  const sig = signHealthMedPayload(payloadB64, secret);
-  return `${payloadB64}.${sig}`;
+  return mintHealthMedHmacToken(claims, secret);
 }
 
 /** Verify signature + expiry for a group reminder token; returns claims or null. */
@@ -237,41 +274,9 @@ export function verifyHealthMedGroupPushActionToken(
   secret: string,
   nowMs = Date.now(),
 ): HealthMedGroupPushActionClaims | null {
-  if (!token || !secret) return null;
-  const dot = token.indexOf(".");
-  if (dot <= 0 || dot === token.length - 1) return null;
-  const payloadB64 = token.slice(0, dot);
-  const sig = token.slice(dot + 1);
-  const expected = signHealthMedPayload(payloadB64, secret);
-  const sigBuf = Buffer.from(sig);
-  const expBuf = Buffer.from(expected);
-  if (sigBuf.length !== expBuf.length || !sigBuf.equals(expBuf)) return null;
-  let claims: HealthMedGroupPushActionClaims;
-  try {
-    claims = JSON.parse(
-      Buffer.from(payloadB64, "base64url").toString("utf8"),
-    ) as HealthMedGroupPushActionClaims;
-  } catch {
-    return null;
-  }
-  if (claims.v !== 1) return null;
-  if (
-    typeof claims.householdId !== "string" ||
-    typeof claims.userId !== "string" ||
-    typeof claims.medicationGroupId !== "string" ||
-    typeof claims.scheduledAt !== "string" ||
-    typeof claims.exp !== "number" ||
-    !Array.isArray(claims.actions)
-  ) {
-    return null;
-  }
-  if (claims.exp < Math.floor(nowMs / 1000)) return null;
-  if (Number.isNaN(Date.parse(claims.scheduledAt))) return null;
-  const actions = claims.actions.filter(
-    (a): a is HealthMedPushActionStatus => a === "taken" || a === "skipped",
+  return verifyHealthMedHmacToken<HealthMedGroupPushActionClaims>(token, secret, nowMs, (raw) =>
+    typeof raw.medicationGroupId === "string",
   );
-  if (actions.length === 0) return null;
-  return { ...claims, actions };
 }
 
 /** Resolve signing secret for med push tokens. */
