@@ -1,6 +1,7 @@
 import { AccountSettingsNav } from "../../components/AccountSettingsNav";
 import { AppShell } from "../../components/AppShell";
 import { FeedbackCard } from "../../components/FeedbackCard";
+import { GlanceConfigCard, type GlanceTileOption } from "../../components/GlanceConfigCard";
 import { OnboardingReplayCard } from "../../components/OnboardingReplayCard";
 import { ProfileEditor } from "../../components/ProfileEditor";
 import { ScrollToTopFab } from "../../components/ScrollToTopFab";
@@ -41,6 +42,7 @@ export default async function ProfilePage() {
     connections: { id: string; lastSyncAt: string | null }[];
   } | null = null;
   let modulesEnabled: string[] = [];
+  let glanceConfig: string[] | null = null;
   let loadError: string | null = null;
   try {
     profile = await apiFetch("/api/core/profile");
@@ -66,11 +68,27 @@ export default async function ProfilePage() {
     } catch {
       /* calendar module optional */
     }
+    try {
+      const glance = await apiFetch<{ tiles: string[] | null }>("/api/core/glance-config");
+      glanceConfig = glance.tiles;
+    } catch {
+      /* falls back to default order */
+    }
   } catch (e) {
     loadError = loadErrorMessage(e, "Could not load profile");
   }
 
   const canManage = canManageHousehold(profile.role);
+
+  // Chores + shopping are "core" — always available, no toggle. School/health only show up as
+  // configurable dashboard tiles when their module is actually on, same gate TodayGlance itself
+  // uses — keeps this list from ever offering a tile the household can't currently see anyway.
+  const availableGlanceTiles: GlanceTileOption[] = [
+    { key: "chores", label: "Chores" },
+    { key: "shopping", label: "Shopping" },
+    ...(modulesEnabled.includes("school") ? [{ key: "school", label: "School" }] : []),
+    ...(modulesEnabled.includes("health") ? [{ key: "health", label: "Health" }] : []),
+  ];
 
   return (
     <AppShell title="Profile" description="Your name, presence, and notification preferences">
@@ -87,6 +105,7 @@ export default async function ProfilePage() {
               calendarIntegration={calendarIntegration ?? undefined}
               modulesEnabled={modulesEnabled}
             />
+            <GlanceConfigCard available={availableGlanceTiles} initialConfig={glanceConfig} />
             <OnboardingReplayCard />
             <FeedbackCard
               endpoint={process.env.TELEMETRY_ENDPOINT ?? "https://app.domi-ops.com/api/telemetry"}

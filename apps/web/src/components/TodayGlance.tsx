@@ -117,9 +117,13 @@ function useNarrowViewport() {
 export function TodayGlance({
   schoolModuleEnabled = false,
   healthModuleEnabled = false,
+  glanceConfig = null,
 }: {
   schoolModuleEnabled?: boolean;
   healthModuleEnabled?: boolean;
+  /** Per-member tile visibility + order (GlanceConfigCard.tsx, /profile). Null = no preference
+   *  set — falls back to showing every currently-available tile, sorted by urgency. */
+  glanceConfig?: string[] | null;
 }) {
   const [loading, setLoading] = useState(true);
   const [chores, setChores] = useState<ChoresGlance | null>(null);
@@ -216,6 +220,15 @@ export function TodayGlance({
     const healthTile = buildHealthTile(health);
     if (healthTile) built.push(healthTile);
 
+    // A member's explicit choice (GlanceConfigCard) wins outright — their order, only their
+    // chosen tiles (a stale key for a since-disabled module just quietly filters out, since
+    // `built` never contains a tile that isn't currently available in the first place), and no
+    // automatic urgency re-sorting or narrow-viewport hiding second-guessing what they picked.
+    if (glanceConfig) {
+      const byKey = new Map(built.map((t) => [t.key, t]));
+      return glanceConfig.map((k) => byKey.get(k)).filter((t): t is GlanceTileModel => t !== undefined);
+    }
+
     built.sort((a, b) => toneRank[a.tone] - toneRank[b.tone] || a.label.localeCompare(b.label));
 
     const hasActionable = built.some((t) => t.tone !== "success");
@@ -223,10 +236,10 @@ export function TodayGlance({
       return built.filter((t) => t.tone !== "success");
     }
     return built;
-  }, [chores, shopping, school, health, today, narrow]);
+  }, [chores, shopping, school, health, today, narrow, glanceConfig]);
 
   const hiddenClearCount = useMemo(() => {
-    if (!narrow) return 0;
+    if (!narrow || glanceConfig) return 0;
     const all: GlanceTone[] = [];
     if (chores) all.push(chores.summary.tone);
     if (shopping) all.push(shopping.summary.tone);
@@ -236,7 +249,7 @@ export function TodayGlance({
     const actionable = all.some((t) => t !== "success");
     if (!actionable) return 0;
     return all.filter((t) => t === "success").length;
-  }, [narrow, chores, shopping, school, health]);
+  }, [narrow, chores, shopping, school, health, glanceConfig]);
 
   const gridClass =
     tiles.length <= 1

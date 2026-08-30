@@ -14,6 +14,7 @@ export function DashboardBoard({
   healthModuleEnabled = false,
   role = null,
   onboarding = null,
+  glanceConfig = null,
 }: {
   whosHome: StatusRow[];
   self: SelfStatus | null;
@@ -21,6 +22,7 @@ export function DashboardBoard({
   healthModuleEnabled?: boolean;
   role?: string | null;
   onboarding?: OnboardingState | null;
+  glanceConfig?: string[] | null;
 }) {
   return (
     <div className="space-y-6">
@@ -28,6 +30,7 @@ export function DashboardBoard({
       <TodayGlance
         schoolModuleEnabled={schoolModuleEnabled}
         healthModuleEnabled={healthModuleEnabled}
+        glanceConfig={glanceConfig}
       />
       <div className="grid gap-6 md:grid-cols-2 md:items-stretch">
         <TodayAgenda />

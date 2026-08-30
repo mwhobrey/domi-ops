@@ -14,9 +14,10 @@ export default async function DashboardPage() {
   let healthModuleEnabled = false;
   let role: string | null = null;
   let onboarding: OnboardingState | null = null;
+  let glanceConfig: string[] | null = null;
 
   try {
-    const [dashboard, profile, session, onboardingRes] = await Promise.all([
+    const [dashboard, profile, session, onboardingRes, glanceRes] = await Promise.all([
       apiFetch<{ whosHome: StatusRow[] }>("/api/core/dashboard"),
       apiFetch<{
         shownLabel: string;
@@ -33,12 +34,14 @@ export default async function DashboardPage() {
         user: undefined,
       })),
       apiFetch<OnboardingState>("/api/core/onboarding").catch(() => null),
+      apiFetch<{ tiles: string[] | null }>("/api/core/glance-config").catch(() => ({ tiles: null })),
     ]);
     whosHome = dashboard.whosHome;
     schoolModuleEnabled = (session.modulesEnabled ?? []).includes("school");
     healthModuleEnabled = (session.modulesEnabled ?? []).includes("health");
     role = session.user?.role ?? null;
     onboarding = onboardingRes;
+    glanceConfig = glanceRes.tiles;
     if (profile.homeStatusId) {
       self = {
         homeStatusId: profile.homeStatusId,
@@ -66,6 +69,7 @@ export default async function DashboardPage() {
           healthModuleEnabled={healthModuleEnabled}
           role={role}
           onboarding={onboarding}
+          glanceConfig={glanceConfig}
         />
       )}
     </AppShell>

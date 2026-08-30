@@ -442,6 +442,13 @@
       "when": 1780495036000,
       "tag": "0062_health_medication_group_members",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1780495037000,
+      "tag": "0063_glance_config",
+      "breakpoints": true
     }
   ]
 }

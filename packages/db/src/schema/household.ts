@@ -134,6 +134,12 @@ export const householdMembers = pgTable(
     onboardingStepsDone: text("onboarding_steps_done").notNull().default("[]"),
     /** Set when the member dismisses the first-login checklist. Null = still showing. */
     onboardingDismissedAt: timestamp("onboarding_dismissed_at", { withTimezone: true }),
+    /** Dashboard "Today at a glance" tile visibility + order (TodayGlance.tsx) — JSON string
+     *  array of tile keys ("chores", "shopping", "school", "health") in the order this member
+     *  wants them shown. A key's absence means hidden. Null/empty = default (all
+     *  currently-available tiles, sorted by urgency) — this is per-member, not per-household,
+     *  since different people in the same household reasonably care about different things. */
+    glanceConfig: text("glance_config"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("household_members_household_user").on(t.householdId, t.userId)],
