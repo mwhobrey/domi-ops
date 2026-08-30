@@ -1,5 +1,5 @@
 import { ModuleReportsLink } from "../../components/reports/ModuleReportsLink";
-import { LoadingShell } from "../../components/LoadingShell";
+import { AppShell } from "../../components/AppShell";
 import { PageLoading } from "../../components/PageLoading";
 
 // `actions` here has to match page.tsx passing one too — see the comment in
@@ -7,8 +7,8 @@ import { PageLoading } from "../../components/PageLoading";
 // the same DOM shape or the streaming Suspense reveal silently never completes).
 export default function Loading() {
   return (
-    <LoadingShell title="Expenses" actions={<ModuleReportsLink module="expenses" />}>
+    <AppShell title="Expenses" actions={<ModuleReportsLink module="expenses" />}>
       <PageLoading />
-    </LoadingShell>
+    </AppShell>
   );
 }

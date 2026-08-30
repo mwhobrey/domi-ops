@@ -1,12 +1,21 @@
-import { LoadingShell } from "../../../components/LoadingShell";
+import { AppShell } from "../../../components/AppShell";
 import { PageLoading } from "../../../components/PageLoading";
+import { LinkButton } from "../../../components/ui";
 
-// DIAGNOSTIC (2026-08-30): breadcrumb/actions temporarily removed to match page.tsx's
-// diagnostic version — see the comment there.
+// breadcrumb/actions must match page.tsx's shape, not just be "present in some form" — see the
+// comment in app/drive/loading.tsx for the full explanation.
 export default function Loading() {
   return (
-    <LoadingShell title="Chore reports">
+    <AppShell
+      title="Chore reports"
+      breadcrumb={[{ label: "Chores", href: "/chores" }, { label: "Reports" }]}
+      actions={
+        <LinkButton href="/chores" variant="ghost" size="sm">
+          Back to list
+        </LinkButton>
+      }
+    >
       <PageLoading />
-    </LoadingShell>
+    </AppShell>
   );
 }

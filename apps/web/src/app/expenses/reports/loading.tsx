@@ -1,4 +1,4 @@
-import { LoadingShell } from "../../../components/LoadingShell";
+import { AppShell } from "../../../components/AppShell";
 import { PageLoading } from "../../../components/PageLoading";
 import { LinkButton } from "../../../components/ui";
 
@@ -6,7 +6,7 @@ import { LinkButton } from "../../../components/ui";
 // comment in app/drive/loading.tsx for the full explanation.
 export default function Loading() {
   return (
-    <LoadingShell
+    <AppShell
       title="Spending reports"
       breadcrumb={[{ label: "Expenses", href: "/expenses" }, { label: "Reports" }]}
       actions={
@@ -16,6 +16,6 @@ export default function Loading() {
       }
     >
       <PageLoading />
-    </LoadingShell>
+    </AppShell>
   );
 }

@@ -1,4 +1,4 @@
-import { LoadingShell } from "../../components/LoadingShell";
+import { AppShell } from "../../components/AppShell";
 import { PageLoading } from "../../components/PageLoading";
 
 // `breadcrumb` here has to match page.tsx passing one too, even though the loading state can't
@@ -15,8 +15,8 @@ import { PageLoading } from "../../components/PageLoading";
 // present, not their exact content) identical to the real page's.
 export default function DriveLoading() {
   return (
-    <LoadingShell title="Drive" breadcrumb={[{ label: "Drive" }]}>
+    <AppShell title="Drive" breadcrumb={[{ label: "Drive" }]}>
       <PageLoading />
-    </LoadingShell>
+    </AppShell>
   );
 }
