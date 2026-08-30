@@ -43,7 +43,7 @@ Custom status is **in addition to** Home/Away:
 **Technical notes**
 
 - Schema today: `home_status.status` varchar(64) — likely split to `presence` + `status_message` in `packages/db`.
-- Files: `HouseholdPanel.tsx`, `apps/api/src/routes/core.ts` (`/dashboard`, `/profile`, home-status patch), `packages/db/src/schema/core.ts`.
+- Files: `HouseholdPanel.tsx`, `apps/api/src/routes/dashboard.ts` (`/dashboard`, home-status patch), `apps/api/src/routes/profile.ts` (`/profile`), `packages/db/src/schema/core.ts`.
 
 ---
 
@@ -73,7 +73,7 @@ Forecast temps are shown as bare `°` with Celsius from Open-Meteo and Celsius c
 
 **Technical notes**
 
-- `WeatherPanel.tsx`, `apps/api/src/routes/core.ts` (`/weather`), `ProfileEditor.tsx`, `packages/config` if env default needed.
+- `WeatherPanel.tsx`, `apps/api/src/routes/weather.ts` (`/weather`), `ProfileEditor.tsx`, `packages/config` if env default needed.
 - Optional: household-level default later (out of scope unless requested).
 
 ---

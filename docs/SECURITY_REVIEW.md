@@ -57,7 +57,7 @@
 | Check | Status | Evidence |
 |-------|--------|----------|
 | Authenticated routes use `requireAuth` | **Pass** | `core`, `calendar`, `drive`, `school`, `health`, `weekly-reports`, etc. mount `requireAuth` |
-| Queries scoped by `householdId` | **Pass** | e.g. `eq(notices.householdId, auth.householdId)` throughout `apps/api/src/routes/core.ts` |
+| Queries scoped by `householdId` | **Pass** | e.g. `eq(notices.householdId, auth.householdId)` throughout `apps/api/src/routes/notices.ts` and its siblings (`shopping.ts`, `chores.ts`, `notes.ts`, `expenses.ts`, `household.ts`) |
 | Module gating | **Pass** | `requireHouseholdModule` / `isHouseholdModuleEnabled` on school, drive, health, calendar |
 | Owner/admin boundaries | **Pass** | `canProvisionMembers` on settings + member role PATCH; `updateHouseholdMemberRole` last-owner guard (`packages/auth`) |
 | School / health visibility | **Pass** | Role + enrollment checks (`school-access.ts`); health private + share lists (`health-access.ts`) |

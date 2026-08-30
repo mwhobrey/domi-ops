@@ -56,7 +56,7 @@ Prod adds external `proxy` network for Caddy (`docker-compose.prod.yml`).
 ### 2. Core household data (CRUD)
 
 - Browser/server: `apiFetch("/api/core/...")` with `credentials: "include"` (`apps/web/src/lib/api.ts`).
-- API: `requireAuth` → scope queries by `auth.householdId` (e.g. `shoppingItems`, `chores` in `apps/api/src/routes/core.ts`).
+- API: `requireAuth` → scope queries by `auth.householdId` (e.g. `shoppingItems` in `apps/api/src/routes/shopping.ts`, `chores` in `chores.ts`).
 - Mutations: JSON body → Drizzle insert/update → JSON response.
 
 ### 3. Google Calendar

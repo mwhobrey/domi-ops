@@ -119,11 +119,24 @@ domi-ops/
 | `src/lib/health-serialize.ts` | Health DTO encrypt/decrypt + schedule JSON |
 | `src/lib/expense-budget-access.ts` | Personal budget view/write + shares (WHO-237) |
 | `src/lib/expenses.ts` | Expense serialize, category spend, budget summaries, reports |
-| `src/routes/core.ts` | Dashboard, shopping (+ `/shopping/glance`), chores, notes, expenses; profile overlay prefs |
+| `src/routes/dashboard.ts` | `/dashboard`, home-status PATCH |
+| `src/routes/weather.ts` | `/weather`, `/weather/geocode` |
+| `src/routes/notices.ts` | Household notice board + in-app `/notifications` |
+| `src/routes/push.ts` | VAPID public key, push subscribe/unsubscribe |
+| `src/routes/shopping.ts` | Shopping list (+ `/shopping/glance`), recurring, receipts, reports |
+| `src/routes/chores.ts` | Chores (+ `/chores/glance`), recurring, karma, reports |
+| `src/routes/notes.ts` | Notes CRUD, sharing, tag suggestions |
+| `src/routes/expenses.ts` | Expenses CRUD, budgets + shares, reports |
+| `src/routes/profile.ts` | `/profile` + overlay prefs, avatars |
+| `src/routes/household.ts` | `/household/settings`, `/household/integrations`, member roster/provisioning |
 | `src/routes/school.ts` | Classes, assignments (`GET /assignments?filter=`), submissions |
 | `src/routes/school-upload.ts` | Presign stub |
 | `src/routes/health.ts` | API DB ping (`GET /health` on API host) |
 | `Dockerfile` + `scripts/docker-entrypoint-api.sh` | Migrate on start |
+
+The 10 files above (`dashboard.ts` through `household.ts`) replaced a single `core.ts` monolith
+(2026-08-30 cleanup) — one resource per file, matching the `school.ts`/`drive.ts` convention.
+Shared helpers (`posterLabel`, `loadEntityDriveAttachments`) moved to `src/lib/`.
 
 ### `apps/worker` — Queue consumer
 

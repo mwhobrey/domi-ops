@@ -8,7 +8,16 @@ import { createAuthMiddleware, type AppVariables } from "./middleware/auth.js";
 import { createTenantMiddleware } from "./middleware/tenant.js";
 import { whomeSessionRoutes } from "./routes/auth.js";
 import { calendarRoutes } from "./routes/calendar.js";
-import { coreRoutes } from "./routes/core.js";
+import { dashboardRoutes } from "./routes/dashboard.js";
+import { weatherRoutes } from "./routes/weather.js";
+import { noticesRoutes } from "./routes/notices.js";
+import { pushRoutes } from "./routes/push.js";
+import { shoppingRoutes } from "./routes/shopping.js";
+import { choresRoutes } from "./routes/chores.js";
+import { notesRoutes } from "./routes/notes.js";
+import { expensesRoutes } from "./routes/expenses.js";
+import { profileRoutes } from "./routes/profile.js";
+import { householdRoutes } from "./routes/household.js";
 import { googleCalendarAuthRoutes } from "./routes/google-calendar-auth.js";
 import { healthRoutes } from "./routes/health.js";
 import { householdHealthRoutes } from "./routes/household-health.js";
@@ -123,9 +132,18 @@ app.on(["POST", "GET"], "/auth/*", async (c) => {
 
 app.route("/", healthRoutes(db));
 app.route("/api/calendar", calendarRoutes(db, env));
-// Setup must mount before coreRoutes — core applies requireAuth to all /api/core/*.
+// Setup must mount before the routes below — they all apply requireAuth to every /api/core/*.
 app.route("/api/core/setup", setupRoutes(db, env));
-app.route("/api/core", coreRoutes(db, env));
+app.route("/api/core", dashboardRoutes(db, env));
+app.route("/api/core", weatherRoutes(db, env));
+app.route("/api/core", noticesRoutes(db, env));
+app.route("/api/core", pushRoutes(db, env));
+app.route("/api/core", shoppingRoutes(db, env));
+app.route("/api/core", choresRoutes(db, env));
+app.route("/api/core", notesRoutes(db, env));
+app.route("/api/core", expensesRoutes(db, env));
+app.route("/api/core", profileRoutes(db, env));
+app.route("/api/core", householdRoutes(db, env));
 app.route("/api/core", weeklyReportRoutes(db, env));
 app.route("/api/core", reportRoutes(db, env));
 app.route("/api/core/upload", browserUploadRoutes(env));
