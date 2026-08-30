@@ -35,7 +35,7 @@
     "playwright": "^1.51.1",
     "node-gyp": "^11.5.0",
     "turbo": "^2.5.4",
-    "typescript": "^5.8.3",
+    "typescript": "^7.0.2",
     "vitest": "^3.2.4"
   },
   "engines": {
