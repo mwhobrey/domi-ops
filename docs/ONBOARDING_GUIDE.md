@@ -1,11 +1,12 @@
 # First-login onboarding guide
 
-**Status (updated 2026-08-24):** built in-app — `apps/web/src/components/OnboardingChecklist.tsx`, a dismissible checklist card on the dashboard, role-aware (owner/admin steps vs. member steps), rendered for every first-time visitor until dismissed. This doc remains the content source of truth; update the component's `OWNER_STEPS`/`MEMBER_STEPS` arrays if this doc changes.
+**Status (updated 2026-08-29):** built in-app — `apps/web/src/components/OnboardingChecklist.tsx`, a dismissible checklist card on the dashboard, role-aware (owner/admin steps vs. member steps), rendered for every first-time visitor until dismissed. This doc remains the content source of truth; update the component's `OWNER_STEPS`/`MEMBER_STEPS` arrays if this doc changes.
 
 **Implementation notes:**
 - Persistence is server-side (`household_members.onboarding_steps_done` / `onboarding_dismissed_at`, migration `0055_onboarding_checklist.sql`), via `GET`/`PATCH /api/core/onboarding`. Domi Ops is meant to work everywhere someone picks it up — phone, tablet, desktop, installed PWA — so checklist progress has to travel with the person, not sit in one browser's local storage. A first pass used per-member `localStorage` (matching the existing `ProfileOnboardingBanner` nudge) and got replaced once that fell short of the cross-platform bar.
 - It's a dashboard card, not a blocking modal — matches the rest of this app's style, doesn't gate access to anything.
 - An admin cannot yet reopen a dismissed checklist for someone else from Settings — nothing surfaces the raw DB columns in any UI. Fine for now; revisit if it turns out people actually want that.
+- Five of the six steps (everything but "Install on your phone," which is a browser action, not something in our own UI) are clickable and launch a `driver.js` guided tour — a spotlight card pointing at the actual setting, not just a link that dumps you on the page (`apps/web/src/lib/tours.ts`). A step whose target lives on another page (Calendar, Profile) sets a `sessionStorage` flag before navigating; `PendingTourRunner`, mounted on Settings/Calendar/Profile, picks it up and runs the tour once that page has rendered. Clicking the checklist item again re-runs the tour — it doesn't mark the step done by itself, the checkbox is still a separate click.
 
 ---
 
@@ -42,6 +43,10 @@ Don't set up in the abstract — add one real item to whichever modules you turn
 ### 6. Install on phones
 
 Each family member: open the app in their phone's browser → **Add to Home Screen**. This is what makes push notifications and the "just check Domi Ops" habit actually happen.
+
+### Optional: customize "Today at a glance"
+
+**Profile → Dashboard tiles** — the dashboard's glance row defaults to every module you have turned on, in a fixed order. If your household leans on three of them and ignores the rest, uncheck the ones you don't want and drag the order (up/down arrows, no drag-and-drop) to put what you actually check first. Per-member, not household-wide — everyone sees their own dashboard the way they want it. "Reset to default" clears it back to automatic.
 
 ---
 
