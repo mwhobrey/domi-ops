@@ -18,9 +18,10 @@ RUN npx turbo run build --filter=@domi-ops/worker...
 FROM node:22-alpine
 WORKDIR /app
 ENV NODE_ENV=production
-COPY --from=builder /app/apps/worker/dist ./apps/worker/dist
-COPY --from=builder /app/apps/worker/package.json ./apps/worker/
-COPY --from=builder /app/packages ./packages
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./
+COPY --from=builder --chown=node:node /app/apps/worker/dist ./apps/worker/dist
+COPY --from=builder --chown=node:node /app/apps/worker/package.json ./apps/worker/
+COPY --from=builder --chown=node:node /app/packages ./packages
+COPY --from=builder --chown=node:node /app/node_modules ./node_modules
+COPY --from=builder --chown=node:node /app/package.json ./
+USER node
 CMD ["node", "apps/worker/dist/index.js"]
