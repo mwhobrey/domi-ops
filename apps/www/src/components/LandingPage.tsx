@@ -7,7 +7,7 @@ import {
   ThemeAwareScreenshot,
   resolveMarketingUrls,
 } from "@domi-ops/marketing-ui";
-import { ALSO_STRIP_ICONS, MODULE_TILES } from "@/lib/module-tiles";
+import { ALSO_STRIP_ITEMS, MODULE_TILES } from "@/lib/module-tiles";
 
 const DAY_TIMELINE = [
   { time: "6:45 AM", text: "Chore chart buzzes before the bus does. Nobody's asking twice." },
@@ -262,10 +262,10 @@ export function LandingPage() {
                 pitch, just there when you reach for them.
               </p>
               <ul className="flex flex-wrap gap-3 text-sm text-[var(--color-text-muted)]">
-                {ALSO_STRIP_ICONS.map((Icon, i) => (
-                  <li key={i} className="inline-flex items-center gap-1.5 rounded-full border border-[var(--color-border)] px-3 py-1">
+                {ALSO_STRIP_ITEMS.map(({ icon: Icon, label }) => (
+                  <li key={label} className="inline-flex items-center gap-1.5 rounded-full border border-[var(--color-border)] px-3 py-1">
                     <Icon className="h-4 w-4 text-[var(--color-accent)]" aria-hidden />
-                    <span>{["Presence", "PWA", "Push"][i]}</span>
+                    <span>{label}</span>
                   </li>
                 ))}
               </ul>

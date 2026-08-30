@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { BookOpen, Calendar, ListChecks } from "lucide-react";
+import { Bell, CircleDot, Smartphone } from "lucide-react";
 import type { MarketingScreenshot } from "@domi-ops/marketing-ui";
 import { MARKETING_SCREENSHOTS } from "@domi-ops/marketing-ui";
 
@@ -76,4 +76,8 @@ export const MODULE_TILES: ModuleTile[] = [
   },
 ];
 
-export const ALSO_STRIP_ICONS = [BookOpen, Calendar, ListChecks] as const;
+export const ALSO_STRIP_ITEMS = [
+  { icon: CircleDot, label: "Presence" },
+  { icon: Smartphone, label: "PWA" },
+  { icon: Bell, label: "Push" },
+] as const;
