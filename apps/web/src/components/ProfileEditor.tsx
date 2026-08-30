@@ -30,14 +30,16 @@ function ProfileSection({
   description,
   children,
   className,
+  dataTour,
 }: {
   title: string;
   description?: string;
   children: React.ReactNode;
   className?: string;
+  dataTour?: string;
 }) {
   return (
-    <Card className={className}>
+    <Card className={className} data-tour={dataTour}>
       <CardBody className="space-y-4">
         <div className="space-y-1">
           <SectionHeader title={title} />
@@ -328,6 +330,7 @@ export function ProfileEditor({
           title="Notifications"
           description="Choose which Web Push alerts this browser and account receive."
           className="md:col-span-2"
+          dataTour="notifications-section"
         >
           <NotificationSettingsPanel
             initial={{

@@ -442,3 +442,43 @@ dialog.dialog-sheet::backdrop {
     margin: 0.6in;
   }
 }
+
+/* driver.js (guided walkthroughs — lib/tours.ts) ships hardcoded light-theme colors in its own
+   driver.css with no CSS-variable hooks, so this app's dark theme has to override it directly
+   rather than through driver's own theming API (there isn't one beyond a couple of animation
+   vars). Kept minimal — just enough to stop a white card with dark text from looking like a
+   rendering bug against this app's dark surfaces. */
+.driver-popover {
+  background-color: var(--color-surface-elevated);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.driver-popover-title {
+  color: var(--color-text);
+}
+.driver-popover-description {
+  color: var(--color-text-muted);
+}
+.driver-popover-close-btn {
+  color: var(--color-text-muted);
+}
+.driver-popover-close-btn:hover,
+.driver-popover-close-btn:focus {
+  color: var(--color-text);
+}
+.driver-popover-footer-btn {
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+}
+.driver-popover-footer-btn:hover,
+.driver-popover-footer-btn:focus {
+  background-color: var(--color-border);
+}
+.driver-popover-progress-text {
+  color: var(--color-text-muted);
+}
+.driver-popover-arrow {
+  border-color: var(--color-surface-elevated);
+}

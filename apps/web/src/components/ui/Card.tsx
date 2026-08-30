@@ -3,7 +3,8 @@ import { cn } from "../../lib/cn";
 export function Card({
   className,
   children,
-}: {
+  ...rest
+}: React.HTMLAttributes<HTMLDivElement> & {
   className?: string;
   children: React.ReactNode;
 }) {
@@ -13,6 +14,7 @@ export function Card({
         "rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-surface-elevated)] shadow-[var(--shadow-card)]",
         className,
       )}
+      {...rest}
     >
       {children}
     </div>

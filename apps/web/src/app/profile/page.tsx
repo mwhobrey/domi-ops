@@ -3,6 +3,7 @@ import { AppShell } from "../../components/AppShell";
 import { FeedbackCard } from "../../components/FeedbackCard";
 import { GlanceConfigCard, type GlanceTileOption } from "../../components/GlanceConfigCard";
 import { OnboardingReplayCard } from "../../components/OnboardingReplayCard";
+import { PendingTourRunner } from "../../components/PendingTourRunner";
 import { ProfileEditor } from "../../components/ProfileEditor";
 import { ScrollToTopFab } from "../../components/ScrollToTopFab";
 import { apiFetch } from "../../lib/api";
@@ -96,6 +97,7 @@ export default async function ProfilePage() {
 
   return (
     <AppShell title="Profile" description="Your name, presence, and notification preferences">
+      <PendingTourRunner />
       {loadError ? (
         <Alert variant="error">
           {loadError}. <a href="/profile">Retry</a>

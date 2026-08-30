@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
+import { launchTour, type TourKey } from "../lib/tours";
 import { Card, CardBody, CardHeader, Checkbox, IconButton } from "./ui";
 
 /**
@@ -96,6 +98,8 @@ function persist(next: Partial<OnboardingState>) {
   });
 }
 
+const TOUR_KEYS = new Set<TourKey>(["household-basics", "modules", "invite", "calendar", "notifications"]);
+
 export function OnboardingChecklist({
   role,
   initialState,
@@ -104,6 +108,7 @@ export function OnboardingChecklist({
   initialState: OnboardingState | null;
 }) {
   const [state, setState] = useState<OnboardingState | null>(initialState);
+  const router = useRouter();
 
   if (!state || state.dismissed) return null;
 
@@ -147,7 +152,15 @@ export function OnboardingChecklist({
               className="mt-0.5"
             />
             <div className="min-w-0 flex-1">
-              {step.href ? (
+              {TOUR_KEYS.has(step.key as TourKey) ? (
+                <button
+                  type="button"
+                  onClick={() => launchTour(step.key as TourKey, router)}
+                  className="text-left text-sm font-medium hover:text-[var(--color-accent)] hover:underline"
+                >
+                  {step.label}
+                </button>
+              ) : step.href ? (
                 <a
                   href={step.href}
                   className="text-sm font-medium hover:text-[var(--color-accent)] hover:underline"

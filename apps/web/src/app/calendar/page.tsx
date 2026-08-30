@@ -1,5 +1,6 @@
 import { AppShell } from "../../components/AppShell";
 import { CalendarPageClient } from "../../components/CalendarPageClient";
+import { PendingTourRunner } from "../../components/PendingTourRunner";
 import { apiFetch } from "../../lib/api";
 import { oauthFailureHint } from "../../lib/oauth-dev-hint";
 import { loadErrorMessage } from "../../lib/load-error";
@@ -31,6 +32,7 @@ export default async function CalendarPage({
 
   return (
     <AppShell title="Calendar">
+      <PendingTourRunner />
       {loadError && (
         <Alert variant="info" className="mb-4">
           {loadError}. Connection settings may be incomplete — events still load below.

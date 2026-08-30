@@ -152,7 +152,7 @@ export function HouseholdMembersPanel({
   if (!canManage) return null;
 
   return (
-    <Card>
+    <Card data-tour="invite-section">
       <CardBody className="space-y-6">
         <div className="space-y-1">
           <SectionHeader title="Members" />

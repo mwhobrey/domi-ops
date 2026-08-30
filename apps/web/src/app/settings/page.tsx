@@ -5,6 +5,7 @@ import {
   HouseholdIntegrationsPanel,
   type HouseholdIntegrationsStatus,
 } from "../../components/HouseholdIntegrationsPanel";
+import { PendingTourRunner } from "../../components/PendingTourRunner";
 import { ScrollToTopFab } from "../../components/ScrollToTopFab";
 import { HouseholdMembersPanel } from "../../components/HouseholdMembersPanel";
 import { HouseholdSettingsEditor } from "../../components/HouseholdSettingsEditor";
@@ -50,6 +51,7 @@ export default async function SettingsPage() {
       title="Household settings"
       description="Name, timezone, and members for everyone in your home"
     >
+      <PendingTourRunner />
       {loadError ? (
         <Alert variant="error">
           {loadError}. <a href="/settings">Retry</a>

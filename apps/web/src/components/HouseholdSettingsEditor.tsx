@@ -102,7 +102,7 @@ export function HouseholdSettingsEditor({ initial }: { initial: HouseholdSetting
           Name and timezone apply across the dashboard, calendar defaults, and reports.
         </p>
 
-        <label className="block space-y-1">
+        <label className="block space-y-1" data-tour="household-name">
           <span className="text-sm font-medium">Household name</span>
           <Input
             value={name}
@@ -128,7 +128,7 @@ export function HouseholdSettingsEditor({ initial }: { initial: HouseholdSetting
           />
         </label>
 
-        <label className="block space-y-1">
+        <label className="block space-y-1" data-tour="household-timezone">
           <span className="text-sm font-medium">Timezone</span>
           <Select value={timezone} onChange={(e) => setTimezone(e.target.value)}>
             {timezoneOptions.map((tz) => (
@@ -139,7 +139,7 @@ export function HouseholdSettingsEditor({ initial }: { initial: HouseholdSetting
           </Select>
         </label>
 
-        <div className="space-y-3">
+        <div className="space-y-3" data-tour="modules-section">
           <div className="space-y-1">
             <p className="text-sm font-medium">Enabled modules</p>
             <p className="text-xs text-[var(--color-text-muted)]">

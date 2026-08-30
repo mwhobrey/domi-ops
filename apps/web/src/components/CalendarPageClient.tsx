@@ -672,6 +672,7 @@ export function CalendarPageClient({
           <Button
             size="sm"
             className="shrink-0"
+            data-tour="new-event-button"
             onClick={() => {
               setSelected(null);
               setCreateDraft(null);
