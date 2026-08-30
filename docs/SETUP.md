@@ -192,14 +192,7 @@ ssh -L 3000:127.0.0.1:3000 user@your-server
 ## Path C: Production with pre-built images
 
 After the first install, prefer **pulling images** instead of rebuilding on the server (faster, less RAM).
-
-**One-time:** log in to GitHub Container Registry on the server:
-
-```bash
-# Classic PAT with read:packages scope — see deploy/CUTOVER-WHOBBREY.md
-export GHCR_PAT='ghp_xxxxxxxx'
-echo "$GHCR_PAT" | docker login ghcr.io -u YOUR_GITHUB_USER --password-stdin
-```
+GHCR images are public — no login required.
 
 **Each update:**
 

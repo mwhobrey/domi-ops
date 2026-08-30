@@ -3,14 +3,17 @@
 # Services: postgres, redis, minio, api, worker, web (+ import profile "tools")
 # Migrations run on API container start. S3 bucket created on first API boot.
 #
-#   cp .env.example .env   # set secrets + PUBLIC_APP_URL
-#   docker compose -f docker-compose.prod.yml up -d --build
+# Recommended: pull pre-built GHCR images (ghcr.io/mwhobrey/domi-ops-*, public — no login
+# required) instead of building on-box. This is the fast path — no repo clone of the full
+# monorepo needed beyond this compose file + .env.
 #
-# Pull pre-built GHCR images (WHO-133) instead of on-box build:
-#   echo "$GHCR_PAT" | docker login ghcr.io -u YOUR_GITHUB_USER --password-stdin
-#   export DOMI_OPS_IMAGE_TAG=latest   # or git sha from Actions
+#   cp .env.example .env   # set secrets + PUBLIC_APP_URL
+#   export DOMI_OPS_IMAGE_TAG=latest   # or a version tag / git sha — see docs/RELEASE_PROCESS.md
 #   docker compose -f docker-compose.prod.yml pull api worker web
 #   docker compose -f docker-compose.prod.yml up -d --no-build
+#
+# Building from source instead (contributors, or a fork with local changes):
+#   docker compose -f docker-compose.prod.yml up -d --build
 #
 # Reverse proxy: join Caddy on a shared Docker network (see docker-compose.proxy-external.yml).
 # Staging rehearsal: add docker-compose.staging.yml (separate Postgres volume, :3002).

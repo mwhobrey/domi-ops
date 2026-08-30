@@ -64,11 +64,16 @@ cp .env.example .env
 # Set POSTGRES_PASSWORD, SESSION_SECRET, ENCRYPTION_KEY, S3_ACCESS_KEY, S3_SECRET_KEY
 # Greenfield: SETUP_TOKEN (min 16 chars) for /setup or bootstrap:owner
 
-docker compose -f docker-compose.prod.yml up -d --build
+export DOMI_OPS_IMAGE_TAG=latest   # or a version tag — see docs/RELEASE_PROCESS.md
+docker compose -f docker-compose.prod.yml pull api worker web
+docker compose -f docker-compose.prod.yml up -d --no-build
 # Then open https://your.domain/setup (or npm run bootstrap:owner on the server)
 ```
 
-Pre-built images are published to GHCR on `main` and version tags — see [SETUP.md Path C](docs/SETUP.md#path-c-production-with-pre-built-images) and `DOMI_OPS_IMAGE_TAG`.
+Pre-built images are published to GHCR on `main` and version tags — no login required to pull
+them. See [SETUP.md Path C](docs/SETUP.md#path-c-production-with-pre-built-images) for details,
+or build from source instead (`docker compose ... up -d --build`) if you're running a fork with
+local changes.
 
 **Stuck?** [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
 
