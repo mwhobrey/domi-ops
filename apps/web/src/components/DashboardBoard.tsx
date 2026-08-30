@@ -12,6 +12,8 @@ export function DashboardBoard({
   self,
   schoolModuleEnabled = false,
   healthModuleEnabled = false,
+  driveModuleEnabled = false,
+  calendarModuleEnabled = false,
   role = null,
   onboarding = null,
   glanceConfig = null,
@@ -20,6 +22,8 @@ export function DashboardBoard({
   self: SelfStatus | null;
   schoolModuleEnabled?: boolean;
   healthModuleEnabled?: boolean;
+  driveModuleEnabled?: boolean;
+  calendarModuleEnabled?: boolean;
   role?: string | null;
   onboarding?: OnboardingState | null;
   glanceConfig?: string[] | null;
@@ -30,6 +34,8 @@ export function DashboardBoard({
       <TodayGlance
         schoolModuleEnabled={schoolModuleEnabled}
         healthModuleEnabled={healthModuleEnabled}
+        driveModuleEnabled={driveModuleEnabled}
+        calendarModuleEnabled={calendarModuleEnabled}
         glanceConfig={glanceConfig}
       />
       <div className="grid gap-6 md:grid-cols-2 md:items-stretch">

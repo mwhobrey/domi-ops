@@ -76,6 +76,8 @@ import { avatarObjectKey, processAvatarUpload } from "../lib/avatar-image.js";
 import { memberAvatarUrl } from "../lib/avatar-url.js";
 import { buildChoresGlance } from "../lib/chores-glance.js";
 import { buildShoppingGlance } from "../lib/shopping-glance.js";
+import { buildNotesGlance } from "../lib/notes-glance.js";
+import { buildExpensesGlance } from "../lib/expenses-glance.js";
 import {
   collectChoreListSuggestions,
   collectChoreTagSuggestions,
@@ -1508,6 +1510,17 @@ export function coreRoutes(db: Database, env: Env) {
     return c.json({ ok: true });
   });
 
+  app.get("/notes/glance", async (c) => {
+    const auth = c.get("auth")!;
+    const rows = await db
+      .select({ id: notes.id, title: notes.title, pinned: notes.pinned })
+      .from(notes)
+      .where(noteListWhere(db, auth))
+      .orderBy(desc(notes.pinned), desc(notes.createdAt))
+      .limit(6);
+    return c.json(buildNotesGlance(rows));
+  });
+
   app.get("/notes/tag-suggestions", async (c) => {
     const auth = c.get("auth")!;
     const q = c.req.query("q")?.trim() ?? "";
@@ -1687,6 +1700,16 @@ export function coreRoutes(db: Database, env: Env) {
       .returning({ id: notes.id });
     if (!row) return c.json({ error: "not_found" }, 404);
     return c.json({ ok: true });
+  });
+
+  app.get("/expenses/glance", async (c) => {
+    const auth = c.get("auth")!;
+    const visible = await listVisibleBudgets(db, auth);
+    const monthKey = currentMonthKey();
+    const budgets = await Promise.all(
+      visible.map((budget) => summarizeBudgetRow(db, budget, monthKey)),
+    );
+    return c.json(buildExpensesGlance(budgets));
   });
 
   app.get("/expenses/category-suggestions", async (c) => {

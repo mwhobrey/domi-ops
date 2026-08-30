@@ -86,8 +86,12 @@ export default async function ProfilePage() {
   const availableGlanceTiles: GlanceTileOption[] = [
     { key: "chores", label: "Chores" },
     { key: "shopping", label: "Shopping" },
+    { key: "notes", label: "Notes" },
+    { key: "expenses", label: "Expenses" },
     ...(modulesEnabled.includes("school") ? [{ key: "school", label: "School" }] : []),
     ...(modulesEnabled.includes("health") ? [{ key: "health", label: "Health" }] : []),
+    ...(modulesEnabled.includes("drive") ? [{ key: "drive", label: "Drive" }] : []),
+    ...(modulesEnabled.includes("calendar_sync") ? [{ key: "calendar", label: "Calendar" }] : []),
   ];
 
   return (

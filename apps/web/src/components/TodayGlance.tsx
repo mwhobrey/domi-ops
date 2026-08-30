@@ -39,6 +39,33 @@ type HealthGlance = {
   }[];
 };
 
+type DriveGlance = {
+  summary: { headline: string; tone: GlanceTone };
+  items: { id: string; title: string; kind: string; pinned: boolean }[];
+  overflow: number;
+};
+
+type NotesGlance = {
+  summary: { headline: string; tone: GlanceTone };
+  items: { id: string; title: string; pinned: boolean }[];
+  overflow: number;
+};
+
+type ExpensesGlance = {
+  summary: { headline: string; tone: GlanceTone };
+  items: { id: string; category: string; percentUsed: number; status: "under" | "warning" | "over" }[];
+  overflow: number;
+};
+
+type CalendarEvent = {
+  id: string;
+  title: string;
+  allDay: boolean;
+  startTime: string | null;
+  endTime: string | null;
+};
+type CalendarEventsResponse = { events: CalendarEvent[] };
+
 type GlanceTileModel = {
   key: string;
   label: string;
@@ -102,6 +129,81 @@ function buildHealthTile(glance: HealthGlance | null): GlanceTileModel | null {
   };
 }
 
+function buildDriveTile(glance: DriveGlance | null): GlanceTileModel | null {
+  if (!glance) return null;
+  return {
+    key: "drive",
+    label: "Drive",
+    href: "/drive",
+    headline: glance.summary.headline,
+    tone: glance.summary.tone,
+    items: glance.items.map((f) => ({
+      key: f.id,
+      label: f.title,
+      meta: f.pinned ? "Pinned" : f.kind,
+    })),
+    overflowCount: glance.overflow,
+    emptyHint: glance.summary.tone === "success" ? "Nothing uploaded yet." : undefined,
+  };
+}
+
+function buildNotesTile(glance: NotesGlance | null): GlanceTileModel | null {
+  if (!glance) return null;
+  return {
+    key: "notes",
+    label: "Notes",
+    href: "/notes",
+    headline: glance.summary.headline,
+    tone: glance.summary.tone,
+    items: glance.items.map((n) => ({
+      key: n.id,
+      label: n.title,
+      meta: n.pinned ? "Pinned" : undefined,
+    })),
+    overflowCount: glance.overflow,
+    emptyHint: glance.summary.tone === "success" ? "Nothing written yet." : undefined,
+  };
+}
+
+function buildExpensesTile(glance: ExpensesGlance | null): GlanceTileModel | null {
+  if (!glance) return null;
+  return {
+    key: "expenses",
+    label: "Expenses",
+    href: "/expenses",
+    headline: glance.summary.headline,
+    tone: glance.summary.tone,
+    items: glance.items.map((b) => ({
+      key: b.id,
+      label: b.category,
+      meta: `${b.percentUsed}% of budget`,
+    })),
+    overflowCount: glance.overflow,
+    emptyHint: glance.summary.headline === "Set up" ? "No budgets set yet." : undefined,
+  };
+}
+
+function buildCalendarTile(glance: CalendarEventsResponse | null): GlanceTileModel | null {
+  if (!glance) return null;
+  const events = glance.events;
+  const headline = events.length === 0 ? "Nothing today" : `${events.length} today`;
+  const tone: GlanceTone = events.length === 0 ? "success" : "default";
+  return {
+    key: "calendar",
+    label: "Calendar",
+    href: "/calendar",
+    headline,
+    tone,
+    items: events.slice(0, 3).map((e) => ({
+      key: e.id,
+      label: e.title,
+      meta: e.allDay ? "All day" : (e.startTime ?? undefined),
+    })),
+    overflowCount: Math.max(0, events.length - 3),
+    emptyHint: tone === "success" ? "Nothing on the calendar today." : undefined,
+  };
+}
+
 function useNarrowViewport() {
   const [narrow, setNarrow] = useState(false);
   useEffect(() => {
@@ -117,10 +219,14 @@ function useNarrowViewport() {
 export function TodayGlance({
   schoolModuleEnabled = false,
   healthModuleEnabled = false,
+  driveModuleEnabled = false,
+  calendarModuleEnabled = false,
   glanceConfig = null,
 }: {
   schoolModuleEnabled?: boolean;
   healthModuleEnabled?: boolean;
+  driveModuleEnabled?: boolean;
+  calendarModuleEnabled?: boolean;
   /** Per-member tile visibility + order (GlanceConfigCard.tsx, /profile). Null = no preference
    *  set — falls back to showing every currently-available tile, sorted by urgency. */
   glanceConfig?: string[] | null;
@@ -130,35 +236,54 @@ export function TodayGlance({
   const [school, setSchool] = useState<SchoolGlance | null>(null);
   const [shopping, setShopping] = useState<ShoppingGlance | null>(null);
   const [health, setHealth] = useState<HealthGlance | null>(null);
+  const [drive, setDrive] = useState<DriveGlance | null>(null);
+  const [notesGlance, setNotesGlance] = useState<NotesGlance | null>(null);
+  const [expensesGlance, setExpensesGlance] = useState<ExpensesGlance | null>(null);
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEventsResponse | null>(null);
   const today = new Date().toISOString().slice(0, 10);
   const narrow = useNarrowViewport();
 
   useEffect(() => {
     (async () => {
       try {
-        const [choresRes, shoppingRes, schoolRes, healthRes] = await Promise.all([
-          apiClient.get<ChoresGlance>("/api/core/chores/glance"),
-          apiClient.get<ShoppingGlance>("/api/core/shopping/glance"),
-          schoolModuleEnabled
-            ? apiClient.get<SchoolGlance>("/api/school/glance").catch(() => ({ enabled: false }))
-            : Promise.resolve({ enabled: false } as SchoolGlance),
-          healthModuleEnabled
-            ? apiClient
-                .get<HealthGlance>("/api/health/glance")
-                .catch(() => ({ enabled: false, pendingDoses: [] }))
-            : Promise.resolve(null),
-        ]);
+        const [choresRes, shoppingRes, schoolRes, healthRes, driveRes, notesRes, expensesRes, calendarRes] =
+          await Promise.all([
+            apiClient.get<ChoresGlance>("/api/core/chores/glance"),
+            apiClient.get<ShoppingGlance>("/api/core/shopping/glance"),
+            schoolModuleEnabled
+              ? apiClient.get<SchoolGlance>("/api/school/glance").catch(() => ({ enabled: false }))
+              : Promise.resolve({ enabled: false } as SchoolGlance),
+            healthModuleEnabled
+              ? apiClient
+                  .get<HealthGlance>("/api/health/glance")
+                  .catch(() => ({ enabled: false, pendingDoses: [] }))
+              : Promise.resolve(null),
+            driveModuleEnabled
+              ? apiClient.get<DriveGlance>("/api/core/drive/glance").catch(() => null)
+              : Promise.resolve(null),
+            apiClient.get<NotesGlance>("/api/core/notes/glance").catch(() => null),
+            apiClient.get<ExpensesGlance>("/api/core/expenses/glance").catch(() => null),
+            calendarModuleEnabled
+              ? apiClient
+                  .get<CalendarEventsResponse>(`/api/calendar/events?from=${today}&to=${today}`)
+                  .catch(() => null)
+              : Promise.resolve(null),
+          ]);
         setChores(choresRes);
         setShopping(shoppingRes);
         setSchool(schoolRes.enabled ? schoolRes : null);
         setHealth(healthModuleEnabled ? healthRes : null);
+        setDrive(driveModuleEnabled ? driveRes : null);
+        setNotesGlance(notesRes);
+        setExpensesGlance(expensesRes);
+        setCalendarEvents(calendarModuleEnabled ? calendarRes : null);
       } catch {
         /* ignore widget errors */
       } finally {
         setLoading(false);
       }
     })();
-  }, [schoolModuleEnabled, healthModuleEnabled]);
+  }, [schoolModuleEnabled, healthModuleEnabled, driveModuleEnabled, calendarModuleEnabled, today]);
 
   const tiles = useMemo(() => {
     const built: GlanceTileModel[] = [];
@@ -219,6 +344,14 @@ export function TodayGlance({
     }
     const healthTile = buildHealthTile(health);
     if (healthTile) built.push(healthTile);
+    const driveTile = buildDriveTile(drive);
+    if (driveTile) built.push(driveTile);
+    const notesTile = buildNotesTile(notesGlance);
+    if (notesTile) built.push(notesTile);
+    const expensesTile = buildExpensesTile(expensesGlance);
+    if (expensesTile) built.push(expensesTile);
+    const calendarTile = buildCalendarTile(calendarEvents);
+    if (calendarTile) built.push(calendarTile);
 
     // A member's explicit choice (GlanceConfigCard) wins outright — their order, only their
     // chosen tiles (a stale key for a since-disabled module just quietly filters out, since
@@ -236,7 +369,19 @@ export function TodayGlance({
       return built.filter((t) => t.tone !== "success");
     }
     return built;
-  }, [chores, shopping, school, health, today, narrow, glanceConfig]);
+  }, [
+    chores,
+    shopping,
+    school,
+    health,
+    drive,
+    notesGlance,
+    expensesGlance,
+    calendarEvents,
+    today,
+    narrow,
+    glanceConfig,
+  ]);
 
   const hiddenClearCount = useMemo(() => {
     if (!narrow || glanceConfig) return 0;
@@ -246,10 +391,18 @@ export function TodayGlance({
     if (school?.summary) all.push(school.summary.tone);
     const ht = buildHealthTile(health);
     if (ht) all.push(ht.tone);
+    const dt = buildDriveTile(drive);
+    if (dt) all.push(dt.tone);
+    const nt = buildNotesTile(notesGlance);
+    if (nt) all.push(nt.tone);
+    const et = buildExpensesTile(expensesGlance);
+    if (et) all.push(et.tone);
+    const ct = buildCalendarTile(calendarEvents);
+    if (ct) all.push(ct.tone);
     const actionable = all.some((t) => t !== "success");
     if (!actionable) return 0;
     return all.filter((t) => t === "success").length;
-  }, [narrow, chores, shopping, school, health, glanceConfig]);
+  }, [narrow, chores, shopping, school, health, drive, notesGlance, expensesGlance, calendarEvents, glanceConfig]);
 
   const gridClass =
     tiles.length <= 1
