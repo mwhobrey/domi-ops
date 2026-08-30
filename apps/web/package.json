@@ -13,7 +13,7 @@
     "@domi-ops/marketing-ui": "*",
     "@tiptap/extension-link": "^3.26.0",
     "@tiptap/markdown": "^3.26.0",
-    "@tiptap/pm": "^3.26.0",
+    "@tiptap/pm": "^3.30.5",
     "@tiptap/react": "^3.26.0",
     "@tiptap/starter-kit": "^3.26.0",
     "better-auth": "^1.6.14",
