@@ -1,12 +1,20 @@
 import { AppShell } from "../../../components/AppShell";
 import { PageLoading } from "../../../components/PageLoading";
+import { LinkButton } from "../../../components/ui";
 
-// Own loading.tsx rather than relying on inheritance from ../loading.tsx — see the comment in
-// app/chores/reports/loading.tsx for why (a Next.js App Router bug where nested-segment content
-// can arrive from the server correctly but never get revealed client-side).
+// breadcrumb/actions must match page.tsx's shape, not just be "present in some form" — see the
+// comment in app/drive/loading.tsx for the full explanation.
 export default function Loading() {
   return (
-    <AppShell title="Spending reports">
+    <AppShell
+      title="Spending reports"
+      breadcrumb={[{ label: "Expenses", href: "/expenses" }, { label: "Reports" }]}
+      actions={
+        <LinkButton href="/expenses" variant="ghost" size="sm">
+          Back to list
+        </LinkButton>
+      }
+    >
       <PageLoading />
     </AppShell>
   );
