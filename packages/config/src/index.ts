@@ -188,16 +188,15 @@ export const envSchema = z
         });
       }
     }
-    const calendarSync = data.MODULES_ENABLED.includes("calendar_sync");
-    if (calendarSync && data.NODE_ENV === "production") {
-      if (!data.GOOGLE_OAUTH_CLIENT_ID || !data.GOOGLE_OAUTH_CLIENT_SECRET) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Google OAuth credentials required when calendar_sync module is enabled",
-          path: ["GOOGLE_OAUTH_CLIENT_ID"],
-        });
-      }
-    }
+    // NOTE: no boot-time requirement that Google OAuth creds be set when calendar_sync is
+    // enabled. The "calendar_sync" module name is historical — it gates the native calendar
+    // (events, week view, etc.) as a whole, which works fully standalone; Google import/sync is
+    // one optional feature within it, not a prerequisite for it. Every Google-touching route
+    // already checks GOOGLE_OAUTH_CLIENT_ID/SECRET itself and degrades gracefully when unset
+    // (calendar.ts, google-calendar-auth.ts, google-docs-auth.ts, reports.ts) — this block used
+    // to crash-loop the whole API over a feature nothing downstream actually required. Confirmed
+    // live 2026-08-29: hosted-prod had calendar_sync disabled entirely (not just Google import)
+    // because Google OAuth was never set up, which meant paying customers got zero calendar.
   });
 
 export type Env = z.infer<typeof envSchema>;
