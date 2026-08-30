@@ -1,4 +1,4 @@
-FROM node:22-alpine AS builder
+FROM node:26-alpine AS builder
 WORKDIR /app
 RUN corepack enable
 
@@ -11,7 +11,7 @@ COPY packages ./packages
 RUN npm ci
 RUN npm run build -w @domi-ops/web
 
-FROM node:22-alpine
+FROM node:26-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=builder --chown=node:node /app/apps/web/.next/standalone ./
