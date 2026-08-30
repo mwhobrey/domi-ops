@@ -608,7 +608,7 @@ Stop on-droplet `docker compose up --build` (~45+ min, high RAM). Private repo s
 
 - [x] GitHub Actions builds `web`, `api`, `worker`, `import` images on push/tag
 - [x] Push to private `ghcr.io/mwhobrey/domi-ops-*` (no public repo required)
-- [x] Droplet pulls via PAT `read:packages`; document in `deploy/CUTOVER-WHOBBREY.md`
+- [x] Droplet pulls via PAT `read:packages`; documented in the operator's own private cutover notes
 - [x] Compose image refs + `DOMI_OPS_IMAGE_TAG` for pull-only deploy
 - [x] Document free-tier limits + `docker save`/`load` off-box fallback
 

@@ -3,6 +3,7 @@
 **Issue:** [WHO-172](https://linear.app/mikewhob-whome/issue/WHO-172)  
 **Scope:** Self-host OSS launch gate (`DEPLOYMENT_MODE=single`). Hosted multi-tenant (`shared` / RLS) foundation shipped in M3 (WHO-195–198) — section 8 updated; Stripe provisioning still M5.  
 **Reviewed:** 2026-07-08 · commit after WHO-176; hosted section refreshed after M3  
+**Refreshed:** 2026-08-30 — dependency and Docker sections re-audited ahead of the WHO-174 public flip; see [Linear comment on WHO-172](https://linear.app/mikewhob-whome/issue/WHO-172) for the full diff  
 **Method:** Code + config audit, `npm audit`, Docker/compose review. No penetration test.
 
 ## Summary
@@ -14,11 +15,14 @@
 | API household scoping | **Pass** | Routes use `auth.householdId`; admin guards on settings/members |
 | Uploads & Drive | **Partial** | Size caps + HMAC upload tokens; no MIME allowlist; public shares opt-out |
 | Health module | **Pass** | Field encryption + visibility/shares; prod requires `ENCRYPTION_KEY` |
-| Dependencies | **Partial** | 1 high (`nodemailer`), 6 moderate (esbuild chain, postcss via Next) |
-| Docker hardening | **Partial** | Internal network, no host DB ports; **containers run as root** |
+| Dependencies | **Partial** | 0 critical/high, 6 moderate — all dev/build-time-only (esbuild via drizzle-kit, postcss vendored in Next); see [§6](#6-dependencies) |
+| Docker hardening | **Pass** | Internal network, no host DB ports; containers run as **non-root** (`USER node`) as of 2026-08-30 |
 | Hosted tenant isolation | **Partial** | RLS + tenant context shipped (M3); run `npm run test:hosted` after seed |
 
-**Verdict:** Acceptable for **private self-host OSS** launch with documented gaps. Address **Partial** items before public repo flip (WHO-174) or any hosted multi-tenant work.
+**Verdict:** Acceptable for **private self-host OSS** launch with documented gaps. Dependencies and
+Docker hardening — the two items previously called out as blocking the public flip — are cleared
+as of 2026-08-30. Remaining **Partial** items (upload MIME policy, hosted tenant isolation) are
+tracked but non-blocking; address before hosted multi-tenant work specifically.
 
 ---
 
@@ -101,16 +105,24 @@
 
 ## 6. Dependencies
 
-`npm audit` (2026-07-08):
+`npm audit` (2026-08-30, refreshed from 2026-07-08 — findings had drifted well past the original
+review; see [Linear comment on WHO-172](https://linear.app/mikewhob-whome/issue/WHO-172) for the
+before/after):
 
 | Severity | Count | Package | Notes |
 |----------|-------|---------|-------|
-| High | 1 | `nodemailer` ≤9.0.0 | SSRF/file-read in raw message option — only used for optional SMTP verification email |
-| Moderate | 6 | `esbuild` (via `drizzle-kit`), `postcss` (via `next`) | Dev/build-time; not runtime API surface |
+| Moderate | 6 | `esbuild`/`@esbuild-kit/*` (via `drizzle-kit`), `postcss` (vendored inside `next`) | Dev/build-time only; not reachable at runtime. No fix available without a `drizzle-kit` pre-1.0 major or `next@16` — tracked, not blocking |
 
-**Recommended follow-up:** Bump `nodemailer` to `^9.0.3` in `@domi-ops/auth` before public launch.
+`nodemailer` (the 2026-07-08 High finding) was fixed separately (2026-08-29, `^9.0.6`). Since
+then, `next`, `better-auth`, `hono`, `@hono/node-server`, `sharp`, and several transitive deps
+(`tar` — was Critical, `undici`, `nanoid`, `ip-address`, `brace-expansion`, `dompurify`) picked up
+new advisories and were bumped 2026-08-30; all within existing semver ranges except `sharp`
+(`^0.34.2` → `^0.35.4`, libvips CVEs) and `next`'s own patch pin (tightened to `^15.5.24` to avoid
+an npm workspace resolver conflict pulling `next@16`). Verified: full `typecheck`/`build` clean,
+367/367 unit tests pass.
 
-CI runs `npm audit` implicitly via install; consider explicit `npm audit --audit-level=high` in CI after nodemailer bump.
+Dependabot is now enabled on the repo (weekly npm/docker/github-actions PRs,
+`.github/dependabot.yml`) so this doesn't drift silently again.
 
 ---
 
@@ -121,11 +133,12 @@ CI runs `npm audit` implicitly via install; consider explicit `npm audit --audit
 | DB/Redis/MinIO not on public ports | **Pass** | `docker-compose.prod.yml` — internal network only |
 | Required secrets at compose up | **Pass** | `${POSTGRES_PASSWORD:?}`, `${S3_ACCESS_KEY:?}`, `${S3_SECRET_KEY:?}` |
 | Healthchecks on postgres/redis | **Pass** | Compose healthchecks; API `depends_on: service_healthy` |
-| Non-root container user | **Fail** | `apps/api`, `apps/web`, `apps/worker` Dockerfiles — no `USER` directive; run as root in Alpine |
+| Non-root container user | **Pass** | `USER node` in `apps/api`, `apps/web`, `apps/worker` Dockerfiles (2026-08-30) — `node:22-alpine`'s built-in uid 1000, `--chown=node:node` on every `COPY --from=builder` |
 | Read-only root filesystem | **N/A** | Not configured |
 | Resource limits | **N/A** | Not set in compose (operator concern) |
 
-**Recommended follow-up:** Add non-root `USER node` (or distroless) to production Dockerfiles.
+`Dockerfile.import` intentionally stays root — it's an operator-invoked one-shot CLI reading
+host-mounted paths of arbitrary ownership, not a long-running network service.
 
 ---
 
@@ -159,8 +172,9 @@ Re-run full matrix on staging with `DEPLOYMENT_MODE=shared` before hosted launch
 
 | Gap | Severity | Suggested issue | Blocking OSS? |
 |-----|----------|-----------------|---------------|
-| Docker non-root | Medium | DevEx — harden Dockerfiles | No (document risk) |
-| `nodemailer` CVE | High (low exposure) | Bump dependency | Yes before public repo |
+| Docker non-root | Medium | DevEx — harden Dockerfiles | **Fixed 2026-08-30** |
+| `nodemailer` CVE | High (low exposure) | Bump dependency | **Fixed 2026-08-29** |
+| Dependency drift (next/better-auth/hono/sharp/tar + transitives) | Critical→Moderate mix | Audit refresh | **Fixed 2026-08-30** |
 | Upload MIME policy | Low–Medium | Drive hardening | No |
 | E2E / IDOR tests | Medium | Test engineering | No |
 | Hosted RLS | Critical (hosted only) | WHO-177–198 | Shipped M3; Stripe still blocks SaaS launch |
