@@ -4,7 +4,7 @@ import { Share2, Users } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
-import type { HealthEvent, HealthMedication } from "./HealthPageClient";
+import type { HealthEvent, HealthMedication } from "./health/health-types";
 import { HealthPeopleAccessPanel } from "./HealthPeopleAccessPanel";
 import type { NoteShareMember } from "./NoteSharePicker";
 import { NoteSharePicker } from "./NoteSharePicker";

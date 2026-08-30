@@ -5,12 +5,9 @@ import { ApiError, apiClient } from "../../lib/client-api";
 import type { NoteShareMember } from "../NoteSharePicker";
 import { NoteSharePicker } from "../NoteSharePicker";
 import type { HealthAclGrants } from "../HealthPeopleAccessPanel";
-import {
-  HealthMedicationSheet,
-  memberLabel,
-  resolveDefaultMemberId,
-  type HealthMedication,
-} from "../HealthPageClient";
+import { HealthMedicationSheet } from "./HealthMedicationSheet";
+import { memberLabel, resolveDefaultMemberId } from "./health-helpers";
+import type { HealthMedication } from "./health-types";
 import {
   Alert,
   Badge,
