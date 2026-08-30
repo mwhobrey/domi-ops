@@ -22,8 +22,9 @@ services:
       NODE_ENV: production
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-https://app.domi-ops.com}
       NEXT_PUBLIC_DEMO_URL: ${NEXT_PUBLIC_DEMO_URL:-https://demo.domi-ops.com}
-      # Flip to "true" only after the WHO-174 public repo flip — self-host links render
-      # "Coming soon" until then (repo is private; see .cursor/runbook/07_LAUNCH.md).
+      # "true" once the repo + GHCR images are public (WHO-174, done 2026-08-30) — self-host
+      # links render "Coming soon" otherwise. Defaults false here since a self-hoster running
+      # their own copy of apps/www hasn't necessarily forked/published their own repo.
       NEXT_PUBLIC_OSS_REPO_PUBLIC: ${NEXT_PUBLIC_OSS_REPO_PUBLIC:-false}
       # Flip to "true" once Stripe live keys + the hosted instance are both up
       # (deploy/HOSTED_BETA_SETUP.md) — pricing page CTA creates a real Checkout Session

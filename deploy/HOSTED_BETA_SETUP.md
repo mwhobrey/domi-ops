@@ -1,6 +1,6 @@
 # Hosted Starter — private beta setup (real production infra)
 
-Provisioning runbook for the **private beta** decided in [.cursor/runbook/07_LAUNCH.md](../.cursor/runbook/07_LAUNCH.md) — `app.domi-ops.com` and `domi-ops.com` go live for real, ahead of the OSS repo flip, so one invited tester (Kort) can go through the actual marketing → checkout → onboarding path. Architecture is [ADR 003](../docs/adr/003-hosted-db-architecture.md) as signed off, not a scaled-down version — this becomes the real Hosted Starter production environment, not throwaway.
+Provisioning runbook for the **private beta** decided in [.cursor/runbook/07_LAUNCH.md](../.cursor/runbook/07_LAUNCH.md) — `app.domi-ops.com` and `domi-ops.com` go live for real, ahead of the OSS repo flip, so one invited outside tester can go through the actual marketing → checkout → onboarding path. Architecture is [ADR 003](../docs/adr/003-hosted-db-architecture.md) as signed off, not a scaled-down version — this becomes the real Hosted Starter production environment, not throwaway.
 
 **Compute vs. managed split** (see cost comparison in session notes / `07_LAUNCH.md`): the droplet runs API + worker + web + Redis only. Postgres and object storage are external managed services. This makes the droplet stateless — redeploying is just pulling new images, nothing to back up on the box itself.
 
@@ -165,10 +165,10 @@ Follow [docs/marketing/DNS_CUTOVER.md](../docs/marketing/DNS_CUTOVER.md) as writ
 Follow [docs/marketing/STRIPE_SETUP.md](../docs/marketing/STRIPE_SETUP.md) for the Product/Price/webhook checklist, plus for this beta specifically:
 
 1. Create a **100% off, once-forever coupon** in Stripe Dashboard → Coupons (duration: `forever` if he keeps the household long-term, or `repeating` for a fixed number of months if you'd rather cap it).
-2. Create a **Promotion Code** attached to that coupon (e.g. `KORTBETA`) — this is the code Kort actually types at checkout, not the coupon ID.
+2. Create a **Promotion Code** attached to that coupon (e.g. `BETATESTER`) — this is the code the tester actually types at checkout, not the coupon ID.
 3. Webhook endpoint: `https://app.domi-ops.com/api/billing/webhook`, events per STRIPE_SETUP.md.
 
-**Engineering side is built** (2026-08-24) — `POST /api/billing/checkout` creates the Checkout Session (`allow_promotion_codes: true`, so Kort's code works), the pricing page posts to it via a plain HTML form (no client JS), and the post-checkout return flow (`/setup?session_id=...` → validate → complete → dashboard) was already in place. Both are inert until env flags are flipped — nothing to redeploy, just set and restart:
+**Engineering side is built** (2026-08-24) — `POST /api/billing/checkout` creates the Checkout Session (`allow_promotion_codes: true`, so the tester's code works), the pricing page posts to it via a plain HTML form (no client JS), and the post-checkout return flow (`/setup?session_id=...` → validate → complete → dashboard) was already in place. Both are inert until env flags are flipped — nothing to redeploy, just set and restart:
 
 - API `.env`: `STRIPE_*` keys/price IDs (this doc §6).
 - Marketing `.env` (same file, read by `docker-compose.marketing.yml`): `NEXT_PUBLIC_HOSTED_CHECKOUT_ENABLED=true` once Stripe is live and smoke-tested; `NEXT_PUBLIC_OSS_REPO_PUBLIC=true` only after the separate WHO-174 repo flip.
@@ -177,7 +177,7 @@ Test the full loop against **Stripe test mode** first (`sk_test_...` keys, flag 
 
 ---
 
-## 7. Smoke test (do this before inviting Kort)
+## 7. Smoke test (do this before inviting the beta tester)
 
 1. `curl https://app.domi-ops.com/health` (or `/api/health`) → `ok`.
 2. `https://domi-ops.com` loads; pricing page shows live checkout CTA (once the endpoint above ships).
