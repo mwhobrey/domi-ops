@@ -16,6 +16,12 @@ updates:
           - "react-dom"
           - "@types/react"
           - "@types/react-dom"
+      # @tiptap/* packages share nested types (extension-link's Mark/Node generics come from
+      # @tiptap/core) — bumping one alone without the others breaks typecheck (confirmed
+      # 2026-08-30, PRs #16/#18). Must move together.
+      tiptap:
+        patterns:
+          - "@tiptap/*"
 
   # Dockerfiles (api, web, worker, import) all pin node:22-alpine as their base image
   - package-ecosystem: "docker"
