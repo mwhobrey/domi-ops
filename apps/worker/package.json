@@ -16,7 +16,7 @@
     "bullmq": "^5.53.2",
     "@domi-ops/db": "*",
     "bullmq": "^5.53.2",
-    "ioredis": "^5.6.1"
+    "ioredis": "^6.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.15.30",
