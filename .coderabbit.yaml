@@ -1,0 +1,50 @@
+# CodeRabbit config — https://docs.coderabbit.ai/reference/configuration
+# Free (full Pro tier) on this public repo — no billing/API key needed. Install the GitHub App
+# at https://github.com/marketplace/coderabbitai to activate; this file just tunes its behavior.
+
+language: en-US
+early_access: false
+
+reviews:
+  profile: assertive
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  collapse_walkthrough: true
+  auto_review:
+    enabled: true
+    drafts: false
+  path_filters:
+    - "!**/*.lock"
+    - "!package-lock.json"
+    - "!**/dist/**"
+    - "!**/.next/**"
+    - "!packages/db/drizzle/**/*.sql"
+  path_instructions:
+    - path: "apps/api/src/routes/**"
+      instructions: >
+        Routes must scope every query by householdId (via auth.householdId) after requireAuth.
+        Flag any query touching a household-scoped table without that filter, and any route
+        that skips requireAuth or requireHouseholdModule for a gated module.
+    - path: "packages/db/drizzle/**/*.sql"
+      instructions: >
+        New tables that need cross-tenant worker access require both a household_isolation and
+        a worker_scan RLS policy (see docs/HOSTED_RLS.md) — flag a table with only one of the two.
+        Migrations must be forward-only and idempotent (IF NOT EXISTS / IF EXISTS), and registered
+        in packages/db/drizzle/meta/_journal.json.
+    - path: "apps/web/src/components/health/**"
+      instructions: >
+        Health data is field-encrypted (encryptHealthField/decryptHealthField) and access-controlled
+        via visibility + shares + segment ACLs (see apps/api/src/lib/health-access.ts). Flag any new
+        read/write path that bypasses those helpers.
+    - path: "**/*.test.ts"
+      instructions: >
+        This repo uses Vitest, not Jest — flag Jest-only APIs (jest.fn, jest.mock) that don't exist
+        under Vitest's compat layer.
+
+chat:
+  auto_reply: true
+
+knowledge_base:
+  learnings:
+    scope: auto
