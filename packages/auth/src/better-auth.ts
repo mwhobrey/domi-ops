@@ -143,6 +143,14 @@ export function createBetterAuth(db: Database, env: Env): WhomeBetterAuth {
       database: {
         generateId: () => randomUUID(),
       },
+      // Caddy (the only reverse proxy in front of this app - see deploy/Caddyfile*.example) sets
+      // X-Forwarded-For to the real observed connecting IP on every reverse_proxy request; it
+      // does not blindly forward a client-supplied value. Without this, better-auth can't
+      // determine a client IP at all and falls back to a single rate-limit bucket shared across
+      // every client (WHO-251) - one aggressive client could exhaust it and lock out real users.
+      ipAddress: {
+        ipAddressHeaders: ["x-forwarded-for"],
+      },
     },
     databaseHooks: {
       session: {
