@@ -76,7 +76,14 @@ async function createCredentialUser(
   await db.insert(baAccounts).values({
     userId: createdUser.id,
     providerId: "credential",
-    accountId: email ?? createdUser.id,
+    // Better Auth's credential sign-in match is `account.accountId === user.id` (see
+    // node_modules/better-auth/dist/api/routes/sign-in.mjs) - NOT the email. Using email here
+    // silently broke sign-in for any seeded user with a real email (confirmed live 2026-08-31,
+    // WHO-250): the row looked completely correct - user + credential account both present,
+    // password hash verified fine in isolation - but Better Auth's own findUserByEmail +
+    // account match never found a matching credential account, so every login attempt logged
+    // "User not found" and returned 401 regardless of password.
+    accountId: createdUser.id,
     password: passwordHash,
   });
 

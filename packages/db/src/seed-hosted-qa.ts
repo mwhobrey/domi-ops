@@ -126,7 +126,9 @@ async function seedHousehold(db: Database, seed: SeedHousehold, passwordHash: st
   await db.insert(baAccounts).values({
     userId: user.id,
     providerId: "credential",
-    accountId: seed.ownerEmail,
+    // Better Auth's credential sign-in match is `account.accountId === user.id`, not the email
+    // (see node_modules/better-auth/dist/api/routes/sign-in.mjs). See WHO-250.
+    accountId: user.id,
     password: passwordHash,
   });
 
