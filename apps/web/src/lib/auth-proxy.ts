@@ -17,7 +17,19 @@ export async function proxyAuthToApi(
   const target = `${apiOrigin()}/auth${path}${request.nextUrl.search}`;
 
   const headers = new Headers();
-  const forward = ["content-type", "cookie", "origin", "authorization", "accept", "accept-language"];
+  // x-forwarded-for: Caddy sets this to the real client IP on the original request into `web`
+  // (see deploy/Caddyfile*.example) - without forwarding it here, the API only ever sees this
+  // container's own internal IP, and better-auth's rate limiter falls back to one shared bucket
+  // across every client regardless of its own ipAddressHeaders config (WHO-251).
+  const forward = [
+    "content-type",
+    "cookie",
+    "origin",
+    "authorization",
+    "accept",
+    "accept-language",
+    "x-forwarded-for",
+  ];
   for (const name of forward) {
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
