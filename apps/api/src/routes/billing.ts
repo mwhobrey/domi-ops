@@ -439,7 +439,12 @@ export function billingRoutes(db: Database, env: Env) {
         await tx.insert(baAccounts).values({
           userId: createdUser.id,
           providerId: "credential",
-          accountId: email,
+          // Better Auth's credential sign-in match is `account.accountId === user.id`, not the
+          // email (see node_modules/better-auth/dist/api/routes/sign-in.mjs) - using email here
+          // means a hosted customer who checked out with email/password (not Google) could never
+          // sign back in. Found via WHO-250 (same bug in the demo-seed script, root-caused there
+          // first) - likely why it went unnoticed: the one real outside tester used Google OAuth.
+          accountId: createdUser.id,
           password: passwordHash,
         });
 

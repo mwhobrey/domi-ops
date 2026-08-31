@@ -121,7 +121,11 @@ export async function bootstrapGreenfieldOwner(
     await sysDb.insert(baAccounts).values({
       userId: createdUser.id,
       providerId: "credential",
-      accountId: email,
+      // Better Auth's credential sign-in match is `account.accountId === user.id`, not the
+      // email (see node_modules/better-auth/dist/api/routes/sign-in.mjs) - using email here
+      // means the owner created by /setup could never sign back in after their session expired.
+      // Found via WHO-250 (same bug in the demo-seed script, root-caused there first).
+      accountId: createdUser.id,
       password: passwordHash,
     });
 
