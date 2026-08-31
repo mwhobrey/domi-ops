@@ -10,7 +10,7 @@ There's no LTS branch; self-hosters are expected to update via [docs/RELEASE_PRO
 Please **don't open a public issue** for a security vulnerability. Instead:
 
 - Preferred: use GitHub's [private vulnerability reporting](https://github.com/mwhobrey/domi-ops/security/advisories/new)
-  if it's enabled on this repo (Security tab → "Report a vulnerability").
+  (Security tab → "Report a vulnerability") — enabled on this repo.
 - Otherwise: send a private message to [@mwhobrey](https://github.com/mwhobrey) on GitHub with
   details and, if possible, a reproduction.
 
