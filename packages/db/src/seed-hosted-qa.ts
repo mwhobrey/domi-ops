@@ -2,6 +2,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { hashPassword } from "better-auth/crypto";
+import { createLocalAccountIssuer } from "better-auth/db";
 import { eq } from "drizzle-orm";
 import { closeDb, createDb, type Database } from "./client.js";
 import {
@@ -126,9 +127,11 @@ async function seedHousehold(db: Database, seed: SeedHousehold, passwordHash: st
   await db.insert(baAccounts).values({
     userId: user.id,
     providerId: "credential",
-    // Better Auth's credential sign-in match is `account.accountId === user.id`, not the email
-    // (see node_modules/better-auth/dist/api/routes/sign-in.mjs). See WHO-250.
+    // Better Auth's credential sign-in match requires BOTH accountId === user.id AND issuer ===
+    // createLocalAccountIssuer(providerId) (see node_modules/better-auth/dist/api/routes/
+    // sign-in.mjs + internal-adapter.mjs). See WHO-250.
     accountId: user.id,
+    issuer: createLocalAccountIssuer("credential"),
     password: passwordHash,
   });
 
