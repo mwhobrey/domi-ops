@@ -47,6 +47,12 @@ COMPOSE=(
   docker compose
   -f docker-compose.hosted-prod.yml
   -f docker-compose.marketing.yml
+  # demo-web is defined with `profiles: [demo]` (docker-compose.marketing.yml) — without this,
+  # `up -d` silently leaves an already-running demo-web on whatever image it happened to be
+  # started with, since compose only manages services whose profile is active in the current
+  # invocation. Confirmed live 2026-08-31: it sat two days behind every other container across
+  # several routine deploys before this was caught.
+  --profile demo
 )
 
 if [[ ! -f .env ]]; then
