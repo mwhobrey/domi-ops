@@ -1,4 +1,5 @@
 import { hashPassword } from "better-auth/crypto";
+import { createLocalAccountIssuer } from "better-auth/db";
 import type { Database } from "@domi-ops/db";
 import { baAccounts, homeStatus, householdMembers, users } from "@domi-ops/db";
 import { and, eq, sql } from "drizzle-orm";
@@ -64,6 +65,11 @@ export async function provisionUsernameMember(
     userId: createdUser.id,
     providerId: "credential",
     accountId: createdUser.id,
+    // Better Auth 1.7+ also requires issuer === createLocalAccountIssuer(providerId) on the
+    // account row (see node_modules/better-auth/dist/db/internal-adapter.mjs) - missing here
+    // meant a household-provisioned username/password member (e.g. a kid's login) could never
+    // actually sign in despite accountId already being correct. Found via WHO-250.
+    issuer: createLocalAccountIssuer("credential"),
     password: passwordHash,
   });
 

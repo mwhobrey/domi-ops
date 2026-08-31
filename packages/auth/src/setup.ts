@@ -3,6 +3,7 @@ import type { Env } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
 import { baAccounts, householdMembers, households, users, withSystemContext } from "@domi-ops/db";
 import { hashPassword } from "better-auth/crypto";
+import { createLocalAccountIssuer } from "better-auth/db";
 import { eq } from "drizzle-orm";
 import { hasImportRecords } from "./import-records.js";
 import { getCanonicalHouseholdId } from "./single-tenant.js";
@@ -121,11 +122,13 @@ export async function bootstrapGreenfieldOwner(
     await sysDb.insert(baAccounts).values({
       userId: createdUser.id,
       providerId: "credential",
-      // Better Auth's credential sign-in match is `account.accountId === user.id`, not the
-      // email (see node_modules/better-auth/dist/api/routes/sign-in.mjs) - using email here
-      // means the owner created by /setup could never sign back in after their session expired.
-      // Found via WHO-250 (same bug in the demo-seed script, root-caused there first).
+      // Better Auth's credential sign-in match requires BOTH accountId === user.id AND issuer
+      // === createLocalAccountIssuer(providerId) (see node_modules/better-auth/dist/api/routes/
+      // sign-in.mjs + internal-adapter.mjs) - neither was set here, meaning the owner created by
+      // /setup could never sign back in once their session expired. Found via WHO-250 (same bug
+      // in the demo-seed script, root-caused there first).
       accountId: createdUser.id,
+      issuer: createLocalAccountIssuer("credential"),
       password: passwordHash,
     });
 

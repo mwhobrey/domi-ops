@@ -10,3 +10,4 @@ export * from "./member-label.js";
 export * from "./import-records.js";
 export * from "./setup.js";
 export { hashPassword, verifyPassword } from "better-auth/crypto";
+export { createLocalAccountIssuer } from "better-auth/db";
