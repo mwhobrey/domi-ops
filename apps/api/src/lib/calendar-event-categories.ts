@@ -76,16 +76,34 @@ export async function ensureDefaultCategory(
     .limit(1);
 
   const color = opts?.color ?? cal?.color ?? "#3b82f6";
-  await db.insert(eventCategories).values({
-    householdId,
-    calendarId,
-    key: DEFAULT_CATEGORY_KEY,
-    label: (opts?.label ?? "General").slice(0, 128),
-    color: normalizeHexColor(color),
-    isDefault: true,
-    sortOrder: 0,
-  });
-  return { key: DEFAULT_CATEGORY_KEY };
+  // Concurrent requests (e.g. the category dropdown fetching while an event is being created)
+  // can both pass the `existing` check above for a brand-new calendar and race to insert the
+  // same (calendarId, "general") row — onConflictDoNothing makes the loser a no-op instead of
+  // an unhandled unique-violation that rolls back its whole transaction (confirmed live: this
+  // was silently wiping out the just-created calendar along with it, every time, for any
+  // household's first-ever event).
+  const [inserted] = await db
+    .insert(eventCategories)
+    .values({
+      householdId,
+      calendarId,
+      key: DEFAULT_CATEGORY_KEY,
+      label: (opts?.label ?? "General").slice(0, 128),
+      color: normalizeHexColor(color),
+      isDefault: true,
+      sortOrder: 0,
+    })
+    .onConflictDoNothing({ target: [eventCategories.calendarId, eventCategories.key] })
+    .returning({ key: eventCategories.key });
+  if (inserted) return { key: inserted.key };
+
+  // Lost the race — the winner's row is what we should report as the default.
+  const [winner] = await db
+    .select({ key: eventCategories.key })
+    .from(eventCategories)
+    .where(and(eq(eventCategories.calendarId, calendarId), eq(eventCategories.isDefault, true)))
+    .limit(1);
+  return { key: winner?.key ?? DEFAULT_CATEGORY_KEY };
 }
 
 /** Backfill default categories for calendars that predate per-calendar categories. */
