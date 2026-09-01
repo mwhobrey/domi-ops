@@ -7,7 +7,7 @@ import { devLoopbackOrigins } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
 import { baAccounts, baSessions, baVerifications, users, withUserLookupContext } from "@domi-ops/db";
 import { ensureHouseholdMembership } from "./household-membership.js";
-import { sendVerificationEmail } from "./mail.js";
+import { sendPasswordResetEmail, sendVerificationEmail } from "./mail.js";
 import { USERNAME_MAX_LENGTH, USERNAME_MIN_LENGTH, USERNAME_PATTERN } from "./username.js";
 
 /** Narrow surface we use from Better Auth — avoids leaking plugin-specific inferred types into .d.ts. */
@@ -118,6 +118,12 @@ export function createBetterAuth(db: Database, env: Env): WhomeBetterAuth {
       enabled: true,
       minPasswordLength: 8,
       requireEmailVerification: env.EMAIL_VERIFICATION_REQUIRED ?? false,
+      // WHO-254 — no self-service recovery existed at all before this; a locked-out user's only
+      // option was a manual DB update by whoever has server access.
+      sendResetPassword: async ({ user, url }) => {
+        if (!user.email) return;
+        await sendPasswordResetEmail(env, { to: user.email, url, name: user.name });
+      },
     },
     emailVerification: {
       sendOnSignUp: true,

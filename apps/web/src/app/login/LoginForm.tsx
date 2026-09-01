@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { authClient } from "../../lib/auth-client";
 import { Button } from "../../components/ui";
 
@@ -228,7 +229,17 @@ export function LoginForm({
         )}
 
         <label className="block space-y-1.5">
-          <span className="text-label text-[var(--color-text-muted)]">Password</span>
+          <div className="flex items-baseline justify-between">
+            <span className="text-label text-[var(--color-text-muted)]">Password</span>
+            {mode === "sign-in" && signInMethod === "email" && (
+              <Link
+                href="/forgot-password"
+                className="text-xs font-medium text-[var(--color-accent)] underline-offset-2 hover:underline"
+              >
+                Forgot password?
+              </Link>
+            )}
+          </div>
           <input
             type="password"
             name="password"

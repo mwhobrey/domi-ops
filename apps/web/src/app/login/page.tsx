@@ -7,7 +7,7 @@ import { LoginForm } from "./LoginForm";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; next?: string; hosted?: string }>;
+  searchParams: Promise<{ error?: string; next?: string; hosted?: string; reset?: string }>;
 }) {
   const params = await searchParams;
   const nextPath = params.next?.startsWith("/") ? params.next : "/dashboard";
@@ -89,6 +89,15 @@ export default async function LoginPage({
             role="status"
           >
             Your household is ready — sign in with the email and password you just set.
+          </p>
+        )}
+
+        {params.reset === "1" && (
+          <p
+            className="rounded-[var(--radius-lg)] border border-[var(--color-success-muted)] bg-[var(--color-success-muted)]/20 px-3 py-2.5 text-sm text-[var(--color-success)]"
+            role="status"
+          >
+            Password updated — sign in with your new password.
           </p>
         )}
 
