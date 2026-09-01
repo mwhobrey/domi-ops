@@ -33,8 +33,14 @@ export function PwaRegister() {
           if (readyReg.waiting) setUpdateReady(true);
         });
       })
-      .catch(() => {
-        /* optional — install still works from manifest in many browsers */
+      .catch((err) => {
+        // Was silently swallowed — a real registration failure here means push notifications
+        // are completely dead for this device with zero trace anywhere (they hard-depend on
+        // this service worker; confirmed live investigating a "notifications aren't working"
+        // report). The PWA install banner still works from the manifest alone in many browsers
+        // without this, which is presumably why this was written as "optional" — but push
+        // specifically has no fallback.
+        console.error("[domi-ops] service worker registration failed:", err);
       });
 
     return () => {

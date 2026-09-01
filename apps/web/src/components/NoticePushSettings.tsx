@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiClient, ApiError } from "../lib/client-api";
 import {
+  ensurePushSubscribedWhenEnabling,
   fetchPushConfig,
   isPushSupported,
   subscribeBrowserPush,
-  syncPushSubscription,
   unsubscribeBrowserPush,
 } from "../lib/web-push";
 import { Alert, Button, Checkbox } from "./ui";
@@ -76,9 +76,17 @@ export function NoticePushSettings({
         setSubscribed(false);
       }
       await persistEnabled(checked);
-      if (checked && vapidKey && supported === true && Notification.permission === "granted") {
-        const ok = await syncPushSubscription(vapidKey);
+      // Was gated on Notification.permission === "granted" — on a real first-time device
+      // (permission "default", never asked) that condition is false, so checking the box did
+      // nothing but flip the preference: no prompt, no error, no subscription. Confirmed live:
+      // "notifications already on" in the DB with zero rows in push_subscriptions.
+      // ensurePushSubscribedWhenEnabling (already used correctly by the other push-settings
+      // panels) handles "default" by actually requesting permission, not just syncing an
+      // existing grant.
+      if (checked && vapidKey && supported === true) {
+        const ok = await ensurePushSubscribedWhenEnabling();
         setSubscribed(ok);
+        if (!ok) setMsg("Permission denied or not available.");
       }
     } catch (err) {
       setMsg(err instanceof ApiError ? err.message : "Could not update preference");
