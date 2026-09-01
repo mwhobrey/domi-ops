@@ -971,6 +971,40 @@ export function calendarRoutes(db: Database, env: Env) {
     const offsets = normalizeReminderOffsets(body.reminderOffsets);
     if (offsets.length) await replaceEventReminders(db, ev!.id, auth.householdId, offsets);
     const policyCtx = await loadEventPolicyContext(db, auth.householdId, auth.userId);
+
+    // A brand-new local event never gets pushed to Google on its own — POST /events never used
+    // to enqueue anything (WHO-252). Mirror PATCH /events/:id's push-enqueue below, keyed off the
+    // raw linkedByTargetCalendar map since computeEventPolicy always reports a just-created event
+    // as unpushable (it has no googleEventId yet — that's the point of this push).
+    const link = policyCtx.linkedByTargetCalendar.get(calendarId);
+    if (
+      link?.syncMode === "bidirectional" &&
+      link.connectionUserId === auth.userId &&
+      isModuleEnabled(env, "calendar_sync")
+    ) {
+      await db.insert(calendarSyncOutbox).values({
+        eventId: ev!.id,
+        operation: "create",
+        payloadJson: JSON.stringify({ linkedCalendarId: link.linkedCalendarId }),
+      });
+      // Without this, the event keeps the "synced" column default even though nothing has been
+      // pushed yet — and if pushEventCreate then bails early (expired token, calendar unlinked
+      // mid-flight) without ever touching syncStatus, processOutboxForConnection reads that
+      // still-"synced" status as "already succeeded" and deletes the outbox row, permanently
+      // abandoning the push.
+      await db
+        .update(calendarEvents)
+        .set({ syncStatus: "pending", updatedAt: new Date() })
+        .where(eq(calendarEvents.id, ev!.id));
+      ev!.syncStatus = "pending";
+      const redisUrl = env.REDIS_URL ?? "redis://localhost:6379";
+      await enqueueSyncJob(redisUrl, "google.calendar.push", {
+        connectionId: link.connectionId,
+        householdId: auth.householdId,
+        userId: auth.userId,
+      });
+    }
+
     return c.json(
       { event: await enrichEventDto(db, auth.householdId, ev!, computeEventPolicy(ev!, policyCtx)) },
       201,
