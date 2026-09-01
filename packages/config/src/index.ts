@@ -112,6 +112,8 @@ export const envSchema = z
     SMTP_USER: z.string().optional(),
     SMTP_PASSWORD: z.string().optional(),
     SMTP_FROM: z.string().email().optional(),
+    // WHO-253 — error monitoring (Sentry). Optional: unset means no-op, same pattern as SMTP_*.
+    SENTRY_DSN: z.string().optional(),
     EMAIL_VERIFICATION_REQUIRED: z
       .string()
       .optional()

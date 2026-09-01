@@ -1,6 +1,8 @@
 import { Worker } from "bullmq";
+import * as Sentry from "@sentry/node";
 import { loadEnv } from "@domi-ops/config";
 import { createDb, withHouseholdContext, withWorkerScanContext } from "@domi-ops/db";
+import { initSentry } from "./lib/sentry.js";
 import {
   SYNC_QUEUE,
   type SyncJobName,
@@ -16,6 +18,7 @@ import {
 } from "@domi-ops/calendar-sync";
 
 const env = loadEnv();
+initSentry(env);
 const db = createDb(env.DATABASE_URL);
 const redisUrl = env.REDIS_URL ?? "redis://localhost:6379";
 
@@ -58,6 +61,7 @@ worker.on("completed", (job) => {
 
 worker.on("failed", (job, err) => {
   console.error(`Job ${job?.id} failed`, err);
+  Sentry.captureException(err, { tags: { jobName: job?.data.name } });
 });
 
 void ensureCalendarReminderScheduler(redisUrl).catch((err) => {
