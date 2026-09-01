@@ -88,7 +88,16 @@ export async function pushEventUpdate(
       })
       .where(eq(calendarEvents.id, ev.id));
     return true;
-  } catch {
+  } catch (err) {
+    // Was a bare `catch {}` — every push failure (bad token, 404'd Google event, malformed
+    // body, whatever) silently became a no-op "pending" status with zero trace anywhere.
+    // Confirmed live: a real push failed, the outbox row got dropped anyway (see
+    // processOutboxForConnection's `ev?.syncStatus === "synced"` check below, which reads the
+    // *pre-push* default value, not the outcome of this call), and nothing surfaced it.
+    console.error(
+      `[calendar-sync] push failed for event ${ev.id} -> linked calendar ${linkedCalendarId}:`,
+      err instanceof Error ? err.message : err,
+    );
     await db
       .update(calendarEvents)
       .set({ syncStatus: "pending", updatedAt: new Date() })
