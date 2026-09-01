@@ -971,6 +971,30 @@ export function calendarRoutes(db: Database, env: Env) {
     const offsets = normalizeReminderOffsets(body.reminderOffsets);
     if (offsets.length) await replaceEventReminders(db, ev!.id, auth.householdId, offsets);
     const policyCtx = await loadEventPolicyContext(db, auth.householdId, auth.userId);
+
+    // A brand-new local event never gets pushed to Google on its own — POST /events never used
+    // to enqueue anything (WHO-252). Mirror PATCH /events/:id's push-enqueue below, keyed off the
+    // raw linkedByTargetCalendar map since computeEventPolicy always reports a just-created event
+    // as unpushable (it has no googleEventId yet — that's the point of this push).
+    const link = policyCtx.linkedByTargetCalendar.get(calendarId);
+    if (
+      link?.syncMode === "bidirectional" &&
+      link.connectionUserId === auth.userId &&
+      isModuleEnabled(env, "calendar_sync")
+    ) {
+      await db.insert(calendarSyncOutbox).values({
+        eventId: ev!.id,
+        operation: "create",
+        payloadJson: JSON.stringify({ linkedCalendarId: link.linkedCalendarId }),
+      });
+      const redisUrl = env.REDIS_URL ?? "redis://localhost:6379";
+      await enqueueSyncJob(redisUrl, "google.calendar.push", {
+        connectionId: link.connectionId,
+        householdId: auth.householdId,
+        userId: auth.userId,
+      });
+    }
+
     return c.json(
       { event: await enrichEventDto(db, auth.householdId, ev!, computeEventPolicy(ev!, policyCtx)) },
       201,

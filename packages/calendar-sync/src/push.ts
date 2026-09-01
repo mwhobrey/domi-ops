@@ -105,6 +105,81 @@ export async function pushEventUpdate(
   }
 }
 
+/**
+ * Push a brand-new local event to Google for the first time (WHO-252). Unlike pushEventUpdate,
+ * this event has no googleEventId yet — that's the whole point — so it does a Calendar API
+ * `POST` (insert) instead of a `PUT`, then stores the id/etag Google hands back so every
+ * subsequent edit can go through the normal pushEventUpdate path.
+ */
+export async function pushEventCreate(
+  db: Database,
+  env: Env,
+  eventId: string,
+  linkedCalendarId: string,
+): Promise<boolean> {
+  const [ev] = await db
+    .select()
+    .from(calendarEvents)
+    .where(eq(calendarEvents.id, eventId))
+    .limit(1);
+  // Already has a Google event id — this isn't a first-push case (e.g. the outbox row is stale
+  // because a prior attempt already succeeded).
+  if (!ev || ev.googleEventId) return false;
+
+  const [lc] = await db
+    .select()
+    .from(linkedGoogleCalendars)
+    .where(eq(linkedGoogleCalendars.id, linkedCalendarId))
+    .limit(1);
+  if (!lc) return false;
+
+  const [conn] = await db
+    .select()
+    .from(calendarConnections)
+    .where(eq(calendarConnections.id, lc.connectionId))
+    .limit(1);
+  if (!conn || conn.syncMode !== "bidirectional") return false;
+
+  const tz = conn.timeZone ?? "UTC";
+  const reminderOffsets = await listReminderOffsetsForEvent(db, ev.id);
+  const body = eventToGoogleBody({ ...ev, reminderOffsets }, tz);
+  try {
+    let accessToken: string;
+    try {
+      accessToken = await ensureAccessToken(db, env, conn);
+    } catch (e) {
+      if (e instanceof CalendarCredentialsError) return false;
+      throw e;
+    }
+    const created = await googleCalendarMutate(
+      accessToken,
+      "POST",
+      `/calendars/${encodeURIComponent(lc.googleCalendarId)}/events`,
+      body,
+    );
+    await db
+      .update(calendarEvents)
+      .set({
+        googleEventId: created.id ? String(created.id) : null,
+        googleEtag: created.etag ? String(created.etag) : null,
+        syncStatus: "synced",
+        updatedAt: new Date(),
+      })
+      .where(eq(calendarEvents.id, ev.id));
+    return true;
+  } catch (err) {
+    console.error(
+      `[calendar-sync] create-push failed for event ${ev.id} -> linked calendar ${linkedCalendarId}:`,
+      err instanceof Error ? err.message : err,
+    );
+    await db
+      .update(calendarEvents)
+      .set({ syncStatus: "pending", updatedAt: new Date() })
+      .where(eq(calendarEvents.id, ev.id));
+    return false;
+  }
+}
+
 export async function processOutboxForConnection(
   db: Database,
   env: Env,
@@ -145,6 +220,8 @@ export async function processOutboxForConnection(
     let ok = false;
     if (row.operation === "update") {
       ok = await pushEventUpdate(db, env, row.eventId, lcId);
+    } else if (row.operation === "create") {
+      ok = await pushEventCreate(db, env, row.eventId, lcId);
     }
 
     const [ev] = await db
