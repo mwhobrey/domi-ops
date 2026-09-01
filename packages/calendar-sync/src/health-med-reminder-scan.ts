@@ -380,7 +380,7 @@ async function deliverOneMedReminder(
       body,
       url,
       tag: input.tag,
-      subscriptions: [input.target.push],
+      subscriptions: [{ ...input.target.push, userId: input.recipient.userId }],
       ...(token
         ? {
             actions: [...MED_PUSH_ACTIONS],
@@ -503,7 +503,7 @@ async function deliverOneMedGroupReminder(
       body,
       url,
       tag: input.tag,
-      subscriptions: [input.target.push],
+      subscriptions: [{ ...input.target.push, userId: input.recipient.userId }],
       ...(token
         ? {
             actions: [...MED_PUSH_ACTIONS],

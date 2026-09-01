@@ -66,6 +66,7 @@ export async function persistUserNotificationOnce(
 
 export type PushSubscriptionDelivery = {
   id: string;
+  userId: string;
   endpoint: string;
   p256dh: string;
   authKey: string;
@@ -107,7 +108,7 @@ export async function deliverUserNotification(
     tag: input.tag,
     data: { url: input.url },
   };
-  await deliverWebPush(db, subs, payload);
+  await deliverWebPush(db, env, subs, payload);
 }
 
 /**
@@ -152,5 +153,5 @@ export async function deliverUserNotificationToSubscriptions(
     ...(input.actions?.length ? { actions: input.actions } : {}),
     data: { ...(input.data ?? {}), url: input.url },
   };
-  await deliverWebPush(db, input.subscriptions, payload);
+  await deliverWebPush(db, env, input.subscriptions, payload);
 }
