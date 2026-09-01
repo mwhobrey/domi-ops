@@ -13,7 +13,7 @@ import { eventToGoogleBody } from "./mapper.js";
 
 async function googleCalendarMutate(
   accessToken: string,
-  method: "PUT" | "POST" | "DELETE",
+  method: "GET" | "PUT" | "POST" | "DELETE",
   path: string,
   body?: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
@@ -106,6 +106,17 @@ export async function pushEventUpdate(
 }
 
 /**
+ * Google custom event IDs must be lowercase base32hex (`0-9a-v`), 5-1024 chars, unique per
+ * calendar. A UUID with its hyphens stripped is exactly 32 lowercase hex chars (`0-9a-f`, a
+ * strict subset of `a-v`) — deterministic per event, so retrying a create after a partial
+ * failure (Google's POST succeeded, our own DB write afterward didn't — crash, connection drop)
+ * hits Google's own 409 "already exists" instead of silently creating a duplicate event.
+ */
+function googleEventIdFromLocalId(eventId: string): string {
+  return eventId.replace(/-/g, "").toLowerCase();
+}
+
+/**
  * Push a brand-new local event to Google for the first time (WHO-252). Unlike pushEventUpdate,
  * this event has no googleEventId yet — that's the whole point — so it does a Calendar API
  * `POST` (insert) instead of a `PUT`, then stores the id/etag Google hands back so every
@@ -142,7 +153,8 @@ export async function pushEventCreate(
 
   const tz = conn.timeZone ?? "UTC";
   const reminderOffsets = await listReminderOffsetsForEvent(db, ev.id);
-  const body = eventToGoogleBody({ ...ev, reminderOffsets }, tz);
+  const googleEventId = googleEventIdFromLocalId(ev.id);
+  const body = { ...eventToGoogleBody({ ...ev, reminderOffsets }, tz), id: googleEventId };
   try {
     let accessToken: string;
     try {
@@ -151,16 +163,30 @@ export async function pushEventCreate(
       if (e instanceof CalendarCredentialsError) return false;
       throw e;
     }
-    const created = await googleCalendarMutate(
-      accessToken,
-      "POST",
-      `/calendars/${encodeURIComponent(lc.googleCalendarId)}/events`,
-      body,
-    );
+
+    let created: Record<string, unknown>;
+    try {
+      created = await googleCalendarMutate(
+        accessToken,
+        "POST",
+        `/calendars/${encodeURIComponent(lc.googleCalendarId)}/events`,
+        body,
+      );
+    } catch (err) {
+      if (!(err instanceof Error) || !/Google Calendar API 409/.test(err.message)) throw err;
+      // Google already has an event under our deterministic id — a prior attempt's POST
+      // succeeded but the local DB write after it didn't. Adopt what's already there instead of
+      // treating this as a fresh failure (which would just retry the POST and 409 forever).
+      created = await googleCalendarMutate(
+        accessToken,
+        "GET",
+        `/calendars/${encodeURIComponent(lc.googleCalendarId)}/events/${encodeURIComponent(googleEventId)}`,
+      );
+    }
     await db
       .update(calendarEvents)
       .set({
-        googleEventId: created.id ? String(created.id) : null,
+        googleEventId: created.id ? String(created.id) : googleEventId,
         googleEtag: created.etag ? String(created.etag) : null,
         syncStatus: "synced",
         updatedAt: new Date(),
@@ -192,11 +218,14 @@ export async function processOutboxForConnection(
     .orderBy(asc(calendarSyncOutbox.createdAt))
     .limit(limit * 3);
 
+  // Unscoped by design (see below) — every connection's linked-calendar ids, not just this one's.
   const linked = await db
-    .select({ id: linkedGoogleCalendars.id })
-    .from(linkedGoogleCalendars)
-    .where(eq(linkedGoogleCalendars.connectionId, connectionId));
-  const linkedIds = new Set(linked.map((l) => l.id));
+    .select({ id: linkedGoogleCalendars.id, connectionId: linkedGoogleCalendars.connectionId })
+    .from(linkedGoogleCalendars);
+  const linkedIds = new Set(
+    linked.filter((l) => l.connectionId === connectionId).map((l) => l.id),
+  );
+  const allLinkedIds = new Set(linked.map((l) => l.id));
 
   let processed = 0;
   for (const row of rows) {
@@ -212,8 +241,18 @@ export async function processOutboxForConnection(
       payload = {};
     }
     const lcId = payload.linkedCalendarId;
-    if (!lcId || !linkedIds.has(lcId)) {
+    if (!lcId || !allLinkedIds.has(lcId)) {
+      // Genuinely orphaned — no linkedCalendarId at all, or it points at a linked calendar that
+      // no longer exists for *any* connection. Safe to drop.
       await db.delete(calendarSyncOutbox).where(eq(calendarSyncOutbox.id, row.id));
+      continue;
+    }
+    if (!linkedIds.has(lcId)) {
+      // The row query above (`rows`) isn't scoped to this connection at all — it was pulling
+      // every household's outbox rows and deleting whichever ones didn't happen to belong to
+      // *this* connection, on every single connection's processing run. That silently dropped
+      // other households' pending sync work continuously. This row belongs to a different,
+      // still-valid connection — leave it for that connection's own run to pick up.
       continue;
     }
 

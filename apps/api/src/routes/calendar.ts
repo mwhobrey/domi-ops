@@ -987,6 +987,16 @@ export function calendarRoutes(db: Database, env: Env) {
         operation: "create",
         payloadJson: JSON.stringify({ linkedCalendarId: link.linkedCalendarId }),
       });
+      // Without this, the event keeps the "synced" column default even though nothing has been
+      // pushed yet — and if pushEventCreate then bails early (expired token, calendar unlinked
+      // mid-flight) without ever touching syncStatus, processOutboxForConnection reads that
+      // still-"synced" status as "already succeeded" and deletes the outbox row, permanently
+      // abandoning the push.
+      await db
+        .update(calendarEvents)
+        .set({ syncStatus: "pending", updatedAt: new Date() })
+        .where(eq(calendarEvents.id, ev!.id));
+      ev!.syncStatus = "pending";
       const redisUrl = env.REDIS_URL ?? "redis://localhost:6379";
       await enqueueSyncJob(redisUrl, "google.calendar.push", {
         connectionId: link.connectionId,
