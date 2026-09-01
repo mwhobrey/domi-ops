@@ -4,6 +4,7 @@ import { cors } from "hono/cors";
 import { createBetterAuth } from "@domi-ops/auth";
 import { loadEnv, isHostedDeployment, isModuleEnabled } from "@domi-ops/config";
 import { createDb, createScopedDb } from "@domi-ops/db";
+import { initSentry } from "./lib/sentry.js";
 import { createAuthMiddleware, type AppVariables } from "./middleware/auth.js";
 import { createTenantMiddleware } from "./middleware/tenant.js";
 import { whomeSessionRoutes } from "./routes/auth.js";
@@ -46,11 +47,23 @@ import {
 import { getCookie } from "hono/cookie";
 
 const env = loadEnv();
+initSentry(env);
 const baseDb = createDb(env.DATABASE_URL);
 const db = createScopedDb(baseDb);
 const betterAuth = createBetterAuth(baseDb, env);
 
 const app = new Hono<{ Variables: AppVariables }>();
+
+// WHO-253 — there was no global error handler at all before this; an uncaught throw in any
+// route handler silently became a bare 500 with zero logging anywhere. The console.error below
+// is what reaches Sentry — captureConsoleIntegration (initSentry) auto-reports every
+// console.error call site, so an explicit Sentry.captureException(err) here would double-fire
+// one Sentry issue per failure (CodeRabbit caught the same duplication in the worker's
+// equivalent handler). No-op when SENTRY_DSN is unset either way.
+app.onError((err, c) => {
+  console.error(`[domi-ops api] unhandled error on ${c.req.method} ${c.req.path}:`, err);
+  return c.json({ error: "internal_error" }, 500);
+});
 
 // Telemetry is the one endpoint meant to be called cross-origin from arbitrary self-host
 // domains (opt-in metrics phoning home to the central collector) — no cookies/credentials
