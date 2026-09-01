@@ -1,5 +1,4 @@
 import { serve } from "@hono/node-server";
-import * as Sentry from "@sentry/node";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { createBetterAuth } from "@domi-ops/auth";
@@ -56,12 +55,13 @@ const betterAuth = createBetterAuth(baseDb, env);
 const app = new Hono<{ Variables: AppVariables }>();
 
 // WHO-253 — there was no global error handler at all before this; an uncaught throw in any
-// route handler silently became a bare 500 with zero logging anywhere. Sentry.captureException
-// is a no-op when SENTRY_DSN is unset (see initSentry), so this is safe with or without it
-// configured.
+// route handler silently became a bare 500 with zero logging anywhere. The console.error below
+// is what reaches Sentry — captureConsoleIntegration (initSentry) auto-reports every
+// console.error call site, so an explicit Sentry.captureException(err) here would double-fire
+// one Sentry issue per failure (CodeRabbit caught the same duplication in the worker's
+// equivalent handler). No-op when SENTRY_DSN is unset either way.
 app.onError((err, c) => {
   console.error(`[domi-ops api] unhandled error on ${c.req.method} ${c.req.path}:`, err);
-  Sentry.captureException(err);
   return c.json({ error: "internal_error" }, 500);
 });
 

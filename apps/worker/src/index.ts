@@ -60,7 +60,12 @@ worker.on("completed", (job) => {
 });
 
 worker.on("failed", (job, err) => {
-  console.error(`Job ${job?.id} failed`, err);
+  // console.log, not console.error — captureConsoleIntegration (initSentry) auto-reports every
+  // console.error call site, so pairing it with the explicit captureException below double-fired
+  // one Sentry issue per failure. captureException keeps the structured jobName tag (more useful
+  // for triage than console.error's free text would be); this line stays for local log
+  // visibility only.
+  console.log(`Job ${job?.id} failed:`, err);
   Sentry.captureException(err, { tags: { jobName: job?.data.name } });
 });
 
