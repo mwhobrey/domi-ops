@@ -56,7 +56,7 @@ export async function sendPushSubscriptionExpiredEmail(
   const html = `<p>${greeting}</p><p>Push notifications stopped working on one of your devices — this can happen after a browser update, clearing site data, or revoking the notification permission. If you use reminders for medications, calendar events, chores, or anything else, you won't get them on that device until you turn notifications back on.</p><p>Open Domi Ops on that device and re-enable notifications in Settings.</p>`;
 
   if (!isSmtpConfigured(env)) {
-    console.warn(`[domi-ops auth] SMTP not configured — skipped push-expired notice for ${input.to}`);
+    console.warn("[domi-ops auth] SMTP not configured — skipped push-expired notice");
     return;
   }
 
