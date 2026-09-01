@@ -61,18 +61,17 @@ export async function pushEventUpdate(
     .limit(1);
   if (!conn || conn.syncMode !== "bidirectional") return false;
 
-  let accessToken: string;
-  try {
-    accessToken = await ensureAccessToken(db, env, conn);
-  } catch (e) {
-    if (e instanceof CalendarCredentialsError) return false;
-    throw e;
-  }
-
   const tz = conn.timeZone ?? "UTC";
   const reminderOffsets = await listReminderOffsetsForEvent(db, ev.id);
   const body = eventToGoogleBody({ ...ev, reminderOffsets }, tz);
   try {
+    let accessToken: string;
+    try {
+      accessToken = await ensureAccessToken(db, env, conn);
+    } catch (e) {
+      if (e instanceof CalendarCredentialsError) return false;
+      throw e;
+    }
     const updated = await googleCalendarMutate(
       accessToken,
       "PUT",
