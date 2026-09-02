@@ -73,8 +73,14 @@ echo "==> docker compose pull"
 "${COMPOSE[@]}" pull
 
 echo "==> checking for pending migrations"
-if ! docker run --rm --env-file .env --entrypoint node \
-    "ghcr.io/mwhobrey/domi-ops-api:${DOMI_OPS_IMAGE_TAG}" \
+# Must run on the compose network, not a bare `docker run` — DATABASE_URL can point at a
+# compose-local Postgres service (hostname "postgres", the self-host default) which only
+# resolves from containers actually attached to this project's network. `docker compose run`
+# reuses the api service's already-correct networks/env_file instead of us re-deriving them.
+# Confirmed live 2026-09-02: a bare `docker run --env-file .env` here hit
+# `getaddrinfo ENOTFOUND postgres` on a self-hosted-style setup — aborted clean without
+# touching containers, but every such deploy would fail here as long as this script existed.
+if ! "${COMPOSE[@]}" run --rm -T --no-deps --entrypoint node api \
     packages/db/scripts/check-pending-migrations.mjs; then
   echo "" >&2
   echo "ABORTING deploy — containers were NOT touched. See message above." >&2
