@@ -35,7 +35,12 @@ try {
   process.exit(1);
 }
 
-const sql = postgres(url, { max: 1, ssl: "require" });
+// No explicit ssl option — same as migrate.ts/create-hosted-app-role.mjs. DO's connection
+// string already carries `sslmode=require` (see deploy/HOSTED_BETA_SETUP.md), so postgres.js
+// picks it up from the URL; forcing "require" here broke every self-hosted, non-TLS Postgres
+// outright (`Client network socket disconnected before secure TLS connection was established`,
+// confirmed live 2026-09-02).
+const sql = postgres(url, { max: 1 });
 
 try {
   let lastAppliedAt = null;
