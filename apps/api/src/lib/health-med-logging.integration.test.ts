@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import type { Env } from "@domi-ops/config";
 import {
@@ -76,7 +77,11 @@ maybeDescribe("recordDose conflict rules (integration)", () => {
       householdId = hh.id;
       const [u] = await tx
         .insert(users)
-        .values({ displayName: "recordDose-it tester", emailVerified: true })
+        .values({
+          email: `recorddose-it-${randomUUID()}@test.local`,
+          displayName: "recordDose-it tester",
+          emailVerified: true,
+        })
         .returning({ id: users.id });
       userId = u.id;
       const [m] = await tx
