@@ -61,7 +61,12 @@ import {
 } from "../lib/health-serialize.js";
 import { buildHealthReports, VITALS_METRICS } from "../lib/health-reports.js";
 import { decryptHealthFieldOrPassthrough, encryptHealthField } from "../lib/health-crypto.js";
-import { recordDose } from "../lib/health-med-logging.js";
+import {
+  GLANCE_DOSE_LOG_LOOKBACK_DAYS,
+  isInstantLogged,
+  loadDoseLogMap,
+  recordDose,
+} from "../lib/health-med-logging.js";
 
 function encryptionErrorResponse(c: { json: (body: unknown, status?: number) => Response }, e: unknown) {
   if (e instanceof HealthEncryptionError) {
@@ -420,6 +425,19 @@ export function householdHealthRoutes(db: Database, env: Env) {
       }
     }
 
+    // One query for every "is this dose logged" check below, instead of a lookup per med per
+    // time slot (WHO-280).
+    const glanceMedIds = [
+      ...new Set([
+        ...medRows.map((m) => m.id),
+        ...[...groupMemberMedsMap.values()].flat().map((m) => m.id),
+      ]),
+    ];
+    const doseLogLookbackStart = new Date(
+      dayStart.getTime() - GLANCE_DOSE_LOG_LOOKBACK_DAYS * 24 * 60 * 60 * 1000,
+    );
+    const doseLogMap = await loadDoseLogMap(db, glanceMedIds, doseLogLookbackStart);
+
     const pendingDoses: {
       medicationId: string;
       name: string;
@@ -458,17 +476,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
         if (claimedTimes.has(hhmm)) continue; // this specific dose belongs to a group instead
         const scheduledAt = zonedLocalToUtc(today, hhmm, tz);
         if (scheduledAt < dayStart || scheduledAt > dayEnd) continue;
-        const [logged] = await db
-          .select({ id: healthMedicationLogs.id })
-          .from(healthMedicationLogs)
-          .where(
-            and(
-              eq(healthMedicationLogs.medicationId, med.id),
-              eq(healthMedicationLogs.scheduledAt, scheduledAt),
-            ),
-          )
-          .limit(1);
-        if (!logged) {
+        if (!isInstantLogged(doseLogMap, med.id, scheduledAt)) {
           pendingDoses.push({
             medicationId: med.id,
             name,
@@ -489,24 +497,12 @@ export function householdHealthRoutes(db: Database, env: Env) {
       if (!schedule) continue;
       const name = decryptHealthFieldOrPassthrough(med.name, env) ?? "Medication";
       const dosage = decryptHealthFieldOrPassthrough(med.dosage, env);
-      const logRows = await db
-        .select({
-          scheduledAt: healthMedicationLogs.scheduledAt,
-          loggedAt: healthMedicationLogs.loggedAt,
-          status: healthMedicationLogs.status,
-        })
-        .from(healthMedicationLogs)
-        .where(eq(healthMedicationLogs.medicationId, med.id));
       const pending = nextIntervalPending({
         schedule,
         tz,
         date: today,
         now: new Date(),
-        logs: logRows.map((l) => ({
-          scheduledAt: l.scheduledAt,
-          loggedAt: l.loggedAt,
-          status: l.status,
-        })),
+        logs: doseLogMap.get(med.id) ?? [],
       });
       if (!pending) continue;
       pendingDoses.push({
@@ -550,20 +546,12 @@ export function householdHealthRoutes(db: Database, env: Env) {
             (parseMedSchedule(m.scheduleJson).times ?? []).some((t) => t.slice(0, 5) === hhmm),
         );
         if (membersAtThisTime.length === 0) continue;
-        const memberIds = membersAtThisTime.map((m) => m.id);
-        const loggedRows = await db
-          .select({ medicationId: healthMedicationLogs.medicationId })
-          .from(healthMedicationLogs)
-          .where(
-            and(
-              inArray(healthMedicationLogs.medicationId, memberIds),
-              eq(healthMedicationLogs.scheduledAt, scheduledAt),
-            ),
-          );
         // Partial-take: a group dose stays pending until EVERY member medication has a log for
         // this instant, not just one — someone taking 2 of 3 meds early shouldn't make the
         // group's reminder disappear before the 3rd is handled.
-        const loggedIds = new Set(loggedRows.map((r) => r.medicationId));
+        const loggedIds = new Set(
+          membersAtThisTime.filter((m) => isInstantLogged(doseLogMap, m.id, scheduledAt)).map((m) => m.id),
+        );
         if (loggedIds.size >= membersAtThisTime.length) continue;
         pendingGroupDoses.push({
           groupId: group.id,
@@ -591,14 +579,6 @@ export function householdHealthRoutes(db: Database, env: Env) {
       if (!schedule) continue;
       const name = decryptHealthFieldOrPassthrough(group.name, env) ?? "Medications";
       const memberIds = members.map((m) => m.id);
-      const logRows = await db
-        .select({
-          scheduledAt: healthMedicationLogs.scheduledAt,
-          loggedAt: healthMedicationLogs.loggedAt,
-          status: healthMedicationLogs.status,
-        })
-        .from(healthMedicationLogs)
-        .where(inArray(healthMedicationLogs.medicationId, memberIds));
       // The group's interval clock is driven by the union of all member medications' log
       // history — once grouped, the group's own schedule (not any individual member's) is
       // authoritative, so "last taken" resets on whichever member dose was logged most recently.
@@ -607,21 +587,12 @@ export function householdHealthRoutes(db: Database, env: Env) {
         tz,
         date: today,
         now: new Date(),
-        logs: logRows.map((l) => ({ scheduledAt: l.scheduledAt, loggedAt: l.loggedAt, status: l.status })),
+        logs: memberIds.flatMap((id) => doseLogMap.get(id) ?? []),
       });
       if (!pending) continue;
-      // logRows above only selected scheduledAt/loggedAt/status (for nextIntervalPending) — a
-      // second, narrower query gets medicationId for just this specific pending instant.
-      const loggedForPendingRows = await db
-        .select({ medicationId: healthMedicationLogs.medicationId })
-        .from(healthMedicationLogs)
-        .where(
-          and(
-            inArray(healthMedicationLogs.medicationId, memberIds),
-            eq(healthMedicationLogs.scheduledAt, pending.scheduledAt),
-          ),
-        );
-      const loggedForPendingIds = new Set(loggedForPendingRows.map((r) => r.medicationId));
+      const loggedForPendingIds = new Set(
+        memberIds.filter((id) => isInstantLogged(doseLogMap, id, pending.scheduledAt)),
+      );
       pendingGroupDoses.push({
         groupId: group.id,
         name,

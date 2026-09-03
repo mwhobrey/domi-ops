@@ -14,7 +14,7 @@ import {
   withSystemContext,
   type Database,
 } from "@domi-ops/db";
-import { recordDose } from "./health-med-logging.js";
+import { isInstantLogged, loadDoseLogMap, recordDose } from "./health-med-logging.js";
 
 /**
  * WHO-280: prove the one-writer / one-conflict-rule contract holds against a real Postgres
@@ -152,5 +152,34 @@ maybeDescribe("recordDose conflict rules (integration)", () => {
       );
     }
     expect(await logRows(null)).toHaveLength(2);
+  });
+
+  it("loadDoseLogMap groups logs by med and isInstantLogged matches the exact instant", async () => {
+    await clearLogs();
+    const other = new Date("2026-02-01T20:00:00.000Z");
+    await withHouseholdContext(db, householdId, async (tx) => {
+      await recordDose(tx, env, { ...base(), status: "taken", source: "single" });
+      await recordDose(tx, env, { ...base(), scheduledAt: other, status: "skipped", source: "single" });
+    });
+    const map = await withHouseholdContext(db, householdId, (tx) =>
+      loadDoseLogMap(tx, [med.id], new Date("2026-01-01T00:00:00.000Z")),
+    );
+    expect(map.get(med.id)).toHaveLength(2);
+    expect(isInstantLogged(map, med.id, instant)).toBe(true);
+    expect(isInstantLogged(map, med.id, other)).toBe(true);
+    expect(isInstantLogged(map, med.id, new Date("2026-02-01T12:00:00.000Z"))).toBe(false);
+    expect(isInstantLogged(map, "no-such-med", instant)).toBe(false);
+  });
+
+  it("loadDoseLogMap honours the since cutoff", async () => {
+    await clearLogs();
+    await withHouseholdContext(db, householdId, (tx) =>
+      recordDose(tx, env, { ...base(), status: "taken", source: "single" }),
+    );
+    const future = new Date(Date.now() + 60 * 1000);
+    const map = await withHouseholdContext(db, householdId, (tx) =>
+      loadDoseLogMap(tx, [med.id], future),
+    );
+    expect(map.get(med.id) ?? []).toHaveLength(0);
   });
 });
