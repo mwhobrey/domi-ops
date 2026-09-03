@@ -1,6 +1,6 @@
-# Google OAuth for whome
+# Google OAuth for Domi Ops
 
-Your error (`invalid_request` / OAuth 2.0 policy) is almost always **Google Cloud Console config**, not Domi Ops code. The client named **Whobrey HomeHub** was likely set up for Flask on port **5000**; Domi Ops uses different URLs.
+The `invalid_request` / OAuth 2.0 policy error is almost always **Google Cloud Console config**, not Domi Ops code. A client named **Whobrey HomeHub** was likely set up for Flask on port **5000**; Domi Ops uses different URLs.
 
 ## 1. OAuth client type
 
@@ -10,7 +10,7 @@ Google Cloud → **APIs & Services** → **Credentials** → your OAuth 2.0 Clie
 
 | Path | Browser URL | `.env` |
 |------|-------------|--------|
-| **Default — native** | `http://localhost:3000` | `cp .env.example .env` (`DOMI_OPS_DEV_PROFILE=native`) |
+| **Default (native)** | `http://localhost:3000` | `cp .env.example .env` (`DOMI_OPS_DEV_PROFILE=native`) |
 | Docker compose `web` | `http://localhost:3001` | `cp .env.docker.example .env` (`DOMI_OPS_DEV_PROFILE=docker`) |
 
 Do not flip `PUBLIC_APP_URL` between 3000 and 3001 without updating Google Cloud redirect URIs. API startup logs OAuth callback URLs in development; `GET /health` returns `dev.oauthRedirects` when `NODE_ENV=development`.
@@ -27,7 +27,7 @@ Add the URL you open in the browser (no trailing slash):
 
 ## 4. Authorized redirect URIs (exact match)
 
-whome sends redirects based on **`PUBLIC_APP_URL`** (Next proxies `/auth/*` to the API).
+Domi Ops sends redirects based on **`PUBLIC_APP_URL`** (Next proxies `/auth/*` to the API).
 
 | Purpose | Redirect URI |
 |---------|----------------|
@@ -55,7 +55,7 @@ Optional override: set `GOOGLE_OAUTH_REDIRECT_URI` only for calendar if you need
 2. **Publishing status:** **Testing** for personal/homelab use.
 3. **Test users:** Add every Google account that will sign in (required in Testing mode).
 4. **App domain:** Set **Application home page** and **Privacy policy** URLs. Google often blocks sign-in without a privacy policy link, even for localhost dev. Use your real domain or a static page you control.
-5. **Scopes:** Login uses `openid`, email, profile. Calendar connect adds the Calendar scope. Docs/Drive connect uses **`drive.file` only** (non-sensitive; Family Link–friendly) — create/open files via Picker or app uploads. Enable **Google Drive API** in the same GCP project (Docs API optional; we no longer call Docs REST).
+5. **Scopes:** Login uses `openid`, email, profile. Calendar connect adds the Calendar scope. Docs/Drive connect uses **`drive.file` only** (non-sensitive, Family Link–friendly): create and open files via Picker or app uploads. Enable **Google Drive API** in the same GCP project (Docs API optional; we no longer call Docs REST).
 
 ## 6. `.env` alignment
 
@@ -80,7 +80,7 @@ Open (while logged out):
 
 `http://localhost:3001/login` → **Continue with Google**
 
-On Google’s screen, check the address bar `redirect_uri` query param — it must **exactly** match `{PUBLIC_APP_URL}/auth/callback/google` in GCP (encoded form is normal).
+On Google's screen, check the address bar `redirect_uri` query param. It must **exactly** match `{PUBLIC_APP_URL}/auth/callback/google` in GCP (encoded form is normal).
 
 ## 8. Production (DigitalOcean + Caddy)
 
@@ -90,7 +90,7 @@ Use HTTPS everywhere:
 - Redirects: `https://home.yourdomain.com/auth/callback/google` and `.../auth/google/calendar/callback`
 - `PUBLIC_APP_URL=https://home.yourdomain.com`
 
-Add the production domain under **Firebase-style** authorized domains only if you use Firebase; Domi Ops does not require Firebase.
+Add the production domain under Firebase-style authorized domains only if you use Firebase; Domi Ops does not require Firebase.
 
 ## 9. Google Picker (school assignment materials)
 
@@ -106,12 +106,12 @@ In **APIs & Services → Library**, enable:
 ### API key (browser)
 
 1. **Credentials → Create credentials → API key**
-2. **Application restrictions → HTTP referrers** — add every origin users open in the browser:
+2. **Application restrictions → HTTP referrers:** add every origin users open in the browser:
    - `http://localhost:3000/*` (native dev)
    - `http://localhost:3001/*` (Docker web)
    - `https://your.domain/*` (production)
 3. **API restrictions → Restrict key** → allow **Google Picker API** (optional: Google Drive API)
-4. Add `https://docs.google.com/*` to website restrictions — Picker’s iframe often sends that referrer; without it Google may report “API developer key is invalid” even when localhost is allowed.
+4. Add `https://docs.google.com/*` to website restrictions. Picker's iframe often sends that referrer, and without it Google may report "API developer key is invalid" even when localhost is allowed.
 
 If you already have an API key with matching referrer restrictions, add Picker API to its restriction list instead of creating a duplicate.
 
@@ -119,7 +119,7 @@ If you already have an API key with matching referrer restrictions, add Picker A
 
 ```env
 GOOGLE_PICKER_API_KEY=AIza...
-# Optional — digits only. Defaults to the numeric prefix of GOOGLE_OAUTH_CLIENT_ID.
+# Optional, digits only. Defaults to the numeric prefix of GOOGLE_OAUTH_CLIENT_ID.
 # GOOGLE_CLOUD_PROJECT_NUMBER=166249078987
 ```
 
@@ -137,10 +137,10 @@ Confirm **Authorized JavaScript origins** (§3) include your dev/prod browser UR
 
 ## 10. Student Google Docs (school tests — WHO-209–212)
 
-Students connect the same **Google Docs** OAuth flow as teachers (`/auth/google/docs/start?next=…`). Scopes are **`drive.file` only** (plus login openid/email/profile) — no Docs `documents` scope and no full Drive scope. Family Link supervised accounts can usually grant `drive.file`; if a child previously connected with the old scopes, **disconnect and reconnect** after this change.
+Students connect the same **Google Docs** OAuth flow as teachers (`/auth/google/docs/start?next=…`). Scopes are **`drive.file` only** (plus login openid/email/profile), with no Docs `documents` scope and no full Drive scope. Family Link supervised accounts can usually grant `drive.file`; if a child previously connected with the old scopes, **disconnect and reconnect** after this change.
 
 **Start test flow:** On assignments with an unfrozen `google_doc` test material, the API uses the **teacher's** token to grant the student's Google account **reader** access to the template, then the **student's** token runs `files.copy` into their Drive. The copy is tagged with Drive `appProperties` (`domi_ops_material_id`, `domi_ops_submission_id`, `domi_ops_template_file_id`) for lineage checks.
 
 **Submit:** Student picks their copy via Picker → `POST /api/school/submissions/:id/google-artifacts`. Lineage v1 flags mismatches for teachers but does not block turn-in.
 
-**Prereqs:** Student Google account email must match their linked Better Auth Google account (or profile email). Enable **Google Drive API** for the project; student must be a **test user** on the consent screen in Testing mode. Supervised (Family Link) accounts: use `drive.file` only (WHO-228) — reconnect Docs after upgrading if the child previously granted `documents`.
+**Prereqs:** Student Google account email must match their linked Better Auth Google account (or profile email). Enable **Google Drive API** for the project; the student must be a **test user** on the consent screen in Testing mode. Supervised (Family Link) accounts use `drive.file` only (WHO-228); reconnect Docs after upgrading if the child previously granted `documents`.

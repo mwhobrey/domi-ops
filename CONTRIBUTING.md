@@ -1,6 +1,6 @@
 # Contributing to Domi Ops
 
-Thanks for helping improve Domi Ops. This is a household operations monorepo — keep changes focused and match existing patterns.
+Thanks for helping improve Domi Ops. This is a household operations monorepo. Keep changes focused and match existing patterns.
 
 By participating, you're expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
@@ -65,7 +65,7 @@ New SQL migrations must be registered in `packages/db/drizzle/meta/_journal.json
 - TypeScript strict; ESM with `.js` extensions in API/worker import paths.
 - Workspace packages: `@domi-ops/<name>`.
 - API routes scoped by household after `requireAuth`.
-- Web fetches session per request — no client-side token storage.
+- Web fetches session per request; no client-side token storage.
 - UI components live in `apps/web/src/components/ui/`; page-specific logic in feature components.
 - Read `.cursor/runbook/03_RULES_AND_STANDARDS.md` before non-trivial changes.
 
@@ -94,4 +94,4 @@ See [docs/SELF_HOST.md](docs/SELF_HOST.md) for production deployment.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).

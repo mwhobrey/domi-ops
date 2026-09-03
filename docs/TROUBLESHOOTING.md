@@ -77,5 +77,5 @@ Quick index for self-host operators. Start with [SETUP.md](./SETUP.md) for the h
 1. API health: `curl -s https://your.domain/health` (or `:4000/health` locally)
 2. Logs: `docker compose -f docker-compose.prod.yml logs api worker web --tail 100`
 3. Smoke script: `./scripts/smoke-cutover.sh` (staging)
-4. [SELF_HOST.md](./SELF_HOST.md) — technical reference
+4. [SELF_HOST.md](./SELF_HOST.md) for the technical reference
 5. [GitHub Issues](https://github.com/mwhobrey/domi-ops/issues) (after repo is public)
