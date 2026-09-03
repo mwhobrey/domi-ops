@@ -13,6 +13,7 @@ export async function showBrowserNotification(
     body,
     tag: tag ?? "domi-ops-alert",
     icon: "/icons/icon-192.png",
+    badge: "/icons/badge-96.png",
     data: { url },
   });
 }

@@ -1,0 +1,26 @@
+<!-- Source shape for apps/web/public/icons/badge-96.png — the Android notification status-bar
+     badge. Android/Chrome render only the alpha channel, tinted to the system colour, so this
+     is a single flat white glyph on transparent with no interior detail: a plain house
+     silhouette with a chimney (the domi-ops mark's core metaphor, simplified hard for 24dp).
+     Regenerate the PNG with: node scripts/process-logo.mjs -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+  <path fill="#ffffff" d="
+    M48 14
+    L86 46
+    L76 46
+    L76 82
+    L58 82
+    L58 58
+    L38 58
+    L38 82
+    L20 82
+    L20 46
+    L10 46
+    Z
+    M64 24
+    L72 24
+    L72 33
+    L64 26
+    Z
+  "/>
+</svg>

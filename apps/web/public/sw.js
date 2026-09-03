@@ -1,6 +1,6 @@
 /* Minimal service worker — installable PWA; network-first for app routes.
  * Bump CACHE when shell assets change so activate purges stale caches. */
-const CACHE = "domi-ops-shell-v2";
+const CACHE = "domi-ops-shell-v3";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -84,6 +84,9 @@ self.addEventListener("push", (event) => {
         body: payload.body,
         tag: payload.tag,
         icon: "/icons/icon-192.png",
+        // Android status-bar (collapsed) monochrome mark — without this it falls back to a
+        // generic bell, indistinguishable from other apps'.
+        badge: "/icons/badge-96.png",
         data: payload.data,
         ...(payload.actions?.length ? { actions: payload.actions } : {}),
       });

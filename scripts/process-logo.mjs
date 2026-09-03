@@ -99,12 +99,28 @@ async function maskableIcon(source, size) {
   return squareIcon(source, size, 0.18);
 }
 
+// Android status-bar / notification badge (`ServiceWorkerRegistration.showNotification`'s
+// `badge` option — the small monochrome mark in the collapsed status bar; distinct from
+// `icon`, the full-colour art in the expanded shade). Android and Chrome render ONLY the alpha
+// channel, tinted to the system colour, so it has to be one flat hard-edged glyph with no
+// interior detail. The full logo (roof + spiderweb gable + infinity loop) turns to mud at
+// 24dp, so the badge is its own simplified source — a plain house silhouette,
+// docs/brand/notification-badge.svg. Without a `badge` at all, Android falls back to a generic
+// bell, indistinguishable from every other app's (the original complaint).
+async function badgeIcon(svgPath, size) {
+  return sharp(svgPath, { density: 600 })
+    .resize(size, size, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .png()
+    .toBuffer();
+}
+
 const jobs = [
   ["apps/web/public/icons/icon-main.png", squareIcon(trimmedUniversal, 1024, 0.08)],
   ["apps/web/public/icons/icon-512.png", maskableIcon(trimmedUniversal, 512)],
   ["apps/web/public/icons/icon-192.png", squareIcon(trimmedUniversal, 192, 0.09)],
   ["apps/web/public/icons/apple-touch-icon.png", squareIcon(trimmedUniversal, 180, 0.12)],
   ["apps/web/public/favicon.png", squareIcon(trimmedUniversal, 32, 0.06)],
+  ["apps/web/public/icons/badge-96.png", badgeIcon("docs/brand/notification-badge.svg", 96)],
 ];
 
 for (const [path, bufPromise] of jobs) {
