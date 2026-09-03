@@ -219,22 +219,24 @@ export function HealthPageClient({
     setError(null);
     setLoggingAllKey(groupKey);
     try {
-      for (const dose of actionable) {
-        const ok = await logDose(
-          dose.medicationId,
-          { scheduledAt: dose.scheduledAt, alsoCreateEvent: false },
-          { reload: false },
-        );
-        if (!ok) break;
-      }
+      // One conflict-safe bulk request, not an N-request loop that could overwrite a dose the
+      // user just skipped. `source: "bulk"` server-side leaves already-logged doses alone.
+      await apiClient.post("/api/health/doses/batch", {
+        entries: actionable.map((d) => ({
+          medicationId: d.medicationId,
+          scheduledAt: d.scheduledAt,
+          status: "taken",
+        })),
+      });
       await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not log doses");
     } finally {
       setLoggingAllKey(null);
     }
   }
 
-  /** Persisted-group "Take all" — one batch request to /medication-groups/:id/log-all, unlike
-   *  the ad-hoc logAllTaken above which still loops N individual requests client-side. */
+  /** Persisted-group "Take all" — one batch request to /medication-groups/:id/log-all. */
   async function logGroupAllTaken(group: PendingGroupDose) {
     const key = `group:${group.groupId}:${group.scheduledAt}`;
     if (loggingAllKey) return;

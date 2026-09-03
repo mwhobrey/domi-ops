@@ -61,7 +61,7 @@ import {
 } from "../lib/health-serialize.js";
 import { buildHealthReports, VITALS_METRICS } from "../lib/health-reports.js";
 import { decryptHealthFieldOrPassthrough, encryptHealthField } from "../lib/health-crypto.js";
-import { logMedicationDose } from "../lib/health-med-logging.js";
+import { recordDose } from "../lib/health-med-logging.js";
 
 function encryptionErrorResponse(c: { json: (body: unknown, status?: number) => Response }, e: unknown) {
   if (e instanceof HealthEncryptionError) {
@@ -213,40 +213,20 @@ export function householdHealthRoutes(db: Database, env: Env) {
       return c.json({ error: "invalid_token" }, 401);
     }
 
-    const [existing] = await db
-      .select()
-      .from(healthMedicationLogs)
-      .where(
-        and(
-          eq(healthMedicationLogs.medicationId, med.id),
-          eq(healthMedicationLogs.scheduledAt, scheduledAt),
-        ),
-      )
-      .limit(1);
-    if (existing) {
-      return c.json({
-        ok: true,
-        alreadyLogged: true,
-        log: serializeHealthLog(existing, env),
-      });
-    }
-
-    const loggedAt = new Date();
+    // Tapping a per-med notification button is a `single` action: if this dose was already
+    // logged (e.g. skipped earlier, then "Taken" tapped on the still-visible notification), it
+    // flips. See recordDose's conflict rule.
     try {
-      const [logRow] = await db
-        .insert(healthMedicationLogs)
-        .values({
-          medicationId: med.id,
-          scheduledAt,
-          status,
-          loggedAt,
-          loggedByUserId: auth.userId,
-          notes: null,
-          healthEventId: null,
-        })
-        .returning();
-
-      return c.json({ ok: true, alreadyLogged: false, log: serializeHealthLog(logRow, env) }, 201);
+      const { log, outcome } = await recordDose(db, env, {
+        med,
+        householdId: auth.householdId,
+        loggedByUserId: auth.userId,
+        status,
+        scheduledAt,
+        loggedAt: new Date(),
+        source: "single",
+      });
+      return c.json({ ok: true, alreadyLogged: outcome !== "inserted", log }, outcome === "inserted" ? 201 : 200);
     } catch (e) {
       const resp = encryptionErrorResponse(c, e);
       if (resp) return resp;
@@ -1262,7 +1242,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
     }
 
     try {
-      const { log, healthEventId } = await logMedicationDose(db, env, {
+      const { log, healthEventId, outcome } = await recordDose(db, env, {
         med,
         householdId: auth.householdId,
         loggedByUserId: auth.userId,
@@ -1270,9 +1250,10 @@ export function householdHealthRoutes(db: Database, env: Env) {
         scheduledAt,
         loggedAt,
         notes: body.notes,
+        source: "single",
         alsoCreateEvent,
       });
-      return c.json({ log, healthEventId }, 201);
+      return c.json({ log, healthEventId, outcome }, 201);
     } catch (e) {
       const resp = encryptionErrorResponse(c, e);
       if (resp) return resp;
@@ -1306,6 +1287,113 @@ export function householdHealthRoutes(db: Database, env: Env) {
       .limit(100);
 
     return c.json({ logs: logs.map((l) => serializeHealthLog(l, env)) });
+  });
+
+  /**
+   * Undo a dose log. A mistaken skip (or take) is otherwise permanent — "single" actions
+   * overwrite each other but a group "take all" won't touch a logged dose, so there was no
+   * way back. Deletes the log and the "Took <med>" event it spawned, if any.
+   */
+  app.delete("/medications/:id/logs/:logId", async (c) => {
+    const auth = c.get("auth")!;
+    const medId = c.req.param("id");
+    const logId = c.req.param("logId");
+    const [med] = await db
+      .select()
+      .from(healthMedications)
+      .where(and(eq(healthMedications.id, medId), eq(healthMedications.householdId, auth.householdId)))
+      .limit(1);
+    if (!med) return c.json({ error: "not_found" }, 404);
+    if (!(await hasHealthSegmentAccess(db, auth, med.memberId, "doses", "write"))) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+    const [logRow] = await db
+      .select()
+      .from(healthMedicationLogs)
+      .where(and(eq(healthMedicationLogs.id, logId), eq(healthMedicationLogs.medicationId, medId)))
+      .limit(1);
+    if (!logRow) return c.json({ error: "not_found" }, 404);
+
+    await db.delete(healthMedicationLogs).where(eq(healthMedicationLogs.id, logId));
+    if (logRow.healthEventId) {
+      await db.delete(healthEvents).where(eq(healthEvents.id, logRow.healthEventId));
+    }
+    return c.json({ ok: true });
+  });
+
+  /**
+   * Log several doses at once — the web "Take all" on an ad-hoc same-time slot, so it's one
+   * request and one conflict-safe pass instead of an N-request client loop that could race a
+   * just-tapped skip. `source: "bulk"`, so an already-logged dose in the batch is left alone.
+   */
+  app.post("/doses/batch", async (c) => {
+    const auth = c.get("auth")!;
+    const body = await c.req.json<{
+      entries?: { medicationId?: string; scheduledAt?: string; status?: string }[];
+      alsoCreateEvent?: boolean;
+    }>();
+    const entries = Array.isArray(body.entries) ? body.entries : [];
+    if (entries.length === 0) return c.json({ error: "no_entries" }, 400);
+    if (entries.length > 50) return c.json({ error: "too_many_entries" }, 400);
+
+    const ids = [...new Set(entries.map((e) => e.medicationId).filter((v): v is string => !!v))];
+    const meds = ids.length
+      ? await db
+          .select()
+          .from(healthMedications)
+          .where(and(inArray(healthMedications.id, ids), healthMedicationVisibleWhere(db, auth)!))
+      : [];
+    const medById = new Map(meds.map((m) => [m.id, m]));
+
+    const loggedAt = new Date();
+    const results: {
+      medicationId: string;
+      scheduledAt: string | null;
+      outcome?: "inserted" | "updated" | "unchanged";
+      log?: ReturnType<typeof serializeHealthLog>;
+      error?: string;
+    }[] = [];
+
+    for (const entry of entries) {
+      const med = entry.medicationId ? medById.get(entry.medicationId) : undefined;
+      const scheduledAtRaw = entry.scheduledAt ?? null;
+      if (!med) {
+        results.push({ medicationId: entry.medicationId ?? "", scheduledAt: scheduledAtRaw, error: "not_found" });
+        continue;
+      }
+      if (!(await hasHealthSegmentAccess(db, auth, med.memberId, "doses", "write"))) {
+        results.push({ medicationId: med.id, scheduledAt: scheduledAtRaw, error: "forbidden" });
+        continue;
+      }
+      const status = entry.status === "skipped" || entry.status === "missed" ? entry.status : "taken";
+      const scheduledAt = scheduledAtRaw ? new Date(scheduledAtRaw) : null;
+      if (med.scheduleKind !== "prn" && (!scheduledAt || Number.isNaN(scheduledAt.getTime()))) {
+        results.push({ medicationId: med.id, scheduledAt: scheduledAtRaw, error: "scheduled_at_required" });
+        continue;
+      }
+      try {
+        const { log, outcome } = await recordDose(db, env, {
+          med,
+          householdId: auth.householdId,
+          loggedByUserId: auth.userId,
+          status,
+          scheduledAt,
+          loggedAt,
+          source: "bulk",
+          alsoCreateEvent: body.alsoCreateEvent ?? false,
+        });
+        results.push({ medicationId: med.id, scheduledAt: log.scheduledAt, outcome, log });
+      } catch (e) {
+        const resp = encryptionErrorResponse(c, e);
+        if (resp) return resp;
+        results.push({
+          medicationId: med.id,
+          scheduledAt: scheduledAtRaw,
+          error: e instanceof Error ? e.message : "log_failed",
+        });
+      }
+    }
+    return c.json({ results }, 201);
   });
 
   return app;

@@ -10,7 +10,6 @@ import type { Database } from "@domi-ops/db";
 import {
   healthMedicationGroupMembers,
   healthMedicationGroups,
-  healthMedicationLogs,
   healthMedications,
   householdMembers,
 } from "@domi-ops/db";
@@ -38,7 +37,7 @@ import {
   serializeHealthLog,
   serializeHealthMedication,
 } from "../lib/health-serialize.js";
-import { logMedicationDose } from "../lib/health-med-logging.js";
+import { recordDose } from "../lib/health-med-logging.js";
 
 type HealthMedicationGroupRow = typeof healthMedicationGroups.$inferSelect;
 type SerializedHealthMedication = ReturnType<typeof serializeHealthMedication>;
@@ -124,30 +123,19 @@ async function logAllGroupMembers(
   const results: LogAllResult[] = [];
   for (const med of memberMeds) {
     try {
-      const [existing] = await db
-        .select()
-        .from(healthMedicationLogs)
-        .where(
-          and(
-            eq(healthMedicationLogs.medicationId, med.id),
-            eq(healthMedicationLogs.scheduledAt, input.scheduledAt),
-          ),
-        )
-        .limit(1);
-      if (existing) {
-        results.push({ medicationId: med.id, alreadyLogged: true, log: serializeHealthLog(existing, env) });
-        continue;
-      }
-      const { log } = await logMedicationDose(db, env, {
+      // `source: "bulk"` — recordDose leaves an already-logged dose (taken or skipped)
+      // untouched. A group "take all" only fills gaps; it never overrides a deliberate skip.
+      const { log, outcome } = await recordDose(db, env, {
         med,
         householdId: input.group.householdId,
         loggedByUserId: input.loggedByUserId,
         status: input.status,
         scheduledAt: input.scheduledAt,
         loggedAt: input.loggedAt,
+        source: "bulk",
         alsoCreateEvent: input.alsoCreateEvent ?? false,
       });
-      results.push({ medicationId: med.id, alreadyLogged: false, log });
+      results.push({ medicationId: med.id, alreadyLogged: outcome !== "inserted", log });
     } catch (e) {
       if (e instanceof HealthEncryptionError) throw e;
       results.push({ medicationId: med.id, error: e instanceof Error ? e.message : "log_failed" });

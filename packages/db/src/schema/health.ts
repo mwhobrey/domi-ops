@@ -235,22 +235,33 @@ export const healthMemberAcl = pgTable(
   (t) => [primaryKey({ columns: [t.subjectMemberId, t.granteeMemberId] })],
 );
 
-export const healthMedicationLogs = pgTable("health_medication_logs", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  medicationId: uuid("medication_id")
-    .notNull()
-    .references(() => healthMedications.id, { onDelete: "cascade" }),
-  scheduledAt: timestamp("scheduled_at", { withTimezone: true }),
-  status: medLogStatusEnum("status").notNull(),
-  loggedAt: timestamp("logged_at", { withTimezone: true }).notNull().defaultNow(),
-  loggedByUserId: uuid("logged_by_user_id").references(() => users.id, {
-    onDelete: "set null",
-  }),
-  notes: text("notes"),
-  healthEventId: uuid("health_event_id").references(() => healthEvents.id, {
-    onDelete: "set null",
-  }),
-});
+export const healthMedicationLogs = pgTable(
+  "health_medication_logs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    medicationId: uuid("medication_id")
+      .notNull()
+      .references(() => healthMedications.id, { onDelete: "cascade" }),
+    scheduledAt: timestamp("scheduled_at", { withTimezone: true }),
+    status: medLogStatusEnum("status").notNull(),
+    loggedAt: timestamp("logged_at", { withTimezone: true }).notNull().defaultNow(),
+    loggedByUserId: uuid("logged_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    notes: text("notes"),
+    healthEventId: uuid("health_event_id").references(() => healthEvents.id, {
+      onDelete: "set null",
+    }),
+  },
+  (t) => [
+    // One log per medication per scheduled instant — the DB backstop behind recordDose()
+    // (apps/api/src/lib/health-med-logging.ts). PRN doses (scheduled_at NULL) are exempt:
+    // "as needed" means many per day, each its own row.
+    uniqueIndex("health_medication_logs_instant_unique")
+      .on(t.medicationId, t.scheduledAt)
+      .where(sql`${t.scheduledAt} is not null`),
+  ],
+);
 
 export const healthMedReminderSent = pgTable(
   "health_med_reminder_sent",
