@@ -15,7 +15,7 @@ import {
   householdMembers,
   households,
 } from "@domi-ops/db";
-import { and, desc, eq, gte, inArray, isNull, lte, or } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lt, lte, or } from "drizzle-orm";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 import {
@@ -44,7 +44,7 @@ import {
   validateHealthShareMemberIds,
   type HealthAclGrants,
 } from "../lib/health-access.js";
-import { todayIsoDateInTz, zonedLocalToUtc, formatTimeLabelInTz, resolveAlertTimeZone, nextIntervalPending, parseIntervalSchedule } from "@domi-ops/calendar-sync";
+import { addDaysIso, todayIsoDateInTz, zonedLocalToUtc, formatTimeLabelInTz, resolveAlertTimeZone, nextIntervalPending, parseIntervalSchedule } from "@domi-ops/calendar-sync";
 import {
   encryptHealthTextFields,
   enrichHealthEvents,
@@ -341,6 +341,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
     const today = todayIsoDateInTz(tz);
     const dayStart = zonedLocalToUtc(today, "00:00", tz);
     const dayEnd = zonedLocalToUtc(today, "23:59", tz);
+    const nextDayStart = zonedLocalToUtc(addDaysIso(today, 1), "00:00", tz);
 
     const eventRows = await db
       .select()
@@ -629,7 +630,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
                 and(
                   isNull(healthMedicationLogs.scheduledAt),
                   gte(healthMedicationLogs.loggedAt, dayStart),
-                  lte(healthMedicationLogs.loggedAt, dayEnd),
+                  lt(healthMedicationLogs.loggedAt, nextDayStart),
                 ),
               ),
             ),
