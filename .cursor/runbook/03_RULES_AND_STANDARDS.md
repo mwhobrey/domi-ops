@@ -80,7 +80,7 @@
 
 **Manual verification checklist:**
 
-1. `GET /api/healthz` → `{ "status": "ok" }` (DB reachable)
+1. `GET /api/healthz` → `status: "ok"` (DB reachable). In development the body also carries a `dev` block — `publicAppUrl`, `profile`, `oauthRedirects`, `warnings` (`apps/api/src/routes/health.ts`).
 2. Google login → `/dashboard` loads
 3. `npm run typecheck` at root
 4. `npm run lint` (web)
