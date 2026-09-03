@@ -101,6 +101,9 @@ export function LoginForm({
       const res = await authClient.signIn.social({
         provider: "google",
         callbackURL: nextPath,
+        // Route OAuth failures back to the login page with a readable message instead of
+        // Better Auth's bare /auth/error page (WHO-277 / WHO-278).
+        errorCallbackURL: "/login?error=oauth",
       });
       if (res.error) {
         setError(res.error.message ?? "Google sign-in failed. Try again.");

@@ -61,5 +61,13 @@ export async function ensureHouseholdMembership(
   const existing = await resolveAuthContext(db, userId);
   if (existing) return;
 
+  // Hosted (DEPLOYMENT_MODE=shared|dedicated): a signed-in user with no household simply
+  // hasn't completed Stripe checkout yet. That's a valid pending state — the web layer
+  // redirects them to /pricing, and /api/billing/hosted-setup/complete attaches them to the
+  // household the webhook provisions. Only single-tenant self-host auto-creates a household
+  // on first login; bootstrapHouseholdOnLogin throws for anything else, which used to escape
+  // the Better Auth session hook and blank-screen the OAuth callback (WHO-277).
+  if (env.DEPLOYMENT_MODE !== "single") return;
+
   await bootstrapHouseholdOnLogin(db, env, userId);
 }

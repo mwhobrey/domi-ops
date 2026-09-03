@@ -13,7 +13,9 @@ import { USERNAME_MAX_LENGTH, USERNAME_MIN_LENGTH, USERNAME_PATTERN } from "./us
 /** Narrow surface we use from Better Auth — avoids leaking plugin-specific inferred types into .d.ts. */
 export interface WhomeBetterAuth {
   api: {
-    getSession: (input: { headers: Headers }) => Promise<{ user?: { id: string } } | null>;
+    getSession: (input: {
+      headers: Headers;
+    }) => Promise<{ user?: { id: string; email?: string | null } } | null>;
   };
   handler: (request: Request) => Response | Promise<Response>;
 }
