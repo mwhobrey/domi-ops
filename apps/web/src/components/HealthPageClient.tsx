@@ -26,6 +26,7 @@ import {
   type HealthEvent,
   type HealthMedication,
   type MedicationGroupOption,
+  type LoggedDose,
   type PendingDose,
   type PendingGroupDose,
 } from "./health/health-types";
@@ -73,6 +74,8 @@ export function HealthPageClient({
   const [groups, setGroups] = useState<MedicationGroupOption[]>([]);
   const [pendingDoses, setPendingDoses] = useState<PendingDose[]>([]);
   const [pendingGroupDoses, setPendingGroupDoses] = useState<PendingGroupDose[]>([]);
+  const [loggedToday, setLoggedToday] = useState<LoggedDose[]>([]);
+  const [undoingLogId, setUndoingLogId] = useState<string | null>(null);
   const [prnMeds, setPrnMeds] = useState<HealthMedication[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -102,6 +105,7 @@ export function HealthPageClient({
           pendingDoses: PendingDose[];
           pendingGroupDoses: PendingGroupDose[];
           prnMedications: HealthMedication[];
+          loggedToday?: LoggedDose[];
         }>("/api/health/glance"),
         apiClient.get<{ bySubject: Record<string, HealthAclGrants> }>("/api/health/capabilities"),
       ]);
@@ -111,6 +115,7 @@ export function HealthPageClient({
       setPendingDoses(glanceRes.pendingDoses);
       setPendingGroupDoses(glanceRes.pendingGroupDoses ?? []);
       setPrnMeds(glanceRes.prnMedications);
+      setLoggedToday(glanceRes.loggedToday ?? []);
       setCapabilities(capsRes.bySubject ?? {});
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load health data");
@@ -251,6 +256,20 @@ export function HealthPageClient({
       setError(err instanceof ApiError ? err.message : "Could not log group doses");
     } finally {
       setLoggingAllKey(null);
+    }
+  }
+
+  async function undoDose(dose: LoggedDose) {
+    if (undoingLogId) return;
+    setError(null);
+    setUndoingLogId(dose.logId);
+    try {
+      await apiClient.delete(`/api/health/medications/${dose.medicationId}/logs/${dose.logId}`);
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not undo");
+    } finally {
+      setUndoingLogId(null);
     }
   }
 
@@ -426,6 +445,54 @@ export function HealthPageClient({
               )}
             </CardBody>
           </Card>
+
+          {loggedToday.length > 0 ? (
+            <Card>
+              <CardBody className="space-y-3">
+                <SectionHeader title="Logged today" />
+                <ul className="space-y-2">
+                  {loggedToday.map((dose) => (
+                    <HealthRow
+                      key={dose.logId}
+                      title={dose.name}
+                      subtitle={[
+                        dose.dosage?.trim(),
+                        dose.scheduledTimeLabel ? `for ${dose.scheduledTimeLabel}` : null,
+                        `logged ${dose.loggedAtLabel}`,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                      trailing={
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            tone={
+                              dose.status === "taken"
+                                ? "success"
+                                : dose.status === "missed"
+                                  ? "warning"
+                                  : "default"
+                            }
+                          >
+                            {dose.status === "taken" ? "Taken" : dose.status === "skipped" ? "Skipped" : "Missed"}
+                          </Badge>
+                          {canLogForMember(dose.memberId) ? (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              disabled={undoingLogId === dose.logId}
+                              onClick={() => void undoDose(dose)}
+                            >
+                              {undoingLogId === dose.logId ? "…" : "Undo"}
+                            </Button>
+                          ) : null}
+                        </div>
+                      }
+                    />
+                  ))}
+                </ul>
+              </CardBody>
+            </Card>
+          ) : null}
 
           <Card>
             <CardBody className="space-y-4">

@@ -1,12 +1,66 @@
 import type { Env } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
 import { healthEvents, healthMedicationLogs, healthMedications } from "@domi-ops/db";
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull } from "drizzle-orm";
 import { decryptHealthFieldOrPassthrough, encryptHealthField } from "./health-crypto.js";
 import { loadHealthMedicationShareMap, replaceHealthEventShares } from "./health-access.js";
 import { serializeHealthLog } from "./health-serialize.js";
 
 type HealthMedicationRow = typeof healthMedications.$inferSelect;
+
+export interface DoseLogEntry {
+  scheduledAt: Date | null;
+  loggedAt: Date;
+  status: "taken" | "skipped" | "missed";
+}
+
+/** Days of history to pull for the glance — bounds the interval-med "last taken" lookback. */
+export const GLANCE_DOSE_LOG_LOOKBACK_DAYS = 60;
+
+/**
+ * Every dose log for `medicationIds` logged on or after `since`, grouped by medication id.
+ * One query in place of the glance builder's per-med / per-time `is-it-logged` lookups
+ * (WHO-280). 60 days back covers any real interval schedule — a longer cadence than that is a
+ * monthly `scheduled` med, not `interval`.
+ */
+export async function loadDoseLogMap(
+  db: Database,
+  medicationIds: string[],
+  since: Date,
+): Promise<Map<string, DoseLogEntry[]>> {
+  const map = new Map<string, DoseLogEntry[]>();
+  if (medicationIds.length === 0) return map;
+  const rows = await db
+    .select({
+      medicationId: healthMedicationLogs.medicationId,
+      scheduledAt: healthMedicationLogs.scheduledAt,
+      loggedAt: healthMedicationLogs.loggedAt,
+      status: healthMedicationLogs.status,
+    })
+    .from(healthMedicationLogs)
+    .where(
+      and(
+        inArray(healthMedicationLogs.medicationId, medicationIds),
+        gte(healthMedicationLogs.loggedAt, since),
+      ),
+    );
+  for (const r of rows) {
+    const list = map.get(r.medicationId);
+    const entry: DoseLogEntry = { scheduledAt: r.scheduledAt, loggedAt: r.loggedAt, status: r.status };
+    if (list) list.push(entry);
+    else map.set(r.medicationId, [entry]);
+  }
+  return map;
+}
+
+/** True if `medId` has any log for the exact scheduled instant `at`. */
+export function isInstantLogged(
+  doseLogMap: Map<string, DoseLogEntry[]>,
+  medId: string,
+  at: Date,
+): boolean {
+  return (doseLogMap.get(medId) ?? []).some((l) => l.scheduledAt?.getTime() === at.getTime());
+}
 
 /**
  * Who's asking to log this dose. Decides what happens when a log already exists for the same
@@ -26,7 +80,8 @@ export type RecordDoseOutcome = "inserted" | "updated" | "unchanged";
 export interface RecordDoseInput {
   med: HealthMedicationRow;
   householdId: string;
-  loggedByUserId: string;
+  /** null is valid — the column is nullable and "set null" on user delete. */
+  loggedByUserId: string | null;
   status: "taken" | "skipped" | "missed";
   /** null for PRN — every PRN take is its own row, no dedup. */
   scheduledAt: Date | null;
