@@ -15,7 +15,7 @@ import {
   householdMembers,
   households,
 } from "@domi-ops/db";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lte, or } from "drizzle-orm";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 import {
@@ -640,6 +640,46 @@ export function householdHealthRoutes(db: Database, env: Env) {
 
     pendingGroupDoses.sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
 
+    // Doses already logged today — so the Today tab can show them with an Undo (WHO-280).
+    const visibleMedIds = medRows.map((m) => m.id);
+    const medRowById = new Map(medRows.map((m) => [m.id, m]));
+    const todaysLogs = visibleMedIds.length
+      ? await db
+          .select()
+          .from(healthMedicationLogs)
+          .where(
+            and(
+              inArray(healthMedicationLogs.medicationId, visibleMedIds),
+              or(
+                and(
+                  gte(healthMedicationLogs.scheduledAt, dayStart),
+                  lte(healthMedicationLogs.scheduledAt, dayEnd),
+                ),
+                and(
+                  isNull(healthMedicationLogs.scheduledAt),
+                  gte(healthMedicationLogs.loggedAt, dayStart),
+                  lte(healthMedicationLogs.loggedAt, dayEnd),
+                ),
+              ),
+            ),
+          )
+          .orderBy(desc(healthMedicationLogs.loggedAt))
+      : [];
+    const loggedToday = todaysLogs.map((l) => {
+      const med = medRowById.get(l.medicationId)!;
+      return {
+        logId: l.id,
+        medicationId: l.medicationId,
+        name: decryptHealthFieldOrPassthrough(med.name, env) ?? "Medication",
+        dosage: decryptHealthFieldOrPassthrough(med.dosage, env),
+        memberId: med.memberId,
+        status: l.status,
+        scheduledAt: l.scheduledAt?.toISOString() ?? null,
+        scheduledTimeLabel: l.scheduledAt ? formatTimeLabelInTz(l.scheduledAt, tz) : null,
+        loggedAtLabel: formatTimeLabelInTz(l.loggedAt, tz),
+      };
+    });
+
     const events = await enrichHealthEvents(db, env, auth, eventRows.slice(0, 5));
     const prnList = await enrichHealthMedications(db, env, auth, prnMeds);
 
@@ -652,6 +692,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
       pendingDoses,
       pendingGroupDoses,
       prnMedications: prnList,
+      loggedToday,
     });
   });
 

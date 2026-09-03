@@ -114,6 +114,18 @@ export interface PendingGroupDose {
   medications: { medicationId: string; name: string; dosage: string | null; alreadyLogged: boolean }[];
 }
 
+export interface LoggedDose {
+  logId: string;
+  medicationId: string;
+  name: string;
+  dosage?: string | null;
+  memberId: string;
+  status: "taken" | "skipped" | "missed";
+  scheduledAt: string | null;
+  scheduledTimeLabel: string | null;
+  loggedAtLabel: string;
+}
+
 export type TodayEntry =
   | { kind: "adhoc"; scheduledTime: string; timeGroup: { scheduledTime: string; label: string; doses: PendingDose[] } }
   | { kind: "group"; scheduledTime: string; group: PendingGroupDose };

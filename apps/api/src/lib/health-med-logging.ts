@@ -26,7 +26,8 @@ export type RecordDoseOutcome = "inserted" | "updated" | "unchanged";
 export interface RecordDoseInput {
   med: HealthMedicationRow;
   householdId: string;
-  loggedByUserId: string;
+  /** null is valid — the column is nullable and "set null" on user delete. */
+  loggedByUserId: string | null;
   status: "taken" | "skipped" | "missed";
   /** null for PRN — every PRN take is its own row, no dedup. */
   scheduledAt: Date | null;
