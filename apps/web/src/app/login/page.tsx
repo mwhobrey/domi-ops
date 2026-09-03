@@ -17,6 +17,9 @@ export default async function LoginPage({
     .map((c) => `${c.name}=${c.value}`)
     .join("; ");
 
+  const marketingUrl = process.env.PUBLIC_MARKETING_URL;
+
+  let session: { authenticated?: boolean; needsHousehold?: boolean } = {};
   try {
     const sessionBase = process.env.API_URL ?? "http://localhost:4000";
     const res = await fetch(`${sessionBase}/auth/session`, {
@@ -24,20 +27,26 @@ export default async function LoginPage({
       cache: "no-store",
     });
     if (res.ok) {
-      const data = (await res.json()) as { authenticated?: boolean };
-      if (data.authenticated) {
-        redirect(nextPath);
-      }
+      session = (await res.json()) as { authenticated?: boolean; needsHousehold?: boolean };
     }
   } catch {
     /* API not up */
   }
 
+  // redirect() throws NEXT_REDIRECT — must run outside the try/catch above or it gets swallowed.
+  if (session.authenticated) {
+    redirect(nextPath);
+  }
+  // Signed in but no household — on hosted, send them to checkout to finish. Without a
+  // marketing site there's no self-serve path, so fall through and show a notice instead.
+  if (session.needsHousehold && marketingUrl) {
+    redirect(`${marketingUrl.replace(/\/$/, "")}/pricing?checkout=finish`);
+  }
+  const noHousehold = Boolean(session.needsHousehold);
+
   const googleEnabled = Boolean(
     process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET,
   );
-
-  const marketingUrl = process.env.PUBLIC_MARKETING_URL;
   const allowPublicSignup = isPublicSignupAllowed();
   const isDemoMode = process.env.DEMO_MODE === "true" || process.env.NEXT_PUBLIC_DEMO_MODE === "true";
   const demoEmail = process.env.DEMO_OWNER_EMAIL ?? "demo@domi-ops.com";
@@ -110,6 +119,29 @@ export default async function LoginPage({
           </p>
         )}
 
+        {(noHousehold || params.error === "no-household") && (
+          <p
+            className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm leading-relaxed text-[var(--color-text-muted)]"
+            role="status"
+          >
+            You&apos;re signed in, but this account isn&apos;t set up with a household yet.
+            {marketingUrl ? (
+              <>
+                {" "}
+                <a
+                  href={`${marketingUrl.replace(/\/$/, "")}/pricing?checkout=finish`}
+                  className="font-medium text-[var(--color-accent)] underline-offset-2 hover:underline"
+                >
+                  Choose a plan to finish setup
+                </a>
+                .
+              </>
+            ) : (
+              " Ask an admin to add you, or complete checkout to create one."
+            )}
+          </p>
+        )}
+
         {!allowPublicSignup && !isDemoMode && needsSetup && (
           <p className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm leading-relaxed text-[var(--color-text-muted)]">
             First household on this server?{" "}
@@ -120,7 +152,7 @@ export default async function LoginPage({
           </p>
         )}
 
-        {!allowPublicSignup && !isDemoMode && !needsSetup && (
+        {!allowPublicSignup && !isDemoMode && !needsSetup && !noHousehold && (
           <p className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm leading-relaxed text-[var(--color-text-muted)]">
             New here? Ask your household owner to invite you by email or Google, or to set you up
             with a username from Household settings.

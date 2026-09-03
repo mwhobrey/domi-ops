@@ -11,6 +11,24 @@ const MODULE_ROUTE_PREFIXES: { prefix: string; module: string }[] = [
   { prefix: "/health", module: "health" },
 ];
 
+/**
+ * Signed in with Better Auth but not attached to a household — on hosted this is a user who
+ * authenticated (e.g. Google) before completing checkout. Send them to the marketing pricing
+ * page to finish, not to /login (which would render blank — WHO-277). Falls back to /login
+ * with a notice when there is no marketing site (self-host with no separate www).
+ */
+function noHouseholdRedirect(request: NextRequest): URL {
+  const marketing = process.env.PUBLIC_MARKETING_URL?.replace(/\/$/, "");
+  if (marketing) {
+    const url = new URL(`${marketing}/pricing`);
+    url.searchParams.set("checkout", "finish");
+    return url;
+  }
+  const login = new URL("/login", request.url);
+  login.searchParams.set("error", "no-household");
+  return login;
+}
+
 export async function middleware(request: NextRequest) {
   const canonicalRedirect = devCanonicalHostRedirect(request);
   if (canonicalRedirect) return canonicalRedirect;
@@ -34,8 +52,12 @@ export async function middleware(request: NextRequest) {
     if (res.ok) {
       const data = (await res.json()) as {
         authenticated?: boolean;
+        needsHousehold?: boolean;
         modulesEnabled?: string[];
       };
+      if (data.needsHousehold) {
+        return NextResponse.redirect(noHouseholdRedirect(request));
+      }
       if (data.authenticated) {
         const modules = data.modulesEnabled ?? [];
         for (const { prefix, module } of MODULE_ROUTE_PREFIXES) {

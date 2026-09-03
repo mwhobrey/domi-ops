@@ -21,7 +21,15 @@ export function whomeSessionRoutes(db: Database, env: Env, auth: WhomeBetterAuth
 
     const authCtx = await resolveAuthContext(db, session.user.id);
     if (!authCtx) {
-      return c.json({ authenticated: false });
+      // Signed in with Better Auth but no household yet — on hosted this is a user who
+      // authenticated (e.g. via Google) before completing checkout. Not "logged in" for app
+      // purposes, but distinct from "logged out": the web layer routes `needsHousehold` to
+      // /pricing instead of bouncing to /login, which would just render blank (WHO-277).
+      return c.json({
+        authenticated: false,
+        needsHousehold: true,
+        pendingEmail: session.user.email ?? null,
+      });
     }
 
     const [memberRow] = await db

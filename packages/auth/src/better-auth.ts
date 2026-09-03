@@ -13,7 +13,9 @@ import { USERNAME_MAX_LENGTH, USERNAME_MIN_LENGTH, USERNAME_PATTERN } from "./us
 /** Narrow surface we use from Better Auth — avoids leaking plugin-specific inferred types into .d.ts. */
 export interface WhomeBetterAuth {
   api: {
-    getSession: (input: { headers: Headers }) => Promise<{ user?: { id: string } } | null>;
+    getSession: (input: {
+      headers: Headers;
+    }) => Promise<{ user?: { id: string; email?: string | null } } | null>;
   };
   handler: (request: Request) => Response | Promise<Response>;
 }
@@ -110,6 +112,15 @@ export function createBetterAuth(db: Database, env: Env): WhomeBetterAuth {
     },
     account: {
       modelName: "ba_accounts",
+      // Let a Google sign-in attach to an existing local (email/password) user with the same
+      // address instead of erroring with "account already exists" (WHO-277). Google always
+      // returns a verified email and an account can't be created for an address you don't
+      // own, so trusting it as ownership proof is safe. This is what makes "checkout with
+      // email/password first, then use Google later" work on hosted.
+      accountLinking: {
+        enabled: true,
+        trustedProviders: ["google"],
+      },
     },
     verification: {
       modelName: "ba_verifications",
