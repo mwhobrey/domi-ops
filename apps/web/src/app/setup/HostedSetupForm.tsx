@@ -97,11 +97,13 @@ export function HostedSetupForm({
       const data = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok || !data.ok) {
         setError(
-          data.error === "email_taken"
-            ? "An account already exists with this email but is not linked to this household. Please contact support."
-            : data.error === "not_paid"
-              ? "Payment not confirmed. Please wait and try again."
-              : "Setup failed. Please try again.",
+          data.error === "signin_required"
+            ? "This email already has an account. Sign in with it first (same provider you used before), then reopen this setup link."
+            : data.error === "email_taken"
+              ? "An account already exists with this email but is linked to a different household. Please contact support."
+              : data.error === "not_paid"
+                ? "Payment not confirmed. Please wait and try again."
+                : "Setup failed. Please try again.",
         );
         return;
       }

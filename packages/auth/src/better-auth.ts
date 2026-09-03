@@ -112,15 +112,6 @@ export function createBetterAuth(db: Database, env: Env): WhomeBetterAuth {
     },
     account: {
       modelName: "ba_accounts",
-      // Let a Google sign-in attach to an existing local (email/password) user with the same
-      // address instead of erroring with "account already exists" (WHO-277). Google always
-      // returns a verified email and an account can't be created for an address you don't
-      // own, so trusting it as ownership proof is safe. This is what makes "checkout with
-      // email/password first, then use Google later" work on hosted.
-      accountLinking: {
-        enabled: true,
-        trustedProviders: ["google"],
-      },
     },
     verification: {
       modelName: "ba_verifications",

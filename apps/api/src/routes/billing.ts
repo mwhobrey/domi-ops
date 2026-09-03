@@ -14,6 +14,7 @@ import {
   withSystemContext,
 } from "@domi-ops/db";
 import { createLocalAccountIssuer, hashPassword } from "@domi-ops/auth";
+import type { AppVariables } from "../middleware/auth.js";
 
 const ALL_MODULES = JSON.stringify(["core", "school", "calendar_sync", "drive", "health"]);
 const STARTER_QUOTA_BYTES = 26_843_545_600; // 25 GB
@@ -127,7 +128,7 @@ async function resolveOrProvisionHousehold(
 }
 
 export function billingRoutes(db: Database, env: Env) {
-  const app = new Hono();
+  const app = new Hono<{ Variables: AppVariables }>();
 
   // Only available on hosted deployments with Stripe configured.
   app.post("/webhook", async (c) => {
@@ -381,6 +382,14 @@ export function billingRoutes(db: Database, env: Env) {
       return c.json({ ok: false, error: "missing_fields" }, 400);
     }
 
+    // The checkout email (typed by whoever paid) is NOT proof of who owns that address.
+    // Attaching a *pre-existing* user to a household on the strength of it alone would let a
+    // payer type a victim's email and hijack the victim's orphaned account. So claiming an
+    // existing user requires being signed in AS that user (they proved the address via
+    // whatever provider they used). Creating a brand-new user from the checkout email is
+    // unchanged — there's no account to hijack yet.
+    const callerUserId = c.get("userId");
+
     try {
       const stripe = makeStripe(env.STRIPE_SECRET_KEY!);
       const session = await stripe.checkout.sessions.retrieve(session_id);
@@ -446,9 +455,13 @@ export function billingRoutes(db: Database, env: Env) {
           }
 
           // User row exists but no household — e.g. they signed in with Google before
-          // checking out (WHO-277), or an earlier attempt half-finished. Claim them as this
-          // household's owner. Public email/password sign-up is hard-blocked on hosted
-          // (WHO-248), so there's no "someone else registered this address" case to fear.
+          // checking out (WHO-277), or an earlier attempt half-finished. Only that user
+          // themselves (proven by an active session) may claim the account; the checkout
+          // email is not ownership proof.
+          if (!callerUserId || callerUserId !== existingUser.id) {
+            return { ok: false as const, error: "signin_required" as const };
+          }
+
           const [cred] = await tx
             .select({ id: baAccounts.id })
             .from(baAccounts)
@@ -460,8 +473,8 @@ export function billingRoutes(db: Database, env: Env) {
             )
             .limit(1);
           // Give them an email/password fallback login too (their Google account keeps
-          // working via account linking). Never overwrite an existing credential from this
-          // unauthenticated endpoint.
+          // working via Better Auth's default implicit linking). Never overwrite an existing
+          // credential here — the password field is set-once at setup.
           if (!cred && passwordHash) {
             await tx.insert(baAccounts).values({
               userId: existingUser.id,
