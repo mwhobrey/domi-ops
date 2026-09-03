@@ -23,9 +23,14 @@ reviews:
   path_instructions:
     - path: "apps/api/src/routes/**"
       instructions: >
-        Routes must scope every query by householdId (via auth.householdId) after requireAuth.
-        Flag any query touching a household-scoped table without that filter, and any route
-        that skips requireAuth or requireHouseholdModule for a gated module.
+        Routes must resolve tenant scope after requireAuth. A direct auth.householdId predicate
+        is one way; TRANSITIVE scoping is equally valid — resolving household-owned parent rows
+        via the *VisibleWhere helpers and then querying children by those ids. health_medication_logs
+        and health_vitals_readings have no household_id column by design (migrations 0035/0058) and
+        are scoped this way, backed by a household_isolation RLS policy (0038); do NOT flag those as
+        missing a household filter. DO flag: a query on a table that HAS a household_id column
+        without the predicate, and any route that skips requireAuth or requireHouseholdModule for a
+        gated module.
     - path: "packages/db/drizzle/**/*.sql"
       instructions: >
         New tables that need cross-tenant worker access require both a household_isolation and

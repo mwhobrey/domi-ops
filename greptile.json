@@ -1,0 +1,39 @@
+{
+  "strictness": 2,
+  "commentTypes": ["logic", "syntax"],
+  "triggerOnUpdates": false,
+  "triggerOnDrafts": false,
+  "excludeAuthors": ["dependabot[bot]", "coderabbitai[bot]"],
+  "includeBranches": ["main"],
+  "fileChangeLimit": 150,
+  "ignorePatterns": "**/*.lock\npackage-lock.json\n**/dist/**\n**/.next/**\npackages/db/drizzle/meta/**",
+  "statusCheck": false,
+  "includeConfidenceScore": true,
+  "instructions": "Bug-focused review of a TypeScript monorepo (Next.js web, Hono API, BullMQ worker, Drizzle/Postgres). Prioritise correctness, security, and tenant-isolation bugs over style. This repo also runs CodeRabbit — don't duplicate obvious nitpicks; surface things a diff-only reviewer would miss (cross-file call sites, type/interface breaks, schema-vs-code drift).",
+  "customContext": {
+    "files": [
+      { "path": ".cursor/runbook/01_ARCHITECTURE.md", "description": "Stack, service topology, auth/session flow, per-module data flow" },
+      { "path": ".cursor/runbook/03_RULES_AND_STANDARDS.md", "description": "Coding conventions, error-handling contracts, migration rules, known gotchas" },
+      { "path": "docs/HOSTED_RLS.md", "description": "Hosted tenant-context + Row-Level-Security model" },
+      { "path": "CONTRIBUTING.md", "description": "Repo map, commands, conventions, PR workflow" }
+    ],
+    "rules": [
+      {
+        "rule": "Household-scoped API routes must resolve tenant scope after requireAuth. A direct auth.householdId predicate is one valid way. TRANSITIVE scoping is equally valid and common here: resolve household-owned parent rows via the *VisibleWhere helpers (apps/api/src/lib/health-access.ts and similar), then query child rows by those ids. health_medication_logs and health_vitals_readings have NO household_id column by design (migrations 0035 / 0058) and are scoped this way, with a household_isolation RLS policy (migration 0038, EXISTS-join through the parent) as a hard backstop. Do NOT flag these as missing household scope.",
+        "scope": ["apps/api/src/**"]
+      },
+      {
+        "rule": "New DB tables that need cross-tenant worker access require BOTH a household_isolation and a worker_scan RLS policy (docs/HOSTED_RLS.md) — flag a table with only one. Migrations are forward-only, idempotent (IF NOT EXISTS / IF EXISTS), and must be registered in packages/db/drizzle/meta/_journal.json or the runner silently skips them.",
+        "scope": ["packages/db/drizzle/**"]
+      },
+      {
+        "rule": "Health module: PHI-like fields (medication and event names, dosage, instructions, notes, vitals values) are encrypted at rest via encryptHealthField / decryptHealthField + ENCRYPTION_KEY. Access is gated by visibility + per-record shares + per-segment ACLs in apps/api/src/lib/health-access.ts. Flag a new read or write path that bypasses those helpers or stores an unencrypted PHI field.",
+        "scope": ["apps/api/src/routes/household-health*.ts", "apps/api/src/lib/health-*.ts", "apps/web/src/components/health/**"]
+      },
+      {
+        "rule": "ESM: import specifiers in apps/api, apps/worker and packages/* carry explicit .js extensions even for .ts source. Tests use Vitest, not Jest (jest.* APIs are absent). No new runtime dependency without a stated reason in the PR.",
+        "scope": ["apps/api/**", "apps/worker/**", "packages/**"]
+      }
+    ]
+  }
+}
