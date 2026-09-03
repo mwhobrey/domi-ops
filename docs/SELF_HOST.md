@@ -2,15 +2,15 @@
 
 > **Household admins:** start with **[SETUP.md](./SETUP.md)** for step-by-step paths, configuration in plain language, optional Google setup, and best practices. This document is the technical reference.
 
-Domi Ops is designed for a single household per PostgreSQL instance (`DEPLOYMENT_MODE=single`). This guide consolidates local dev, production Docker, migrations, optional modules, and common troubleshooting.
+Domi Ops is designed for a single household per PostgreSQL instance (`DEPLOYMENT_MODE=single`). This guide covers local dev, production Docker, migrations, optional modules, and common troubleshooting.
 
 ## Prerequisites
 
-- **Node.js 20+** (for local dev and import CLI)
+- **Node.js 20+** (for local dev and the import CLI)
 - **Docker + Docker Compose** (recommended for production)
-- **Domain + TLS** (Caddy or similar reverse proxy)
+- **Domain + TLS** (Caddy or a similar reverse proxy)
 - **Secrets:** `SESSION_SECRET` (32+ chars), `ENCRYPTION_KEY`, `POSTGRES_PASSWORD`
-- **Optional:** Google Cloud OAuth client for sign-in and Calendar sync
+- **Optional:** a Google Cloud OAuth client for sign-in and Calendar sync
 
 ## Quick local dev
 
@@ -32,7 +32,7 @@ npm run dev
 
 **Reset:** `npm run dev:reset` wipes Docker volumes, re-runs migrations, flushes Redis.
 
-**Docker-only dev** (web on host :3001): copy `.env.docker.example` → `.env`, then `docker compose up --build`. Do not mix native and Docker profiles without updating OAuth redirect URIs.
+**Docker-only dev** (web on host :3001): copy `.env.docker.example` to `.env`, then `docker compose up --build`. Do not mix native and Docker profiles without updating OAuth redirect URIs.
 
 ## Environment variables
 
@@ -40,14 +40,14 @@ Copy `.env.example` and set at minimum:
 
 | Variable | Notes |
 |----------|-------|
-| `PUBLIC_APP_URL` | Browser origin — OAuth redirects derive from this |
-| `API_URL` | Internal API base (web → api) |
+| `PUBLIC_APP_URL` | Browser origin. OAuth redirects derive from this |
+| `API_URL` | Internal API base (web to api) |
 | `DATABASE_URL` | PostgreSQL connection string |
 | `REDIS_URL` | BullMQ worker queue |
 | `SESSION_SECRET` | Better Auth signing (min 32 chars) |
 | `ENCRYPTION_KEY` | OAuth token + health field encryption |
 | `AUTH_REQUIRED` | Must be `true` in production |
-| `SETUP_TOKEN` | Greenfield only — min 16 chars; `/setup` or `bootstrap:owner` (see [SETUP.md](./SETUP.md)) |
+| `SETUP_TOKEN` | Greenfield only: min 16 chars; `/setup` or `bootstrap:owner` (see [SETUP.md](./SETUP.md)) |
 | `POSTGRES_PASSWORD` | Required for `docker-compose.prod.yml` (compose builds `DATABASE_URL`) |
 | `S3_*` | MinIO locally; S3-compatible in prod |
 | `MODULES_ENABLED` | Comma list: `core,school,calendar_sync,drive,health` |
@@ -58,12 +58,12 @@ See `.env.example` for Drive quotas, VAPID Web Push, SMTP email verification, an
 
 ## Production (Docker Compose)
 
-One compose file brings up the **full stack** — Postgres, Redis, MinIO, API, worker, and web. No external database or object store required.
+One compose file brings up the **full stack**: Postgres, Redis, MinIO, API, worker, and web. No external database or object store required.
 
 ```bash
 cp .env.example .env
 # Set POSTGRES_PASSWORD, SESSION_SECRET, ENCRYPTION_KEY, PUBLIC_APP_URL=https://your.domain
-# Set S3_ACCESS_KEY / S3_SECRET_KEY (MinIO credentials — compose runs MinIO for you)
+# Set S3_ACCESS_KEY / S3_SECRET_KEY (MinIO credentials; compose runs MinIO for you)
 # Set GOOGLE_OAUTH_* if using Google sign-in or Calendar
 
 docker compose -f docker-compose.prod.yml up -d --build
@@ -84,7 +84,7 @@ PROXY_NETWORK=headscale_default docker compose \
   -f docker-compose.proxy-external.yml up -d --build
 ```
 
-Caddy must be on the same network to `reverse_proxy web:3000` — see [deploy/Caddyfile.example](../deploy/Caddyfile.example).
+Caddy must be on the same network to `reverse_proxy web:3000`. See [deploy/Caddyfile.example](../deploy/Caddyfile.example).
 
 ### Staging rehearsal
 
@@ -122,7 +122,7 @@ Controlled by `MODULES_ENABLED` at deploy time and per-household toggles in **Se
 | Module | Key | Requires |
 |--------|-----|----------|
 | Core lists, dashboard, notices | `core` | Always on |
-| Homeschool LMS | `school` | — |
+| Homeschool LMS | `school` | Nothing extra |
 | Google Calendar sync | `calendar_sync` | `GOOGLE_OAUTH_*`, worker |
 | Household Drive | `drive` | `S3_*` configured |
 | Health tracker | `health` | `ENCRYPTION_KEY` in production |
@@ -134,7 +134,7 @@ Controlled by `MODULES_ENABLED` at deploy time and per-household toggles in **Se
 Domi Ops is **not** a HIPAA-covered entity and does not claim HIPAA compliance. When the `health` module is enabled:
 
 - **In transit:** use HTTPS in production (Caddy or your reverse proxy). Plain HTTP dev is not suitable for real health data.
-- **At rest (application):** titles, notes, medication names/dosage/instructions, and dose log notes are encrypted in PostgreSQL via `@domi-ops/crypto` (`ENCRYPTION_KEY` — same key as Google OAuth tokens).
+- **At rest (application):** titles, notes, medication names/dosage/instructions, and dose log notes are encrypted in PostgreSQL via `@domi-ops/crypto`, keyed by `ENCRYPTION_KEY` (the same key as Google OAuth tokens).
 - **At rest (operator):** encrypt your Postgres volume or enable full-disk encryption on the host. Domi Ops does not manage disk-level encryption.
 - **Key rotation:** rotating `ENCRYPTION_KEY` requires re-encrypting stored health fields (same limitation as OAuth tokens today; no migration tooling in v1).
 
@@ -142,8 +142,8 @@ Domi Ops is **not** a HIPAA-covered entity and does not claim HIPAA compliance. 
 
 Required for Google sign-in and Calendar sync. Configure **both** redirect URIs in Google Cloud Console:
 
-- `{PUBLIC_APP_URL}/auth/callback/google` — Better Auth sign-in
-- `{PUBLIC_APP_URL}/auth/google/calendar/callback` — Calendar connect
+- `{PUBLIC_APP_URL}/auth/callback/google` for Better Auth sign-in
+- `{PUBLIC_APP_URL}/auth/google/calendar/callback` for Calendar connect
 
 Step-by-step: [GOOGLE_OAUTH_SETUP.md](./GOOGLE_OAUTH_SETUP.md).
 
@@ -160,22 +160,22 @@ See **[TROUBLESHOOTING.md](./TROUBLESHOOTING.md)** for a full index. Quick hits:
 | Symptom | Fix |
 |---------|-----|
 | OAuth `invalid_request` | Redirect URIs / JavaScript origins must exactly match `PUBLIC_APP_URL` |
-| Login works on :3001 but not :3000 | Profile mismatch — use one dev path; see `.env.example` vs `.env.docker.example` |
-| `relation does not exist` | Run `npm run db:migrate` or restart API container |
+| Login works on :3001 but not :3000 | Profile mismatch; use one dev path (see `.env.example` vs `.env.docker.example`) |
+| `relation does not exist` | Run `npm run db:migrate` or restart the API container |
 | Migration silently skipped | New `.sql` file missing from `packages/db/drizzle/meta/_journal.json` |
 | Calendar sync idle | Check worker logs, `REDIS_URL`, `GOOGLE_OAUTH_*`, worker `ENCRYPTION_KEY` |
-| Avatar/upload fails | Verify `S3_*` and MinIO bucket (`scripts/ensure-minio.mjs` on dev reset) |
+| Avatar/upload fails | Verify `S3_*` and the MinIO bucket (`scripts/ensure-minio.mjs` on dev reset) |
 | Web Push not delivered | Set `VAPID_*` env vars; user must enable in Profile |
 | `EADDRINUSE :3000` | Stop stale `next dev` or run infra-only: `docker compose up -d postgres redis minio` |
-| GHCR pull denied | `docker login ghcr.io` with PAT `read:packages` — [SETUP.md Path C](./SETUP.md#path-c-production-with-pre-built-images) |
-| Cannot create first owner | `SETUP_TOKEN` + `/setup` — [SETUP.md](./SETUP.md#first-login-and-household-setup) |
+| GHCR pull denied | `docker login ghcr.io` with PAT `read:packages` (see [SETUP.md Path C](./SETUP.md#path-c-production-with-pre-built-images)) |
+| Cannot create first owner | `SETUP_TOKEN` + `/setup` (see [SETUP.md](./SETUP.md#first-login-and-household-setup)) |
 
 ## Further reading
 
-- [SETUP.md](./SETUP.md) — step-by-step paths for household admins
-- [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) — common failures index
-- [ROLLBACK.md](./ROLLBACK.md) — backups and rolling back a bad update or migration
-- [SECURITY_REVIEW.md](./SECURITY_REVIEW.md) — pre-launch security checklist
-- [ARCHITECTURE.md](./ARCHITECTURE.md) — system design
-- [CONTRIBUTING.md](../CONTRIBUTING.md) — dev workflow
-- [README.md](../README.md) — project overview
+- [SETUP.md](./SETUP.md): step-by-step paths for household admins
+- [TROUBLESHOOTING.md](./TROUBLESHOOTING.md): common failures index
+- [ROLLBACK.md](./ROLLBACK.md): backups and rolling back a bad update or migration
+- [SECURITY_REVIEW.md](./SECURITY_REVIEW.md): pre-launch security checklist
+- [ARCHITECTURE.md](./ARCHITECTURE.md): system design
+- [CONTRIBUTING.md](../CONTRIBUTING.md): dev workflow
+- [README.md](../README.md): project overview
