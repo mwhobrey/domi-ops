@@ -73,13 +73,14 @@
 
 | Item | Status |
 |------|--------|
-| Unit tests | Vitest — `npm run test` (config, crypto, import dry-run) |
+| Unit tests | Vitest — `npm run test` (config, crypto, import dry-run, pure API lib) |
+| Integration tests | `npm run test:hosted` — RLS/tenant isolation, billing bootstrap, dose logging. Needs a live Postgres; each file self-skips without `DATABASE_URL`/`HOSTED_TEST_DATABASE_URL`. |
 | E2E | **None** |
-| CI | `.github/workflows/ci.yml` — typecheck, build, test |
+| CI | `.github/workflows/ci.yml` — `build` job (typecheck + build + `npm run test`) and `test-hosted` job (Postgres service → migrate → `seed:hosted-qa` → `db:create-app-role` → `npm run test:hosted`) |
 
 **Manual verification checklist:**
 
-1. `GET /health` → DB connected
+1. `GET /api/healthz` → `{ "status": "ok" }` (DB reachable)
 2. Google login → `/dashboard` loads
 3. `npm run typecheck` at root
 4. `npm run lint` (web)
@@ -102,7 +103,7 @@ npm run dev
 
 - **Default dev path:** native `npm run dev` → browser `http://localhost:3000`, `.env.example` (`DOMI_OPS_DEV_PROFILE=native`, `PORT=3000`, `PUBLIC_APP_URL=http://localhost:3000`).
 - **Alternate:** full Docker stack → host `http://localhost:3001`, use `.env.docker.example` (`DOMI_OPS_DEV_PROFILE=docker`). Do not mix profiles without updating Google OAuth redirect URIs.
-- Root `.env` is loaded by `@domi-ops/config` `loadEnv()` (api/worker) and `apps/web/next.config.ts` (Next). Development boot warns on `PUBLIC_APP_URL` / profile mismatch; `GET /health` includes `dev.oauthRedirects`.
+- Root `.env` is loaded by `@domi-ops/config` `loadEnv()` (api/worker) and `apps/web/next.config.ts` (Next). Development boot warns on `PUBLIC_APP_URL` / profile mismatch; `GET /api/healthz` includes `dev.oauthRedirects`.
 - If `EADDRINUSE :3000`, stop a stale `next dev` or run only infra: `docker compose up -d postgres redis minio` (omit `web`/`api` when using native dev).
 
 ### Docker full stack
@@ -195,10 +196,19 @@ This repo often uses hand-written numbered migrations (`0007_home_status_presenc
 17. **Browser file uploads** — Presign returns same-origin `PUT /api/core/upload/:id?token=…`; API streams to MinIO. No public MinIO/Caddy `/s3` route required. `S3_PUBLIC_URL` optional for direct object URLs.
 18. **mise / Node PATH** — Root `mise.toml` pins Node 22. Cursor agent shells and some terminals do not activate mise shims (`npm` missing from PATH). Use `mise exec -- npm …` (or `mise activate` in an interactive shell). Do not hunt for `node.exe` on disk.
 
+## PR workflow
+
+The repo is public; changes land through PRs, not direct pushes to `main` (`CONTRIBUTING.md` is the contributor-facing version).
+
+1. Branch off `main`: `who-<N>/<slug>` for ticketed work, `fix/<slug>` / `docs/<slug>` otherwise.
+2. One PR per WHO ticket. Commit as below.
+3. Open the PR against `main`. CI runs `build` + `test-hosted`; `main` protection needs both green, all review threads resolved, and the branch up to date (`strict`). No required approvals — you can merge your own once it's clean.
+4. **Squash-merge**, delete the branch. GitHub appends `(#NN)` to the squash subject; keep the `[WHO-NN] :gitmoji: type(scope):` prefix intact.
+5. CodeRabbit reviews every PR. Address or reply-and-resolve each thread. A parallel Autofix bot may push its own fix commit to the branch — reset onto it rather than fighting it.
+6. Deploy is separate from merge: self-host is operator-run; the hosted beta is `deploy/deploy-hosted.sh` on the droplet after merge (migrations first, via the admin connection — see `deploy/HOSTED_BETA_SETUP.md`).
+
 ## Commit message convention (project lead preference)
 
-When Mike requests commits:
+`[WHO-TICKET] :gitmoji: type(scope): summary`
 
-`[JIRA-TICKET] :gitmoji: type(scope): summary`
-
-Body bullets: `* :gitmoji: detail`. No trailers. See user rules / gitmoji.dev.
+Body bullets: `* :gitmoji: detail`. No trailers of any kind. See user rules / gitmoji.dev.

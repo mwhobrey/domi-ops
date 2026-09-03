@@ -102,7 +102,7 @@ From `apps/api/src/index.ts`:
 
 | Mount | Module |
 |-------|--------|
-| `/health` | `health.ts` — `select 1` |
+| `/api/healthz` | `health.ts` — `select 1` liveness (mounted at `/api`) |
 | `/auth` | `auth.ts` — session, Google login, logout |
 | `/auth/google/calendar` | `google-calendar-auth.ts` |
 | `/api/calendar` | `calendar.ts` |
@@ -115,4 +115,4 @@ Global: CORS to `PUBLIC_APP_URL` with credentials; auth middleware on all routes
 
 ## Product tiers (design vs code)
 
-`docs/ARCHITECTURE.md` describes OSS self-host, Hosted Starter (shared Postgres + RLS), Hosted Family (Neon per household). **Default dogfood path:** `DEPLOYMENT_MODE=single`. **Hosted Starter foundation** shipped (RLS, tenant context, entitlements, QA compose) — `HOSTED_TIER` optional in `@domi-ops/config`; Stripe provisioning is M5. **Launch sequencing** (near-simultaneous OSS + hosted): [07_LAUNCH.md](./07_LAUNCH.md) and [ADR 001](../../docs/adr/001-public-launch-scope.md).
+`docs/ARCHITECTURE.md` describes OSS self-host, Hosted Starter (shared Postgres + RLS), Hosted Family (Neon per household). Self-host default: `DEPLOYMENT_MODE=single`. Hosted Starter (`DEPLOYMENT_MODE=shared`) — RLS, tenant context, entitlements, Stripe checkout + webhook provisioning — is **built and running in a private beta** at `app.domi-ops.com`. Hosted Family (dedicated DB) is unbuilt (ADR 003 Phase 2). Launch state: [07_LAUNCH.md](./07_LAUNCH.md), policy in [ADR 001](../../docs/adr/001-public-launch-scope.md).
