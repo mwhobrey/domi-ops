@@ -15,7 +15,7 @@ import {
   householdMembers,
   households,
 } from "@domi-ops/db";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lt, lte, or } from "drizzle-orm";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 import {
@@ -44,7 +44,7 @@ import {
   validateHealthShareMemberIds,
   type HealthAclGrants,
 } from "../lib/health-access.js";
-import { todayIsoDateInTz, zonedLocalToUtc, formatTimeLabelInTz, resolveAlertTimeZone, nextIntervalPending, parseIntervalSchedule } from "@domi-ops/calendar-sync";
+import { addDaysIso, todayIsoDateInTz, zonedLocalToUtc, formatTimeLabelInTz, resolveAlertTimeZone, nextIntervalPending, parseIntervalSchedule } from "@domi-ops/calendar-sync";
 import {
   encryptHealthTextFields,
   enrichHealthEvents,
@@ -61,7 +61,12 @@ import {
 } from "../lib/health-serialize.js";
 import { buildHealthReports, VITALS_METRICS } from "../lib/health-reports.js";
 import { decryptHealthFieldOrPassthrough, encryptHealthField } from "../lib/health-crypto.js";
-import { logMedicationDose } from "../lib/health-med-logging.js";
+import {
+  GLANCE_DOSE_LOG_LOOKBACK_DAYS,
+  isInstantLogged,
+  loadDoseLogMap,
+  recordDose,
+} from "../lib/health-med-logging.js";
 
 function encryptionErrorResponse(c: { json: (body: unknown, status?: number) => Response }, e: unknown) {
   if (e instanceof HealthEncryptionError) {
@@ -213,40 +218,20 @@ export function householdHealthRoutes(db: Database, env: Env) {
       return c.json({ error: "invalid_token" }, 401);
     }
 
-    const [existing] = await db
-      .select()
-      .from(healthMedicationLogs)
-      .where(
-        and(
-          eq(healthMedicationLogs.medicationId, med.id),
-          eq(healthMedicationLogs.scheduledAt, scheduledAt),
-        ),
-      )
-      .limit(1);
-    if (existing) {
-      return c.json({
-        ok: true,
-        alreadyLogged: true,
-        log: serializeHealthLog(existing, env),
-      });
-    }
-
-    const loggedAt = new Date();
+    // Tapping a per-med notification button is a `single` action: if this dose was already
+    // logged (e.g. skipped earlier, then "Taken" tapped on the still-visible notification), it
+    // flips. See recordDose's conflict rule.
     try {
-      const [logRow] = await db
-        .insert(healthMedicationLogs)
-        .values({
-          medicationId: med.id,
-          scheduledAt,
-          status,
-          loggedAt,
-          loggedByUserId: auth.userId,
-          notes: null,
-          healthEventId: null,
-        })
-        .returning();
-
-      return c.json({ ok: true, alreadyLogged: false, log: serializeHealthLog(logRow, env) }, 201);
+      const { log, outcome } = await recordDose(db, env, {
+        med,
+        householdId: auth.householdId,
+        loggedByUserId: auth.userId,
+        status,
+        scheduledAt,
+        loggedAt: new Date(),
+        source: "single",
+      });
+      return c.json({ ok: true, alreadyLogged: outcome !== "inserted", log }, outcome === "inserted" ? 201 : 200);
     } catch (e) {
       const resp = encryptionErrorResponse(c, e);
       if (resp) return resp;
@@ -356,6 +341,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
     const today = todayIsoDateInTz(tz);
     const dayStart = zonedLocalToUtc(today, "00:00", tz);
     const dayEnd = zonedLocalToUtc(today, "23:59", tz);
+    const nextDayStart = zonedLocalToUtc(addDaysIso(today, 1), "00:00", tz);
 
     const eventRows = await db
       .select()
@@ -440,6 +426,19 @@ export function householdHealthRoutes(db: Database, env: Env) {
       }
     }
 
+    // One query for every "is this dose logged" check below, instead of a lookup per med per
+    // time slot (WHO-280).
+    const glanceMedIds = [
+      ...new Set([
+        ...medRows.map((m) => m.id),
+        ...[...groupMemberMedsMap.values()].flat().map((m) => m.id),
+      ]),
+    ];
+    const doseLogLookbackStart = new Date(
+      dayStart.getTime() - GLANCE_DOSE_LOG_LOOKBACK_DAYS * 24 * 60 * 60 * 1000,
+    );
+    const doseLogMap = await loadDoseLogMap(db, glanceMedIds, doseLogLookbackStart);
+
     const pendingDoses: {
       medicationId: string;
       name: string;
@@ -478,17 +477,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
         if (claimedTimes.has(hhmm)) continue; // this specific dose belongs to a group instead
         const scheduledAt = zonedLocalToUtc(today, hhmm, tz);
         if (scheduledAt < dayStart || scheduledAt > dayEnd) continue;
-        const [logged] = await db
-          .select({ id: healthMedicationLogs.id })
-          .from(healthMedicationLogs)
-          .where(
-            and(
-              eq(healthMedicationLogs.medicationId, med.id),
-              eq(healthMedicationLogs.scheduledAt, scheduledAt),
-            ),
-          )
-          .limit(1);
-        if (!logged) {
+        if (!isInstantLogged(doseLogMap, med.id, scheduledAt)) {
           pendingDoses.push({
             medicationId: med.id,
             name,
@@ -509,24 +498,12 @@ export function householdHealthRoutes(db: Database, env: Env) {
       if (!schedule) continue;
       const name = decryptHealthFieldOrPassthrough(med.name, env) ?? "Medication";
       const dosage = decryptHealthFieldOrPassthrough(med.dosage, env);
-      const logRows = await db
-        .select({
-          scheduledAt: healthMedicationLogs.scheduledAt,
-          loggedAt: healthMedicationLogs.loggedAt,
-          status: healthMedicationLogs.status,
-        })
-        .from(healthMedicationLogs)
-        .where(eq(healthMedicationLogs.medicationId, med.id));
       const pending = nextIntervalPending({
         schedule,
         tz,
         date: today,
         now: new Date(),
-        logs: logRows.map((l) => ({
-          scheduledAt: l.scheduledAt,
-          loggedAt: l.loggedAt,
-          status: l.status,
-        })),
+        logs: doseLogMap.get(med.id) ?? [],
       });
       if (!pending) continue;
       pendingDoses.push({
@@ -570,20 +547,12 @@ export function householdHealthRoutes(db: Database, env: Env) {
             (parseMedSchedule(m.scheduleJson).times ?? []).some((t) => t.slice(0, 5) === hhmm),
         );
         if (membersAtThisTime.length === 0) continue;
-        const memberIds = membersAtThisTime.map((m) => m.id);
-        const loggedRows = await db
-          .select({ medicationId: healthMedicationLogs.medicationId })
-          .from(healthMedicationLogs)
-          .where(
-            and(
-              inArray(healthMedicationLogs.medicationId, memberIds),
-              eq(healthMedicationLogs.scheduledAt, scheduledAt),
-            ),
-          );
         // Partial-take: a group dose stays pending until EVERY member medication has a log for
         // this instant, not just one — someone taking 2 of 3 meds early shouldn't make the
         // group's reminder disappear before the 3rd is handled.
-        const loggedIds = new Set(loggedRows.map((r) => r.medicationId));
+        const loggedIds = new Set(
+          membersAtThisTime.filter((m) => isInstantLogged(doseLogMap, m.id, scheduledAt)).map((m) => m.id),
+        );
         if (loggedIds.size >= membersAtThisTime.length) continue;
         pendingGroupDoses.push({
           groupId: group.id,
@@ -611,14 +580,6 @@ export function householdHealthRoutes(db: Database, env: Env) {
       if (!schedule) continue;
       const name = decryptHealthFieldOrPassthrough(group.name, env) ?? "Medications";
       const memberIds = members.map((m) => m.id);
-      const logRows = await db
-        .select({
-          scheduledAt: healthMedicationLogs.scheduledAt,
-          loggedAt: healthMedicationLogs.loggedAt,
-          status: healthMedicationLogs.status,
-        })
-        .from(healthMedicationLogs)
-        .where(inArray(healthMedicationLogs.medicationId, memberIds));
       // The group's interval clock is driven by the union of all member medications' log
       // history — once grouped, the group's own schedule (not any individual member's) is
       // authoritative, so "last taken" resets on whichever member dose was logged most recently.
@@ -627,21 +588,12 @@ export function householdHealthRoutes(db: Database, env: Env) {
         tz,
         date: today,
         now: new Date(),
-        logs: logRows.map((l) => ({ scheduledAt: l.scheduledAt, loggedAt: l.loggedAt, status: l.status })),
+        logs: memberIds.flatMap((id) => doseLogMap.get(id) ?? []),
       });
       if (!pending) continue;
-      // logRows above only selected scheduledAt/loggedAt/status (for nextIntervalPending) — a
-      // second, narrower query gets medicationId for just this specific pending instant.
-      const loggedForPendingRows = await db
-        .select({ medicationId: healthMedicationLogs.medicationId })
-        .from(healthMedicationLogs)
-        .where(
-          and(
-            inArray(healthMedicationLogs.medicationId, memberIds),
-            eq(healthMedicationLogs.scheduledAt, pending.scheduledAt),
-          ),
-        );
-      const loggedForPendingIds = new Set(loggedForPendingRows.map((r) => r.medicationId));
+      const loggedForPendingIds = new Set(
+        memberIds.filter((id) => isInstantLogged(doseLogMap, id, pending.scheduledAt)),
+      );
       pendingGroupDoses.push({
         groupId: group.id,
         name,
@@ -660,6 +612,46 @@ export function householdHealthRoutes(db: Database, env: Env) {
 
     pendingGroupDoses.sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
 
+    // Doses already logged today — so the Today tab can show them with an Undo (WHO-280).
+    const visibleMedIds = medRows.map((m) => m.id);
+    const medRowById = new Map(medRows.map((m) => [m.id, m]));
+    const todaysLogs = visibleMedIds.length
+      ? await db
+          .select()
+          .from(healthMedicationLogs)
+          .where(
+            and(
+              inArray(healthMedicationLogs.medicationId, visibleMedIds),
+              or(
+                and(
+                  gte(healthMedicationLogs.scheduledAt, dayStart),
+                  lte(healthMedicationLogs.scheduledAt, dayEnd),
+                ),
+                and(
+                  isNull(healthMedicationLogs.scheduledAt),
+                  gte(healthMedicationLogs.loggedAt, dayStart),
+                  lt(healthMedicationLogs.loggedAt, nextDayStart),
+                ),
+              ),
+            ),
+          )
+          .orderBy(desc(healthMedicationLogs.loggedAt))
+      : [];
+    const loggedToday = todaysLogs.map((l) => {
+      const med = medRowById.get(l.medicationId)!;
+      return {
+        logId: l.id,
+        medicationId: l.medicationId,
+        name: decryptHealthFieldOrPassthrough(med.name, env) ?? "Medication",
+        dosage: decryptHealthFieldOrPassthrough(med.dosage, env),
+        memberId: med.memberId,
+        status: l.status,
+        scheduledAt: l.scheduledAt?.toISOString() ?? null,
+        scheduledTimeLabel: l.scheduledAt ? formatTimeLabelInTz(l.scheduledAt, tz) : null,
+        loggedAtLabel: formatTimeLabelInTz(l.loggedAt, tz),
+      };
+    });
+
     const events = await enrichHealthEvents(db, env, auth, eventRows.slice(0, 5));
     const prnList = await enrichHealthMedications(db, env, auth, prnMeds);
 
@@ -672,6 +664,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
       pendingDoses,
       pendingGroupDoses,
       prnMedications: prnList,
+      loggedToday,
     });
   });
 
@@ -1262,7 +1255,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
     }
 
     try {
-      const { log, healthEventId } = await logMedicationDose(db, env, {
+      const { log, healthEventId, outcome } = await recordDose(db, env, {
         med,
         householdId: auth.householdId,
         loggedByUserId: auth.userId,
@@ -1270,9 +1263,10 @@ export function householdHealthRoutes(db: Database, env: Env) {
         scheduledAt,
         loggedAt,
         notes: body.notes,
+        source: "single",
         alsoCreateEvent,
       });
-      return c.json({ log, healthEventId }, 201);
+      return c.json({ log, healthEventId, outcome }, 201);
     } catch (e) {
       const resp = encryptionErrorResponse(c, e);
       if (resp) return resp;
@@ -1306,6 +1300,113 @@ export function householdHealthRoutes(db: Database, env: Env) {
       .limit(100);
 
     return c.json({ logs: logs.map((l) => serializeHealthLog(l, env)) });
+  });
+
+  /**
+   * Undo a dose log. A mistaken skip (or take) is otherwise permanent — "single" actions
+   * overwrite each other but a group "take all" won't touch a logged dose, so there was no
+   * way back. Deletes the log and the "Took <med>" event it spawned, if any.
+   */
+  app.delete("/medications/:id/logs/:logId", async (c) => {
+    const auth = c.get("auth")!;
+    const medId = c.req.param("id");
+    const logId = c.req.param("logId");
+    const [med] = await db
+      .select()
+      .from(healthMedications)
+      .where(and(eq(healthMedications.id, medId), eq(healthMedications.householdId, auth.householdId)))
+      .limit(1);
+    if (!med) return c.json({ error: "not_found" }, 404);
+    if (!(await hasHealthSegmentAccess(db, auth, med.memberId, "doses", "write"))) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+    const [logRow] = await db
+      .select()
+      .from(healthMedicationLogs)
+      .where(and(eq(healthMedicationLogs.id, logId), eq(healthMedicationLogs.medicationId, medId)))
+      .limit(1);
+    if (!logRow) return c.json({ error: "not_found" }, 404);
+
+    await db.delete(healthMedicationLogs).where(eq(healthMedicationLogs.id, logId));
+    if (logRow.healthEventId) {
+      await db.delete(healthEvents).where(eq(healthEvents.id, logRow.healthEventId));
+    }
+    return c.json({ ok: true });
+  });
+
+  /**
+   * Log several doses at once — the web "Take all" on an ad-hoc same-time slot, so it's one
+   * request and one conflict-safe pass instead of an N-request client loop that could race a
+   * just-tapped skip. `source: "bulk"`, so an already-logged dose in the batch is left alone.
+   */
+  app.post("/doses/batch", async (c) => {
+    const auth = c.get("auth")!;
+    const body = await c.req.json<{
+      entries?: { medicationId?: string; scheduledAt?: string; status?: string }[];
+      alsoCreateEvent?: boolean;
+    }>();
+    const entries = Array.isArray(body.entries) ? body.entries : [];
+    if (entries.length === 0) return c.json({ error: "no_entries" }, 400);
+    if (entries.length > 50) return c.json({ error: "too_many_entries" }, 400);
+
+    const ids = [...new Set(entries.map((e) => e.medicationId).filter((v): v is string => !!v))];
+    const meds = ids.length
+      ? await db
+          .select()
+          .from(healthMedications)
+          .where(and(inArray(healthMedications.id, ids), healthMedicationVisibleWhere(db, auth)!))
+      : [];
+    const medById = new Map(meds.map((m) => [m.id, m]));
+
+    const loggedAt = new Date();
+    const results: {
+      medicationId: string;
+      scheduledAt: string | null;
+      outcome?: "inserted" | "updated" | "unchanged";
+      log?: ReturnType<typeof serializeHealthLog>;
+      error?: string;
+    }[] = [];
+
+    for (const entry of entries) {
+      const med = entry.medicationId ? medById.get(entry.medicationId) : undefined;
+      const scheduledAtRaw = entry.scheduledAt ?? null;
+      if (!med) {
+        results.push({ medicationId: entry.medicationId ?? "", scheduledAt: scheduledAtRaw, error: "not_found" });
+        continue;
+      }
+      if (!(await hasHealthSegmentAccess(db, auth, med.memberId, "doses", "write"))) {
+        results.push({ medicationId: med.id, scheduledAt: scheduledAtRaw, error: "forbidden" });
+        continue;
+      }
+      const status = entry.status === "skipped" || entry.status === "missed" ? entry.status : "taken";
+      const scheduledAt = scheduledAtRaw ? new Date(scheduledAtRaw) : null;
+      if (med.scheduleKind !== "prn" && (!scheduledAt || Number.isNaN(scheduledAt.getTime()))) {
+        results.push({ medicationId: med.id, scheduledAt: scheduledAtRaw, error: "scheduled_at_required" });
+        continue;
+      }
+      try {
+        const { log, outcome } = await recordDose(db, env, {
+          med,
+          householdId: auth.householdId,
+          loggedByUserId: auth.userId,
+          status,
+          scheduledAt,
+          loggedAt,
+          source: "bulk",
+          alsoCreateEvent: body.alsoCreateEvent ?? false,
+        });
+        results.push({ medicationId: med.id, scheduledAt: log.scheduledAt, outcome, log });
+      } catch (e) {
+        const resp = encryptionErrorResponse(c, e);
+        if (resp) return resp;
+        results.push({
+          medicationId: med.id,
+          scheduledAt: scheduledAtRaw,
+          error: e instanceof Error ? e.message : "log_failed",
+        });
+      }
+    }
+    return c.json({ results }, 201);
   });
 
   return app;
