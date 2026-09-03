@@ -184,6 +184,7 @@ Test the full loop against **Stripe test mode** first (`sk_test_...` keys, flag 
 3. Full dry run in **Stripe test mode** first: pricing → checkout with a test card + your promo code → webhook fires → household appears in DO Postgres → `/hosted-setup` wizard → dashboard.
 4. Only after the test-mode run is clean, swap `.env` to live Stripe keys and repeat once for real with the real promo code.
 5. Confirm `/setup`-style public owner sign-up is still blocked: `curl -X POST https://app.domi-ops.com/api/auth/sign-up/email` → `403` (WHO-248 guard — should already hold, this just confirms it wasn't accidentally loosened).
+6. **Google path (WHO-277/279):** on `/login`, "Continue with Google" *before* any checkout must land on `domi-ops.com/pricing` with a "finish setup" notice — **not** a blank screen. Then run checkout with that same Google email → `/setup?session_id=` wizard → completes → `/dashboard`. Also verify the reverse order (checkout with email/password first, then "Continue with Google" same address → links, lands on dashboard). Both against Stripe test mode first.
 
 ---
 

@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import Stripe from "stripe";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Env } from "@domi-ops/config";
 import { isHostedDeployment, isStripeConfigured } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
@@ -412,7 +412,15 @@ export function billingRoutes(db: Database, env: Env) {
 
         const { householdId } = sub;
 
-        // Idempotency: if user already exists and is a member of this household, return ok
+        const applyHouseholdSettings = () =>
+          tx
+            .update(households)
+            .set({
+              name: householdName.trim().slice(0, 128),
+              timezone: timezone ?? "UTC",
+            })
+            .where(eq(households.id, householdId));
+
         const [existingUser] = await tx
           .select({ id: users.id })
           .from(users)
@@ -421,12 +429,56 @@ export function billingRoutes(db: Database, env: Env) {
 
         if (existingUser) {
           const [existingMember] = await tx
-            .select({ id: householdMembers.id })
+            .select({
+              id: householdMembers.id,
+              householdId: householdMembers.householdId,
+            })
             .from(householdMembers)
             .where(eq(householdMembers.userId, existingUser.id))
             .limit(1);
-          if (existingMember) return { ok: true as const };
-          return { ok: false as const, error: "email_taken" as const };
+
+          // Already attached. Idempotent replay if it's this household; a real conflict if
+          // they somehow belong to a different one (shouldn't happen on hosted).
+          if (existingMember) {
+            return existingMember.householdId === householdId
+              ? { ok: true as const }
+              : { ok: false as const, error: "email_taken" as const };
+          }
+
+          // User row exists but no household — e.g. they signed in with Google before
+          // checking out (WHO-277), or an earlier attempt half-finished. Claim them as this
+          // household's owner. Public email/password sign-up is hard-blocked on hosted
+          // (WHO-248), so there's no "someone else registered this address" case to fear.
+          const [cred] = await tx
+            .select({ id: baAccounts.id })
+            .from(baAccounts)
+            .where(
+              and(
+                eq(baAccounts.userId, existingUser.id),
+                eq(baAccounts.providerId, "credential"),
+              ),
+            )
+            .limit(1);
+          // Give them an email/password fallback login too (their Google account keeps
+          // working via account linking). Never overwrite an existing credential from this
+          // unauthenticated endpoint.
+          if (!cred && passwordHash) {
+            await tx.insert(baAccounts).values({
+              userId: existingUser.id,
+              providerId: "credential",
+              accountId: existingUser.id,
+              issuer: createLocalAccountIssuer("credential"),
+              password: passwordHash,
+            });
+          }
+
+          await tx.insert(householdMembers).values({
+            householdId,
+            userId: existingUser.id,
+            role: "owner",
+          });
+          await applyHouseholdSettings();
+          return { ok: true as const };
         }
 
         const displayName = (email.split("@")[0] || "Owner").slice(0, 128);
@@ -455,14 +507,7 @@ export function billingRoutes(db: Database, env: Env) {
           role: "owner",
         });
 
-        await tx
-          .update(households)
-          .set({
-            name: householdName.trim().slice(0, 128),
-            timezone: timezone ?? "UTC",
-          })
-          .where(eq(households.id, householdId));
-
+        await applyHouseholdSettings();
         return { ok: true as const };
       });
 
