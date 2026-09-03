@@ -2,11 +2,13 @@
 
 ## Executive summary
 
-**Domi Ops** is an open-source household operations platform (calendar, homeschool LMS, shopping, chores, notes, expenses). It is a TypeScript monorepo: Next.js UI, Hono REST API, BullMQ worker, Drizzle/PostgreSQL, Redis queues, MinIO/S3 files. Primary deployment today is self-hosted Docker (household dogfood). **Public launch is still OSS self-host and Domi Ops hosted together** — Hosted Starter foundation (RLS, tenant context, entitlements) is in code; remaining work is billing, legal, marketing deploy, and the public repo flip. See [07_LAUNCH.md](./07_LAUNCH.md).
+**Domi Ops** is an open-source household operations platform (calendar, homeschool LMS, shopping, chores, notes, expenses). It is a TypeScript monorepo: Next.js UI, Hono REST API, BullMQ worker, Drizzle/PostgreSQL, Redis queues, MinIO/S3 files.
+
+**Status:** the repo is **public** (MIT, `mwhobrey/domi-ops`, default branch `main`). Two deployments run: the single-tenant household dogfood at `whome.whobrey.me`, and a **private hosted Starter beta** at `app.domi-ops.com` (`DEPLOYMENT_MODE=shared`, real Stripe, invite-only). The remaining launch step is the *public* hosted opening — open signup, marketing announcement, community channels. See [07_LAUNCH.md](./07_LAUNCH.md).
 
 ## North Star
 
-**One household runs daily life in Domi Ops** — calendar, homeschool, and core modules on a single Postgres instance — with enterprise-grade UX. Self-host and managed hosted tiers share one codebase; both ship at public OSS launch when ready.
+**One household runs daily life in Domi Ops** — calendar, homeschool, and core modules on a single Postgres instance — with enterprise-grade UX. Self-host and managed hosted tiers share one codebase.
 
 ## When to read what
 
@@ -15,8 +17,9 @@
 | New to the repo | This file → [01_ARCHITECTURE.md](./01_ARCHITECTURE.md) |
 | Adding/changing a feature | [02_COMPONENTS_AND_FILES.md](./02_COMPONENTS_AND_FILES.md) + relevant route/schema file |
 | Fixing auth, cookies, or Docker networking | [01_ARCHITECTURE.md](./01_ARCHITECTURE.md) (auth/proxy section) + [03_RULES_AND_STANDARDS.md](./03_RULES_AND_STANDARDS.md) |
-| Shipping or deploying | [03_RULES_AND_STANDARDS.md](./03_RULES_AND_STANDARDS.md) + `docker-compose.prod.yml`, `deploy/Caddyfile.example` |
-| Prioritizing work | [07_LAUNCH.md](./07_LAUNCH.md) (launch) then [04_CURRENT_STATE.md](./04_CURRENT_STATE.md) |
+| Shipping or deploying | [03_RULES_AND_STANDARDS.md](./03_RULES_AND_STANDARDS.md) (PR workflow + deploy) + `CONTRIBUTING.md` |
+| Deploying the hosted beta | `deploy/HOSTED_BETA_SETUP.md` + `deploy/deploy-hosted.sh` |
+| Prioritizing work | [07_LAUNCH.md](./07_LAUNCH.md) then [04_CURRENT_STATE.md](./04_CURRENT_STATE.md) |
 | Manual School QA / import check | [05_SCHOOL_QA.md](./05_SCHOOL_QA.md) |
 | Dogfood test phases (session tracker) | [06_DOGFOOD_TEST_PHASES.md](./06_DOGFOOD_TEST_PHASES.md) |
 
@@ -50,9 +53,9 @@
 
 - **Node:** **22** (`mise.toml`; CI `setup-node` + Docker `node:22-alpine`). `package.json` `engines` remains `>=20`.
 - **Package manager:** npm 10.9.2 workspaces + Turborepo (`@domi-ops/*` scope). Agent/CI shells without mise shims: `mise exec -- npm …`
-- **Commits on `master`:** `a96a368` (cutover baseline), `4b67280` (initial platform)
-- **CI:** GitHub Actions on push/PR (`typecheck`, `build`, `test`)
-- **Tests:** Vitest — `npm run test`
+- **Repo:** `mwhobrey/domi-ops`, public, default branch `main`. PR workflow (see `03`); `master` is retired.
+- **CI** (`.github/workflows/ci.yml`): `build` job (typecheck + build + `npm run test`) and `test-hosted` job (Postgres service, migrate, `seed:hosted-qa`, `db:create-app-role`, `npm run test:hosted`). `main` branch protection requires both green + all review threads resolved; 0 required approvals.
+- **Tests:** Vitest — `npm run test`; `npm run test:hosted` needs a live Postgres.
 
 ## Quick commands
 
@@ -65,4 +68,4 @@ npm run dev   # web :3000 local; Docker web maps host :3001
 ```
 
 - Web (Docker): `http://localhost:3001`
-- API health: `http://localhost:4000/health`
+- API liveness: `http://localhost:4000/api/healthz` (`/api/health` is the Health *module*, not liveness)

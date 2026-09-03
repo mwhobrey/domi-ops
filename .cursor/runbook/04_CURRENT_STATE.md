@@ -1,6 +1,6 @@
 # Current state
 
-*Household dogfood stable on `https://whome.whobrey.me` (GHCR, Google OAuth, Drive). Local QA phases 0–5 pass (`06_DOGFOOD_TEST_PHASES.md`). **Focus is launch platform** (billing, legal, marketing deploy, OSS flip) — [07_LAUNCH.md](./07_LAUNCH.md) — not new module polish unless a dogfood bug.*
+*Two live deployments: the single-tenant dogfood at `https://whome.whobrey.me`, and the private hosted Starter beta at `app.domi-ops.com` (`DEPLOYMENT_MODE=shared`, real Stripe, invite-only). Repo is public. Remaining launch work is the public hosted opening — [07_LAUNCH.md](./07_LAUNCH.md). Prefer bug fixes and hosted hardening over new module polish.*
 
 ## What is working (implemented paths)
 
@@ -17,7 +17,7 @@
 - `npm run db:migrate` and API Docker entrypoint apply migrations. New SQL must be registered in `packages/db/drizzle/meta/_journal.json` (see `03_RULES_AND_STANDARDS.md` â†’ Database migrations).
 - **Demo seed (WHO-190 Phase 1):** `npm run db:seed-demo` — wipes/recreates `rivera-demo` household (Maria owner `demo@domi-ops.com`, default password `DemoRivera2026!`); Chicago-relative dates for calendar/school/chores; safety gate (`DEMO_MODE` / non-production / `--force`). Spec: `docs/marketing/demo-household-spec.md`.
 - **Marketing screenshots (WHO-190 Phase 2):** `npm run marketing:capture-screenshots` — Playwright light+dark PNGs → `docs/marketing/screenshots/` + `apps/www/public/marketing/screenshots/`; landing on `apps/www` uses `@domi-ops/marketing-ui` `ThemeAwareScreenshot` (`<picture>` + `prefers-color-scheme`). Preview: `npm run dev:www` → `http://localhost:3002`.
-- **Marketing site (WHO-134 / WHO-183):** `apps/www` code-complete (landing, `/pricing`, `/privacy`, `/terms`, `packages/marketing-ui`) — **not deployed**; `domi-ops.com` DNS cutover not done. Legal copy shipped ([WHO-182](https://linear.app/mikewhob-whome/issue/WHO-182)); deploy recipe: `docker-compose.marketing.yml` + `deploy/Caddyfile.domi-ops.example`. Preview: `npm run dev:www` → `http://localhost:3002`. ADR: `docs/adr/002-marketing-site-topology.md`.
+- **Marketing site (WHO-134 / WHO-183):** `apps/www` — **live at `domi-ops.com`** (landing, `/pricing` with checkout enabled, `/privacy`, `/terms`, `packages/marketing-ui`). Deploy: `docker-compose.marketing.yml` + `deploy/Caddyfile.domi-ops.example`, part of `deploy/deploy-hosted.sh`. Preview: `npm run dev:www` → `http://localhost:3002`. ADR: `docs/adr/002-marketing-site-topology.md`.
 - Zod env validation with production guards (`@domi-ops/config`).
 - Docker Compose dev stack: postgres, redis, minio, api, worker, web.
 - Native `npm run dev` (default): `.env.example` / `DOMI_OPS_DEV_PROFILE=native` / `PORT=3000` / `PUBLIC_APP_URL=http://localhost:3000`; dev boot warns on OAuth port mismatch; `.env.docker.example` for compose web on :3001.
@@ -135,31 +135,27 @@
 - **Postgres/MinIO defaults:** dev compose uses `domi_ops` user/db and `domi-ops` S3 bucket; existing prod `.env` can keep legacy `POSTGRES_USER=whome` until you migrate data.
 - **Import marker:** `import_records` rows with `source_table=whome` still resolve; new imports write `domi-ops`.
 - **Browser:** `localStorage` / `sessionStorage` keys prefixed `domi-ops:` (calendar filters, onboarding dismiss, etc.) — users re-set prefs once.
-- **GitHub repo:** `mwhobrey/domi-ops` (private; renamed from `whome`, WHO-192). Public flip still gated on [WHO-174](https://linear.app/mikewhob-whome/issue/WHO-174).
+- **GitHub repo:** `mwhobrey/domi-ops` — **public**, MIT, default branch `main` (renamed from `whome`, WHO-192; OSS flip WHO-174 done). PR workflow, `03_RULES_AND_STANDARDS.md`.
 
 - **Drive module (M1–M5 v1 shipped):** schema + API + web UI + private sharing + role permissions + cross-module linking + HomeHub import — migrations `0028_drive`, `0029_drive_permissions`; **`/drive`** ListPage; **`DriveObjectPicker`** / **`DriveAttachmentChips`**; Notes/Notices/School `drive_references` integration; **`drive_permissions_json`** in settings (default member=write, child=read); HomeHub `file` → Drive `/Imports`. **Phase 2 (WHO-121–125 shipped):** folder tree UI, quota enforcement + settings meter, public share links (`/s/:token`), dashboard glance, **Notes markdown embeds** `[[drive:uuid|label]]` (inline chips/images via `MarkdownContent` + `driveEmbeds` on notes API including `contentType`; image files render inline via authenticated proxy; missing → "File removed"; resolve `GET /api/core/drive/objects/resolve`; edit sheet **Insert embed** + Preview tab). **WHO-126:** drag-drop upload, folder-target indicator, drag-to-folder move + edit sheet folder picker; **folder parent nav** + full-screen drop (no double-upload); **API upload proxy** (`PUT /api/core/upload`). **WHO-128/129/130 fixes:** embed preprocessing always runs when content contains `[[drive:…]]`; `prepareMarkdownSourceForRender` unwraps Rich-editor inline-code shields (and TipTap escapes) before preprocess; `MarkdownContent` `urlTransform` allows `domi-ops-drive://` + `domi-ops-drive-missing://` (react-markdown v10 strips custom protocols by default); Rich editor shields embeds in inline code + `shouldAutoLink` skips `drive:`; edit sheet merges API `driveEmbeds` + resolve preview + `key={note.id}` remount. **WHO-131:** `DriveObjectPicker` folder breadcrumb + `folderId` list (matches `/drive`); API `parseDriveEmbedIds` uses same unshield prep as web; gif/image detection uses embed label before resolve; plain-text TipTap `\\[\\[drive:…\\]\\]` unwrapped; `DriveEmbedImage` loads via credentialed `fetch` → blob URL. **WHO-132:** `[[` autocomplete popover portals into edit sheet dialog; drag attachment chips into editor inserts embed syntax for inline image preview. Spike: `docs/SHARED_RESOURCES_SPIKE.md`.
 
 | Area | Evidence | Impact |
 |------|----------|--------|
 | Recurring (advanced) | DAILY/WEEKLY/MONTHLY materialize + HomeHub `recurring_reminder` import; partial RRULE subset | Full RRULE edge cases + exotic recurrence rules |
-| Hosted multi-tenant | WHO-195–198, WHO-178 shipped | RLS + tenant context + entitlements + hosted compose/seed + leak tests (`npm run test:hosted`); Stripe provisioning still M5 |
-| Hosted billing (M5) | `POST /api/billing/webhook` implemented (WHO-185/199); `hostedCheckoutEnabled: false` | Stripe keys not yet in prod env; checkout still off; hosted setup wizard (WHO-184) + subscription plan gating UI (WHO-186) shipped; hosted `/auth/sign-up/*` now hard-blocked in API regardless of `ALLOW_PUBLIC_SIGNUP` (WHO-248) |
-| Subscription status | `household_subscriptions.status` surfaced via `/api/core/household/settings` | `past_due` / `canceled` messaging is UI-only; module entitlements are still driven by `modules_entitled` ceiling — WHO-186 |
-| Legal (WHO-182) | Operator draft on www + app (`packages/marketing-ui` legal content) | Not lawyer-reviewed; `privacy@domi-ops.com` mailbox TBD |
-| Marketing deploy | `apps/www` not on `domi-ops.com` | Apex still undeployed (legal copy no longer the blocker) |
-| `test:hosted` CI | `test-hosted` job in `.github/workflows/ci.yml` (WHO-249) | Postgres service + migrate + seed + `domi_ops_app` role + tenant isolation Vitest on push/PR; local Docker still needed for manual API checks |
+| Hosted multi-tenant | WHO-195–198, WHO-178 shipped; live on the beta | RLS + tenant context + entitlements + hosted compose/seed + leak tests (`npm run test:hosted`) |
+| Hosted billing | Stripe checkout **live** on the beta (production keys, `NEXT_PUBLIC_HOSTED_CHECKOUT_ENABLED=true`); webhook provisions household + subscription; `/setup?session_id=` wizard; `/auth/sign-up/*` hard-blocked on hosted (WHO-248); Google-first onboarding wired (WHO-277/278/279) | `past_due` / `canceled` gating is still UI-only — module entitlements driven by the `modules_entitled` ceiling (WHO-186) |
+| Legal (WHO-182) | Live on www + app (`packages/marketing-ui`) | Not lawyer-reviewed; `privacy@domi-ops.com` mailbox TBD |
+| `test:hosted` CI | `test-hosted` job in `.github/workflows/ci.yml` (WHO-249) | Required check on `main`; needs a live Postgres, so it self-skips in the plain `build` job |
 | `/api/core/files` legacy route | superseded by Drive | Use `/api/core/drive/*`; import blobs still under `imports/` until WHO-120 |
 | **Production cutover on droplet** | **Live** at `https://whome.whobrey.me` (GHCR images, Caddy → `domi-ops-web`); HomeHub parallel on `home.whobrey.me` | Full import soak + HomeHub retirement still operator-run (not the default queue) |
 | Real `app.db` import counts | validated on **extended fixture** + **local dogfood `data/app.db`** | Droplet staging/prod import still operator-run |
 
 ## Immediate next steps
 
-Launch platform — full order in [07_LAUNCH.md](./07_LAUNCH.md):
+Private beta is live and taking a real invited tester through checkout → onboarding. Watch for feedback, then:
 
-1. ~~M5 billing: WHO-185 SKUs + WHO-199 webhook~~ **Done** — Stripe env in config, `POST /api/billing/webhook`, `stripe_events` idempotency (migration `0054`). Paste real Stripe Price IDs into env before deploy.
-2. ~~WHO-184 hosted setup wizard (post-payment owner invite + household config) + WHO-186 subscription status gating~~ **Done** — hosted `/setup?session_id=...` validates Stripe checkout and provisions the owner; settings show subscription status + lock module toggles at your entitled ceiling.
-3. Shared-mode staging (`DEPLOYMENT_MODE=shared`) + `npm run test:hosted` on that DB.
-3. Marketing DNS cutover after you are ready to put `domi-ops.com` live (`deploy/Caddyfile.domi-ops.example`).
+1. WHO-186 — enforce subscription status (`past_due` / `canceled`) on module entitlements, not just UI messaging.
+2. Public hosted opening — open signup, marketing announcement, community channels, post-launch support runbook ([07_LAUNCH.md](./07_LAUNCH.md) M6).
 
 Optional leftover (not the default queue): HomeHub retirement on `home.whobrey.me` per `deploy/CUTOVER.md`.
 
