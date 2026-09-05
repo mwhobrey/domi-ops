@@ -29,3 +29,7 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 - Scroll jank on iOS (Safari and Chrome, both WebKit): dropped `backdrop-filter` from the sticky
   header, calendar toolbar, calendar agenda day headers, health sharing bottom bar, and the drive
   drag-and-drop overlay, since WebKit recomputes the blur every scroll frame instead of caching it.
+- Hosted checkout no longer creates a duplicate household (and Stripe customer) when the same
+  person runs checkout more than once, and a signed-in user who finishes checkout is now attached
+  to their household by their session identity rather than the email typed into Stripe Checkout —
+  a mismatch between the two used to spawn a second account that could never reach the app.
