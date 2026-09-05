@@ -629,7 +629,7 @@ export function CalendarPageClient({
 
       <div
         ref={stickyChromeRef}
-        className="sticky top-[var(--header-height)] z-30 -mx-4 shrink-0 border-b border-[var(--color-border)] bg-[var(--color-surface-inset)]/95 px-4 py-2 backdrop-blur-sm"
+        className="sticky top-[var(--header-height)] z-30 -mx-4 shrink-0 border-b border-[var(--color-border)] bg-[var(--color-surface-inset)] px-4 py-2"
         role="region"
         aria-label="Calendar controls"
       >

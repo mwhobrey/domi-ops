@@ -72,7 +72,7 @@ export function CalendarAgendaView({
           <section key={date}>
             <h3
               className={cn(
-                "sticky z-10 mb-2 py-2 text-sm font-medium backdrop-blur-sm",
+                "sticky z-10 mb-2 py-2 text-sm font-medium bg-[var(--color-surface-inset)]",
                 !dayHeaderStickyTop && "top-[var(--header-height)]",
                 isToday
                   ? "text-[var(--color-accent)]"
