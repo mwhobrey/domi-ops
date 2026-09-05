@@ -26,3 +26,6 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 - The `/health` page was unreachable in production due to a Caddy routing rule that shadowed it
   with the API's own liveness endpoint.
+- Scroll jank on iOS (Safari and Chrome, both WebKit): dropped `backdrop-filter` from the sticky
+  header, calendar toolbar, calendar agenda day headers, health sharing bottom bar, and the drive
+  drag-and-drop overlay, since WebKit recomputes the blur every scroll frame instead of caching it.

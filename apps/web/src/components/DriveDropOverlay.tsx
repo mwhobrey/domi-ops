@@ -15,7 +15,7 @@ export function DriveDropOverlay({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--color-bg)]/80 p-6 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--color-surface)]/95 p-6"
       aria-hidden
       onDragOver={(e) => {
         e.preventDefault();
