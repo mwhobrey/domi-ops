@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import Stripe from "stripe";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Env } from "@domi-ops/config";
 import { isHostedDeployment, isStripeConfigured } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
@@ -15,7 +15,6 @@ import {
 } from "@domi-ops/db";
 import { createLocalAccountIssuer, hashPassword } from "@domi-ops/auth";
 import type { AppVariables } from "../middleware/auth.js";
-import { pickReusableHousehold, siblingCustomerIds } from "../lib/hosted-provisioning.js";
 
 const ALL_MODULES = JSON.stringify(["core", "school", "calendar_sync", "drive", "health"]);
 const STARTER_QUOTA_BYTES = 26_843_545_600; // 25 GB
@@ -96,50 +95,35 @@ async function upsertSubscription(
 /**
  * Find or create a household for this checkout. Returns householdId.
  *
- * Dedup order (WHO-285 — one person clicking the plan button twice, or once per device, used to
- * get a fresh Stripe customer and a fresh household every time):
- *   1. a subscription row already linked to this exact Stripe customer,
- *   2. the signed-in user (`ownerUserId`, from `client_reference_id`) already owns a household,
- *   3. a *different* Stripe customer with the same email already maps to a household
- *      (`siblingCustomerIds` — Stripe mints a new customer object per Checkout Session when none
- *      is passed in, so repeat checkouts by the same person look like distinct customers).
- * Only when all three miss do we provision a new household.
+ * Reuse an existing household (WHO-285 — a repeat checkout used to spawn a fresh household every
+ * time) when either:
+ *   1. a subscription row is already linked to this exact Stripe customer, or
+ *   2. `ownerUserId` (the signed-in user, from a validated `client_reference_id`) already belongs
+ *      to a household.
+ * Only match (2) on an *authenticated* identity — never on a Checkout-typed email, which the
+ * payer controls and could point at another tenant's customer.
  */
-async function resolveOrProvisionHousehold(
+export async function resolveOrProvisionHousehold(
   db: Database,
   stripeCustomerId: string,
   customerEmail: string | null,
   ownerUserId: string | null,
-  siblingIds: string[],
 ): Promise<string> {
-  const [byCurrentCustomer] = await db
+  const [byCustomer] = await db
     .select({ householdId: householdSubscriptions.householdId })
     .from(householdSubscriptions)
     .where(eq(householdSubscriptions.stripeCustomerId, stripeCustomerId))
     .limit(1);
+  if (byCustomer) return byCustomer.householdId;
 
-  const [byOwner] = ownerUserId
-    ? await db
-        .select({ householdId: householdMembers.householdId })
-        .from(householdMembers)
-        .where(eq(householdMembers.userId, ownerUserId))
-        .limit(1)
-    : [];
-
-  const [bySibling] = siblingIds.length
-    ? await db
-        .select({ householdId: householdSubscriptions.householdId })
-        .from(householdSubscriptions)
-        .where(inArray(householdSubscriptions.stripeCustomerId, siblingIds))
-        .limit(1)
-    : [];
-
-  const reusable = pickReusableHousehold({
-    byCurrentCustomer: byCurrentCustomer?.householdId ?? null,
-    byOwnerMembership: byOwner?.householdId ?? null,
-    bySiblingCustomer: bySibling?.householdId ?? null,
-  });
-  if (reusable) return reusable;
+  if (ownerUserId) {
+    const [byOwner] = await db
+      .select({ householdId: householdMembers.householdId })
+      .from(householdMembers)
+      .where(eq(householdMembers.userId, ownerUserId))
+      .limit(1);
+    if (byOwner) return byOwner.householdId;
+  }
 
   // No household yet — provision one. Name derived from customer email prefix.
   const name = customerEmail
@@ -199,10 +183,10 @@ export function billingRoutes(db: Database, env: Env) {
 
             const customerId = typeof session.customer === "string" ? session.customer : session.customer.id;
             const subscriptionId = typeof session.subscription === "string" ? session.subscription : session.subscription.id;
-            const customerEmail = sessionCustomerEmail(session);
 
             // `client_reference_id` is the signed-in user id we stamp on the session in
-            // POST /checkout (WHO-285). Validate it points at a real user before trusting it.
+            // POST /checkout (WHO-285). It comes from a Stripe-signed webhook payload and was set
+            // from an authenticated session — safe to attach as owner. Validate it still resolves.
             let ownerUserId: string | null = null;
             if (session.client_reference_id) {
               const [u] = await tx
@@ -213,15 +197,6 @@ export function billingRoutes(db: Database, env: Env) {
               ownerUserId = u?.id ?? null;
             }
 
-            // Other Stripe customers with this email — Checkout mints a fresh customer per
-            // session when none is passed in, so a repeat checkout looks like a new customer.
-            const siblingIds = customerEmail
-              ? siblingCustomerIds(
-                  (await stripe.customers.list({ email: customerEmail, limit: 100 })).data,
-                  customerId,
-                )
-              : [];
-
             const sub = await stripe.subscriptions.retrieve(subscriptionId);
             const trialEnd = sub.trial_end ? new Date(sub.trial_end * 1000) : null;
             const status = sub.status === "trialing" ? "trialing" : sub.status === "active" ? "active" : "trialing";
@@ -229,9 +204,8 @@ export function billingRoutes(db: Database, env: Env) {
             const householdId = await resolveOrProvisionHousehold(
               tx,
               customerId,
-              customerEmail,
+              sessionCustomerEmail(session),
               ownerUserId,
-              siblingIds,
             );
 
             await upsertSubscription(tx, {
@@ -367,28 +341,30 @@ export function billingRoutes(db: Database, env: Env) {
     const appUrl = (env.PUBLIC_APP_URL ?? "https://app.domi-ops.com").replace(/\/$/, "");
     const marketingUrl = (env.PUBLIC_MARKETING_URL ?? "https://domi-ops.com").replace(/\/$/, "");
 
+    // The pricing form POSTs cross-subdomain from the marketing site, but the Better Auth session
+    // cookie (host-scoped to app.domi-ops.com, same-site under the shared domi-ops.com registrable
+    // domain) still rides along. A signed-in caller here is a household-less user finishing
+    // checkout — carry their id as `client_reference_id` so the webhook attaches *this* user and
+    // dedupes repeat attempts (WHO-285). Anonymous checkout from the public pricing page is
+    // unchanged.
+    const callerUserId = c.get("userId");
+
+    if (callerUserId) {
+      const [member] = await withSystemContext(db, (tx) =>
+        tx
+          .select({ householdId: householdMembers.householdId })
+          .from(householdMembers)
+          .where(eq(householdMembers.userId, callerUserId))
+          .limit(1),
+      );
+      // Already has a household (and therefore a subscription) — a back-button or double-submit
+      // here would create a second subscription on the same Stripe customer, whose lifecycle
+      // events then fight over the household's status. Send them to the app instead.
+      if (member) return c.redirect(`${appUrl}/dashboard`, 303);
+    }
+
     try {
       const stripe = makeStripe(env.STRIPE_SECRET_KEY!);
-
-      // The pricing form POSTs cross-subdomain from the marketing site, but the Better Auth
-      // session cookie (host-scoped to app.domi-ops.com, same-site under the shared
-      // domi-ops.com registrable domain) still rides along. When it does — i.e. a signed-in
-      // household-less user finishing checkout — carry their identity into the session so the
-      // webhook attaches *this* user and dedupes repeat attempts (WHO-285). Anonymous checkout
-      // from the public pricing page is unchanged.
-      const callerUserId = c.get("userId");
-      let existingCustomerId: string | undefined;
-      if (callerUserId) {
-        const [u] = await withSystemContext(db, (tx) =>
-          tx.select({ email: users.email }).from(users).where(eq(users.id, callerUserId)).limit(1),
-        );
-        if (u?.email) {
-          // Stripe list({email}) is an exact match; a repeat checkout with the same casing
-          // reuses the customer instead of minting a new one.
-          const found = await stripe.customers.list({ email: u.email, limit: 1 });
-          existingCustomerId = found.data[0]?.id;
-        }
-      }
 
       const session = await stripe.checkout.sessions.create({
         mode: "subscription",
@@ -398,7 +374,6 @@ export function billingRoutes(db: Database, env: Env) {
           ...(callerUserId ? { metadata: { whomeUserId: callerUserId } } : {}),
         },
         allow_promotion_codes: true,
-        ...(existingCustomerId ? { customer: existingCustomerId } : {}),
         ...(callerUserId ? { client_reference_id: callerUserId } : {}),
         success_url: `${appUrl}/setup?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${marketingUrl}/pricing`,
@@ -491,14 +466,15 @@ export function billingRoutes(db: Database, env: Env) {
       return c.json({ ok: false, error: "missing_fields" }, 400);
     }
 
-    // Identity resolution here has two paths:
-    //   - signed-in caller (has an active session): attach *that* user, whatever email they
-    //     typed into Stripe Checkout. Keying off the checkout email instead used to fork a
-    //     second account + household whenever the two didn't match (WHO-285).
-    //   - no caller (anonymous completion): fall back to the checkout email — attach a
-    //     pre-existing memberless user only, or create a fresh one. Never attach a pre-existing
-    //     user that already has a credential/membership on the strength of a typed email alone
-    //     (that would let a payer hijack a victim's orphaned account).
+    // Identity resolution here has two paths (WHO-285):
+    //   - the session was started by a signed-in user (`client_reference_id` is set, from
+    //     POST /checkout) — attach *that* user, whatever email they typed into Stripe Checkout.
+    //     A session started by user A can only be completed by A: `session_id` values leak
+    //     (they sit in the /setup URL), so a bare "signed in + knows the id" is not enough.
+    //   - anonymous checkout (`client_reference_id` absent): fall back to the checkout email —
+    //     attach a pre-existing memberless user only if the caller is signed in AS that user, or
+    //     create a fresh one. Never attach a pre-existing user with a credential/membership on a
+    //     typed email alone (that would let a payer hijack a victim's orphaned account).
     const callerUserId = c.get("userId");
 
     try {
@@ -507,6 +483,12 @@ export function billingRoutes(db: Database, env: Env) {
 
       if (session.payment_status !== "paid" && session.payment_status !== "no_payment_required") {
         return c.json({ ok: false, error: "not_paid" }, 400);
+      }
+
+      const sessionOwnerId = session.client_reference_id;
+      // A signed-in checkout belongs to exactly one user — reject anyone else's session.
+      if (sessionOwnerId && sessionOwnerId !== callerUserId) {
+        return c.json({ ok: false, error: "signin_required" }, 400);
       }
 
       const customerId = typeof session.customer === "string" ? session.customer : session.customer?.id;
@@ -561,8 +543,11 @@ export function billingRoutes(db: Database, env: Env) {
           }
         };
 
-        // Signed-in caller wins over the checkout email (WHO-285).
-        if (callerUserId) {
+        // Signed-in caller wins over the checkout email — but only for a session we can
+        // positively tie to them (`client_reference_id`, set in POST /checkout). An anonymous
+        // session (no `client_reference_id`) can't be claimed this way; it drops to the
+        // email-based path below. (WHO-285)
+        if (callerUserId && sessionOwnerId === callerUserId) {
           const [caller] = await tx
             .select({ id: users.id })
             .from(users)
