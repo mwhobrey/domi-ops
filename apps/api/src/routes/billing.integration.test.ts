@@ -11,7 +11,7 @@ import {
   withSystemContext,
   type Database,
 } from "@domi-ops/db";
-import { resolveOrProvisionHousehold } from "./billing.js";
+import { resolveOrProvisionHousehold, upsertSubscription } from "./billing.js";
 
 /**
  * WHO-285 — a repeat hosted checkout used to provision a fresh household every time, and the
@@ -57,11 +57,11 @@ maybeDescribe("resolveOrProvisionHousehold (integration)", () => {
       });
     });
 
-  const seedUser = () =>
+  const seedUser = (email = `who285-${randomUUID().slice(0, 8)}@example.test`) =>
     withSystemContext(db, async (tx) => {
       const [u] = await tx
         .insert(users)
-        .values({ email: `who285-${randomUUID().slice(0, 8)}@example.test`, emailVerified: true })
+        .values({ email, emailVerified: true })
         .returning({ id: users.id });
       userIds.push(u.id);
       return u.id;
@@ -128,18 +128,93 @@ maybeDescribe("resolveOrProvisionHousehold (integration)", () => {
   });
 
   it("never reaches another tenant's household via the checkout email", async () => {
+    const victimEmail = `who285-victim-${randomUUID().slice(0, 8)}@example.test`;
     const victimHh = await seedHousehold("who285-victim");
-    const victimUser = await seedUser();
-    await seedMember(victimHh, victimUser);
+    await seedMember(victimHh, await seedUser(victimEmail));
     await seedSubscription(victimHh, `cus_${randomUUID().slice(0, 14)}`);
 
     const attacker = await seedUser();
-    // Attacker's checkout: fresh customer, attacker's own id, victim's email — must NOT resolve
-    // to the victim household (no email-based dedup path exists).
+    // Attacker's checkout: fresh customer, attacker's own id, but the victim's real email typed
+    // into Stripe Checkout — must NOT resolve to the victim household (no email-based dedup).
     const resolved = await withSystemContext(db, (tx) =>
-      resolveOrProvisionHousehold(tx, `cus_${randomUUID().slice(0, 14)}`, "who285-victim@example.test", attacker),
+      resolveOrProvisionHousehold(tx, `cus_${randomUUID().slice(0, 14)}`, victimEmail, attacker),
     );
     householdIds.push(resolved);
     expect(resolved).not.toBe(victimHh);
+  });
+
+  it("upsertSubscription keeps the first live subscription when a raced second one lands", async () => {
+    const hh = await seedHousehold("who285-race");
+    const customerA = `cus_${randomUUID().slice(0, 14)}`;
+    const subA = `sub_${randomUUID().slice(0, 14)}`;
+    const customerB = `cus_${randomUUID().slice(0, 14)}`;
+    customerIds.push(customerA, customerB);
+
+    const read = () =>
+      withSystemContext(db, (tx) =>
+        tx
+          .select({
+            customer: householdSubscriptions.stripeCustomerId,
+            sub: householdSubscriptions.stripeSubscriptionId,
+            status: householdSubscriptions.status,
+          })
+          .from(householdSubscriptions)
+          .where(eq(householdSubscriptions.householdId, hh))
+          .limit(1),
+      );
+
+    await withSystemContext(db, (tx) =>
+      upsertSubscription(tx, {
+        householdId: hh,
+        stripeCustomerId: customerA,
+        stripeSubscriptionId: subA,
+        status: "trialing",
+        trialEndsAt: null,
+      }),
+    );
+
+    // Raced second webhook — different live subscription for the same household.
+    await withSystemContext(db, (tx) =>
+      upsertSubscription(tx, {
+        householdId: hh,
+        stripeCustomerId: customerB,
+        stripeSubscriptionId: `sub_${randomUUID().slice(0, 14)}`,
+        status: "trialing",
+        trialEndsAt: null,
+      }),
+    );
+    expect((await read())[0]).toMatchObject({ customer: customerA, sub: subA });
+
+    // Same subscription replays with a status change — that still applies.
+    await withSystemContext(db, (tx) =>
+      upsertSubscription(tx, {
+        householdId: hh,
+        stripeCustomerId: customerA,
+        stripeSubscriptionId: subA,
+        status: "active",
+        trialEndsAt: null,
+      }),
+    );
+    expect((await read())[0]).toMatchObject({ sub: subA, status: "active" });
+
+    // After cancellation a genuine re-subscribe takes the row over.
+    await withSystemContext(db, (tx) =>
+      tx
+        .update(householdSubscriptions)
+        .set({ status: "canceled" })
+        .where(eq(householdSubscriptions.householdId, hh)),
+    );
+    const customerC = `cus_${randomUUID().slice(0, 14)}`;
+    customerIds.push(customerC);
+    await withSystemContext(db, (tx) =>
+      upsertSubscription(tx, {
+        householdId: hh,
+        stripeCustomerId: customerC,
+        stripeSubscriptionId: `sub_${randomUUID().slice(0, 14)}`,
+        status: "trialing",
+        trialEndsAt: null,
+      }),
+    );
+    expect((await read())[0]).toMatchObject({ customer: customerC, status: "trialing" });
   });
 });

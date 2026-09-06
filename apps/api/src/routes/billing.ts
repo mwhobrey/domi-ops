@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import Stripe from "stripe";
-import { and, eq } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import type { Env } from "@domi-ops/config";
 import { isHostedDeployment, isStripeConfigured } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
@@ -45,7 +45,7 @@ async function markProcessed(db: Database, eventId: string, type: string): Promi
   await db.insert(stripeEvents).values({ id: eventId, type }).onConflictDoNothing();
 }
 
-async function upsertSubscription(
+export async function upsertSubscription(
   db: Database,
   {
     householdId,
@@ -80,6 +80,16 @@ async function upsertSubscription(
         trialEndsAt,
         updatedAt: new Date(),
       },
+      // Only take over the household's subscription row for a re-subscribe (existing row is
+      // canceled) or a replay of the same subscription. If a *different* live subscription
+      // already holds it — two checkout sessions the same user raced through before either
+      // webhook landed (WHO-285) — keep the first; the loser is an unreferenced $0 trial that
+      // expires on its own rather than a row whose customer id the lifecycle handlers would
+      // then act on. Enforcing one checkout per user is the durable fix (follow-up).
+      setWhere: or(
+        eq(householdSubscriptions.status, "canceled"),
+        eq(householdSubscriptions.stripeSubscriptionId, stripeSubscriptionId),
+      ),
     });
 }
 
@@ -358,8 +368,8 @@ export function billingRoutes(db: Database, env: Env) {
           .limit(1),
       );
       // Already has a household (and therefore a subscription) — a back-button or double-submit
-      // here would create a second subscription on the same Stripe customer, whose lifecycle
-      // events then fight over the household's status. Send them to the app instead.
+      // here would start a second, unrelated Stripe customer + subscription that no one manages.
+      // Send them to the app instead.
       if (member) return c.redirect(`${appUrl}/dashboard`, 303);
     }
 
@@ -408,6 +418,13 @@ export function billingRoutes(db: Database, env: Env) {
 
       if (session.payment_status !== "paid" && session.payment_status !== "no_payment_required") {
         return c.json({ valid: false, reason: "not_paid" });
+      }
+
+      // A signed-in checkout (`client_reference_id` set) exposes its household name + email only
+      // to the user who started it — `session_id` sits in the /setup URL and leaks (WHO-285).
+      // Anonymous checkouts have no owner to check against.
+      if (session.client_reference_id && session.client_reference_id !== c.get("userId")) {
+        return c.json({ valid: false, reason: "signin_required" });
       }
 
       const customerId = typeof session.customer === "string" ? session.customer : session.customer?.id;
