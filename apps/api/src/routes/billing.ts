@@ -334,6 +334,18 @@ export function billingRoutes(db: Database, env: Env) {
       return c.json({ error: "not_hosted" }, 404);
     }
 
+    // Store builds must use RevenueCat / IAP — never Stripe Checkout inside the binary (ADR 005).
+    const ua = (c.req.header("user-agent") ?? "").toLowerCase();
+    if (ua.includes("capacitor") || c.req.header("x-domi-native") === "1") {
+      return c.json(
+        {
+          error: "stripe_disabled_in_native",
+          message: "Use in-app purchase on the mobile app. Stripe checkout is web-only.",
+        },
+        403,
+      );
+    }
+
     let plan = "monthly";
     try {
       const body = await c.req.parseBody();

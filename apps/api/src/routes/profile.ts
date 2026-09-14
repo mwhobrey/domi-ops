@@ -12,7 +12,7 @@ import {
 import { normalizeTemperatureUnit, type TemperatureUnit } from "../lib/weather-units.js";
 import { avatarObjectKey, processAvatarUpload } from "../lib/avatar-image.js";
 import { memberAvatarUrl } from "../lib/avatar-url.js";
-import { deletePushSubscriptionForUser, isWebPushConfigured } from "../lib/push-notices.js";
+import { deletePushSubscriptionForUser, isAnyPushConfigured } from "../lib/push-notices.js";
 import { createS3Client, deleteObject, getObjectBuffer, putObject } from "../lib/s3.js";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -101,7 +101,7 @@ export function profileRoutes(db: Database, env: Env) {
       calendarOverlayHealthEventsEnabled: userRow?.calendarOverlayHealthEventsEnabled ?? true,
       calendarOverlayHealthMedsEnabled: userRow?.calendarOverlayHealthMedsEnabled ?? true,
       pushSubscribed: Boolean(pushSub),
-      pushAvailable: isWebPushConfigured(env),
+      pushAvailable: isAnyPushConfigured(env),
       avatarUrl: memberAvatarUrl(auth.memberId, memberRow?.avatarKey),
     });
   });
@@ -294,6 +294,44 @@ export function profileRoutes(db: Database, env: Env) {
         .set({ avatarKey: null })
         .where(eq(householdMembers.id, auth.memberId));
     }
+    return c.json({ ok: true });
+  });
+
+  /**
+   * Store-required account deletion (WHO-291 / Apple Guideline 5.1.1).
+   * Body: `{ confirm: "DELETE" }`. Refuses if this user is the sole owner and other members remain.
+   */
+  app.delete("/profile/account", async (c) => {
+    const auth = c.get("auth")!;
+    const body = await c.req.json<{ confirm?: string }>().catch(() => null);
+    if (body?.confirm !== "DELETE") {
+      return c.json({ error: "confirm_required", message: 'Send { "confirm": "DELETE" }' }, 400);
+    }
+
+    const members = await db
+      .select({
+        userId: householdMembers.userId,
+        role: householdMembers.role,
+      })
+      .from(householdMembers)
+      .where(eq(householdMembers.householdId, auth.householdId));
+
+    const others = members.filter((m) => m.userId !== auth.userId);
+    const owners = members.filter((m) => m.role === "owner");
+    const isSoleOwner = auth.role === "owner" && owners.every((o) => o.userId === auth.userId);
+    if (isSoleOwner && others.length > 0) {
+      return c.json(
+        {
+          error: "sole_owner",
+          message:
+            "Transfer ownership or remove other household members before deleting this account.",
+        },
+        409,
+      );
+    }
+
+    await deletePushSubscriptionForUser(db, auth.userId);
+    await db.delete(users).where(eq(users.id, auth.userId));
     return c.json({ ok: true });
   });
 

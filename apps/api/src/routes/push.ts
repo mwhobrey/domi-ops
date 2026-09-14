@@ -5,7 +5,9 @@ import {
   claimEndpointForUser,
   deletePushSubscriptionForUser,
   isWebPushConfigured,
+  upsertNativePushSubscription,
   upsertPushSubscription,
+  type NativePushSubscriptionPayload,
   type PushSubscriptionPayload,
 } from "../lib/push-notices.js";
 import type { AppVariables } from "../middleware/auth.js";
@@ -36,16 +38,43 @@ export function pushRoutes(db: Database, env: Env) {
     return c.json({ ok: true });
   });
 
+  /** Capacitor store shell — APNs/FCM device token (WHO-289). */
+  app.post("/push/native-subscribe", async (c) => {
+    const auth = c.get("auth")!;
+    const body = await c.req.json<NativePushSubscriptionPayload>();
+    if (
+      (body?.platform !== "ios" && body?.platform !== "android") ||
+      typeof body.deviceToken !== "string" ||
+      !body.deviceToken.trim()
+    ) {
+      return c.json({ error: "invalid_native_subscription" }, 400);
+    }
+    await upsertNativePushSubscription(db, auth.userId, body);
+    return c.json({ ok: true });
+  });
+
   app.delete("/push/subscribe", async (c) => {
     const auth = c.get("auth")!;
     let endpoint: string | undefined;
+    let nativeOnly = false;
+    let platform: "ios" | "android" | undefined;
     try {
-      const body = await c.req.json<{ endpoint?: string }>();
+      const body = await c.req.json<{
+        endpoint?: string;
+        nativeOnly?: boolean;
+        platform?: "ios" | "android";
+      }>();
       endpoint = body.endpoint;
+      nativeOnly = Boolean(body.nativeOnly);
+      if (body.platform === "ios" || body.platform === "android") platform = body.platform;
     } catch {
       /* no body — remove all subs for user */
     }
-    await deletePushSubscriptionForUser(db, auth.userId, endpoint);
+    await deletePushSubscriptionForUser(db, auth.userId, {
+      endpoint,
+      nativeOnly,
+      platform,
+    });
     return c.json({ ok: true });
   });
 

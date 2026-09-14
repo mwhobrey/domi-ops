@@ -52,20 +52,28 @@ function openAppPath(path) {
 
 function medActionFallbackUrl(data, action) {
   const params = new URLSearchParams();
-  if (data.medicationId) params.set("medication", data.medicationId);
+  if (data.medicationGroupId) params.set("medicationGroup", data.medicationGroupId);
+  else if (data.medicationId) params.set("medication", data.medicationId);
   params.set("action", action === "skip" ? "skip" : "taken");
   if (data.scheduledAt) params.set("scheduledAt", data.scheduledAt);
   if (data.token) params.set("token", data.token);
   return `/health?${params.toString()}`;
 }
 
-async function postMedPushAction(token, action) {
+async function postMedPushAction(data, action) {
   const status = action === "skip" ? "skipped" : "taken";
-  const res = await fetch("/api/health/medications/push-action", {
+  // Group reminders carry medicationGroupId and were signed with the group token shape
+  // (verifyHealthMedGroupPushActionToken) — posting those to the singular /medications/
+  // push-action endpoint fails server-side verification (checkSubject requires medicationId),
+  // so a group reminder's Taken/Skip tap must go to the group endpoint instead.
+  const endpoint = data.medicationGroupId
+    ? "/api/health/medication-groups/push-action"
+    : "/api/health/medications/push-action";
+  const res = await fetch(endpoint, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token, action: status }),
+    body: JSON.stringify({ token: data.token, action: status }),
   });
   return res.ok;
 }
@@ -107,7 +115,7 @@ self.addEventListener("notificationclick", (event) => {
     event.waitUntil(
       (async () => {
         try {
-          const ok = await postMedPushAction(data.token, action);
+          const ok = await postMedPushAction(data, action);
           if (ok) {
             const clientList = await self.clients.matchAll({
               type: "window",
@@ -117,6 +125,7 @@ self.addEventListener("notificationclick", (event) => {
               client.postMessage({
                 type: "domi-ops:med-logged",
                 medicationId: data.medicationId,
+                medicationGroupId: data.medicationGroupId,
                 action,
               });
             }

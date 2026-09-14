@@ -128,6 +128,23 @@ export const envSchema = z
     VAPID_PUBLIC_KEY: z.string().optional(),
     VAPID_PRIVATE_KEY: z.string().optional(),
     VAPID_SUBJECT: z.string().optional(),
+    /** FCM HTTP v1 (preferred) — Firebase project id + service account JSON (string or file path). */
+    FCM_PROJECT_ID: z.string().optional(),
+    FCM_SERVICE_ACCOUNT_JSON: z.string().optional(),
+    /** @deprecated Legacy FCM server key — prefer FCM_PROJECT_ID + FCM_SERVICE_ACCOUNT_JSON. */
+    FCM_SERVER_KEY: z.string().optional(),
+    /** APNs key id for Capacitor iOS push (WHO-289). */
+    APNS_KEY_ID: z.string().optional(),
+    APNS_TEAM_ID: z.string().optional(),
+    APNS_BUNDLE_ID: z.string().optional(),
+    /** Path or PEM contents for APNs .p8 key (WHO-289). */
+    APNS_P8_KEY: z.string().optional(),
+    /** RevenueCat webhook shared secret (WHO-290). */
+    REVENUECAT_WEBHOOK_SECRET: z.string().optional(),
+    /** Apple Sign in with Apple client id / Services ID (WHO-288). */
+    APPLE_CLIENT_ID: z.string().optional(),
+    APPLE_CLIENT_SECRET: z.string().optional(),
+    APPLE_APP_BUNDLE_IDENTIFIER: z.string().optional(),
     DEMO_MODE: z
       .string()
       .optional()

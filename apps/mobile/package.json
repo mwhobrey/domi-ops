@@ -1,0 +1,32 @@
+{
+  "name": "@domi-ops/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Capacitor 8 store shell — remote WebView of live apps/web (ADR 005 / WHO-287)",
+  "scripts": {
+    "build": "node ./scripts/verify-www.mjs",
+    "build:apk": "powershell -ExecutionPolicy Bypass -File ./scripts/build-debug-apk.ps1",
+    "cap:sync": "npx cap sync",
+    "cap:open:android": "npx cap open android",
+    "cap:open:ios": "npx cap open ios",
+    "cap:add:android": "npx cap add android",
+    "cap:add:ios": "npx cap add ios",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@capacitor-firebase/authentication": "^8.0.1",
+    "@capacitor/android": "^8.5.1",
+    "@capacitor/app": "^8.0.0",
+    "@capacitor/core": "^8.5.1",
+    "@capacitor/ios": "^8.5.1",
+    "@capacitor/preferences": "^8.0.0",
+    "@capacitor/push-notifications": "^8.0.0",
+    "@capacitor/status-bar": "^8.0.0",
+    "@revenuecat/purchases-capacitor": "^13.5.0",
+    "firebase": "^11.10.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.1",
+    "typescript": "^5.8.3"
+  }
+}

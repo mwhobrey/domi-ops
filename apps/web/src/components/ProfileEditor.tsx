@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
 import type { HomePresence } from "../lib/home-status";
 import { NotificationSettingsPanel } from "./NotificationSettingsPanel";
+import { DeleteAccountCard } from "./DeleteAccountCard";
 import { ProfileCalendarConnect } from "./ProfileCalendarConnect";
 import { ProfileGoogleDocsConnect } from "./ProfileGoogleDocsConnect";
 import { Alert, Avatar, Button, Card, CardBody, Checkbox, Input, RadioGroup, SectionHeader } from "./ui";
@@ -328,7 +329,7 @@ export function ProfileEditor({
 
         <ProfileSection
           title="Notifications"
-          description="Choose which Web Push alerts this browser and account receive."
+          description="Choose which push alerts this device and account receive."
           className="md:col-span-2"
           dataTour="notifications-section"
         >
@@ -346,6 +347,14 @@ export function ProfileEditor({
             }}
             modulesEnabled={modulesEnabled}
           />
+        </ProfileSection>
+
+        <ProfileSection
+          title="Account"
+          description="Sign-out keeps your data. Delete removes this login permanently (required for store listings)."
+          className="md:col-span-2"
+        >
+          <DeleteAccountCard />
         </ProfileSection>
       </div>
 

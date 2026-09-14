@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="viewport-fit=cover, width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
+    />
+    <meta name="color-scheme" content="dark" />
+    <title>Domi Ops</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="brand">
+        <div class="mark" aria-hidden="true"></div>
+        <h1>Domi Ops</h1>
+        <p class="tagline">Household ops — connect to your server</p>
+      </header>
+
+      <form id="connect-form" class="card" novalidate>
+        <label for="server-url">Server URL</label>
+        <input
+          id="server-url"
+          name="serverUrl"
+          type="url"
+          inputmode="url"
+          autocomplete="url"
+          spellcheck="false"
+          placeholder="https://app.domi-ops.com"
+          value="https://app.domi-ops.com"
+          required
+        />
+        <p class="hint">
+          Hosted default is <code>app.domi-ops.com</code>. Self-host: paste your instance URL
+          (must serve <code>/api/healthz</code>).
+        </p>
+        <p id="status" class="status" role="status" aria-live="polite"></p>
+        <button id="connect-btn" type="submit">Continue</button>
+      </form>
+
+      <p class="footnote">
+        Spike shell (WHO-287). Email/password sign-in happens on the server you connect to.
+        Google in the WebView may fail until native auth (WHO-288).
+      </p>
+    </main>
+    <script src="./app.js" defer></script>
+  </body>
+</html>

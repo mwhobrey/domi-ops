@@ -286,9 +286,12 @@ type DeliveryTarget = {
   timezone: string;
   push?: {
     id: string;
+    userId: string;
     endpoint: string;
     p256dh: string;
     authKey: string;
+    platform?: string | null;
+    deviceToken?: string | null;
   };
 };
 
@@ -556,9 +559,12 @@ async function targetsForRecipient(
       }),
       push: {
         id: sub.id,
+        userId: recipient.userId,
         endpoint: sub.endpoint,
         p256dh: sub.p256dh,
         authKey: sub.authKey,
+        platform: sub.platform,
+        deviceToken: sub.deviceToken,
       },
     }));
   }

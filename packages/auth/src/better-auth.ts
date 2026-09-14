@@ -24,15 +24,27 @@ export function createBetterAuth(db: Database, env: Env): WhomeBetterAuth {
   const secret =
     env.SESSION_SECRET ?? "dev-only-insecure-secret-replace-before-production!!";
 
-  const socialProviders =
-    env.GOOGLE_OAUTH_CLIENT_ID && env.GOOGLE_OAUTH_CLIENT_SECRET
-      ? {
-          google: {
-            clientId: env.GOOGLE_OAUTH_CLIENT_ID,
-            clientSecret: env.GOOGLE_OAUTH_CLIENT_SECRET,
-          },
-        }
-      : undefined;
+  const socialProviders: {
+    google?: { clientId: string; clientSecret: string };
+    apple?: { clientId: string; clientSecret: string; appBundleIdentifier?: string };
+  } = {};
+
+  if (env.GOOGLE_OAUTH_CLIENT_ID && env.GOOGLE_OAUTH_CLIENT_SECRET) {
+    socialProviders.google = {
+      clientId: env.GOOGLE_OAUTH_CLIENT_ID,
+      clientSecret: env.GOOGLE_OAUTH_CLIENT_SECRET,
+    };
+  }
+  // Sign in with Apple — required on iOS store builds once Google is offered (Guideline 4.8 / WHO-288).
+  if (env.APPLE_CLIENT_ID && env.APPLE_CLIENT_SECRET) {
+    socialProviders.apple = {
+      clientId: env.APPLE_CLIENT_ID,
+      clientSecret: env.APPLE_CLIENT_SECRET,
+      ...(env.APPLE_APP_BUNDLE_IDENTIFIER
+        ? { appBundleIdentifier: env.APPLE_APP_BUNDLE_IDENTIFIER }
+        : {}),
+    };
+  }
 
   return betterAuth({
     secret,
@@ -139,7 +151,7 @@ export function createBetterAuth(db: Database, env: Env): WhomeBetterAuth {
         });
       },
     },
-    socialProviders,
+    socialProviders: Object.keys(socialProviders).length > 0 ? socialProviders : undefined,
     plugins: [
       username({
         minUsernameLength: USERNAME_MIN_LENGTH,

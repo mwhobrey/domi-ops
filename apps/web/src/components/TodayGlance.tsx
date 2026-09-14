@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiClient } from "../lib/client-api";
+import { filterGlanceCalendarTileEvents } from "../lib/calendar-utils";
 import { formatChoreDueMeta, formatSchoolDueMeta } from "../lib/glance-meta";
 import type { GlancePreviewItem } from "./ui";
 import { Card, CardBody, CardHeader, GlanceTile, SectionHeader, Skeleton } from "./ui";
@@ -37,6 +38,12 @@ type HealthGlance = {
     scheduledTimeLabel: string;
     awaitingFirst?: boolean;
   }[];
+  pendingGroupDoses?: {
+    groupId: string;
+    name: string;
+    scheduledAt: string;
+    scheduledTimeLabel: string;
+  }[];
 };
 
 type DriveGlance = {
@@ -61,8 +68,11 @@ type CalendarEvent = {
   id: string;
   title: string;
   allDay: boolean;
+  startDate?: string;
   startTime: string | null;
   endTime: string | null;
+  source?: string;
+  overlayKind?: string;
 };
 type CalendarEventsResponse = { events: CalendarEvent[] };
 
@@ -83,9 +93,37 @@ const toneRank: Record<GlanceTone, number> = {
   success: 2,
 };
 
+type HealthGlanceItem = {
+  key: string;
+  label: string;
+  scheduledAt: string;
+  scheduledTimeLabel: string;
+  metaExtra?: string | null;
+  awaitingFirst?: boolean;
+  href: string;
+};
+
 function buildHealthTile(glance: HealthGlance | null): GlanceTileModel | null {
   if (!glance) return null;
-  const pending = glance.pendingDoses ?? [];
+  const pending: HealthGlanceItem[] = [
+    ...(glance.pendingGroupDoses ?? []).map((d) => ({
+      key: `group:${d.groupId}-${d.scheduledAt}`,
+      label: d.name,
+      scheduledAt: d.scheduledAt,
+      scheduledTimeLabel: d.scheduledTimeLabel,
+      href: `/health?takeGroup=${encodeURIComponent(d.groupId)}&scheduledAt=${encodeURIComponent(d.scheduledAt)}`,
+    })),
+    ...(glance.pendingDoses ?? []).map((d) => ({
+      key: `${d.medicationId}-${d.scheduledAt}`,
+      label: d.name,
+      scheduledAt: d.scheduledAt,
+      scheduledTimeLabel: d.scheduledTimeLabel,
+      metaExtra: d.dosage,
+      awaitingFirst: d.awaitingFirst,
+      href: `/health?take=${encodeURIComponent(d.medicationId)}&scheduledAt=${encodeURIComponent(d.scheduledAt)}`,
+    })),
+  ].sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
+
   const now = Date.now();
   const overdueCount = pending.filter((d) => {
     if (d.awaitingFirst) return false;
@@ -116,12 +154,12 @@ function buildHealthTile(glance: HealthGlance | null): GlanceTileModel | null {
       const at = Date.parse(d.scheduledAt);
       const late = !d.awaitingFirst && Number.isFinite(at) && at < now;
       return {
-        key: `${d.medicationId}-${d.scheduledTimeLabel}`,
-        label: d.name,
-        meta: [late ? "Overdue" : d.scheduledTimeLabel, d.dosage, d.awaitingFirst ? "Start" : null]
+        key: d.key,
+        label: d.label,
+        meta: [late ? "Overdue" : d.scheduledTimeLabel, d.metaExtra, d.awaitingFirst ? "Start" : null]
           .filter(Boolean)
           .join(" · "),
-        href: `/health?take=${encodeURIComponent(d.medicationId)}&scheduledAt=${encodeURIComponent(d.scheduledAt)}`,
+        href: d.href,
       };
     }),
     overflowCount: Math.max(0, pending.length - 3),
@@ -185,7 +223,19 @@ function buildExpensesTile(glance: ExpensesGlance | null): GlanceTileModel | nul
 
 function buildCalendarTile(glance: CalendarEventsResponse | null): GlanceTileModel | null {
   if (!glance) return null;
-  const events = glance.events;
+  // Health tile owns doses — drop med overlays here. Also hide timed events that already passed.
+  const events = filterGlanceCalendarTileEvents(
+    glance.events.map((e) => ({
+      id: e.id,
+      title: e.title,
+      allDay: e.allDay,
+      startDate: e.startDate ?? "",
+      startTime: e.startTime,
+      endTime: e.endTime,
+      source: e.source,
+      overlayKind: e.overlayKind,
+    })),
+  );
   const headline = events.length === 0 ? "Nothing today" : `${events.length} today`;
   const tone: GlanceTone = events.length === 0 ? "success" : "default";
   return {

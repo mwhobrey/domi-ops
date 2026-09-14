@@ -11,8 +11,31 @@ export type PushSubscriptionPayload = {
   timezone?: string | null;
 };
 
+export type NativePushSubscriptionPayload = {
+  platform: "ios" | "android";
+  deviceToken: string;
+  timezone?: string | null;
+};
+
 export function isWebPushConfigured(env: Env): boolean {
   return Boolean(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY && env.VAPID_SUBJECT);
+}
+
+/** True when APNs and/or FCM (v1 or legacy) can deliver Capacitor store pushes. */
+export function isNativePushConfigured(env: Env): boolean {
+  const fcm =
+    Boolean(env.FCM_PROJECT_ID && env.FCM_SERVICE_ACCOUNT_JSON) || Boolean(env.FCM_SERVER_KEY);
+  const apns = Boolean(env.APNS_KEY_ID && env.APNS_TEAM_ID && env.APNS_P8_KEY);
+  return fcm || apns;
+}
+
+/** Web VAPID and/or native store push — used for profile `pushAvailable` and delivery gates. */
+export function isAnyPushConfigured(env: Env): boolean {
+  return isWebPushConfigured(env) || isNativePushConfigured(env);
+}
+
+export function nativePushEndpoint(platform: "ios" | "android", deviceToken: string): string {
+  return `native:${platform}:${deviceToken}`;
 }
 
 function truncateBody(text: string, max = 140): string {
@@ -92,6 +115,7 @@ export async function upsertPushSubscription(
 
   await db.insert(pushSubscriptions).values({
     userId,
+    platform: "web",
     endpoint: sub.endpoint,
     p256dh: sub.keys.p256dh,
     authKey: sub.keys.auth,
@@ -99,17 +123,79 @@ export async function upsertPushSubscription(
   });
 }
 
+export async function upsertNativePushSubscription(
+  db: Database,
+  userId: string,
+  sub: NativePushSubscriptionPayload,
+): Promise<void> {
+  const token = sub.deviceToken.trim();
+  if (!token) throw new Error("missing_device_token");
+  const platform = sub.platform;
+  const endpoint = nativePushEndpoint(platform, token);
+  const rawTz =
+    typeof sub.timezone === "string" && sub.timezone.trim() ? sub.timezone.trim().slice(0, 64) : null;
+  const timezone = rawTz && isValidTimeZone(rawTz) ? rawTz : null;
+
+  const existing = await db
+    .select({ id: pushSubscriptions.id })
+    .from(pushSubscriptions)
+    .where(eq(pushSubscriptions.deviceToken, token))
+    .limit(1);
+
+  if (existing[0]) {
+    await db
+      .update(pushSubscriptions)
+      .set({
+        userId,
+        platform,
+        endpoint,
+        deviceToken: token,
+        // Placeholder keys — native delivery does not use VAPID.
+        p256dh: "native",
+        authKey: "native",
+        ...(timezone ? { timezone } : {}),
+      })
+      .where(eq(pushSubscriptions.id, existing[0].id));
+    return;
+  }
+
+  await db.insert(pushSubscriptions).values({
+    userId,
+    platform,
+    endpoint,
+    deviceToken: token,
+    p256dh: "native",
+    authKey: "native",
+    timezone,
+  });
+}
+
 export async function deletePushSubscriptionForUser(
   db: Database,
   userId: string,
-  endpoint?: string,
+  opts?: {
+    endpoint?: string;
+    /** When true, only remove ios/android rows (Capacitor unsubscribe). */
+    nativeOnly?: boolean;
+    platform?: "ios" | "android";
+  },
 ): Promise<void> {
-  if (endpoint) {
+  if (opts?.endpoint) {
     await db
       .delete(pushSubscriptions)
       .where(
-        and(eq(pushSubscriptions.userId, userId), eq(pushSubscriptions.endpoint, endpoint)),
+        and(eq(pushSubscriptions.userId, userId), eq(pushSubscriptions.endpoint, opts.endpoint)),
       );
+    return;
+  }
+  if (opts?.nativeOnly) {
+    const platformFilter =
+      opts.platform === "ios" || opts.platform === "android"
+        ? eq(pushSubscriptions.platform, opts.platform)
+        : inArray(pushSubscriptions.platform, ["ios", "android"]);
+    await db
+      .delete(pushSubscriptions)
+      .where(and(eq(pushSubscriptions.userId, userId), platformFilter));
     return;
   }
   await db.delete(pushSubscriptions).where(eq(pushSubscriptions.userId, userId));

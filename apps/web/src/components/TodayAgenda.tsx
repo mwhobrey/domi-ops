@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
 import type { CalendarEventView } from "../lib/calendar-utils";
-import { isOverlayEvent } from "../lib/calendar-utils";
+import { filterPastTimedEvents, isOverlayEvent } from "../lib/calendar-utils";
 import { Alert, Card, CardBody, CardHeader, SectionHeader, Skeleton } from "./ui";
 
 function todayIsoLocal(): string {
@@ -48,7 +48,9 @@ export function TodayAgenda() {
       const day = data.events.filter(
         (e) => e.startDate === today || (e.endDate && e.startDate <= today && e.endDate >= today),
       );
-      setEvents(day);
+      // Keep med group/individual overlays from the API (groups preferred server-side).
+      // Drop timed events that already ended so the agenda stays "what's left today".
+      setEvents(filterPastTimedEvents(day));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load today’s schedule");
     } finally {

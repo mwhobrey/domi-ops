@@ -2,6 +2,7 @@ import type { Env } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
 import {
   healthEvents,
+  healthMedicationGroups,
   healthMedications,
   households,
   schoolAssignments,
@@ -11,6 +12,8 @@ import {
 import {
   localDateOfInstant,
   localHourInTz,
+  nextIntervalPending,
+  parseIntervalSchedule,
   todayIsoDateInTz,
   zonedLocalToUtc,
 } from "@domi-ops/calendar-sync";
@@ -20,8 +23,17 @@ import { parseMedSchedule } from "./health-serialize.js";
 import { decryptHealthFieldOrPassthrough } from "./health-crypto.js";
 import {
   healthEventVisibleWhere,
+  healthMedicationGroupVisibleWhere,
   healthMedicationVisibleWhere,
+  loadGroupMemberMedicationIdsMap,
+  loadHealthMedicationGroupMembershipMap,
 } from "./health-access.js";
+import {
+  GLANCE_DOSE_LOG_LOOKBACK_DAYS,
+  isInstantLogged,
+  loadDoseLogMap,
+  type DoseLogEntry,
+} from "./health-med-logging.js";
 import { memberEnrollmentsForHousehold } from "./school-auth-context.js";
 import { visibleClassIdsForMember } from "./school-access.js";
 import { publishedAssignmentVisibilities } from "./school-assignment-visibility.js";
@@ -270,6 +282,45 @@ function datesInRange(from: string, to: string): string[] {
   return out;
 }
 
+function medHasScheduledTime(scheduleJson: string | null, hhmm: string): boolean {
+  return (parseMedSchedule(scheduleJson).times ?? []).some((t) => t.slice(0, 5) === hhmm);
+}
+
+function toIntervalLogs(entries: DoseLogEntry[]) {
+  return entries.map((l) => ({
+    scheduledAt: l.scheduledAt,
+    loggedAt: l.loggedAt,
+    status: l.status,
+  }));
+}
+
+function medOverlay(params: {
+  id: string;
+  title: string;
+  date: string;
+  hhmm: string;
+  deepLink: string;
+}): CalendarListEvent {
+  return overlayEvent({
+    id: params.id,
+    title: params.title,
+    startDate: params.date,
+    startTime: `${params.hhmm}:00`,
+    endTime: null,
+    allDay: false,
+    color: OVERLAY_COLOR_HEALTH_MED,
+    calendarId: OVERLAY_CALENDAR_HEALTH_MED,
+    source: "health_med",
+    overlayKind: "health_med",
+    deepLink: params.deepLink,
+  });
+}
+
+/**
+ * Medication dose overlays for calendar views.
+ * - Prefer **groups** over member meds (claimed times / interval membership stay off the grid).
+ * - Hide doses already logged (taken/skipped/missed); keep past untaken doses visible.
+ */
 export async function buildMedicationDoseOverlays(
   db: Database,
   env: Env,
@@ -283,55 +334,238 @@ export async function buildMedicationDoseOverlays(
     .where(eq(households.id, auth.householdId))
     .limit(1);
   const timeZone = household?.timezone ?? "UTC";
+  const today = todayIsoDateInTz(timeZone);
+  const now = new Date();
 
-  const meds = await db
-    .select()
-    .from(healthMedications)
-    .where(
-      and(
-        healthMedicationVisibleWhere(db, auth),
-        eq(healthMedications.enabled, true),
-        eq(healthMedications.scheduleKind, "scheduled"),
+  const [meds, groupRows] = await Promise.all([
+    db
+      .select()
+      .from(healthMedications)
+      .where(
+        and(
+          healthMedicationVisibleWhere(db, auth),
+          eq(healthMedications.enabled, true),
+        ),
       ),
+    db
+      .select()
+      .from(healthMedicationGroups)
+      .where(
+        and(
+          healthMedicationGroupVisibleWhere(db, auth),
+          eq(healthMedicationGroups.enabled, true),
+        ),
+      ),
+  ]);
+
+  const groupById = new Map(groupRows.map((g) => [g.id, g]));
+  const medGroupMembershipMap = await loadHealthMedicationGroupMembershipMap(
+    db,
+    meds.map((m) => m.id),
+  );
+
+  const groupMemberMedsMap = new Map<string, (typeof healthMedications.$inferSelect)[]>();
+  if (groupRows.length > 0) {
+    const [groupMemberIdsMap, allHouseholdMeds] = await Promise.all([
+      loadGroupMemberMedicationIdsMap(
+        db,
+        groupRows.map((g) => g.id),
+      ),
+      db
+        .select()
+        .from(healthMedications)
+        .where(
+          and(eq(healthMedications.householdId, auth.householdId), eq(healthMedications.enabled, true)),
+        ),
+    ]);
+    const medsById = new Map(allHouseholdMeds.map((m) => [m.id, m]));
+    for (const [groupId, medicationIds] of groupMemberIdsMap) {
+      groupMemberMedsMap.set(
+        groupId,
+        medicationIds.map((id) => medsById.get(id)).filter((m) => m !== undefined),
+      );
+    }
+  }
+
+  const doseMedIds = [
+    ...new Set([...meds.map((m) => m.id), ...[...groupMemberMedsMap.values()].flat().map((m) => m.id)]),
+  ];
+  const lookbackStart = new Date(
+    zonedLocalToUtc(from, "00:00", timeZone).getTime() -
+      GLANCE_DOSE_LOG_LOOKBACK_DAYS * 24 * 60 * 60 * 1000,
+  );
+  const doseLogMap = await loadDoseLogMap(db, doseMedIds, lookbackStart);
+
+  function scheduledTimesClaimedByGroups(medId: string): Set<string> {
+    const claimed = new Set<string>();
+    for (const groupId of medGroupMembershipMap.get(medId) ?? []) {
+      const group = groupById.get(groupId);
+      if (!group || group.scheduleKind !== "scheduled") continue;
+      for (const t of parseMedSchedule(group.scheduleJson).times ?? []) {
+        claimed.add(t.slice(0, 5));
+      }
+    }
+    return claimed;
+  }
+
+  function isDelegatedToIntervalGroup(medId: string): boolean {
+    return (medGroupMembershipMap.get(medId) ?? []).some(
+      (groupId) => groupById.get(groupId)?.scheduleKind === "interval",
     );
+  }
 
   const overlays: CalendarListEvent[] = [];
-  for (const med of meds) {
-    const schedule = parseMedSchedule(med.scheduleJson);
-    const times = schedule.times ?? [];
-    if (times.length === 0) continue;
+  const dates = datesInRange(from, to);
 
-    const name = decryptHealthFieldOrPassthrough(med.name, env) ?? "Medication";
+  for (const group of groupRows) {
+    const members = groupMemberMedsMap.get(group.id) ?? [];
+    if (members.length === 0) continue;
+    const name = decryptHealthFieldOrPassthrough(group.name, env) ?? "Medications";
 
-    for (const date of datesInRange(from, to)) {
-      if (med.startDate && date < med.startDate) continue;
-      if (med.endDate && date > med.endDate) continue;
-      if (schedule.daysOfWeek && schedule.daysOfWeek.length > 0) {
-        const dow = new Date(`${date}T12:00:00Z`).getUTCDay();
-        if (!schedule.daysOfWeek.includes(dow)) continue;
+    if (group.scheduleKind === "scheduled") {
+      const schedule = parseMedSchedule(group.scheduleJson);
+      const times = schedule.times ?? [];
+      for (const date of dates) {
+        if (group.startDate && date < group.startDate) continue;
+        if (group.endDate && date > group.endDate) continue;
+        if (schedule.daysOfWeek?.length) {
+          const dow = new Date(`${date}T12:00:00Z`).getUTCDay();
+          if (!schedule.daysOfWeek.includes(dow)) continue;
+        }
+        for (const time of times) {
+          const hhmm = time.length >= 5 ? time.slice(0, 5) : time;
+          const scheduledAt = zonedLocalToUtc(date, hhmm, timeZone);
+          const membersAtThisTime = members.filter((m) =>
+            m.scheduleKind === "scheduled" ? medHasScheduledTime(m.scheduleJson, hhmm) : true,
+          );
+          if (membersAtThisTime.length === 0) continue;
+          const allLogged = membersAtThisTime.every((m) =>
+            isInstantLogged(doseLogMap, m.id, scheduledAt),
+          );
+          if (allLogged) continue;
+          const iso = scheduledAt.toISOString();
+          overlays.push(
+            medOverlay({
+              id: `overlay:health:medgroup:${group.id}:${iso}`,
+              title: name,
+              date,
+              hhmm,
+              deepLink: `/health?takeGroup=${encodeURIComponent(group.id)}&scheduledAt=${encodeURIComponent(iso)}`,
+            }),
+          );
+        }
       }
-      for (const time of times) {
-        const hhmm = time.length >= 5 ? time.slice(0, 5) : time;
-        const scheduledAt = zonedLocalToUtc(date, hhmm, timeZone);
-        const iso = scheduledAt.toISOString();
+      continue;
+    }
+
+    if (group.scheduleKind === "interval") {
+      const interval = parseIntervalSchedule(group.scheduleJson);
+      if (!interval) continue;
+      const memberIds = members.map((m) => m.id);
+      const logs = memberIds.flatMap((id) => toIntervalLogs(doseLogMap.get(id) ?? []));
+      for (const date of dates) {
+        if (group.startDate && date < group.startDate) continue;
+        if (group.endDate && date > group.endDate) continue;
+        const pending = nextIntervalPending({
+          schedule: interval,
+          tz: timeZone,
+          date,
+          now: date === today ? now : zonedLocalToUtc(date, "12:00", timeZone),
+          logs,
+        });
+        if (!pending) continue;
+        if (pending.awaitingFirst && date !== today) continue;
+        const allLogged =
+          !pending.awaitingFirst &&
+          memberIds.every((id) => isInstantLogged(doseLogMap, id, pending.scheduledAt));
+        if (allLogged) continue;
+        const hhmm = pending.scheduledTime.slice(0, 5);
+        const iso = pending.scheduledAt.toISOString();
         overlays.push(
-          overlayEvent({
-            id: `overlay:health:med:${med.id}:${iso}`,
-            title: name,
-            startDate: date,
-            startTime: `${hhmm}:00`,
-            endTime: null,
-            allDay: false,
-            color: OVERLAY_COLOR_HEALTH_MED,
-            calendarId: OVERLAY_CALENDAR_HEALTH_MED,
-            source: "health_med",
-            overlayKind: "health_med",
-                deepLink: `/health?take=${med.id}&scheduledAt=${encodeURIComponent(iso)}`,
+          medOverlay({
+            id: `overlay:health:medgroup:${group.id}:${iso}`,
+            title: pending.awaitingFirst ? `${name} (start)` : name,
+            date,
+            hhmm,
+            deepLink: `/health?takeGroup=${encodeURIComponent(group.id)}&scheduledAt=${encodeURIComponent(iso)}`,
           }),
         );
       }
     }
   }
+
+  for (const med of meds) {
+    if (med.scheduleKind === "prn") continue;
+    if (med.scheduleKind === "interval" && isDelegatedToIntervalGroup(med.id)) continue;
+
+    const name = decryptHealthFieldOrPassthrough(med.name, env) ?? "Medication";
+
+    if (med.scheduleKind === "scheduled") {
+      const schedule = parseMedSchedule(med.scheduleJson);
+      const times = schedule.times ?? [];
+      if (times.length === 0) continue;
+      const claimed = scheduledTimesClaimedByGroups(med.id);
+      for (const date of dates) {
+        if (med.startDate && date < med.startDate) continue;
+        if (med.endDate && date > med.endDate) continue;
+        if (schedule.daysOfWeek?.length) {
+          const dow = new Date(`${date}T12:00:00Z`).getUTCDay();
+          if (!schedule.daysOfWeek.includes(dow)) continue;
+        }
+        for (const time of times) {
+          const hhmm = time.length >= 5 ? time.slice(0, 5) : time;
+          if (claimed.has(hhmm)) continue;
+          const scheduledAt = zonedLocalToUtc(date, hhmm, timeZone);
+          if (isInstantLogged(doseLogMap, med.id, scheduledAt)) continue;
+          const iso = scheduledAt.toISOString();
+          overlays.push(
+            medOverlay({
+              id: `overlay:health:med:${med.id}:${iso}`,
+              title: name,
+              date,
+              hhmm,
+              deepLink: `/health?take=${encodeURIComponent(med.id)}&scheduledAt=${encodeURIComponent(iso)}`,
+            }),
+          );
+        }
+      }
+      continue;
+    }
+
+    if (med.scheduleKind === "interval") {
+      const interval = parseIntervalSchedule(med.scheduleJson);
+      if (!interval) continue;
+      const logs = toIntervalLogs(doseLogMap.get(med.id) ?? []);
+      for (const date of dates) {
+        if (med.startDate && date < med.startDate) continue;
+        if (med.endDate && date > med.endDate) continue;
+        const pending = nextIntervalPending({
+          schedule: interval,
+          tz: timeZone,
+          date,
+          now: date === today ? now : zonedLocalToUtc(date, "12:00", timeZone),
+          logs,
+        });
+        if (!pending) continue;
+        if (pending.awaitingFirst && date !== today) continue;
+        if (!pending.awaitingFirst && isInstantLogged(doseLogMap, med.id, pending.scheduledAt)) {
+          continue;
+        }
+        const hhmm = pending.scheduledTime.slice(0, 5);
+        const iso = pending.scheduledAt.toISOString();
+        overlays.push(
+          medOverlay({
+            id: `overlay:health:med:${med.id}:${iso}`,
+            title: pending.awaitingFirst ? `${name} (start)` : name,
+            date,
+            hhmm,
+            deepLink: `/health?take=${encodeURIComponent(med.id)}&scheduledAt=${encodeURIComponent(iso)}`,
+          }),
+        );
+      }
+    }
+  }
+
   return overlays;
 }
 

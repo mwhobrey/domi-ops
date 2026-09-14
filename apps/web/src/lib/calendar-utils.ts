@@ -45,6 +45,83 @@ export function isOverlayEvent(ev: CalendarEventView): boolean {
   return Boolean(ev.overlayKind || ev.deepLink || ev.id.startsWith("overlay:"));
 }
 
+export function isHealthMedOverlay(ev: {
+  source?: string | null;
+  overlayKind?: string | null;
+  id: string;
+}): boolean {
+  return (
+    ev.source === "health_med" ||
+    ev.overlayKind === "health_med" ||
+    ev.id.startsWith("overlay:health:med")
+  );
+}
+
+/** Local wall-clock end (or start) of a timed event, for "already passed today" filtering. */
+export function eventLocalEndMs(ev: {
+  startDate: string;
+  startTime: string | null;
+  endTime?: string | null;
+  allDay: boolean;
+}): number | null {
+  if (ev.allDay || !ev.startTime) return null;
+  const raw = (ev.endTime ?? ev.startTime).slice(0, 8);
+  const [hStr, mStr, sStr] = raw.split(":");
+  const h = Number(hStr);
+  const m = Number(mStr ?? 0);
+  const s = Number(sStr ?? 0);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
+  const [y, mo, d] = ev.startDate.split("-").map(Number);
+  if (!y || !mo || !d) return null;
+  return new Date(y, mo - 1, d, h, m, Number.isFinite(s) ? s : 0, 0).getTime();
+}
+
+/**
+ * Hide timed calendar events that already ended (all-day stays).
+ * Medication overlays are kept even when past — overdue untaken doses should remain visible;
+ * already-logged doses are omitted server-side.
+ */
+export function filterPastTimedEvents<
+  T extends {
+    id: string;
+    allDay: boolean;
+    startDate: string;
+    startTime: string | null;
+    endTime?: string | null;
+    source?: string | null;
+    overlayKind?: string | null;
+  },
+>(events: T[], now: Date = new Date()): T[] {
+  const nowMs = now.getTime();
+  return events.filter((ev) => {
+    if (isHealthMedOverlay(ev)) return true;
+    if (ev.allDay || !ev.startTime) return true;
+    const endMs = eventLocalEndMs(ev);
+    if (endMs == null) return true;
+    return endMs >= nowMs;
+  });
+}
+
+/**
+ * At-a-glance calendar tile: no medication overlays (health tile owns doses) + hide past timed events.
+ */
+export function filterGlanceCalendarTileEvents<
+  T extends {
+    id: string;
+    allDay: boolean;
+    startDate: string;
+    startTime: string | null;
+    endTime?: string | null;
+    source?: string | null;
+    overlayKind?: string | null;
+  },
+>(events: T[], now: Date = new Date()): T[] {
+  return filterPastTimedEvents(
+    events.filter((ev) => !isHealthMedOverlay(ev)),
+    now,
+  );
+}
+
 /** Events the user may drag on the week/day grid (timed or all-day). Prefer API `editable` when present. */
 export function isEventEditable(ev: CalendarEventView): boolean {
   if (isOverlayEvent(ev)) return false;

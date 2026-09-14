@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
+import { NativeShellBoot } from "../components/NativeShellBoot";
 import { PwaRegister } from "../components/PwaRegister";
 import "./globals.css";
 
@@ -48,6 +49,7 @@ export default function RootLayout({
       <body className="antialiased">
         {children}
         <PwaRegister />
+        <NativeShellBoot />
       </body>
     </html>
   );

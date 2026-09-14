@@ -4,6 +4,7 @@ import { pushSubscriptions, users } from "@domi-ops/db";
 import { eq } from "drizzle-orm";
 import webpush from "web-push";
 import { sendPushSubscriptionExpiredEmail } from "@domi-ops/auth";
+import { deliverNativeDevicePush } from "./native-push-delivery.js";
 
 export type WebPushNotificationAction = {
   action: string;
@@ -25,6 +26,8 @@ type SubscriptionRow = {
   endpoint: string;
   p256dh: string;
   authKey: string;
+  platform?: string | null;
+  deviceToken?: string | null;
 };
 
 /**
@@ -51,6 +54,23 @@ async function notifySubscriptionExpired(db: Database, env: Env, userId: string)
   }
 }
 
+/**
+ * APNs/FCM delivery for Capacitor store builds (WHO-289).
+ */
+async function deliverNativePush(
+  env: Env,
+  sub: SubscriptionRow,
+  payload: WebPushPayload,
+): Promise<"sent" | "skipped" | "gone"> {
+  const platform = sub.platform === "ios" || sub.platform === "android" ? sub.platform : null;
+  const token = sub.deviceToken?.trim();
+  if (!platform || !token) return "skipped";
+
+  const result = await deliverNativeDevicePush(env, platform, token, payload);
+  if (result === "error") return "skipped";
+  return result;
+}
+
 export async function deliverWebPush(
   db: Database,
   env: Env,
@@ -60,6 +80,18 @@ export async function deliverWebPush(
   const json = JSON.stringify(payload);
   await Promise.all(
     subs.map(async (sub) => {
+      if (sub.platform === "ios" || sub.platform === "android" || sub.endpoint.startsWith("native:")) {
+        const result = await deliverNativePush(env, sub, payload);
+        if (result === "gone") {
+          const deleted = await db
+            .delete(pushSubscriptions)
+            .where(eq(pushSubscriptions.id, sub.id))
+            .returning({ id: pushSubscriptions.id });
+          if (deleted.length > 0) await notifySubscriptionExpired(db, env, sub.userId);
+        }
+        return;
+      }
+
       try {
         await webpush.sendNotification(
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.authKey } },
