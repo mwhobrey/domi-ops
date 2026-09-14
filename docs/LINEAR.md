@@ -85,6 +85,19 @@ Workspace-level **Bug** / **Feature** may exist; attach in Linear UI if needed. 
 | M5 — Targeting & cadence | [WHO-143](https://linear.app/mikewhob-whome/issue/WHO-143), [WHO-144](https://linear.app/mikewhob-whome/issue/WHO-144) |
 | M6 — Deferred module push | [WHO-148](https://linear.app/mikewhob-whome/issue/WHO-148)–[WHO-151](https://linear.app/mikewhob-whome/issue/WHO-151) |
 
+### [Native / store](https://linear.app/mikewhob-whome/project/native-store-fbc6e517c5f3)
+
+Capacitor 8 remote WebView of live `apps/web` (ADR 005). Spike doc: `docs/native-mobile-store-spike.md`.
+
+| Milestone | Issues |
+|-----------|--------|
+| M0 — Decision (ADR) | [WHO-286](https://linear.app/mikewhob-whome/issue/WHO-286) |
+| M1 — Spike shell | [WHO-287](https://linear.app/mikewhob-whome/issue/WHO-287) |
+| M2 — Native auth | [WHO-288](https://linear.app/mikewhob-whome/issue/WHO-288) |
+| M3 — Native push | [WHO-289](https://linear.app/mikewhob-whome/issue/WHO-289) |
+| M4 — RevenueCat IAP | [WHO-290](https://linear.app/mikewhob-whome/issue/WHO-290) |
+| M5 — Store submit | [WHO-291](https://linear.app/mikewhob-whome/issue/WHO-291) |
+
 ### [DevEx & platform](https://linear.app/mikewhob-whome/project/devex-and-platform-2b8c7de9daa6)
 
 | Milestone | Issues |

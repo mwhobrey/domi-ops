@@ -39,6 +39,8 @@ export type IntervalPendingDose = {
 const MIN_EVERY = 5;
 const MAX_EVERY = 24 * 60 * 7;
 const MAX_DOSES_CAP = 24;
+/** Intervals of a full day or longer span calendar days — must not reset each local midnight. */
+const MULTI_DAY_MINUTES = 24 * 60;
 
 function parseHhmm(value: unknown): string | undefined {
   if (typeof value !== "string" || !value.includes(":")) return undefined;
@@ -127,6 +129,10 @@ export function normalizeIntervalSchedule(input: {
   };
 }
 
+export function isMultiDayInterval(schedule: IntervalSchedule): boolean {
+  return schedule.everyMinutes >= MULTI_DAY_MINUTES;
+}
+
 function dayEndExclusive(date: string, tz: string, schedule: IntervalSchedule): Date {
   if (schedule.stop.mode === "end_time" && schedule.stop.endTime) {
     return zonedLocalToUtc(date, schedule.stop.endTime, tz);
@@ -135,10 +141,16 @@ function dayEndExclusive(date: string, tz: string, schedule: IntervalSchedule): 
   return zonedLocalToUtc(addDaysIso(date, 1), "00:00", tz);
 }
 
-function takenToday(logs: IntervalLog[], date: string, tz: string): IntervalLog[] {
+function takenOnDate(logs: IntervalLog[], date: string, tz: string): IntervalLog[] {
   return logs
     .filter((l) => l.status === "taken")
     .filter((l) => localDateOfInstant(l.loggedAt, tz) === date)
+    .sort((a, b) => a.loggedAt.getTime() - b.loggedAt.getTime());
+}
+
+function allTaken(logs: IntervalLog[]): IntervalLog[] {
+  return logs
+    .filter((l) => l.status === "taken")
     .sort((a, b) => a.loggedAt.getTime() - b.loggedAt.getTime());
 }
 
@@ -163,6 +175,87 @@ function hasLogForInstant(logs: IntervalLog[], instant: Date): boolean {
   return logs.some((l) => l.scheduledAt != null && Math.abs(l.scheduledAt.getTime() - t) < 60_000);
 }
 
+function pendingFromInstant(
+  instant: Date,
+  tz: string,
+  awaitingFirst = false,
+): IntervalPendingDose {
+  return {
+    scheduledAt: instant,
+    scheduledTime: localTimeHhmm(instant, tz),
+    scheduledTimeLabel: awaitingFirst ? "First dose" : formatTimeLabelInTz(instant, tz),
+    awaitingFirst,
+  };
+}
+
+/**
+ * Multi-day intervals (every ≥ 1 day): clock is global last-taken + everyMinutes.
+ * Must not re-offer the start time on days between doses (WHO-interval-multiday).
+ */
+function nextMultiDayPending(params: {
+  schedule: IntervalSchedule;
+  tz: string;
+  date: string;
+  now: Date;
+  logs: IntervalLog[];
+}): IntervalPendingDose | null {
+  const { schedule, tz, date, now, logs } = params;
+  const taken = allTaken(logs);
+
+  if (taken.length === 0) {
+    if (schedule.anchor === "first_taken") {
+      return pendingFromInstant(now, tz, true);
+    }
+    const start = zonedLocalToUtc(date, schedule.fixedStartTime!, tz);
+    if (hasLogForInstant(logs, start)) return null;
+    // Only surface the first fixed slot on/before today (overdue) — not every future morning.
+    const startDate = localDateOfInstant(start, tz);
+    if (startDate > date) return null;
+    return {
+      scheduledAt: start,
+      scheduledTime: schedule.fixedStartTime!,
+      scheduledTimeLabel: formatTimeLabelInTz(start, tz),
+      awaitingFirst: false,
+    };
+  }
+
+  if (schedule.intervalFrom === "last_taken") {
+    const last = taken[taken.length - 1]!;
+    const next = new Date(last.loggedAt.getTime() + schedule.everyMinutes * 60_000);
+    const nextDate = localDateOfInstant(next, tz);
+    // Due on a future local day — stay quiet until then.
+    if (nextDate > date) return null;
+    if (hasLogForInstant(logs, next)) return null;
+    return pendingFromInstant(next, tz);
+  }
+
+  // schedule_grid spanning days: origin is first take's local clock (or fixed start on that day).
+  const first = taken[0]!;
+  const originDate = localDateOfInstant(first.loggedAt, tz);
+  const origin =
+    schedule.anchor === "fixed_start" && schedule.fixedStartTime
+      ? zonedLocalToUtc(originDate, schedule.fixedStartTime, tz)
+      : zonedLocalToUtc(originDate, localTimeHhmm(first.loggedAt, tz), tz);
+
+  const maxSlots = Math.max(
+    64,
+    schedule.stop.mode === "max_doses" && schedule.stop.maxDoses
+      ? schedule.stop.maxDoses * 8
+      : 64,
+  );
+  for (let i = 0; i < maxSlots; i++) {
+    const slot = new Date(origin.getTime() + i * schedule.everyMinutes * 60_000);
+    const slotDate = localDateOfInstant(slot, tz);
+    if (slotDate > date) break;
+    if (hasLogForInstant(logs, slot)) continue;
+    // Skip slots already in the past relative to the first take when they were "missed"
+    // only if a later take exists past this slot — hasLogForInstant handles logged ones;
+    // unlogged past slots still surface as overdue on `date`.
+    return pendingFromInstant(slot, tz);
+  }
+  return null;
+}
+
 /**
  * Next pending interval dose for local `date` (usually today), or null if done / waiting.
  * When `awaitingFirst`, caller should offer "Start" / first Taken without a prior pending slot.
@@ -175,7 +268,12 @@ export function nextIntervalPending(params: {
   logs: IntervalLog[];
 }): IntervalPendingDose | null {
   const { schedule, tz, date, now, logs } = params;
-  const taken = takenToday(logs, date, tz);
+
+  if (isMultiDayInterval(schedule)) {
+    return nextMultiDayPending(params);
+  }
+
+  const taken = takenOnDate(logs, date, tz);
   const dayEnd = dayEndExclusive(date, tz, schedule);
 
   if (schedule.stop.mode === "max_doses" && schedule.stop.maxDoses != null) {
@@ -217,7 +315,7 @@ export function nextIntervalPending(params: {
     };
   }
 
-  // schedule_grid
+  // schedule_grid (intra-day)
   const start = gridStartInstant(schedule, date, tz, taken[0]);
   if (!start) return null;
   const maxSlots =

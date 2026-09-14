@@ -5,8 +5,19 @@ import { and, eq, inArray } from "drizzle-orm";
 import webpush from "web-push";
 import { deliverWebPush, type WebPushPayload } from "./push-delivery.js";
 
-function configured(env: Env): boolean {
+function webPushConfigured(env: Env): boolean {
   return Boolean(env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY && env.VAPID_SUBJECT);
+}
+
+function nativePushConfigured(env: Env): boolean {
+  const fcm =
+    Boolean(env.FCM_PROJECT_ID && env.FCM_SERVICE_ACCOUNT_JSON) || Boolean(env.FCM_SERVER_KEY);
+  const apns = Boolean(env.APNS_KEY_ID && env.APNS_TEAM_ID && env.APNS_P8_KEY);
+  return fcm || apns;
+}
+
+function anyPushConfigured(env: Env): boolean {
+  return webPushConfigured(env) || nativePushConfigured(env);
 }
 
 /** Persist in-app notification rows (always, even when push is unavailable). */
@@ -70,6 +81,8 @@ export type PushSubscriptionDelivery = {
   endpoint: string;
   p256dh: string;
   authKey: string;
+  platform?: string | null;
+  deviceToken?: string | null;
 };
 
 /** Write inbox history and send Web Push to subscribed devices. */
@@ -90,12 +103,14 @@ export async function deliverUserNotification(
 
   await persistUserNotifications(db, input);
 
-  if (!configured(env)) return;
-  webpush.setVapidDetails(
-    env.VAPID_SUBJECT!,
-    env.VAPID_PUBLIC_KEY!,
-    env.VAPID_PRIVATE_KEY!,
-  );
+  if (!anyPushConfigured(env)) return;
+  if (webPushConfigured(env)) {
+    webpush.setVapidDetails(
+      env.VAPID_SUBJECT!,
+      env.VAPID_PUBLIC_KEY!,
+      env.VAPID_PRIVATE_KEY!,
+    );
+  }
 
   const subs = await db
     .select()
@@ -139,12 +154,14 @@ export async function deliverUserNotificationToSubscriptions(
     tag: input.tag,
   });
 
-  if (!configured(env) || input.subscriptions.length === 0) return;
-  webpush.setVapidDetails(
-    env.VAPID_SUBJECT!,
-    env.VAPID_PUBLIC_KEY!,
-    env.VAPID_PRIVATE_KEY!,
-  );
+  if (!anyPushConfigured(env) || input.subscriptions.length === 0) return;
+  if (webPushConfigured(env)) {
+    webpush.setVapidDetails(
+      env.VAPID_SUBJECT!,
+      env.VAPID_PUBLIC_KEY!,
+      env.VAPID_PRIVATE_KEY!,
+    );
+  }
 
   const payload: WebPushPayload = {
     title: input.title,

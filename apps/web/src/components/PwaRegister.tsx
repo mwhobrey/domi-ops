@@ -1,11 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { isNativeShell } from "../lib/native-shell";
 
 export function PwaRegister() {
   const [updateReady, setUpdateReady] = useState(false);
 
   useEffect(() => {
+    // Store shell (Capacitor) loads live apps/web — updates come from the web deploy /
+    // store binary, not the PWA service worker. Registering SW inside the WebView fights
+    // the wrapper and is the wrong push path (WHO-287 / ADR 005).
+    if (isNativeShell()) return;
     if (!("serviceWorker" in navigator)) return;
 
     const onControllerChange = () => {

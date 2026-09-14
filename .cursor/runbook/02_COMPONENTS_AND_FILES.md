@@ -76,7 +76,7 @@ domi-ops/
 | `src/components/HealthSharingClient.tsx` | `/health/sharing` — People ACL, shared-with-me, I've shared (WHO-230) |
 | `src/components/HealthPeopleAccessPanel.tsx` | Segment ACL matrix with presets |
 | `src/lib/calendar-filters.ts` | Calendar lane/category + overlay filter pills (`domi-ops:calendar-hidden-overlays`) |
-| `src/lib/calendar-utils.ts` | Calendar DTO helpers; `isOverlayEvent`, overlay `source`/`deepLink` |
+| `src/lib/calendar-utils.ts` | Calendar DTO helpers; `isOverlayEvent`, glance/agenda past+med filters, overlay `source`/`deepLink` |
 | `src/lib/color-contrast.ts` | WCAG text color for event chips |
 | `src/lib/member-color.ts` | Deterministic avatar hues |
 | `src/components/lists/ListPage.tsx` | Shared list layout (add form card + errors) |
@@ -93,6 +93,17 @@ domi-ops/
 
 
 **State:** No Redux/Zustand. Server Components fetch via `apiFetch`; client components minimal. Session lives in HTTP-only cookie on API side.
+
+### `apps/mobile` — Capacitor store shell (ADR 005)
+
+| Path | Responsibility |
+|------|----------------|
+| `capacitor.config.ts` | `appId: app.domiops`, `allowNavigation: ["*"]`, SystemBars / push plugins |
+| `www/` | First-run server URL picker + `/api/healthz` (product UI is remote `apps/web`) |
+| `android/`, `ios/` | Generated native projects (signing / `google-services` stay out of git) |
+| README | Spike build commands |
+
+Web companions: `apps/web/src/lib/native-shell.ts`, `native-auth.ts`, `revenuecat-client.ts`, `web-push.ts` (native branch), `components/NativeShellBoot.tsx`.
 
 ### `apps/api` — REST + OAuth
 
@@ -112,7 +123,7 @@ domi-ops/
 | `src/lib/school-test-google-export.ts` | Native test → Docs plain/html formatting (WHO-217) |
 | `src/lib/school-test-google-import.ts` | Soft-parse Doc text → draft questions (WHO-219) |
 | `src/routes/calendar.ts` | Connections, events, sync trigger; `GET /events` merges overlays |
-| `src/lib/calendar-overlays.ts` | School due-date + health virtual events for calendar |
+| `src/lib/calendar-overlays.ts` | School due-date + health event/med(/group) virtual events; taken doses omitted |
 | `src/routes/household-health.ts` | `/api/health` — events, medications, dose log, glance, **`POST /medications/push-action`** (token, no session) |
 | `src/lib/health-access.ts` | Health visibility + shares + segment ACL (WHO-229) |
 | `src/lib/health-crypto.ts` | Field encryption for PHI-like health columns |
@@ -122,7 +133,9 @@ domi-ops/
 | `src/routes/dashboard.ts` | `/dashboard`, home-status PATCH |
 | `src/routes/weather.ts` | `/weather`, `/weather/geocode` |
 | `src/routes/notices.ts` | Household notice board + in-app `/notifications` |
-| `src/routes/push.ts` | VAPID public key, push subscribe/unsubscribe |
+| `src/routes/push.ts` | VAPID + `POST /push/native-subscribe` (Capacitor APNs/FCM tokens) |
+| `src/routes/native-auth.ts` | `POST /native-auth/social` — Google/Apple idToken → Better Auth |
+| `src/routes/revenuecat.ts` | RevenueCat webhook → `household_subscriptions` |
 | `src/routes/shopping.ts` | Shopping list (+ `/shopping/glance`), recurring, receipts, reports |
 | `src/routes/chores.ts` | Chores (+ `/chores/glance`), recurring, karma, reports |
 | `src/routes/notes.ts` | Notes CRUD, sharing, tag suggestions |

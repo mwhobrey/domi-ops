@@ -39,6 +39,9 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_APP_URL: publicAppUrl,
     PUBLIC_APP_URL: publicAppUrl,
     NEXT_PUBLIC_DEMO_MODE: process.env.DEMO_MODE === "true" ? "true" : "false",
+    /** RevenueCat public SDK keys — only used inside the Capacitor shell (WHO-290). */
+    NEXT_PUBLIC_REVENUECAT_IOS_KEY: process.env.NEXT_PUBLIC_REVENUECAT_IOS_KEY ?? "",
+    NEXT_PUBLIC_REVENUECAT_ANDROID_KEY: process.env.NEXT_PUBLIC_REVENUECAT_ANDROID_KEY ?? "",
   },
   async headers() {
     return [

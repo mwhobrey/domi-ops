@@ -128,6 +128,10 @@ export function AppChrome({
     setModulesOpen(false);
     setSignOutPending(true);
     try {
+      const { logOutRevenueCat } = await import("../lib/revenuecat-client");
+      await logOutRevenueCat().catch(() => {
+        /* native-only; ignore on web */
+      });
       const res = await authClient.signOut();
       if (res.error) {
         console.error("[domi-ops] sign out failed:", res.error.message);

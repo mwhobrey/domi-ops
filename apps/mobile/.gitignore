@@ -1,0 +1,20 @@
+# Capacitor generated caches
+.capacitor/
+capacitor-cordova-android-plugins/
+capacitor-cordova-ios-plugins/
+
+# Local SDK / secrets (never commit)
+*.keystore
+*.jks
+google-services.json
+GoogleService-Info.plist
+local.properties
+**/xcuserdata/
+**/*.xcworkspace/xcuserdata/
+
+node_modules/
+dist/
+
+# Local smoke screenshots
+spike-*.png
+

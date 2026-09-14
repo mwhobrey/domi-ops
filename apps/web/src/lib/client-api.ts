@@ -22,12 +22,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   } catch {
     clientTz = undefined;
   }
+  const native =
+    typeof window !== "undefined" &&
+    Boolean(
+      (window as Window & { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor
+        ?.isNativePlatform?.(),
+    );
   const res = await fetch(path, {
     ...init,
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
       ...(clientTz ? { "X-Client-Timezone": clientTz } : {}),
+      ...(native ? { "x-domi-native": "1" } : {}),
       ...init?.headers,
     },
   });

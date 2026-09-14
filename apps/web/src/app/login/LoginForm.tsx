@@ -4,6 +4,12 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { authClient } from "../../lib/auth-client";
+import {
+  isNativeSocialAuthAvailable,
+  shouldOfferNativeApple,
+  signInWithNativeSocial,
+} from "../../lib/native-auth";
+import { isNativeShell } from "../../lib/native-shell";
 import { Button } from "../../components/ui";
 
 type Mode = "sign-in" | "sign-up";
@@ -28,6 +34,8 @@ export function LoginForm({
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const nativeSocial = isNativeSocialAuthAvailable();
+  const showApple = shouldOfferNativeApple(googleEnabled);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -98,6 +106,22 @@ export function LoginForm({
     setError(null);
     setPending(true);
     try {
+      // WKWebView popup/redirect die — use native plugin + idToken exchange (WHO-288).
+      if (isNativeShell() && nativeSocial) {
+        const result = await signInWithNativeSocial("google");
+        if (!result.ok) {
+          setError(
+            result.error === "missing_id_token"
+              ? "Google sign-in did not return a token. Try again."
+              : "Google sign-in failed. Try email/password, or rebuild the store shell with native auth.",
+          );
+          return;
+        }
+        router.push(nextPath);
+        router.refresh();
+        return;
+      }
+
       const res = await authClient.signIn.social({
         provider: "google",
         callbackURL: nextPath,
@@ -123,6 +147,24 @@ export function LoginForm({
       } else {
         setError(msg?.trim() ? `Google sign-in failed: ${msg}` : "Google sign-in failed. Try again.");
       }
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function onApple() {
+    setError(null);
+    setPending(true);
+    try {
+      const result = await signInWithNativeSocial("apple");
+      if (!result.ok) {
+        setError("Sign in with Apple failed. Try email/password.");
+        return;
+      }
+      router.push(nextPath);
+      router.refresh();
+    } catch {
+      setError("Sign in with Apple failed. Try email/password.");
     } finally {
       setPending(false);
     }
@@ -316,6 +358,22 @@ export function LoginForm({
           >
             Continue with Google
           </Button>
+          {showApple && (
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-full"
+              disabled={pending}
+              onClick={onApple}
+            >
+              Continue with Apple
+            </Button>
+          )}
+          {isNativeShell() && !nativeSocial && (
+            <p className="text-center text-xs text-[var(--color-text-muted)]">
+              Native Google sign-in is not wired in this build — use email/password for the spike.
+            </p>
+          )}
         </>
       )}
     </div>

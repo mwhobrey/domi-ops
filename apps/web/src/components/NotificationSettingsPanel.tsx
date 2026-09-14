@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { apiClient, ApiError } from "../lib/client-api";
 import {
+  ensurePushSubscribedWhenEnabling,
   fetchPushConfig,
   isPushSupported,
   subscribeBrowserPush,
   syncPushSubscription,
 } from "../lib/web-push";
+import { isNativeShell } from "../lib/native-shell";
 import { Alert, Button, Checkbox } from "./ui";
 
 type PushPrefs = {
@@ -80,19 +82,25 @@ export function NotificationSettingsPanel({
   );
 
   async function enableThisDevice() {
-    if (!vapidKey) {
-      setMsg("Push is not configured on this server.");
-      return;
-    }
     setBusy(true);
     setMsg(null);
     try {
-      const ok = await subscribeBrowserPush(vapidKey);
+      const ok = isNativeShell()
+        ? await ensurePushSubscribedWhenEnabling()
+        : vapidKey
+          ? await subscribeBrowserPush(vapidKey)
+          : false;
       if (ok) {
         setPrefs((p) => ({ ...p, pushSubscribed: true }));
-        setMsg("This browser is subscribed for notifications.");
+        setMsg(
+          isNativeShell()
+            ? "This device is subscribed for notifications."
+            : "This browser is subscribed for notifications.",
+        );
+      } else if (!isNativeShell() && !vapidKey) {
+        setMsg("Push is not configured on this server.");
       } else {
-        setMsg("Permission denied or not available in this browser.");
+        setMsg("Permission denied or not available.");
       }
     } catch (err) {
       setMsg(err instanceof ApiError ? err.message : "Could not enable notifications");
@@ -182,8 +190,10 @@ export function NotificationSettingsPanel({
   if (!initial.pushAvailable) {
     return (
       <p className="text-sm text-[var(--color-text-muted)]">
-        Browser notifications are not configured on this server (VAPID keys missing). Ask a
-        household admin to set <code className="text-xs">VAPID_*</code> in the server environment.
+        Push notifications are not configured on this server (need{" "}
+        <code className="text-xs">VAPID_*</code> for browsers, or{" "}
+        <code className="text-xs">FCM_*</code> / <code className="text-xs">APNS_*</code> for the
+        store app). Ask a household admin to set them in the server environment.
       </p>
     );
   }
@@ -271,7 +281,11 @@ async function ensureDeviceSubscribed(
   vapidKey: string | null,
   supported: boolean,
 ): Promise<boolean> {
-  if (!supported || !vapidKey) return false;
+  if (!supported) return false;
+  if (isNativeShell()) {
+    return ensurePushSubscribedWhenEnabling();
+  }
+  if (!vapidKey) return false;
   if (Notification.permission === "granted") {
     return syncPushSubscription(vapidKey);
   }

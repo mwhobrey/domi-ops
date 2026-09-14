@@ -48,6 +48,7 @@ export function HealthPageClient({
   initialEventId,
   initialMedicationId,
   initialTakeMedicationId,
+  initialTakeGroupId,
   initialTakeScheduledAt,
   pushAction,
 }: {
@@ -58,6 +59,8 @@ export function HealthPageClient({
   initialMedicationId?: string;
   /** Dashboard / calendar dose deep-link → Today Taken (WHO-239). */
   initialTakeMedicationId?: string;
+  /** Calendar group overlay deep-link → Today group card. */
+  initialTakeGroupId?: string;
   initialTakeScheduledAt?: string;
   /** iOS / no-actions deep-link auto-log (WHO-235). */
   pushAction?: {
@@ -171,6 +174,18 @@ export function HealthPageClient({
     setHighlightTakeKey(key);
     router.replace("/health");
   }, [initialTakeMedicationId, initialTakeScheduledAt, pushAction, loading, router]);
+
+  useEffect(() => {
+    if (!initialTakeGroupId || pushAction || takeHandled.current) return;
+    if (loading) return;
+    takeHandled.current = true;
+    setTab("today");
+    const key = initialTakeScheduledAt
+      ? `group:${initialTakeGroupId}:${initialTakeScheduledAt}`
+      : `group:${initialTakeGroupId}`;
+    setHighlightTakeKey(key);
+    router.replace("/health");
+  }, [initialTakeGroupId, initialTakeScheduledAt, pushAction, loading, router]);
 
   useEffect(() => {
     if (!highlightTakeKey || tab !== "today") return;

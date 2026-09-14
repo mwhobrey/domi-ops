@@ -6,7 +6,6 @@ import {
   ensurePushSubscribedWhenEnabling,
   fetchPushConfig,
   isPushSupported,
-  subscribeBrowserPush,
   unsubscribeBrowserPush,
 } from "../lib/web-push";
 import { Alert, Button, Checkbox } from "./ui";
@@ -45,18 +44,16 @@ export function NoticePushSettings({
   }, []);
 
   async function enableThisBrowser() {
-    if (!vapidKey) {
-      setMsg("Push is not configured on this server.");
-      return;
-    }
     setBusy(true);
     setMsg(null);
     try {
       if (!enabled) await persistEnabled(true);
-      const ok = await subscribeBrowserPush(vapidKey);
+      const ok = await ensurePushSubscribedWhenEnabling();
       if (ok) {
         setSubscribed(true);
-        setMsg("Notifications enabled for this browser.");
+        setMsg("Notifications enabled for this device.");
+      } else if (!vapidKey) {
+        setMsg("Push is not configured on this server.");
       } else {
         setMsg("Permission denied or not available.");
       }
@@ -76,14 +73,7 @@ export function NoticePushSettings({
         setSubscribed(false);
       }
       await persistEnabled(checked);
-      // Was gated on Notification.permission === "granted" — on a real first-time device
-      // (permission "default", never asked) that condition is false, so checking the box did
-      // nothing but flip the preference: no prompt, no error, no subscription. Confirmed live:
-      // "notifications already on" in the DB with zero rows in push_subscriptions.
-      // ensurePushSubscribedWhenEnabling (already used correctly by the other push-settings
-      // panels) handles "default" by actually requesting permission, not just syncing an
-      // existing grant.
-      if (checked && vapidKey && supported === true) {
+      if (checked && supported === true) {
         const ok = await ensurePushSubscribedWhenEnabling();
         setSubscribed(ok);
         if (!ok) setMsg("Permission denied or not available.");
@@ -99,7 +89,7 @@ export function NoticePushSettings({
   if (!pushAvailable) {
     return (
       <p className="text-sm text-[var(--color-text-muted)]">
-        Browser notifications are not configured on this server (VAPID keys missing).
+        Push notifications are not configured on this server (VAPID / FCM / APNs).
       </p>
     );
   }

@@ -44,4 +44,27 @@ describe("mergeCalendarEvents", () => {
     ];
     expect(mergeCalendarEvents(native, overlays)).toHaveLength(2);
   });
+
+  it("keeps group med overlays distinct from individual med overlays in merge order", () => {
+    const overlays = [
+      {
+        ...sample("overlay:health:medgroup:g1:t", "2026-06-10", "08:00:00"),
+        source: "health_med" as const,
+        overlayKind: "health_med" as const,
+        deepLink: "/health?takeGroup=g1",
+        editable: false,
+      },
+      {
+        ...sample("overlay:health:med:m1:t", "2026-06-10", "09:00:00"),
+        source: "health_med" as const,
+        overlayKind: "health_med" as const,
+        deepLink: "/health?take=m1",
+        editable: false,
+      },
+    ];
+    expect(mergeCalendarEvents([], overlays).map((e) => e.id)).toEqual([
+      "overlay:health:medgroup:g1:t",
+      "overlay:health:med:m1:t",
+    ]);
+  });
 });

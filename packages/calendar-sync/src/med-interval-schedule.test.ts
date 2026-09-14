@@ -103,4 +103,73 @@ describe("nextIntervalPending", () => {
     });
     expect(pending).toBeNull();
   });
+
+  it("does not re-show every day for once-every-7-days after a take", () => {
+    const schedule = normalizeIntervalSchedule({
+      everyMinutes: 7 * 24 * 60,
+      anchor: "first_taken",
+      intervalFrom: "last_taken",
+      stop: { mode: "max_doses", maxDoses: 1 },
+    });
+    const takenDay = "2026-08-05";
+    const takenAt = zonedLocalToUtc(takenDay, "08:00", tz);
+    const dayAfter = "2026-08-06";
+    const midWeek = "2026-08-10";
+    const dueDay = "2026-08-12";
+
+    expect(
+      nextIntervalPending({
+        schedule,
+        tz,
+        date: dayAfter,
+        now: zonedLocalToUtc(dayAfter, "08:00", tz),
+        logs: [{ scheduledAt: takenAt, loggedAt: takenAt, status: "taken" }],
+      }),
+    ).toBeNull();
+
+    expect(
+      nextIntervalPending({
+        schedule,
+        tz,
+        date: midWeek,
+        now: zonedLocalToUtc(midWeek, "08:00", tz),
+        logs: [{ scheduledAt: takenAt, loggedAt: takenAt, status: "taken" }],
+      }),
+    ).toBeNull();
+
+    const due = nextIntervalPending({
+      schedule,
+      tz,
+      date: dueDay,
+      now: zonedLocalToUtc(dueDay, "07:30", tz),
+      logs: [{ scheduledAt: takenAt, loggedAt: takenAt, status: "taken" }],
+    });
+    expect(due?.awaitingFirst).toBe(false);
+    expect(due?.scheduledAt.toISOString()).toBe(
+      zonedLocalToUtc(dueDay, "08:00", tz).toISOString(),
+    );
+  });
+
+  it("does not re-show fixed_start every morning for multi-day interval", () => {
+    const schedule = normalizeIntervalSchedule({
+      everyMinutes: 7 * 24 * 60,
+      anchor: "fixed_start",
+      fixedStartTime: "08:00",
+      intervalFrom: "last_taken",
+      stop: { mode: "max_doses", maxDoses: 1 },
+    });
+    const takenDay = "2026-08-05";
+    const takenAt = zonedLocalToUtc(takenDay, "08:05", tz);
+    const dayAfter = "2026-08-06";
+
+    expect(
+      nextIntervalPending({
+        schedule,
+        tz,
+        date: dayAfter,
+        now: zonedLocalToUtc(dayAfter, "09:00", tz),
+        logs: [{ scheduledAt: zonedLocalToUtc(takenDay, "08:00", tz), loggedAt: takenAt, status: "taken" }],
+      }),
+    ).toBeNull();
+  });
 });

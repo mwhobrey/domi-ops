@@ -34,6 +34,8 @@ import { googleDocsAuthRoutes } from "./routes/google-docs-auth.js";
 import { weeklyReportRoutes } from "./routes/weekly-reports.js";
 import { reportRoutes } from "./routes/reports.js";
 import { billingRoutes } from "./routes/billing.js";
+import { nativeAuthRoutes } from "./routes/native-auth.js";
+import { revenueCatRoutes } from "./routes/revenuecat.js";
 import { onboardingRoutes } from "./routes/onboarding.js";
 import { glanceConfigRoutes } from "./routes/glance-config.js";
 import { telemetryRoutes } from "./routes/telemetry.js";
@@ -173,6 +175,8 @@ app.route("/api/school/upload", schoolUploadRoutes(db, env));
 app.route("/api/health", householdHealthRoutes(db, env));
 app.route("/api/health/medication-groups", healthMedicationGroupRoutes(db, env));
 app.route("/api/billing", billingRoutes(db, env));
+app.route("/api/billing", revenueCatRoutes(db, env));
+app.route("/api/core", nativeAuthRoutes(db, env, betterAuth));
 app.route("/api/telemetry", telemetryRoutes(db));
 
 app.get("/api/modules", (c) =>
