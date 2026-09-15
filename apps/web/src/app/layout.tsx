@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { NativeShellBoot } from "../components/NativeShellBoot";
 import { PwaRegister } from "../components/PwaRegister";
+import { SentryClientInit } from "../components/SentryClientInit";
 import "./globals.css";
 
 const inter = Inter({
@@ -44,9 +45,12 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const sentryDsn = process.env.SENTRY_DSN || process.env.NEXT_PUBLIC_SENTRY_DSN || null;
+
   return (
     <html lang="en" className={inter.variable}>
       <body className="antialiased">
+        <SentryClientInit dsn={sentryDsn} />
         {children}
         <PwaRegister />
         <NativeShellBoot />

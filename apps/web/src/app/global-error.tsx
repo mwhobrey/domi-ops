@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import * as Sentry from "@sentry/nextjs";
 
 /**
  * Replaces the root layout when the layout itself throws, so it can't rely on globals.css
@@ -15,6 +16,12 @@ export default function GlobalError({
 }) {
   useEffect(() => {
     console.error("[domi-ops web] fatal error:", error);
+    // Layout (and SentryClientInit) may not have mounted — init briefly if DSN was baked.
+    const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
+    if (dsn && !Sentry.getClient()) {
+      Sentry.init({ dsn, environment: process.env.NODE_ENV });
+    }
+    Sentry.captureException(error);
   }, [error]);
 
   return (
