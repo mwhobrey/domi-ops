@@ -10,6 +10,8 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Added
 
+- Browser + Next.js server Sentry for `apps/web` (`@sentry/nextjs`, WHO-292) — reuses
+  runtime `SENTRY_DSN` on the web container; `error.tsx` / `global-error.tsx` report to Sentry.
 - Capacitor 8 store shell (`apps/mobile`, `appId: app.domiops`) with Bitwarden-style server URL
   picker, `/api/healthz` probe (CapacitorHttp), and remote WebView of live `apps/web` (ADR 005 /
   WHO-287). Native Google + Sign in with Apple idToken exchange, APNs/FCM push (FCM HTTP v1),

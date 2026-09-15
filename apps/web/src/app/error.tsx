@@ -2,6 +2,8 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
+import * as Sentry from "@sentry/nextjs";
+import { ensureBrowserSentry } from "../components/SentryClientInit";
 
 export default function Error({
   error,
@@ -12,6 +14,10 @@ export default function Error({
 }) {
   useEffect(() => {
     console.error("[domi-ops web] unhandled error:", error);
+    void (async () => {
+      await ensureBrowserSentry();
+      Sentry.captureException(error);
+    })();
   }, [error]);
 
   return (

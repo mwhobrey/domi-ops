@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@domi-ops/marketing-ui": "*",
+    "@sentry/nextjs": "^10.74.0",
     "@tiptap/extension-link": "^3.30.5",
     "@tiptap/markdown": "^3.30.5",
     "@tiptap/pm": "^3.30.5",

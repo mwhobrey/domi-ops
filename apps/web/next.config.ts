@@ -42,6 +42,12 @@ const nextConfig: NextConfig = {
     /** RevenueCat public SDK keys — only used inside the Capacitor shell (WHO-290). */
     NEXT_PUBLIC_REVENUECAT_IOS_KEY: process.env.NEXT_PUBLIC_REVENUECAT_IOS_KEY ?? "",
     NEXT_PUBLIC_REVENUECAT_ANDROID_KEY: process.env.NEXT_PUBLIC_REVENUECAT_ANDROID_KEY ?? "",
+    /**
+     * Optional bake for global-error.tsx (layout may not mount). Runtime client init prefers
+     * SENTRY_DSN from the web container env (WHO-292).
+     */
+    NEXT_PUBLIC_SENTRY_DSN:
+      process.env.NEXT_PUBLIC_SENTRY_DSN || process.env.SENTRY_DSN || "",
   },
   async headers() {
     return [
