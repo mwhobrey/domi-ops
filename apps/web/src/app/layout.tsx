@@ -45,12 +45,10 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const sentryDsn = process.env.SENTRY_DSN || process.env.NEXT_PUBLIC_SENTRY_DSN || null;
-
   return (
     <html lang="en" className={inter.variable}>
       <body className="antialiased">
-        <SentryClientInit dsn={sentryDsn} />
+        <SentryClientInit />
         {children}
         <PwaRegister />
         <NativeShellBoot />
