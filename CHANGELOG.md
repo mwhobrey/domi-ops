@@ -23,6 +23,8 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 - Per-route `loading.tsx` skeletons across the app, matching each page's real layout to avoid a
   layout jump when the real content streams in.
 - Issue templates, PR template, Code of Conduct, and this changelog.
+- Event type filter on the Health Events tab, matching the filter already available on the
+  Events report — previously the only way to narrow the feed by type (WHO-294).
 
 ### Changed
 
@@ -49,3 +51,7 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
   Stripe Checkout, and a repeat checkout by someone who already has a household is sent to the app
   instead of creating a second subscription. A mismatch between the login and the Checkout email
   used to spawn a second account and household that could never reach the app.
+- A household member with write access to another member's private health events/medications —
+  not just the record's creator — no longer silently clears its shares when editing and saving.
+  The API previously only returned real share state to the creator; a non-creator editor saw an
+  empty share list and unknowingly overwrote it on save (WHO-293).

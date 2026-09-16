@@ -25,6 +25,7 @@ import {
 import {
   EVENT_TYPES,
   type HealthEvent,
+  type HealthEventType,
   type HealthMedication,
   type MedicationGroupOption,
   type LoggedDose,
@@ -40,6 +41,7 @@ import {
   EmptyState,
   LinkButton,
   SectionHeader,
+  Select,
 } from "./ui";
 
 export function HealthPageClient({
@@ -73,6 +75,7 @@ export function HealthPageClient({
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<"today" | "events" | "medications">("today");
+  const [eventTypeFilter, setEventTypeFilter] = useState<HealthEventType | "all">("all");
   const [events, setEvents] = useState<HealthEvent[]>([]);
   const [medications, setMedications] = useState<HealthMedication[]>([]);
   const [groups, setGroups] = useState<MedicationGroupOption[]>([]);
@@ -586,30 +589,58 @@ export function HealthPageClient({
 
       {tab === "events" ? (
         <div className="space-y-4">
-          {canAddEvent ? (
-          <div className="flex justify-end gap-2">
-            <Button size="sm" variant="secondary" onClick={() => setVitalsSheetOpen(true)}>
-              Log vitals
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => {
-                setEditingEvent(null);
-                setEventSheetOpen(true);
-              }}
-            >
-              Add event
-            </Button>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <label className="flex items-center gap-2 text-sm">
+              <span className="text-[var(--color-text-muted)]">Event type</span>
+              <Select
+                value={eventTypeFilter}
+                onChange={(e) => setEventTypeFilter(e.target.value as HealthEventType | "all")}
+                className="w-auto"
+              >
+                <option value="all">All events</option>
+                {EVENT_TYPES.map((t) => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            {canAddEvent ? (
+            <div className="flex justify-end gap-2">
+              <Button size="sm" variant="secondary" onClick={() => setVitalsSheetOpen(true)}>
+                Log vitals
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => {
+                  setEditingEvent(null);
+                  setEventSheetOpen(true);
+                }}
+              >
+                Add event
+              </Button>
+            </div>
+            ) : null}
           </div>
-          ) : null}
-          {events.length === 0 && !loading ? (
-            <EmptyState
-              icon={<Heart className="h-8 w-8" aria-hidden />}
-              title="No health events"
-              description="Log sickness, injuries, or appointments."
-            />
-          ) : (
-            events.map((ev) => {
+          {(() => {
+            const filteredEvents =
+              eventTypeFilter === "all"
+                ? events
+                : events.filter((ev) => ev.type === eventTypeFilter);
+            if (filteredEvents.length === 0 && !loading) {
+              return (
+                <EmptyState
+                  icon={<Heart className="h-8 w-8" aria-hidden />}
+                  title={eventTypeFilter === "all" ? "No health events" : "No matching events"}
+                  description={
+                    eventTypeFilter === "all"
+                      ? "Log sickness, injuries, or appointments."
+                      : "Try a different event type filter."
+                  }
+                />
+              );
+            }
+            return filteredEvents.map((ev) => {
               const when = formatEventWhen(ev);
               return (
               <HealthRow
@@ -633,8 +664,8 @@ export function HealthPageClient({
                 }}
               />
               );
-            })
-          )}
+            });
+          })()}
         </div>
       ) : null}
 
