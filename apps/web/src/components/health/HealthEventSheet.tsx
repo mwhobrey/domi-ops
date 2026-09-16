@@ -6,13 +6,26 @@ import type { NoteShareMember } from "../NoteSharePicker";
 import { NoteSharePicker } from "../NoteSharePicker";
 import { Alert, Button, Checkbox, Input, Select, Sheet, Textarea } from "../ui";
 import { VitalsReadingsEditor } from "./VitalsReadingsEditor";
+import { ExerciseDetailsEditor } from "./ExerciseDetailsEditor";
+import { BodyPainMap } from "./BodyPainMap";
 import {
+  draftToExerciseDetailInput,
+  draftsToPainLogs,
   draftsToReadings,
+  exerciseDetailToDraft,
+  painLogsToDrafts,
   readingsToDrafts,
   resolveDefaultMemberId,
   todayInTz,
 } from "./health-helpers";
-import { EVENT_TYPES, type HealthEvent, type HealthEventType, type VitalsReadingDraft } from "./health-types";
+import {
+  EVENT_TYPES,
+  type ExerciseDetailDraft,
+  type HealthEvent,
+  type HealthEventType,
+  type PainLogDraft,
+  type VitalsReadingDraft,
+} from "./health-types";
 
 export function HealthEventSheet({
   open,
@@ -62,6 +75,12 @@ export function HealthEventSheet({
   const [readingDrafts, setReadingDrafts] = useState<VitalsReadingDraft[]>(() =>
     readingsToDrafts(event?.readings),
   );
+  const [exerciseDraft, setExerciseDraft] = useState<ExerciseDetailDraft>(() =>
+    exerciseDetailToDraft(event?.exerciseDetails?.[0]),
+  );
+  const [painEntries, setPainEntries] = useState<PainLogDraft[]>(() =>
+    painLogsToDrafts(event?.painLogs),
+  );
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -80,6 +99,8 @@ export function HealthEventSheet({
     setDurationKind(event?.durationKind ?? "single_day");
     setVisibility(event?.visibility ?? "private");
     setReadingDrafts(readingsToDrafts(event?.readings));
+    setExerciseDraft(exerciseDetailToDraft(event?.exerciseDetails?.[0]));
+    setPainEntries(painLogsToDrafts(event?.painLogs));
     setSharedMemberIds(event?.sharedMemberIds ?? []);
   }, [open, event, defaultMemberId, householdTimezone]);
 
@@ -88,6 +109,7 @@ export function HealthEventSheet({
     setBusy(true);
     setErr(null);
     const readings = type === "vitals" ? draftsToReadings(readingDrafts) : undefined;
+    const exerciseDetail = type === "exercise" ? draftToExerciseDetailInput(exerciseDraft) : null;
     const body = {
       memberId,
       type,
@@ -105,6 +127,8 @@ export function HealthEventSheet({
       visibility,
       sharedMemberIds: visibility === "private" ? sharedMemberIds : undefined,
       readings,
+      exerciseDetails: type === "exercise" ? (exerciseDetail ? [exerciseDetail] : []) : undefined,
+      painLogs: type === "pain" ? draftsToPainLogs(painEntries) : undefined,
     };
     try {
       if (event) {
@@ -159,6 +183,10 @@ export function HealthEventSheet({
         {type === "vitals" ? (
           <VitalsReadingsEditor drafts={readingDrafts} onChange={setReadingDrafts} />
         ) : null}
+        {type === "exercise" ? (
+          <ExerciseDetailsEditor draft={exerciseDraft} onChange={setExerciseDraft} />
+        ) : null}
+        {type === "pain" ? <BodyPainMap entries={painEntries} onChange={setPainEntries} /> : null}
         <label className="block space-y-1 text-sm">
           <span>Start date</span>
           <Input

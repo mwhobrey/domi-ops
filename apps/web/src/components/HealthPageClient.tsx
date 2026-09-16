@@ -10,6 +10,8 @@ import { ModuleReportsLink } from "./reports/ModuleReportsLink";
 import { HealthEventSheet } from "./health/HealthEventSheet";
 import { HealthMedicationSheet } from "./health/HealthMedicationSheet";
 import { LogVitalsSheet } from "./health/LogVitalsSheet";
+import { LogExerciseSheet } from "./health/LogExerciseSheet";
+import { LogPainSheet } from "./health/LogPainSheet";
 import { HealthRow, MedGroupDoseCard } from "./health/TodayTabRows";
 import { PrnQuickLog } from "./health/PrnQuickLog";
 import {
@@ -19,6 +21,8 @@ import {
   memberLabel,
   mergeTodayEntriesForMember,
   formatEventWhen,
+  formatExerciseSummary,
+  formatPainSummary,
   formatReadingsSummary,
   scheduleKindLabel,
 } from "./health/health-helpers";
@@ -89,6 +93,8 @@ export function HealthPageClient({
   const [pushActionNotice, setPushActionNotice] = useState<string | null>(null);
   const [eventSheetOpen, setEventSheetOpen] = useState(false);
   const [vitalsSheetOpen, setVitalsSheetOpen] = useState(false);
+  const [exerciseSheetOpen, setExerciseSheetOpen] = useState(false);
+  const [painSheetOpen, setPainSheetOpen] = useState(false);
   const [medSheetOpen, setMedSheetOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<HealthEvent | null>(null);
   const [editingMed, setEditingMed] = useState<HealthMedication | null>(null);
@@ -591,9 +597,15 @@ export function HealthPageClient({
               </Select>
             </label>
             {canAddEvent ? (
-            <div className="flex justify-end gap-2">
+            <div className="flex flex-wrap justify-end gap-2">
               <Button size="sm" variant="secondary" onClick={() => setVitalsSheetOpen(true)}>
                 Log vitals
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => setExerciseSheetOpen(true)}>
+                Log exercise
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => setPainSheetOpen(true)}>
+                Log pain
               </Button>
               <Button
                 size="sm"
@@ -637,6 +649,8 @@ export function HealthPageClient({
                   when,
                   ev.durationKind === "ongoing" && !ev.endedAt ? "Ongoing" : null,
                   ev.type === "vitals" ? formatReadingsSummary(ev.readings) : null,
+                  ev.type === "exercise" ? formatExerciseSummary(ev.exerciseDetails) : null,
+                  ev.type === "pain" ? formatPainSummary(ev.painLogs) : null,
                 ]
                   .filter(Boolean)
                   .join(" · ")}
@@ -735,6 +749,34 @@ export function HealthPageClient({
         onClose={() => setVitalsSheetOpen(false)}
         onSaved={() => {
           setVitalsSheetOpen(false);
+          void load();
+        }}
+      />
+
+      <LogExerciseSheet
+        open={exerciseSheetOpen}
+        members={members}
+        currentMemberId={currentMemberId}
+        writableMemberIds={members
+          .filter((m) => capabilities[m.memberId]?.events === "write")
+          .map((m) => m.memberId)}
+        onClose={() => setExerciseSheetOpen(false)}
+        onSaved={() => {
+          setExerciseSheetOpen(false);
+          void load();
+        }}
+      />
+
+      <LogPainSheet
+        open={painSheetOpen}
+        members={members}
+        currentMemberId={currentMemberId}
+        writableMemberIds={members
+          .filter((m) => capabilities[m.memberId]?.events === "write")
+          .map((m) => m.memberId)}
+        onClose={() => setPainSheetOpen(false)}
+        onSaved={() => {
+          setPainSheetOpen(false);
           void load();
         }}
       />

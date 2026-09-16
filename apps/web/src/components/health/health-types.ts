@@ -11,6 +11,8 @@ export type HealthEventType =
   | "symptom"
   | "medication"
   | "vitals"
+  | "exercise"
+  | "pain"
   | "other";
 
 export type VitalsMetric =
@@ -32,6 +34,30 @@ export interface VitalsReading {
   unit: string;
 }
 
+export interface ExerciseDetail {
+  id?: string;
+  activity: string;
+  durationMinutes: number | null;
+  intensity: string | null;
+  distance: number | null;
+  distanceUnit: string | null;
+  sets: number | null;
+  reps: number | null;
+  caloriesEstimated: number | null;
+}
+
+/** Form-state mirror of ExerciseDetail — numeric fields stay strings while typing. */
+export type ExerciseDetailDraft = {
+  activity: string;
+  durationMinutes: string;
+  intensity: string;
+  distance: string;
+  distanceUnit: string;
+  sets: string;
+  reps: string;
+  caloriesEstimated: string;
+};
+
 export interface HealthEvent {
   id: string;
   memberId: string;
@@ -52,6 +78,8 @@ export interface HealthEvent {
   sharedWithMe?: boolean;
   canEdit?: boolean;
   readings?: VitalsReading[];
+  exerciseDetails?: ExerciseDetail[];
+  painLogs?: PainLog[];
 }
 
 export interface HealthMedication {
@@ -139,8 +167,29 @@ export const EVENT_TYPES: { value: HealthEventType; label: string }[] = [
   { value: "symptom", label: "Symptom" },
   { value: "medication", label: "Medication" },
   { value: "vitals", label: "Vitals" },
+  { value: "exercise", label: "Exercise" },
+  { value: "pain", label: "Pain" },
   { value: "other", label: "Other" },
 ];
+
+export const EXERCISE_INTENSITIES: { value: string; label: string }[] = [
+  { value: "light", label: "Light" },
+  { value: "moderate", label: "Moderate" },
+  { value: "vigorous", label: "Vigorous" },
+];
+
+export function emptyExerciseDetailDraft(): ExerciseDetailDraft {
+  return {
+    activity: "",
+    durationMinutes: "",
+    intensity: "",
+    distance: "",
+    distanceUnit: "",
+    sets: "",
+    reps: "",
+    caloriesEstimated: "",
+  };
+}
 
 export const VITALS_METRICS: { value: VitalsMetric; label: string; defaultUnit: string }[] = [
   { value: "weight", label: "Weight", defaultUnit: "lb" },
@@ -237,3 +286,12 @@ export const PAIN_BODY_REGION_LABELS: Record<HealthPainBodyRegion, string> = {
 };
 
 export type PainLogDraft = { key: string; region: HealthPainBodyRegion; severity: number };
+
+/** Matches the API's SerializedPainLog shape — distinct from PainLogDraft, same split as
+ *  VitalsReading vs VitalsReadingDraft. */
+export interface PainLog {
+  id?: string;
+  bodyRegion: HealthPainBodyRegion;
+  severity: number;
+  qualityTags?: string[] | null;
+}

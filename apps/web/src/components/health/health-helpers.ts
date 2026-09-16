@@ -7,9 +7,15 @@ import type { NoteShareMember } from "../NoteSharePicker";
 import {
   DEFAULT_VITALS_METRICS,
   VITALS_METRICS,
+  emptyExerciseDetailDraft,
+  PAIN_BODY_REGION_LABELS,
+  type ExerciseDetail,
+  type ExerciseDetailDraft,
   type HealthEvent,
   type HealthMedication,
   type LoggedDose,
+  type PainLog,
+  type PainLogDraft,
   type PendingDose,
   type PendingGroupDose,
   type TodayEntry,
@@ -114,6 +120,20 @@ export function formatReadingsSummary(readings: VitalsReading[] | undefined): st
   return readings.map((r) => `${vitalsMetricLabel(r.metric)}: ${r.value} ${r.unit}`).join(", ");
 }
 
+export function formatExerciseSummary(details: ExerciseDetail[] | undefined): string | null {
+  if (!details || details.length === 0) return null;
+  return details
+    .map((d) => (d.durationMinutes != null ? `${d.activity} (${d.durationMinutes} min)` : d.activity))
+    .join(", ");
+}
+
+export function formatPainSummary(logs: PainLog[] | undefined): string | null {
+  if (!logs || logs.length === 0) return null;
+  return logs
+    .map((l) => `${PAIN_BODY_REGION_LABELS[l.bodyRegion]}: ${l.severity}/10`)
+    .join(", ");
+}
+
 /** Short, human title for a vitals event when the user hasn't typed one — "Weight, Heart rate". */
 export function defaultVitalsTitle(drafts: VitalsReadingDraft[]): string {
   const labels = drafts.filter((d) => d.value.trim()).map((d) => vitalsMetricLabel(d.metric));
@@ -151,6 +171,51 @@ export function readingsToDrafts(readings: VitalsReading[] | undefined): VitalsR
     value: String(r.value),
     unit: r.unit,
   }));
+}
+
+export function exerciseDetailToDraft(detail: ExerciseDetail | undefined): ExerciseDetailDraft {
+  if (!detail) return emptyExerciseDetailDraft();
+  return {
+    activity: detail.activity,
+    durationMinutes: detail.durationMinutes != null ? String(detail.durationMinutes) : "",
+    intensity: detail.intensity ?? "",
+    distance: detail.distance != null ? String(detail.distance) : "",
+    distanceUnit: detail.distanceUnit ?? "",
+    sets: detail.sets != null ? String(detail.sets) : "",
+    reps: detail.reps != null ? String(detail.reps) : "",
+    caloriesEstimated: detail.caloriesEstimated != null ? String(detail.caloriesEstimated) : "",
+  };
+}
+
+/** Empty activity name means "nothing to save" — the exercise editor is optional in the sheet. */
+function draftNumberOrNull(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function painLogsToDrafts(logs: PainLog[] | undefined): PainLogDraft[] {
+  if (!logs) return [];
+  return logs.map((l) => ({ key: nextPainDraftKey(), region: l.bodyRegion, severity: l.severity }));
+}
+
+export function draftsToPainLogs(drafts: PainLogDraft[]): PainLog[] {
+  return drafts.map((d) => ({ bodyRegion: d.region, severity: d.severity }));
+}
+
+export function draftToExerciseDetailInput(draft: ExerciseDetailDraft): ExerciseDetail | null {
+  if (!draft.activity.trim()) return null;
+  return {
+    activity: draft.activity.trim(),
+    durationMinutes: draftNumberOrNull(draft.durationMinutes),
+    intensity: draft.intensity.trim() || null,
+    distance: draftNumberOrNull(draft.distance),
+    distanceUnit: draft.distanceUnit.trim() || null,
+    sets: draftNumberOrNull(draft.sets),
+    reps: draftNumberOrNull(draft.reps),
+    caloriesEstimated: draftNumberOrNull(draft.caloriesEstimated),
+  };
 }
 
 let painDraftKey = 0;
