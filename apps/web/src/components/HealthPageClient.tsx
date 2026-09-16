@@ -11,9 +11,9 @@ import { HealthEventSheet } from "./health/HealthEventSheet";
 import { HealthMedicationSheet } from "./health/HealthMedicationSheet";
 import { LogVitalsSheet } from "./health/LogVitalsSheet";
 import { HealthRow, MedGroupDoseCard } from "./health/TodayTabRows";
+import { PrnQuickLog } from "./health/PrnQuickLog";
 import {
   groupLoggedDosesByMember,
-  groupMedsByMember,
   groupPendingDosesByMemberThenTime,
   groupPendingGroupDosesByMember,
   memberLabel,
@@ -97,6 +97,7 @@ export function HealthPageClient({
   const [expandedGroupDoses, setExpandedGroupDoses] = useState<Set<string>>(new Set());
   const [collapsedLoggedMembers, setCollapsedLoggedMembers] = useState<Set<string>>(new Set());
   const [highlightTakeKey, setHighlightTakeKey] = useState<string | null>(null);
+  const [prnLoggingId, setPrnLoggingId] = useState<string | null>(null);
   const pushActionHandled = useRef(false);
   const takeHandled = useRef(false);
   const highlightTakeRef = useRef<HTMLDivElement | null>(null);
@@ -293,6 +294,16 @@ export function HealthPageClient({
     }
   }
 
+  async function logPrnDose(medicationId: string) {
+    if (prnLoggingId) return;
+    setPrnLoggingId(medicationId);
+    try {
+      await logDose(medicationId, {});
+    } finally {
+      setPrnLoggingId(null);
+    }
+  }
+
   function toggleGroupDoseExpanded(key: string) {
     setExpandedGroupDoses((prev) => {
       const next = new Set(prev);
@@ -346,6 +357,12 @@ export function HealthPageClient({
 
       {tab === "today" ? (
         <div className="space-y-6">
+          <PrnQuickLog
+            meds={prnMeds.filter((med) => med.canLog ?? canLogForMember(med.memberId))}
+            members={members}
+            logging={prnLoggingId}
+            onLog={(medicationId) => void logPrnDose(medicationId)}
+          />
           <Card>
             <CardBody className="space-y-4">
               <SectionHeader title="Scheduled doses" />
@@ -551,39 +568,6 @@ export function HealthPageClient({
               </CardBody>
             </Card>
           ) : null}
-
-          <Card>
-            <CardBody className="space-y-4">
-              <SectionHeader title="As needed (PRN)" />
-              {prnMeds.length === 0 ? (
-                <p className="text-sm text-[var(--color-text-muted)]">No as-needed meds.</p>
-              ) : (
-                groupMedsByMember(prnMeds).map((memberGroup) => (
-                  <div key={memberGroup.memberId} className="space-y-2">
-                    <h3 className="text-sm font-semibold text-[var(--color-text)]">
-                      {memberLabel(members, memberGroup.memberId)}
-                    </h3>
-                    <ul className="space-y-2">
-                      {memberGroup.meds.map((med) => (
-                        <HealthRow
-                          key={med.id}
-                          title={med.name}
-                          subtitle={med.dosage?.trim() || "As needed"}
-                          trailing={
-                            (med.canLog ?? canLogForMember(med.memberId)) ? (
-                              <Button size="sm" onClick={() => void logDose(med.id, {})}>
-                                Log dose
-                              </Button>
-                            ) : null
-                          }
-                        />
-                      ))}
-                    </ul>
-                  </div>
-                ))
-              )}
-            </CardBody>
-          </Card>
         </div>
       ) : null}
 
