@@ -23,11 +23,18 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 - Per-route `loading.tsx` skeletons across the app, matching each page's real layout to avoid a
   layout jump when the real content streams in.
 - Issue templates, PR template, Code of Conduct, and this changelog.
+- Event type filter on the Health Events tab, matching the filter already available on the
+  Events report — previously the only way to narrow the feed by type (WHO-294).
 
 ### Changed
 
 - Split several large files (`apps/api/src/routes/core.ts`, `apps/api/src/routes/school.ts`,
   `HealthPageClient.tsx`, `SchoolClassDetail.tsx`) into focused modules for maintainability.
+- Health Today tab's "Logged today" list is now grouped by household member with a collapsible
+  header, matching the grouping "Scheduled doses" already had (WHO-295).
+- PRN meds on the Health Today tab moved from a card at the bottom of the page to a searchable
+  quick-log at the top — type or tap a med to log an as-needed dose in one action instead of
+  scrolling past the scheduled dose queue to reach it (WHO-296).
 
 ### Fixed
 

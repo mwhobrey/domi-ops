@@ -1,6 +1,6 @@
 "use client";
 
-import { Heart } from "lucide-react";
+import { ChevronDown, ChevronRight, Heart } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError, apiClient } from "../lib/client-api";
@@ -11,8 +11,9 @@ import { HealthEventSheet } from "./health/HealthEventSheet";
 import { HealthMedicationSheet } from "./health/HealthMedicationSheet";
 import { LogVitalsSheet } from "./health/LogVitalsSheet";
 import { HealthRow, MedGroupDoseCard } from "./health/TodayTabRows";
+import { PrnQuickLog } from "./health/PrnQuickLog";
 import {
-  groupMedsByMember,
+  groupLoggedDosesByMember,
   groupPendingDosesByMemberThenTime,
   groupPendingGroupDosesByMember,
   memberLabel,
@@ -24,6 +25,7 @@ import {
 import {
   EVENT_TYPES,
   type HealthEvent,
+  type HealthEventType,
   type HealthMedication,
   type MedicationGroupOption,
   type LoggedDose,
@@ -39,6 +41,7 @@ import {
   EmptyState,
   LinkButton,
   SectionHeader,
+  Select,
 } from "./ui";
 
 export function HealthPageClient({
@@ -72,6 +75,7 @@ export function HealthPageClient({
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<"today" | "events" | "medications">("today");
+  const [eventTypeFilter, setEventTypeFilter] = useState<HealthEventType | "all">("all");
   const [events, setEvents] = useState<HealthEvent[]>([]);
   const [medications, setMedications] = useState<HealthMedication[]>([]);
   const [groups, setGroups] = useState<MedicationGroupOption[]>([]);
@@ -91,7 +95,9 @@ export function HealthPageClient({
   const [capabilities, setCapabilities] = useState<Record<string, HealthAclGrants>>({});
   const [loggingAllKey, setLoggingAllKey] = useState<string | null>(null);
   const [expandedGroupDoses, setExpandedGroupDoses] = useState<Set<string>>(new Set());
+  const [collapsedLoggedMembers, setCollapsedLoggedMembers] = useState<Set<string>>(new Set());
   const [highlightTakeKey, setHighlightTakeKey] = useState<string | null>(null);
+  const [prnLoggingId, setPrnLoggingId] = useState<string | null>(null);
   const pushActionHandled = useRef(false);
   const takeHandled = useRef(false);
   const highlightTakeRef = useRef<HTMLDivElement | null>(null);
@@ -288,11 +294,30 @@ export function HealthPageClient({
     }
   }
 
+  async function logPrnDose(medicationId: string): Promise<boolean> {
+    if (prnLoggingId) return false;
+    setPrnLoggingId(medicationId);
+    try {
+      return await logDose(medicationId, {});
+    } finally {
+      setPrnLoggingId(null);
+    }
+  }
+
   function toggleGroupDoseExpanded(key: string) {
     setExpandedGroupDoses((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
+      return next;
+    });
+  }
+
+  function toggleLoggedMemberCollapsed(memberId: string) {
+    setCollapsedLoggedMembers((prev) => {
+      const next = new Set(prev);
+      if (next.has(memberId)) next.delete(memberId);
+      else next.add(memberId);
       return next;
     });
   }
@@ -332,6 +357,13 @@ export function HealthPageClient({
 
       {tab === "today" ? (
         <div className="space-y-6">
+          <PrnQuickLog
+            meds={prnMeds}
+            members={members}
+            canLog={(med) => med.canLog ?? canLogForMember(med.memberId)}
+            logging={prnLoggingId}
+            onLog={logPrnDose}
+          />
           <Card>
             <CardBody className="space-y-4">
               <SectionHeader title="Scheduled doses" />
@@ -463,113 +495,137 @@ export function HealthPageClient({
 
           {loggedToday.length > 0 ? (
             <Card>
-              <CardBody className="space-y-3">
+              <CardBody className="space-y-4">
                 <SectionHeader title="Logged today" />
-                <ul className="space-y-2">
-                  {loggedToday.map((dose) => (
-                    <HealthRow
-                      key={dose.logId}
-                      title={dose.name}
-                      subtitle={[
-                        dose.dosage?.trim(),
-                        dose.scheduledTimeLabel ? `for ${dose.scheduledTimeLabel}` : null,
-                        `logged ${dose.loggedAtLabel}`,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                      trailing={
-                        <div className="flex items-center gap-2">
-                          <Badge
-                            tone={
-                              dose.status === "taken"
-                                ? "success"
-                                : dose.status === "missed"
-                                  ? "warning"
-                                  : "default"
-                            }
-                          >
-                            {dose.status === "taken" ? "Taken" : dose.status === "skipped" ? "Skipped" : "Missed"}
-                          </Badge>
-                          {canLogForMember(dose.memberId) ? (
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              disabled={undoingLogId === dose.logId}
-                              onClick={() => void undoDose(dose)}
-                            >
-                              {undoingLogId === dose.logId ? "…" : "Undo"}
-                            </Button>
-                          ) : null}
-                        </div>
-                      }
-                    />
-                  ))}
-                </ul>
+                {groupLoggedDosesByMember(loggedToday).map((memberGroup) => {
+                  const collapsed = collapsedLoggedMembers.has(memberGroup.memberId);
+                  return (
+                    <div key={memberGroup.memberId} className="space-y-2">
+                      <button
+                        type="button"
+                        className="flex items-center gap-1 text-sm font-semibold text-[var(--color-text)]"
+                        onClick={() => toggleLoggedMemberCollapsed(memberGroup.memberId)}
+                        aria-expanded={!collapsed}
+                      >
+                        {collapsed ? (
+                          <ChevronRight className="h-4 w-4 shrink-0" aria-hidden />
+                        ) : (
+                          <ChevronDown className="h-4 w-4 shrink-0" aria-hidden />
+                        )}
+                        {memberLabel(members, memberGroup.memberId)}
+                        <span className="font-normal text-[var(--color-text-muted)]">
+                          · {memberGroup.doses.length}
+                        </span>
+                      </button>
+                      {collapsed ? null : (
+                        <ul className="space-y-2">
+                          {memberGroup.doses.map((dose) => (
+                            <HealthRow
+                              key={dose.logId}
+                              title={dose.name}
+                              subtitle={[
+                                dose.dosage?.trim(),
+                                dose.scheduledTimeLabel ? `for ${dose.scheduledTimeLabel}` : null,
+                                `logged ${dose.loggedAtLabel}`,
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")}
+                              trailing={
+                                <div className="flex items-center gap-2">
+                                  <Badge
+                                    tone={
+                                      dose.status === "taken"
+                                        ? "success"
+                                        : dose.status === "missed"
+                                          ? "warning"
+                                          : "default"
+                                    }
+                                  >
+                                    {dose.status === "taken"
+                                      ? "Taken"
+                                      : dose.status === "skipped"
+                                        ? "Skipped"
+                                        : "Missed"}
+                                  </Badge>
+                                  {canLogForMember(dose.memberId) ? (
+                                    <Button
+                                      size="sm"
+                                      variant="secondary"
+                                      disabled={undoingLogId === dose.logId}
+                                      onClick={() => void undoDose(dose)}
+                                    >
+                                      {undoingLogId === dose.logId ? "…" : "Undo"}
+                                    </Button>
+                                  ) : null}
+                                </div>
+                              }
+                            />
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  );
+                })}
               </CardBody>
             </Card>
           ) : null}
-
-          <Card>
-            <CardBody className="space-y-4">
-              <SectionHeader title="As needed (PRN)" />
-              {prnMeds.length === 0 ? (
-                <p className="text-sm text-[var(--color-text-muted)]">No as-needed meds.</p>
-              ) : (
-                groupMedsByMember(prnMeds).map((memberGroup) => (
-                  <div key={memberGroup.memberId} className="space-y-2">
-                    <h3 className="text-sm font-semibold text-[var(--color-text)]">
-                      {memberLabel(members, memberGroup.memberId)}
-                    </h3>
-                    <ul className="space-y-2">
-                      {memberGroup.meds.map((med) => (
-                        <HealthRow
-                          key={med.id}
-                          title={med.name}
-                          subtitle={med.dosage?.trim() || "As needed"}
-                          trailing={
-                            (med.canLog ?? canLogForMember(med.memberId)) ? (
-                              <Button size="sm" onClick={() => void logDose(med.id, {})}>
-                                Log dose
-                              </Button>
-                            ) : null
-                          }
-                        />
-                      ))}
-                    </ul>
-                  </div>
-                ))
-              )}
-            </CardBody>
-          </Card>
         </div>
       ) : null}
 
       {tab === "events" ? (
         <div className="space-y-4">
-          {canAddEvent ? (
-          <div className="flex justify-end gap-2">
-            <Button size="sm" variant="secondary" onClick={() => setVitalsSheetOpen(true)}>
-              Log vitals
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => {
-                setEditingEvent(null);
-                setEventSheetOpen(true);
-              }}
-            >
-              Add event
-            </Button>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <label className="flex items-center gap-2 text-sm">
+              <span className="text-[var(--color-text-muted)]">Event type</span>
+              <Select
+                value={eventTypeFilter}
+                onChange={(e) => setEventTypeFilter(e.target.value as HealthEventType | "all")}
+                className="w-auto"
+              >
+                <option value="all">All events</option>
+                {EVENT_TYPES.map((t) => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            {canAddEvent ? (
+            <div className="flex justify-end gap-2">
+              <Button size="sm" variant="secondary" onClick={() => setVitalsSheetOpen(true)}>
+                Log vitals
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => {
+                  setEditingEvent(null);
+                  setEventSheetOpen(true);
+                }}
+              >
+                Add event
+              </Button>
+            </div>
+            ) : null}
           </div>
-          ) : null}
-          {events.length === 0 && !loading ? (
-            <EmptyState
-              icon={<Heart className="h-8 w-8" aria-hidden />}
-              title="No health events"
-              description="Log sickness, injuries, or appointments."
-            />
-          ) : (
-            events.map((ev) => {
+          {(() => {
+            const filteredEvents =
+              eventTypeFilter === "all"
+                ? events
+                : events.filter((ev) => ev.type === eventTypeFilter);
+            if (filteredEvents.length === 0 && !loading) {
+              return (
+                <EmptyState
+                  icon={<Heart className="h-8 w-8" aria-hidden />}
+                  title={eventTypeFilter === "all" ? "No health events" : "No matching events"}
+                  description={
+                    eventTypeFilter === "all"
+                      ? "Log sickness, injuries, or appointments."
+                      : "Try a different event type filter."
+                  }
+                />
+              );
+            }
+            return filteredEvents.map((ev) => {
               const when = formatEventWhen(ev);
               return (
               <HealthRow
@@ -593,8 +649,8 @@ export function HealthPageClient({
                 }}
               />
               );
-            })
-          )}
+            });
+          })()}
         </div>
       ) : null}
 
