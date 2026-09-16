@@ -32,6 +32,9 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
   `HealthPageClient.tsx`, `SchoolClassDetail.tsx`) into focused modules for maintainability.
 - Health Today tab's "Logged today" list is now grouped by household member with a collapsible
   header, matching the grouping "Scheduled doses" already had (WHO-295).
+- PRN meds on the Health Today tab moved from a card at the bottom of the page to a searchable
+  quick-log at the top — type or tap a med to log an as-needed dose in one action instead of
+  scrolling past the scheduled dose queue to reach it (WHO-296).
 
 ### Fixed
 
