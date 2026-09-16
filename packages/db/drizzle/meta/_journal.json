@@ -470,6 +470,13 @@
       "when": 1780495040000,
       "tag": "0066_native_push_subscriptions",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1780495041000,
+      "tag": "0067_health_exercise_pain",
+      "breakpoints": true
     }
   ]
 }
