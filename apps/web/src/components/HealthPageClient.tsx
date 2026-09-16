@@ -294,11 +294,11 @@ export function HealthPageClient({
     }
   }
 
-  async function logPrnDose(medicationId: string) {
-    if (prnLoggingId) return;
+  async function logPrnDose(medicationId: string): Promise<boolean> {
+    if (prnLoggingId) return false;
     setPrnLoggingId(medicationId);
     try {
-      await logDose(medicationId, {});
+      return await logDose(medicationId, {});
     } finally {
       setPrnLoggingId(null);
     }
@@ -358,10 +358,11 @@ export function HealthPageClient({
       {tab === "today" ? (
         <div className="space-y-6">
           <PrnQuickLog
-            meds={prnMeds.filter((med) => med.canLog ?? canLogForMember(med.memberId))}
+            meds={prnMeds}
             members={members}
+            canLog={(med) => med.canLog ?? canLogForMember(med.memberId)}
             logging={prnLoggingId}
-            onLog={(medicationId) => void logPrnDose(medicationId)}
+            onLog={logPrnDose}
           />
           <Card>
             <CardBody className="space-y-4">
