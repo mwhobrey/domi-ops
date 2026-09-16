@@ -153,6 +153,19 @@ export function readingsToDrafts(readings: VitalsReading[] | undefined): VitalsR
   }));
 }
 
+let painDraftKey = 0;
+export function nextPainDraftKey(): string {
+  painDraftKey += 1;
+  return `pain-draft-${painDraftKey}`;
+}
+
+/** Mild/moderate/severe buckets on the existing success/warning/danger tokens — no new palette. */
+export function painSeverityColor(severity: number): string {
+  if (severity <= 3) return "var(--color-success)";
+  if (severity <= 6) return "var(--color-warning)";
+  return "var(--color-danger)";
+}
+
 export function memberLabel(members: NoteShareMember[], memberId: string): string {
   return members.find((m) => m.memberId === memberId)?.label ?? "Member";
 }
