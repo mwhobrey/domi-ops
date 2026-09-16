@@ -255,7 +255,7 @@ export async function enrichHealthEvents(
       row.visibility === "household" ||
       canAccessHealthSegment(grants, "events", "write");
     return serializeHealthEvent(row, env, {
-      sharedMemberIds: isOwnedByMe ? sharedMemberIds : undefined,
+      sharedMemberIds: canEdit ? sharedMemberIds : undefined,
       isOwnedByMe,
       sharedWithMe,
       readings: readingsMap.get(row.id),
@@ -291,7 +291,7 @@ export async function enrichHealthMedications(
       canAccessHealthSegment(grants, "medications", "write");
     const canLog = canAccessHealthSegment(grants, "doses", "write");
     return serializeHealthMedication(row, env, {
-      sharedMemberIds: isOwnedByMe ? sharedMemberIds : undefined,
+      sharedMemberIds: canEdit ? sharedMemberIds : undefined,
       isOwnedByMe,
       sharedWithMe,
       canEdit,
