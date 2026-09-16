@@ -9,6 +9,7 @@ import {
   VITALS_METRICS,
   type HealthEvent,
   type HealthMedication,
+  type LoggedDose,
   type PendingDose,
   type PendingGroupDose,
   type TodayEntry,
@@ -63,6 +64,20 @@ export function groupMedsByMember(meds: HealthMedication[]): Array<{
     byMember.set(med.memberId, list);
   }
   return [...byMember.entries()].map(([memberId, list]) => ({ memberId, meds: list }));
+}
+
+/** "Logged today" doses grouped by person, same shape as groupMedsByMember. */
+export function groupLoggedDosesByMember(doses: LoggedDose[]): Array<{
+  memberId: string;
+  doses: LoggedDose[];
+}> {
+  const byMember = new Map<string, LoggedDose[]>();
+  for (const dose of doses) {
+    const list = byMember.get(dose.memberId) ?? [];
+    list.push(dose);
+    byMember.set(dose.memberId, list);
+  }
+  return [...byMember.entries()].map(([memberId, list]) => ({ memberId, doses: list }));
 }
 
 export function groupPendingGroupDosesByMember(doses: PendingGroupDose[]): Map<string, PendingGroupDose[]> {

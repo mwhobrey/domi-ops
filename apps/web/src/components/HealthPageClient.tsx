@@ -1,6 +1,6 @@
 "use client";
 
-import { Heart } from "lucide-react";
+import { ChevronDown, ChevronRight, Heart } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError, apiClient } from "../lib/client-api";
@@ -12,6 +12,7 @@ import { HealthMedicationSheet } from "./health/HealthMedicationSheet";
 import { LogVitalsSheet } from "./health/LogVitalsSheet";
 import { HealthRow, MedGroupDoseCard } from "./health/TodayTabRows";
 import {
+  groupLoggedDosesByMember,
   groupMedsByMember,
   groupPendingDosesByMemberThenTime,
   groupPendingGroupDosesByMember,
@@ -94,6 +95,7 @@ export function HealthPageClient({
   const [capabilities, setCapabilities] = useState<Record<string, HealthAclGrants>>({});
   const [loggingAllKey, setLoggingAllKey] = useState<string | null>(null);
   const [expandedGroupDoses, setExpandedGroupDoses] = useState<Set<string>>(new Set());
+  const [collapsedLoggedMembers, setCollapsedLoggedMembers] = useState<Set<string>>(new Set());
   const [highlightTakeKey, setHighlightTakeKey] = useState<string | null>(null);
   const pushActionHandled = useRef(false);
   const takeHandled = useRef(false);
@@ -300,6 +302,15 @@ export function HealthPageClient({
     });
   }
 
+  function toggleLoggedMemberCollapsed(memberId: string) {
+    setCollapsedLoggedMembers((prev) => {
+      const next = new Set(prev);
+      if (next.has(memberId)) next.delete(memberId);
+      else next.add(memberId);
+      return next;
+    });
+  }
+
   const canAddEvent = members.some((m) => capabilities[m.memberId]?.events === "write");
   const canAddMed = members.some((m) => capabilities[m.memberId]?.medications === "write");
 
@@ -466,48 +477,77 @@ export function HealthPageClient({
 
           {loggedToday.length > 0 ? (
             <Card>
-              <CardBody className="space-y-3">
+              <CardBody className="space-y-4">
                 <SectionHeader title="Logged today" />
-                <ul className="space-y-2">
-                  {loggedToday.map((dose) => (
-                    <HealthRow
-                      key={dose.logId}
-                      title={dose.name}
-                      subtitle={[
-                        dose.dosage?.trim(),
-                        dose.scheduledTimeLabel ? `for ${dose.scheduledTimeLabel}` : null,
-                        `logged ${dose.loggedAtLabel}`,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                      trailing={
-                        <div className="flex items-center gap-2">
-                          <Badge
-                            tone={
-                              dose.status === "taken"
-                                ? "success"
-                                : dose.status === "missed"
-                                  ? "warning"
-                                  : "default"
-                            }
-                          >
-                            {dose.status === "taken" ? "Taken" : dose.status === "skipped" ? "Skipped" : "Missed"}
-                          </Badge>
-                          {canLogForMember(dose.memberId) ? (
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              disabled={undoingLogId === dose.logId}
-                              onClick={() => void undoDose(dose)}
-                            >
-                              {undoingLogId === dose.logId ? "…" : "Undo"}
-                            </Button>
-                          ) : null}
-                        </div>
-                      }
-                    />
-                  ))}
-                </ul>
+                {groupLoggedDosesByMember(loggedToday).map((memberGroup) => {
+                  const collapsed = collapsedLoggedMembers.has(memberGroup.memberId);
+                  return (
+                    <div key={memberGroup.memberId} className="space-y-2">
+                      <button
+                        type="button"
+                        className="flex items-center gap-1 text-sm font-semibold text-[var(--color-text)]"
+                        onClick={() => toggleLoggedMemberCollapsed(memberGroup.memberId)}
+                        aria-expanded={!collapsed}
+                      >
+                        {collapsed ? (
+                          <ChevronRight className="h-4 w-4 shrink-0" aria-hidden />
+                        ) : (
+                          <ChevronDown className="h-4 w-4 shrink-0" aria-hidden />
+                        )}
+                        {memberLabel(members, memberGroup.memberId)}
+                        <span className="font-normal text-[var(--color-text-muted)]">
+                          · {memberGroup.doses.length}
+                        </span>
+                      </button>
+                      {collapsed ? null : (
+                        <ul className="space-y-2">
+                          {memberGroup.doses.map((dose) => (
+                            <HealthRow
+                              key={dose.logId}
+                              title={dose.name}
+                              subtitle={[
+                                dose.dosage?.trim(),
+                                dose.scheduledTimeLabel ? `for ${dose.scheduledTimeLabel}` : null,
+                                `logged ${dose.loggedAtLabel}`,
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")}
+                              trailing={
+                                <div className="flex items-center gap-2">
+                                  <Badge
+                                    tone={
+                                      dose.status === "taken"
+                                        ? "success"
+                                        : dose.status === "missed"
+                                          ? "warning"
+                                          : "default"
+                                    }
+                                  >
+                                    {dose.status === "taken"
+                                      ? "Taken"
+                                      : dose.status === "skipped"
+                                        ? "Skipped"
+                                        : "Missed"}
+                                  </Badge>
+                                  {canLogForMember(dose.memberId) ? (
+                                    <Button
+                                      size="sm"
+                                      variant="secondary"
+                                      disabled={undoingLogId === dose.logId}
+                                      onClick={() => void undoDose(dose)}
+                                    >
+                                      {undoingLogId === dose.logId ? "…" : "Undo"}
+                                    </Button>
+                                  ) : null}
+                                </div>
+                              }
+                            />
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  );
+                })}
               </CardBody>
             </Card>
           ) : null}
