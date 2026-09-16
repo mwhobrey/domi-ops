@@ -49,3 +49,7 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
   Stripe Checkout, and a repeat checkout by someone who already has a household is sent to the app
   instead of creating a second subscription. A mismatch between the login and the Checkout email
   used to spawn a second account and household that could never reach the app.
+- A household member with write access to another member's private health events/medications —
+  not just the record's creator — no longer silently clears its shares when editing and saving.
+  The API previously only returned real share state to the creator; a non-creator editor saw an
+  empty share list and unknowingly overwrote it on save (WHO-293).
