@@ -13,6 +13,7 @@ import { HealthTrendsTab } from "./health/HealthTrendsTab";
 import { LogVitalsSheet } from "./health/LogVitalsSheet";
 import { LogExerciseSheet } from "./health/LogExerciseSheet";
 import { LogPainSheet } from "./health/LogPainSheet";
+import { LogMealSheet } from "./health/LogMealSheet";
 import { HealthRow, MedGroupDoseCard } from "./health/TodayTabRows";
 import { PrnQuickLog } from "./health/PrnQuickLog";
 import {
@@ -23,6 +24,7 @@ import {
   mergeTodayEntriesForMember,
   formatEventWhen,
   formatExerciseSummary,
+  formatFoodLogSummary,
   formatPainSummary,
   formatReadingsSummary,
 } from "./health/health-helpers";
@@ -91,6 +93,7 @@ export function HealthPageClient({
   const [vitalsSheetOpen, setVitalsSheetOpen] = useState(false);
   const [exerciseSheetOpen, setExerciseSheetOpen] = useState(false);
   const [painSheetOpen, setPainSheetOpen] = useState(false);
+  const [mealSheetOpen, setMealSheetOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<HealthEvent | null>(null);
   const [capabilities, setCapabilities] = useState<Record<string, HealthAclGrants>>({});
   const [loggingAllKey, setLoggingAllKey] = useState<string | null>(null);
@@ -631,6 +634,9 @@ export function HealthPageClient({
               <Button size="sm" variant="secondary" onClick={() => setPainSheetOpen(true)}>
                 Log pain
               </Button>
+              <Button size="sm" variant="secondary" onClick={() => setMealSheetOpen(true)}>
+                Log meal
+              </Button>
               <Button
                 size="sm"
                 onClick={() => {
@@ -675,6 +681,7 @@ export function HealthPageClient({
                   ev.type === "vitals" ? formatReadingsSummary(ev.readings) : null,
                   ev.type === "exercise" ? formatExerciseSummary(ev.exerciseDetails) : null,
                   ev.type === "pain" ? formatPainSummary(ev.painLogs) : null,
+                  ev.type === "food_intake" ? formatFoodLogSummary(ev.foodLogEntries) : null,
                 ]
                   .filter(Boolean)
                   .join(" · ")}
@@ -762,6 +769,20 @@ export function HealthPageClient({
         onClose={() => setPainSheetOpen(false)}
         onSaved={() => {
           setPainSheetOpen(false);
+          void load();
+        }}
+      />
+
+      <LogMealSheet
+        open={mealSheetOpen}
+        members={members}
+        currentMemberId={currentMemberId}
+        writableMemberIds={members
+          .filter((m) => capabilities[m.memberId]?.events === "write")
+          .map((m) => m.memberId)}
+        onClose={() => setMealSheetOpen(false)}
+        onSaved={() => {
+          setMealSheetOpen(false);
           void load();
         }}
       />

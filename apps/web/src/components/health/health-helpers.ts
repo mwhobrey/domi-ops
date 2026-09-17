@@ -11,6 +11,8 @@ import {
   PAIN_BODY_REGION_LABELS,
   type ExerciseDetail,
   type ExerciseDetailDraft,
+  type FoodLogEntry,
+  type FoodLogEntryDraft,
   type HealthEvent,
   type HealthMedication,
   type LoggedDose,
@@ -134,6 +136,17 @@ export function formatPainSummary(logs: PainLog[] | undefined): string | null {
     .join(", ");
 }
 
+export function formatFoodLogSummary(entries: FoodLogEntry[] | undefined): string | null {
+  if (!entries || entries.length === 0) return null;
+  return entries.map((e) => e.foodName).join(", ");
+}
+
+/** Short, human title for a meal event when the user hasn't typed one — "Chicken, Rice". */
+export function defaultMealTitle(drafts: FoodLogEntryDraft[]): string {
+  const names = drafts.map((d) => d.foodName.trim()).filter(Boolean);
+  return names.length > 0 ? names.join(", ") : "Meal";
+}
+
 /** Short, human title for a vitals event when the user hasn't typed one — "Weight, Heart rate". */
 export function defaultVitalsTitle(drafts: VitalsReadingDraft[]): string {
   const labels = drafts.filter((d) => d.value.trim()).map((d) => vitalsMetricLabel(d.metric));
@@ -207,6 +220,63 @@ export function painLogsToDrafts(logs: PainLog[] | undefined): PainLogDraft[] {
 
 export function draftsToPainLogs(drafts: PainLogDraft[]): PainLog[] {
   return drafts.map((d) => ({ bodyRegion: d.region, severity: d.severity, qualityTags: d.qualityTags }));
+}
+
+let foodDraftKey = 0;
+export function nextFoodDraftKey(): string {
+  foodDraftKey += 1;
+  return `food-draft-${foodDraftKey}`;
+}
+
+function emptyFoodLogEntryDraft(): FoodLogEntryDraft {
+  return {
+    key: nextFoodDraftKey(),
+    foodName: "",
+    quantity: "",
+    unit: "",
+    calories: "",
+    proteinG: "",
+    carbsG: "",
+    fatG: "",
+  };
+}
+
+export function foodLogEntriesToDrafts(entries: FoodLogEntry[] | undefined): FoodLogEntryDraft[] {
+  if (!entries || entries.length === 0) return [emptyFoodLogEntryDraft()];
+  return entries.map((e) => ({
+    key: nextFoodDraftKey(),
+    foodName: e.foodName,
+    quantity: e.quantity != null ? String(e.quantity) : "",
+    unit: e.unit,
+    calories: e.calories != null ? String(e.calories) : "",
+    proteinG: e.proteinG != null ? String(e.proteinG) : "",
+    carbsG: e.carbsG != null ? String(e.carbsG) : "",
+    fatG: e.fatG != null ? String(e.fatG) : "",
+  }));
+}
+
+export function newFoodLogEntryDraft(): FoodLogEntryDraft {
+  return emptyFoodLogEntryDraft();
+}
+
+export function draftsToFoodLogEntries(drafts: FoodLogEntryDraft[]): FoodLogEntry[] {
+  return drafts
+    .filter(
+      (d) =>
+        d.foodName.trim() &&
+        d.unit.trim() &&
+        d.quantity.trim() &&
+        Number.isFinite(Number(d.quantity)),
+    )
+    .map((d) => ({
+      foodName: d.foodName.trim(),
+      quantity: Number(d.quantity),
+      unit: d.unit.trim(),
+      calories: draftNumberOrNull(d.calories),
+      proteinG: draftNumberOrNull(d.proteinG),
+      carbsG: draftNumberOrNull(d.carbsG),
+      fatG: draftNumberOrNull(d.fatG),
+    }));
 }
 
 export function draftToExerciseDetailInput(draft: ExerciseDetailDraft): ExerciseDetail | null {

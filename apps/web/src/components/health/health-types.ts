@@ -70,6 +70,18 @@ export interface FoodLogEntry {
   fatG: number | null;
 }
 
+/** Form-state mirror of FoodLogEntry — numeric fields stay strings while typing. */
+export type FoodLogEntryDraft = {
+  key: string;
+  foodName: string;
+  quantity: string;
+  unit: string;
+  calories: string;
+  proteinG: string;
+  carbsG: string;
+  fatG: string;
+};
+
 export interface HealthEvent {
   id: string;
   memberId: string;
