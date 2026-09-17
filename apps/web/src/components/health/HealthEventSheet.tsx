@@ -114,6 +114,11 @@ export function HealthEventSheet({
 
   async function save() {
     if (readOnly || !title.trim()) return;
+    const foodLogEntries = type === "food_intake" ? draftsToFoodLogEntries(foodDrafts) : undefined;
+    if (type === "food_intake" && foodLogEntries!.length === 0) {
+      setErr("Add at least one food item.");
+      return;
+    }
     setBusy(true);
     setErr(null);
     const readings = type === "vitals" ? draftsToReadings(readingDrafts) : undefined;
@@ -137,7 +142,7 @@ export function HealthEventSheet({
       readings,
       exerciseDetails: type === "exercise" ? (exerciseDetail ? [exerciseDetail] : []) : undefined,
       painLogs: type === "pain" ? draftsToPainLogs(painEntries) : undefined,
-      foodLogEntries: type === "food_intake" ? draftsToFoodLogEntries(foodDrafts) : undefined,
+      foodLogEntries,
     };
     try {
       if (event) {
