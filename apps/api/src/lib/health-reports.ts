@@ -41,6 +41,7 @@ export const HEALTH_EVENT_TYPE_LABELS: Record<string, string> = {
   vitals: "Vitals",
   exercise: "Exercise",
   pain: "Pain",
+  food_intake: "Meal",
   other: "Other",
 };
 

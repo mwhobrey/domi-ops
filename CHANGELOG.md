@@ -47,6 +47,9 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 - New Health **Trends** tab: vitals, exercise, and pain charts inline on `/health` instead of
   only in Reports — the same "is BP trending up" gap now closed for exercise volume and pain
   severity too (WHO-303).
+- Schema and API support for nutrition tracking: a `food_intake` health event type with one or
+  more food entries per meal (name, quantity, calories, protein/carbs/fat) — manual entry only,
+  no food database. No logging UI yet; that's next (WHO-304).
 - Split several large files (`apps/api/src/routes/core.ts`, `apps/api/src/routes/school.ts`,
   `HealthPageClient.tsx`, `SchoolClassDetail.tsx`) into focused modules for maintainability.
 - Health Today tab's "Logged today" list is now grouped by household member with a collapsible

@@ -156,6 +156,7 @@ export const HEALTH_REPORT_EVENT_TYPES: { value: string; label: string }[] = [
   { value: "vitals", label: "Vitals" },
   { value: "exercise", label: "Exercise" },
   { value: "pain", label: "Pain" },
+  { value: "food_intake", label: "Meal" },
   { value: "other", label: "Other" },
 ];
 

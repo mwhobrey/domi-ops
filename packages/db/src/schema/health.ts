@@ -24,6 +24,7 @@ export const healthEventTypeEnum = pgEnum("health_event_type", [
   "vitals",
   "exercise",
   "pain",
+  "food_intake",
   "other",
 ]);
 
@@ -174,6 +175,30 @@ export const healthPainLogs = pgTable("health_pain_logs", {
   bodyRegion: healthPainBodyRegionEnum("body_region").notNull(),
   severity: text("severity").notNull(),
   qualityTags: text("quality_tags"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * One or more food items logged against a `type: "food_intake"` health_events row — a meal
+ * naturally has several items in one sitting, same one-event-many-rows shape as
+ * health_vitals_readings/health_exercise_details. Quantitative fields are encrypted text (same
+ * convention as vitals `value`); `unit` and `source` are plain, non-PHI metadata. `source` is
+ * reserved for a future food-database/lookup integration the same way
+ * health_exercise_details.external_source is — manual entry only for v1.
+ */
+export const healthFoodLogEntries = pgTable("health_food_log_entries", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  eventId: uuid("event_id")
+    .notNull()
+    .references(() => healthEvents.id, { onDelete: "cascade" }),
+  foodName: text("food_name").notNull(),
+  quantity: text("quantity").notNull(),
+  unit: text("unit").notNull(),
+  calories: text("calories"),
+  proteinG: text("protein_g"),
+  carbsG: text("carbs_g"),
+  fatG: text("fat_g"),
+  source: text("source").notNull().default("manual"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
