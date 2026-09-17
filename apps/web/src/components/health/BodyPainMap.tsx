@@ -139,6 +139,7 @@ export function BodyPainMap({
           type="button"
           size="sm"
           variant={view === "front" ? "primary" : "secondary"}
+          aria-pressed={view === "front"}
           onClick={() => setView("front")}
         >
           Front
@@ -147,6 +148,7 @@ export function BodyPainMap({
           type="button"
           size="sm"
           variant={view === "back" ? "primary" : "secondary"}
+          aria-pressed={view === "back"}
           onClick={() => setView("back")}
         >
           Back
