@@ -7,8 +7,17 @@ import type { NoteShareMember } from "../NoteSharePicker";
 import {
   DEFAULT_VITALS_METRICS,
   VITALS_METRICS,
+  emptyExerciseDetailDraft,
+  PAIN_BODY_REGION_LABELS,
+  type ExerciseDetail,
+  type ExerciseDetailDraft,
+  type FoodLogEntry,
+  type FoodLogEntryDraft,
   type HealthEvent,
   type HealthMedication,
+  type LoggedDose,
+  type PainLog,
+  type PainLogDraft,
   type PendingDose,
   type PendingGroupDose,
   type TodayEntry,
@@ -65,6 +74,20 @@ export function groupMedsByMember(meds: HealthMedication[]): Array<{
   return [...byMember.entries()].map(([memberId, list]) => ({ memberId, meds: list }));
 }
 
+/** "Logged today" doses grouped by person, same shape as groupMedsByMember. */
+export function groupLoggedDosesByMember(doses: LoggedDose[]): Array<{
+  memberId: string;
+  doses: LoggedDose[];
+}> {
+  const byMember = new Map<string, LoggedDose[]>();
+  for (const dose of doses) {
+    const list = byMember.get(dose.memberId) ?? [];
+    list.push(dose);
+    byMember.set(dose.memberId, list);
+  }
+  return [...byMember.entries()].map(([memberId, list]) => ({ memberId, doses: list }));
+}
+
 export function groupPendingGroupDosesByMember(doses: PendingGroupDose[]): Map<string, PendingGroupDose[]> {
   const map = new Map<string, PendingGroupDose[]>();
   for (const dose of doses) {
@@ -97,6 +120,31 @@ export function vitalsMetricLabel(metric: string): string {
 export function formatReadingsSummary(readings: VitalsReading[] | undefined): string | null {
   if (!readings || readings.length === 0) return null;
   return readings.map((r) => `${vitalsMetricLabel(r.metric)}: ${r.value} ${r.unit}`).join(", ");
+}
+
+export function formatExerciseSummary(details: ExerciseDetail[] | undefined): string | null {
+  if (!details || details.length === 0) return null;
+  return details
+    .map((d) => (d.durationMinutes != null ? `${d.activity} (${d.durationMinutes} min)` : d.activity))
+    .join(", ");
+}
+
+export function formatPainSummary(logs: PainLog[] | undefined): string | null {
+  if (!logs || logs.length === 0) return null;
+  return logs
+    .map((l) => `${PAIN_BODY_REGION_LABELS[l.bodyRegion]}: ${l.severity}/10`)
+    .join(", ");
+}
+
+export function formatFoodLogSummary(entries: FoodLogEntry[] | undefined): string | null {
+  if (!entries || entries.length === 0) return null;
+  return entries.map((e) => e.foodName).join(", ");
+}
+
+/** Short, human title for a meal event when the user hasn't typed one — "Chicken, Rice". */
+export function defaultMealTitle(drafts: FoodLogEntryDraft[]): string {
+  const names = drafts.map((d) => d.foodName.trim()).filter(Boolean);
+  return names.length > 0 ? names.join(", ") : "Meal";
 }
 
 /** Short, human title for a vitals event when the user hasn't typed one — "Weight, Heart rate". */
@@ -136,6 +184,126 @@ export function readingsToDrafts(readings: VitalsReading[] | undefined): VitalsR
     value: String(r.value),
     unit: r.unit,
   }));
+}
+
+export function exerciseDetailToDraft(detail: ExerciseDetail | undefined): ExerciseDetailDraft {
+  if (!detail) return emptyExerciseDetailDraft();
+  return {
+    activity: detail.activity,
+    durationMinutes: detail.durationMinutes != null ? String(detail.durationMinutes) : "",
+    intensity: detail.intensity ?? "",
+    distance: detail.distance != null ? String(detail.distance) : "",
+    distanceUnit: detail.distanceUnit ?? "",
+    sets: detail.sets != null ? String(detail.sets) : "",
+    reps: detail.reps != null ? String(detail.reps) : "",
+    caloriesEstimated: detail.caloriesEstimated != null ? String(detail.caloriesEstimated) : "",
+  };
+}
+
+/** Empty activity name means "nothing to save" — the exercise editor is optional in the sheet. */
+function draftNumberOrNull(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function painLogsToDrafts(logs: PainLog[] | undefined): PainLogDraft[] {
+  if (!logs) return [];
+  return logs.map((l) => ({
+    key: nextPainDraftKey(),
+    region: l.bodyRegion,
+    severity: l.severity,
+    qualityTags: l.qualityTags,
+  }));
+}
+
+export function draftsToPainLogs(drafts: PainLogDraft[]): PainLog[] {
+  return drafts.map((d) => ({ bodyRegion: d.region, severity: d.severity, qualityTags: d.qualityTags }));
+}
+
+let foodDraftKey = 0;
+export function nextFoodDraftKey(): string {
+  foodDraftKey += 1;
+  return `food-draft-${foodDraftKey}`;
+}
+
+function emptyFoodLogEntryDraft(): FoodLogEntryDraft {
+  return {
+    key: nextFoodDraftKey(),
+    foodName: "",
+    quantity: "",
+    unit: "",
+    calories: "",
+    proteinG: "",
+    carbsG: "",
+    fatG: "",
+  };
+}
+
+export function foodLogEntriesToDrafts(entries: FoodLogEntry[] | undefined): FoodLogEntryDraft[] {
+  if (!entries || entries.length === 0) return [emptyFoodLogEntryDraft()];
+  return entries.map((e) => ({
+    key: nextFoodDraftKey(),
+    foodName: e.foodName,
+    quantity: e.quantity != null ? String(e.quantity) : "",
+    unit: e.unit,
+    calories: e.calories != null ? String(e.calories) : "",
+    proteinG: e.proteinG != null ? String(e.proteinG) : "",
+    carbsG: e.carbsG != null ? String(e.carbsG) : "",
+    fatG: e.fatG != null ? String(e.fatG) : "",
+  }));
+}
+
+export function newFoodLogEntryDraft(): FoodLogEntryDraft {
+  return emptyFoodLogEntryDraft();
+}
+
+export function draftsToFoodLogEntries(drafts: FoodLogEntryDraft[]): FoodLogEntry[] {
+  return drafts
+    .filter(
+      (d) =>
+        d.foodName.trim() &&
+        d.unit.trim() &&
+        d.quantity.trim() &&
+        Number.isFinite(Number(d.quantity)),
+    )
+    .map((d) => ({
+      foodName: d.foodName.trim(),
+      quantity: Number(d.quantity),
+      unit: d.unit.trim(),
+      calories: draftNumberOrNull(d.calories),
+      proteinG: draftNumberOrNull(d.proteinG),
+      carbsG: draftNumberOrNull(d.carbsG),
+      fatG: draftNumberOrNull(d.fatG),
+    }));
+}
+
+export function draftToExerciseDetailInput(draft: ExerciseDetailDraft): ExerciseDetail | null {
+  if (!draft.activity.trim()) return null;
+  return {
+    activity: draft.activity.trim(),
+    durationMinutes: draftNumberOrNull(draft.durationMinutes),
+    intensity: draft.intensity.trim() || null,
+    distance: draftNumberOrNull(draft.distance),
+    distanceUnit: draft.distanceUnit.trim() || null,
+    sets: draftNumberOrNull(draft.sets),
+    reps: draftNumberOrNull(draft.reps),
+    caloriesEstimated: draftNumberOrNull(draft.caloriesEstimated),
+  };
+}
+
+let painDraftKey = 0;
+export function nextPainDraftKey(): string {
+  painDraftKey += 1;
+  return `pain-draft-${painDraftKey}`;
+}
+
+/** Mild/moderate/severe buckets on the existing success/warning/danger tokens — no new palette. */
+export function painSeverityColor(severity: number): string {
+  if (severity <= 3) return "var(--color-success)";
+  if (severity <= 6) return "var(--color-warning)";
+  return "var(--color-danger)";
 }
 
 export function memberLabel(members: NoteShareMember[], memberId: string): string {

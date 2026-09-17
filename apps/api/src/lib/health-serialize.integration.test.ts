@@ -17,7 +17,14 @@ import {
   withSystemContext,
   type Database,
 } from "@domi-ops/db";
-import { enrichHealthEvents, enrichHealthMedications } from "./health-serialize.js";
+import {
+  enrichHealthEvents,
+  enrichHealthMedications,
+  loadExerciseDetailsForEvents,
+  loadPainLogsForEvents,
+  replaceExerciseDetails,
+  replacePainLogs,
+} from "./health-serialize.js";
 
 /**
  * WHO-293 (CodeRabbit-requested regression coverage): a non-creator with legitimate write
@@ -184,5 +191,173 @@ maybeDescribe("enrichHealthEvents / enrichHealthMedications sharing (integration
     expect(enriched.canEdit).toBe(true);
     expect(enriched.isOwnedByMe).toBe(false);
     expect(enriched.sharedMemberIds).toEqual([sharedWithMemberId]);
+  });
+});
+
+/**
+ * WHO-299: exercise/pain detail rows round-trip through real encryption (quantitative fields
+ * are encrypted text, same convention as vitals `value` — see packages/db/src/schema/health.ts).
+ */
+const encryptedEnv = { ENCRYPTION_KEY: "test-health-encryption-key-32chars!!" } as Env;
+
+maybeDescribe("exercise/pain detail persistence (integration)", () => {
+  let db: Database;
+  let householdId: string;
+  let memberId: string;
+  let userId: string;
+
+  beforeAll(async () => {
+    if (!TEST_URL) return;
+    db = createDb(TEST_URL);
+    await withSystemContext(db, async (tx) => {
+      const [hh] = await tx
+        .insert(households)
+        .values({ name: "health-exercise-pain-it", timezone: "UTC" })
+        .returning({ id: households.id });
+      householdId = hh.id;
+      const [user] = await tx
+        .insert(users)
+        .values({
+          email: `health-exercise-pain-${randomUUID()}@test.local`,
+          displayName: "Tester",
+          emailVerified: true,
+        })
+        .returning({ id: users.id });
+      userId = user.id;
+      const [member] = await tx
+        .insert(householdMembers)
+        .values({ householdId, userId, role: "owner", name: "Tester" })
+        .returning({ id: householdMembers.id });
+      memberId = member.id;
+    });
+  }, 30_000);
+
+  afterAll(async () => {
+    if (!db) return;
+    await withSystemContext(db, async (tx) => {
+      if (householdId) await tx.delete(households).where(eq(households.id, householdId));
+      if (userId) await tx.delete(users).where(eq(users.id, userId));
+    });
+    await closeDb(db);
+  });
+
+  it("round-trips encrypted exercise detail fields", async () => {
+    const [event] = await withHouseholdContext(db, householdId, (tx) =>
+      tx
+        .insert(healthEvents)
+        .values({
+          householdId,
+          memberId,
+          type: "exercise",
+          title: "Morning workout",
+          visibility: "private",
+          createdByUserId: userId,
+        })
+        .returning(),
+    );
+
+    await withHouseholdContext(db, householdId, (tx) =>
+      replaceExerciseDetails(tx, encryptedEnv, event.id, [
+        {
+          activity: "Running",
+          durationMinutes: 32,
+          intensity: "vigorous",
+          distance: 4.2,
+          distanceUnit: "mi",
+          sets: null,
+          reps: null,
+          caloriesEstimated: 310,
+        },
+      ]),
+    );
+
+    const map = await withHouseholdContext(db, householdId, (tx) =>
+      loadExerciseDetailsForEvents(tx, encryptedEnv, [event.id]),
+    );
+    const details = map.get(event.id);
+    expect(details).toHaveLength(1);
+    expect(details![0]).toMatchObject({
+      activity: "Running",
+      durationMinutes: 32,
+      intensity: "vigorous",
+      distance: 4.2,
+      distanceUnit: "mi",
+      sets: null,
+      reps: null,
+      caloriesEstimated: 310,
+      externalSource: "manual",
+    });
+  });
+
+  it("round-trips encrypted pain severity and quality tags across multiple regions", async () => {
+    const [event] = await withHouseholdContext(db, householdId, (tx) =>
+      tx
+        .insert(healthEvents)
+        .values({
+          householdId,
+          memberId,
+          type: "pain",
+          title: "Pain check-in",
+          visibility: "private",
+          createdByUserId: userId,
+        })
+        .returning(),
+    );
+
+    await withHouseholdContext(db, householdId, (tx) =>
+      replacePainLogs(tx, encryptedEnv, event.id, [
+        { bodyRegion: "front_head", severity: 6, qualityTags: ["throbbing", "sharp"] },
+        { bodyRegion: "neck_front", severity: 4, qualityTags: null },
+      ]),
+    );
+
+    const map = await withHouseholdContext(db, householdId, (tx) =>
+      loadPainLogsForEvents(tx, encryptedEnv, [event.id]),
+    );
+    const logs = map.get(event.id)!.sort((a, b) => b.severity - a.severity);
+    expect(logs).toHaveLength(2);
+    expect(logs[0]).toMatchObject({
+      bodyRegion: "front_head",
+      severity: 6,
+      qualityTags: ["throbbing", "sharp"],
+    });
+    expect(logs[1]).toMatchObject({
+      bodyRegion: "neck_front",
+      severity: 4,
+      qualityTags: null,
+    });
+  });
+
+  it("replace fully overwrites prior details, matching the vitals replace-not-append pattern", async () => {
+    const [event] = await withHouseholdContext(db, householdId, (tx) =>
+      tx
+        .insert(healthEvents)
+        .values({
+          householdId,
+          memberId,
+          type: "exercise",
+          title: "Evening workout",
+          visibility: "private",
+          createdByUserId: userId,
+        })
+        .returning(),
+    );
+
+    await withHouseholdContext(db, householdId, (tx) =>
+      replaceExerciseDetails(tx, encryptedEnv, event.id, [
+        { activity: "Cycling" },
+        { activity: "Yoga" },
+      ]),
+    );
+    await withHouseholdContext(db, householdId, (tx) =>
+      replaceExerciseDetails(tx, encryptedEnv, event.id, [{ activity: "Swimming" }]),
+    );
+
+    const map = await withHouseholdContext(db, householdId, (tx) =>
+      loadExerciseDetailsForEvents(tx, encryptedEnv, [event.id]),
+    );
+    const details = map.get(event.id);
+    expect(details).toHaveLength(1);
+    expect(details![0].activity).toBe("Swimming");
   });
 });
