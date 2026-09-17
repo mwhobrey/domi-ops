@@ -337,6 +337,16 @@ export function HealthPageClient({
     [events],
   );
 
+  // If an edit removes the last event of the selected type (e.g. retyping it, or deleting it),
+  // its chip disappears from presentEventTypes but the filter would otherwise keep pointing at
+  // it, showing "No matching events" even though other events exist.
+  useEffect(() => {
+    if (loading || eventTypeFilter === "all") return;
+    if (!presentEventTypes.some((t) => t.value === eventTypeFilter)) {
+      setEventTypeFilter("all");
+    }
+  }, [loading, eventTypeFilter, presentEventTypes]);
+
   function canLogForMember(memberId: string) {
     return capabilities[memberId]?.doses === "write";
   }
