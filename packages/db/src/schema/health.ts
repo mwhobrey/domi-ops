@@ -22,6 +22,8 @@ export const healthEventTypeEnum = pgEnum("health_event_type", [
   "symptom",
   "medication",
   "vitals",
+  "exercise",
+  "pain",
   "other",
 ]);
 
@@ -36,6 +38,45 @@ export const healthVitalsMetricEnum = pgEnum("health_vitals_metric", [
   "blood_glucose",
   "respiratory_rate",
   "other",
+]);
+
+/**
+ * Front/back body-map regions for pain logging (WHO-297/298). Shoulders, arms, hands, thighs,
+ * shins, and feet are clickable from either view and share one region value; only anatomically
+ * front- or back-only areas (head/face, neck, torso, buttocks) get separate front/back entries.
+ */
+export const healthPainBodyRegionEnum = pgEnum("health_pain_body_region", [
+  "front_head",
+  "face",
+  "neck_front",
+  "chest",
+  "abdomen",
+  "groin",
+  "left_shoulder",
+  "right_shoulder",
+  "left_upper_arm",
+  "right_upper_arm",
+  "left_forearm",
+  "right_forearm",
+  "left_hand",
+  "right_hand",
+  "left_thigh",
+  "right_thigh",
+  "left_shin",
+  "right_shin",
+  "left_foot",
+  "right_foot",
+  "back_head",
+  "neck_back",
+  "upper_back",
+  "lower_back",
+  "buttocks",
+  "left_shoulder_blade",
+  "right_shoulder_blade",
+  "left_hamstring",
+  "right_hamstring",
+  "left_calf",
+  "right_calf",
 ]);
 
 export const medScheduleKindEnum = pgEnum("med_schedule_kind", [
@@ -89,6 +130,50 @@ export const healthVitalsReadings = pgTable("health_vitals_readings", {
   metric: healthVitalsMetricEnum("metric").notNull(),
   value: text("value").notNull(),
   unit: text("unit").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * One or more activities logged against a `type: "exercise"` health_events row — a single
+ * "Morning workout" event can carry several rows (e.g. running + strength training), same
+ * one-event-many-rows shape as health_vitals_readings. Quantitative fields are encrypted text
+ * (same convention as vitals `value`); `intensity`, `distance_unit`, and the reserved
+ * `external_*` import-dedupe columns are plain, non-PHI metadata.
+ */
+export const healthExerciseDetails = pgTable("health_exercise_details", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  eventId: uuid("event_id")
+    .notNull()
+    .references(() => healthEvents.id, { onDelete: "cascade" }),
+  activity: text("activity").notNull(),
+  durationMinutes: text("duration_minutes"),
+  intensity: text("intensity"),
+  distance: text("distance"),
+  distanceUnit: text("distance_unit"),
+  sets: text("sets"),
+  reps: text("reps"),
+  caloriesEstimated: text("calories_estimated"),
+  /** Reserved for a future Apple Health / Google Fit import — unused until that ships. */
+  externalSource: text("external_source").notNull().default("manual"),
+  externalId: text("external_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * One or more body-region check-ins logged against a `type: "pain"` health_events row —
+ * tapping a front/back body map is inherently multi-select, so "headache 6/10 + neck
+ * stiffness 4/10" logged together is two rows sharing one eventId. `severity` and
+ * `qualityTags` are encrypted text (same convention as vitals `value` / event `notes`);
+ * `bodyRegion` is a plain enum, same treatment as vitals' `metric`.
+ */
+export const healthPainLogs = pgTable("health_pain_logs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  eventId: uuid("event_id")
+    .notNull()
+    .references(() => healthEvents.id, { onDelete: "cascade" }),
+  bodyRegion: healthPainBodyRegionEnum("body_region").notNull(),
+  severity: text("severity").notNull(),
+  qualityTags: text("quality_tags"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
