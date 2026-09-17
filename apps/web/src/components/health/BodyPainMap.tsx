@@ -67,10 +67,12 @@ const BACK_REGIONS: RegionShape[] = [
 function RegionPath({
   shape,
   severity,
+  disabled,
   onClick,
 }: {
   shape: RegionShape;
   severity: number | undefined;
+  disabled?: boolean;
   onClick: () => void;
 }) {
   const fill = severity ? painSeverityColor(severity) : "var(--color-surface-elevated)";
@@ -80,17 +82,22 @@ function RegionPath({
     fillOpacity,
     stroke: "var(--color-border)",
     strokeWidth: 1,
-    className: "cursor-pointer transition-colors hover:stroke-[var(--color-accent)]",
-    onClick,
+    className: disabled
+      ? "cursor-default"
+      : "cursor-pointer transition-colors hover:stroke-[var(--color-accent)]",
+    onClick: disabled ? undefined : onClick,
     role: "button" as const,
-    tabIndex: 0,
+    tabIndex: disabled ? -1 : 0,
+    "aria-disabled": disabled || undefined,
     "aria-label": `${PAIN_BODY_REGION_LABELS[shape.region]}${severity ? `, severity ${severity} of 10` : ""}`,
-    onKeyDown: (e: React.KeyboardEvent) => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        onClick();
-      }
-    },
+    onKeyDown: disabled
+      ? undefined
+      : (e: React.KeyboardEvent) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onClick();
+          }
+        },
   };
   if (shape.shape === "ellipse") {
     return <ellipse cx={shape.cx} cy={shape.cy} rx={shape.rx} ry={shape.ry} {...common} />;
@@ -107,15 +114,18 @@ function RegionPath({
 export function BodyPainMap({
   entries,
   onChange,
+  disabled = false,
 }: {
   entries: PainLogDraft[];
   onChange: (entries: PainLogDraft[]) => void;
+  disabled?: boolean;
 }) {
   const [view, setView] = useState<"front" | "back">("front");
   const regions = view === "front" ? FRONT_REGIONS : BACK_REGIONS;
   const severityByRegion = new Map(entries.map((e) => [e.region, e.severity]));
 
   function toggleRegion(region: HealthPainBodyRegion) {
+    if (disabled) return;
     const existing = entries.find((e) => e.region === region);
     if (existing) {
       onChange(entries.filter((e) => e.key !== existing.key));
@@ -125,10 +135,12 @@ export function BodyPainMap({
   }
 
   function updateSeverity(key: string, severity: number) {
+    if (disabled) return;
     onChange(entries.map((e) => (e.key === key ? { ...e, severity } : e)));
   }
 
   function removeEntry(key: string) {
+    if (disabled) return;
     onChange(entries.filter((e) => e.key !== key));
   }
 
@@ -160,6 +172,7 @@ export function BodyPainMap({
             key={`${view}-${shape.region}`}
             shape={shape}
             severity={severityByRegion.get(shape.region)}
+            disabled={disabled}
             onClick={() => toggleRegion(shape.region)}
           />
         ))}
@@ -186,18 +199,21 @@ export function BodyPainMap({
                 min={1}
                 max={10}
                 value={entry.severity}
+                disabled={disabled}
                 onChange={(e) => updateSeverity(entry.key, Number(e.target.value))}
                 aria-label={`${PAIN_BODY_REGION_LABELS[entry.region]} severity`}
-                className="w-28"
+                className="w-28 disabled:opacity-50"
               />
               <span className="w-6 shrink-0 text-right text-sm tabular-nums">{entry.severity}</span>
               <button
                 type="button"
                 onClick={() => removeEntry(entry.key)}
+                disabled={disabled}
                 aria-label={`Remove ${PAIN_BODY_REGION_LABELS[entry.region]}`}
                 className={cn(
                   "shrink-0 rounded-full p-1 text-[var(--color-text-muted)]",
                   "hover:bg-[var(--color-border)]/50 hover:text-[var(--color-text)]",
+                  "disabled:pointer-events-none disabled:opacity-50",
                 )}
               >
                 ×

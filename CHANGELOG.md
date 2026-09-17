@@ -25,6 +25,11 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 - Issue templates, PR template, Code of Conduct, and this changelog.
 - Event type filter on the Health Events tab, matching the filter already available on the
   Events report — previously the only way to narrow the feed by type (WHO-294).
+- Exercise and pain tracking in the Health module (WHO-297/298/299): dedicated "Log exercise"
+  and "Log pain" quick-log buttons alongside the existing "Log vitals", each opening a
+  purpose-built sheet — pain logging taps a front/back body map instead of typing a location.
+  Both types are also fully editable via the general "Add event" form for backdating, same as
+  vitals already was.
 
 ### Changed
 
