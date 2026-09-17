@@ -8,7 +8,7 @@ import type { NoteShareMember } from "./NoteSharePicker";
 import type { HealthAclGrants } from "./HealthPeopleAccessPanel";
 import { ModuleReportsLink } from "./reports/ModuleReportsLink";
 import { HealthEventSheet } from "./health/HealthEventSheet";
-import { HealthMedicationSheet } from "./health/HealthMedicationSheet";
+import { MedicationManagerClient } from "./health/MedicationManagerClient";
 import { LogVitalsSheet } from "./health/LogVitalsSheet";
 import { LogExerciseSheet } from "./health/LogExerciseSheet";
 import { LogPainSheet } from "./health/LogPainSheet";
@@ -24,14 +24,12 @@ import {
   formatExerciseSummary,
   formatPainSummary,
   formatReadingsSummary,
-  scheduleKindLabel,
 } from "./health/health-helpers";
 import {
   EVENT_TYPES,
   type HealthEvent,
   type HealthEventType,
   type HealthMedication,
-  type MedicationGroupOption,
   type LoggedDose,
   type PendingDose,
   type PendingGroupDose,
@@ -80,8 +78,6 @@ export function HealthPageClient({
   const [tab, setTab] = useState<"today" | "log" | "medications">("today");
   const [eventTypeFilter, setEventTypeFilter] = useState<HealthEventType | "all">("all");
   const [events, setEvents] = useState<HealthEvent[]>([]);
-  const [medications, setMedications] = useState<HealthMedication[]>([]);
-  const [groups, setGroups] = useState<MedicationGroupOption[]>([]);
   const [pendingDoses, setPendingDoses] = useState<PendingDose[]>([]);
   const [pendingGroupDoses, setPendingGroupDoses] = useState<PendingGroupDose[]>([]);
   const [loggedToday, setLoggedToday] = useState<LoggedDose[]>([]);
@@ -94,9 +90,7 @@ export function HealthPageClient({
   const [vitalsSheetOpen, setVitalsSheetOpen] = useState(false);
   const [exerciseSheetOpen, setExerciseSheetOpen] = useState(false);
   const [painSheetOpen, setPainSheetOpen] = useState(false);
-  const [medSheetOpen, setMedSheetOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<HealthEvent | null>(null);
-  const [editingMed, setEditingMed] = useState<HealthMedication | null>(null);
   const [capabilities, setCapabilities] = useState<Record<string, HealthAclGrants>>({});
   const [loggingAllKey, setLoggingAllKey] = useState<string | null>(null);
   const [expandedGroupDoses, setExpandedGroupDoses] = useState<Set<string>>(new Set());
@@ -111,10 +105,8 @@ export function HealthPageClient({
     setLoading(true);
     setError(null);
     try {
-      const [eventsRes, medsRes, groupsRes, glanceRes, capsRes] = await Promise.all([
+      const [eventsRes, glanceRes, capsRes] = await Promise.all([
         apiClient.get<{ events: HealthEvent[] }>("/api/health/events"),
-        apiClient.get<{ medications: HealthMedication[] }>("/api/health/medications"),
-        apiClient.get<{ groups: MedicationGroupOption[] }>("/api/health/medication-groups"),
         apiClient.get<{
           pendingDoses: PendingDose[];
           pendingGroupDoses: PendingGroupDose[];
@@ -124,8 +116,6 @@ export function HealthPageClient({
         apiClient.get<{ bySubject: Record<string, HealthAclGrants> }>("/api/health/capabilities"),
       ]);
       setEvents(eventsRes.events);
-      setMedications(medsRes.medications);
-      setGroups(groupsRes.groups ?? []);
       setPendingDoses(glanceRes.pendingDoses);
       setPendingGroupDoses(glanceRes.pendingGroupDoses ?? []);
       setPrnMeds(glanceRes.prnMedications);
@@ -166,13 +156,11 @@ export function HealthPageClient({
 
   useEffect(() => {
     if (!initialMedicationId || pushAction || initialTakeMedicationId) return;
-    const med = medications.find((m) => m.id === initialMedicationId);
-    if (med) {
-      setEditingMed(med);
-      setMedSheetOpen(true);
-      setTab("medications");
-    }
-  }, [initialMedicationId, medications, pushAction, initialTakeMedicationId]);
+    setTab("medications");
+  }, [initialMedicationId, pushAction, initialTakeMedicationId]);
+
+  const managerInitialMedicationId =
+    initialMedicationId && !pushAction && !initialTakeMedicationId ? initialMedicationId : undefined;
 
   useEffect(() => {
     if (!initialTakeMedicationId || pushAction || takeHandled.current) return;
@@ -328,7 +316,6 @@ export function HealthPageClient({
   }
 
   const canAddEvent = members.some((m) => capabilities[m.memberId]?.events === "write");
-  const canAddMed = members.some((m) => capabilities[m.memberId]?.medications === "write");
 
   // Only chip types with at least one logged event — a 9-way "All"-plus-every-type row is
   // clutter for the common case (most households only ever log a couple of types).
@@ -699,52 +686,11 @@ export function HealthPageClient({
       ) : null}
 
       {tab === "medications" ? (
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <LinkButton href="/health/medications" size="sm" variant="secondary">
-              Open medication manager
-            </LinkButton>
-            {canAddMed ? (
-              <Button
-                size="sm"
-                onClick={() => {
-                  setEditingMed(null);
-                  setMedSheetOpen(true);
-                }}
-              >
-                Add medication
-              </Button>
-            ) : null}
-          </div>
-          <p className="text-sm text-[var(--color-text-muted)]">
-            This list is for quick edits. Use the medication manager to set up reminder groups and see
-            everyone&apos;s schedule at a glance.
-          </p>
-          {medications.length === 0 && !loading ? (
-            <EmptyState
-              icon={<Heart className="h-8 w-8" aria-hidden />}
-              title="No medications"
-              description="Add scheduled or PRN medications."
-            />
-          ) : (
-            medications.map((med) => (
-              <HealthRow
-                key={med.id}
-                title={med.name}
-                subtitle={`${scheduleKindLabel(med.scheduleKind)} · ${memberLabel(members, med.memberId)}`}
-                trailing={
-                  <Badge tone={med.enabled ? "accent" : "default"}>
-                    {scheduleKindLabel(med.scheduleKind)}
-                  </Badge>
-                }
-                onClick={() => {
-                  setEditingMed(med);
-                  setMedSheetOpen(true);
-                }}
-              />
-            ))
-          )}
-        </div>
+        <MedicationManagerClient
+          members={members}
+          currentMemberId={currentMemberId}
+          initialMedicationId={managerInitialMedicationId}
+        />
       ) : null}
 
       <HealthEventSheet
@@ -807,28 +753,6 @@ export function HealthPageClient({
         onClose={() => setPainSheetOpen(false)}
         onSaved={() => {
           setPainSheetOpen(false);
-          void load();
-        }}
-      />
-
-      <HealthMedicationSheet
-        open={medSheetOpen}
-        medication={editingMed}
-        members={members}
-        currentMemberId={currentMemberId}
-        writableMemberIds={members
-          .filter((m) => capabilities[m.memberId]?.medications === "write")
-          .map((m) => m.memberId)}
-        groups={groups}
-        readOnly={Boolean(editingMed && editingMed.canEdit === false)}
-        onClose={() => {
-          setMedSheetOpen(false);
-          setEditingMed(null);
-          router.replace("/health");
-        }}
-        onSaved={() => {
-          setMedSheetOpen(false);
-          setEditingMed(null);
           void load();
         }}
       />
