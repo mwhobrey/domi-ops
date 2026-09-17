@@ -23,11 +23,44 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 - Per-route `loading.tsx` skeletons across the app, matching each page's real layout to avoid a
   layout jump when the real content streams in.
 - Issue templates, PR template, Code of Conduct, and this changelog.
+- Event type filter on the Health Events tab, matching the filter already available on the
+  Events report — previously the only way to narrow the feed by type (WHO-294).
+- Exercise and pain tracking in the Health module (WHO-297/298/299): dedicated "Log exercise"
+  and "Log pain" quick-log buttons alongside the existing "Log vitals", each opening a
+  purpose-built sheet — pain logging taps a front/back body map instead of typing a location.
+  Both types are also fully editable via the general "Add event" form for backdating, same as
+  vitals already was.
+- Exercise and pain report kinds (WHO-301): "Exercise" shows weekly workout volume and a
+  by-activity minutes breakdown; "Pain" shows a body-region frequency heatmap (reusing the
+  `BodyPainMap` diagram in read-only mode) and severity-over-time per region. Both are
+  selectable from the Health reports picker and support the same print/CSV/JSON/YAML export
+  as every other health report.
 
 ### Changed
 
+- Health Events tab renamed to Log, with the type dropdown replaced by filter chips that only
+  show types you've actually logged, instead of all nine every time (WHO-300).
+- Medication editing consolidated to one place: the Health Medications tab is now the full
+  manager (groups, day timeline, schedule editor) instead of a separate quick-edit list that
+  linked out to `/health/medications` for anything more. That page is now a redirect back to
+  `/health` (WHO-302).
+- New Health **Trends** tab: vitals, exercise, and pain charts inline on `/health` instead of
+  only in Reports — the same "is BP trending up" gap now closed for exercise volume and pain
+  severity too (WHO-303).
+- Nutrition tracking: a `food_intake` health event type with one or more food entries per meal
+  (name, quantity, calories, protein/carbs/fat) — manual entry only, no food database. Dedicated
+  "Log meal" quick-log button alongside Log vitals/exercise/pain, plus full editing via the
+  generic "Add event" form for backdating (WHO-304/305). New "Nutrition" report kind (daily
+  calorie trend + protein/carbs/fat breakdown) in both the Reports hub and the Health Trends tab
+  — same running-totals treatment as vitals/exercise/pain, not just a food journal (WHO-306).
+  This closes out Phase 3 of the Health module expansion.
 - Split several large files (`apps/api/src/routes/core.ts`, `apps/api/src/routes/school.ts`,
   `HealthPageClient.tsx`, `SchoolClassDetail.tsx`) into focused modules for maintainability.
+- Health Today tab's "Logged today" list is now grouped by household member with a collapsible
+  header, matching the grouping "Scheduled doses" already had (WHO-295).
+- PRN meds on the Health Today tab moved from a card at the bottom of the page to a searchable
+  quick-log at the top — type or tap a med to log an as-needed dose in one action instead of
+  scrolling past the scheduled dose queue to reach it (WHO-296).
 
 ### Fixed
 
@@ -51,3 +84,6 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
   not just the record's creator — no longer silently clears its shares when editing and saving.
   The API previously only returned real share state to the creator; a non-creator editor saw an
   empty share list and unknowingly overwrote it on save (WHO-293).
+- The Health Events "Event type" filter (report + tab) silently dropped Exercise/Pain since
+  neither was in the type-label map the filter validates against; both were also missing from
+  the report filter's own dropdown options.

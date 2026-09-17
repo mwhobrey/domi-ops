@@ -15,6 +15,16 @@ function formatMonthLabel(monthKey: string): string {
   return date.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 }
 
+function formatDateOnlyLabel(iso: string): string {
+  const [year, month, day] = iso.split("-").map(Number);
+  if (!year || !month || !day) return iso;
+  return new Date(year, month - 1, day).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
 export function weeklyToCanonical(report: WeeklyReportData): CanonicalReport {
   return {
     title: report.title,
@@ -346,6 +356,166 @@ export function healthMedicationListToCanonical(data: HealthReportData): Canonic
         emptyMessage: meds.length === 0 ? "No active medications." : undefined,
       },
     ],
+  };
+}
+
+export function healthExerciseToCanonical(data: HealthReportData): CanonicalReport {
+  const trend = data.exerciseTrend?.points ?? [];
+  const byActivity = data.exerciseByActivity ?? [];
+  const totalMinutes = trend.reduce((sum, p) => sum + p.totalMinutes, 0);
+  const totalSessions = trend.reduce((sum, p) => sum + p.sessionCount, 0);
+
+  const sections: CanonicalReportSection[] = [
+    {
+      key: "summary",
+      label: "Exercise summary",
+      stats: [
+        { label: "Sessions", value: String(totalSessions) },
+        { label: "Total minutes", value: String(totalMinutes) },
+      ],
+    },
+  ];
+
+  if (trend.length > 0) {
+    sections.push({
+      key: "weekly-volume",
+      label: "Weekly volume",
+      tables: [
+        {
+          key: "weekly-volume",
+          label: "Weekly volume",
+          columns: ["Week of", "Sessions", "Total minutes"],
+          rows: trend.map((p) => [formatDateOnlyLabel(p.weekStart), p.sessionCount, p.totalMinutes]),
+        },
+      ],
+    });
+  }
+
+  if (byActivity.length > 0) {
+    sections.push({
+      key: "by-activity",
+      label: "By activity",
+      tables: [
+        {
+          key: "by-activity",
+          label: "By activity",
+          columns: ["Activity", "Sessions", "Total minutes"],
+          rows: byActivity.map((a) => [a.activity, a.sessionCount, a.totalMinutes]),
+        },
+      ],
+    });
+  }
+
+  return {
+    title: `Exercise — ${data.from} to ${data.to}`,
+    module: "health",
+    kind: "exercise",
+    generatedAt: new Date().toISOString(),
+    timezone: data.timezone,
+    sections,
+  };
+}
+
+export function healthPainToCanonical(data: HealthReportData): CanonicalReport {
+  const trend = data.painTrend ?? [];
+  const byRegion = data.painByRegion ?? [];
+  const totalLogs = byRegion.reduce((sum, r) => sum + r.count, 0);
+
+  const sections: CanonicalReportSection[] = [
+    {
+      key: "summary",
+      label: "Pain summary",
+      stats: [
+        { label: "Logged check-ins", value: String(totalLogs) },
+        { label: "Body regions affected", value: String(byRegion.length) },
+      ],
+    },
+  ];
+
+  if (byRegion.length > 0) {
+    sections.push({
+      key: "by-region",
+      label: "By body region",
+      tables: [
+        {
+          key: "by-region",
+          label: "By body region",
+          columns: ["Body region", "Times logged"],
+          rows: byRegion.map((r) => [r.bodyRegionLabel, r.count]),
+        },
+      ],
+    });
+  }
+
+  if (trend.length > 0) {
+    sections.push({
+      key: "severity-trend",
+      label: "Severity over time",
+      tables: trend.map((t) => ({
+        key: `severity-${t.bodyRegion}`,
+        label: t.bodyRegionLabel,
+        columns: ["Date", "Severity"],
+        rows: t.points.map((p) => [formatDateOnlyLabel(p.date), p.severity]),
+      })),
+    });
+  }
+
+  return {
+    title: `Pain — ${data.from} to ${data.to}`,
+    module: "health",
+    kind: "pain",
+    generatedAt: new Date().toISOString(),
+    timezone: data.timezone,
+    sections,
+  };
+}
+
+export function healthNutritionToCanonical(data: HealthReportData): CanonicalReport {
+  const points = data.nutritionTrend?.points ?? [];
+  const totalCalories = points.reduce((sum, p) => sum + p.calories, 0);
+  const totalEntries = points.reduce((sum, p) => sum + p.entryCount, 0);
+  const avgCalories = points.length > 0 ? Math.round(totalCalories / points.length) : 0;
+
+  const sections: CanonicalReportSection[] = [
+    {
+      key: "summary",
+      label: "Nutrition summary",
+      stats: [
+        { label: "Days logged", value: String(points.length) },
+        { label: "Food items logged", value: String(totalEntries) },
+        { label: "Average daily calories", value: String(avgCalories) },
+      ],
+    },
+  ];
+
+  if (points.length > 0) {
+    sections.push({
+      key: "daily-totals",
+      label: "Daily totals",
+      tables: [
+        {
+          key: "daily-totals",
+          label: "Daily totals",
+          columns: ["Date", "Calories", "Protein (g)", "Carbs (g)", "Fat (g)"],
+          rows: points.map((p) => [
+            formatDateOnlyLabel(p.date),
+            p.calories,
+            p.proteinG,
+            p.carbsG,
+            p.fatG,
+          ]),
+        },
+      ],
+    });
+  }
+
+  return {
+    title: `Nutrition — ${data.from} to ${data.to}`,
+    module: "health",
+    kind: "nutrition",
+    generatedAt: new Date().toISOString(),
+    timezone: data.timezone,
+    sections,
   };
 }
 
