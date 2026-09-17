@@ -12,6 +12,7 @@ import {
   isMidnightInTz,
   isoDateInRange,
   localDateOfInstant,
+  mondayOfWeekIso,
   nextIntervalPending,
   parseIntervalSchedule,
   todayIsoDateInTz,
@@ -24,7 +25,12 @@ import {
   healthMedicationReportsVisibleWhere,
 } from "./health-access.js";
 import { decryptHealthFieldOrPassthrough } from "./health-crypto.js";
-import { loadVitalsReadingsForEvents, parseMedSchedule } from "./health-serialize.js";
+import {
+  loadExerciseDetailsForEvents,
+  loadPainLogsForEvents,
+  loadVitalsReadingsForEvents,
+  parseMedSchedule,
+} from "./health-serialize.js";
 
 export const HEALTH_EVENT_TYPE_LABELS: Record<string, string> = {
   sickness: "Sickness",
@@ -33,7 +39,43 @@ export const HEALTH_EVENT_TYPE_LABELS: Record<string, string> = {
   symptom: "Symptom",
   medication: "Medication",
   vitals: "Vitals",
+  exercise: "Exercise",
+  pain: "Pain",
   other: "Other",
+};
+
+export const PAIN_BODY_REGION_LABELS: Record<string, string> = {
+  front_head: "Top of head",
+  face: "Face",
+  neck_front: "Neck (front)",
+  chest: "Chest",
+  abdomen: "Abdomen",
+  groin: "Groin",
+  left_shoulder: "Left shoulder",
+  right_shoulder: "Right shoulder",
+  left_upper_arm: "Left upper arm",
+  right_upper_arm: "Right upper arm",
+  left_forearm: "Left forearm",
+  right_forearm: "Right forearm",
+  left_hand: "Left hand",
+  right_hand: "Right hand",
+  left_thigh: "Left thigh",
+  right_thigh: "Right thigh",
+  left_shin: "Left shin",
+  right_shin: "Right shin",
+  left_foot: "Left foot",
+  right_foot: "Right foot",
+  back_head: "Back of head",
+  neck_back: "Neck (back)",
+  upper_back: "Upper back",
+  lower_back: "Lower back",
+  buttocks: "Buttocks",
+  left_shoulder_blade: "Left shoulder blade",
+  right_shoulder_blade: "Right shoulder blade",
+  left_hamstring: "Left hamstring",
+  right_hamstring: "Right hamstring",
+  left_calf: "Left calf",
+  right_calf: "Right calf",
 };
 
 export const HEALTH_EVENT_TYPES = Object.keys(HEALTH_EVENT_TYPE_LABELS);
@@ -642,6 +684,94 @@ export async function buildHealthReports(
     }))
     .sort((a, b) => a.metricLabel.localeCompare(b.metricLabel));
 
+  const exerciseEventsInRange = eventsInRange.filter((row) => row.type === "exercise");
+  const exerciseDetailsByEvent = await loadExerciseDetailsForEvents(
+    db,
+    env,
+    exerciseEventsInRange.map((row) => row.id),
+  );
+  const exerciseWeekBuckets = new Map<
+    string,
+    { weekStart: string; totalMinutes: number; sessionCount: number }
+  >();
+  const exerciseActivityBuckets = new Map<
+    string,
+    { activity: string; totalMinutes: number; sessionCount: number }
+  >();
+  for (const event of exerciseEventsInRange) {
+    const anchor = event.startedAt ?? event.createdAt;
+    const weekStart = mondayOfWeekIso(localDateOfInstant(anchor, timezone));
+    const weekBucket = exerciseWeekBuckets.get(weekStart) ?? {
+      weekStart,
+      totalMinutes: 0,
+      sessionCount: 0,
+    };
+    weekBucket.sessionCount += 1;
+    for (const detail of exerciseDetailsByEvent.get(event.id) ?? []) {
+      const minutes = detail.durationMinutes ?? 0;
+      weekBucket.totalMinutes += minutes;
+      const activity = detail.activity.trim() || "Other";
+      const activityBucket = exerciseActivityBuckets.get(activity) ?? {
+        activity,
+        totalMinutes: 0,
+        sessionCount: 0,
+      };
+      activityBucket.totalMinutes += minutes;
+      activityBucket.sessionCount += 1;
+      exerciseActivityBuckets.set(activity, activityBucket);
+    }
+    exerciseWeekBuckets.set(weekStart, weekBucket);
+  }
+  const exerciseTrend = {
+    points: [...exerciseWeekBuckets.values()].sort((a, b) => a.weekStart.localeCompare(b.weekStart)),
+  };
+  const exerciseByActivity = [...exerciseActivityBuckets.values()].sort(
+    (a, b) => b.totalMinutes - a.totalMinutes,
+  );
+
+  const painEventsInRange = eventsInRange.filter((row) => row.type === "pain");
+  const painLogsByEvent = await loadPainLogsForEvents(
+    db,
+    env,
+    painEventsInRange.map((row) => row.id),
+  );
+  const painTrendBuckets = new Map<
+    string,
+    {
+      bodyRegion: string;
+      bodyRegionLabel: string;
+      points: { eventId: string; date: string; severity: number }[];
+    }
+  >();
+  const painRegionCounts = new Map<string, number>();
+  for (const event of painEventsInRange) {
+    const anchor = event.startedAt ?? event.createdAt;
+    const date = localDateOfInstant(anchor, timezone);
+    for (const log of painLogsByEvent.get(event.id) ?? []) {
+      const bucket = painTrendBuckets.get(log.bodyRegion) ?? {
+        bodyRegion: log.bodyRegion,
+        bodyRegionLabel: PAIN_BODY_REGION_LABELS[log.bodyRegion] ?? log.bodyRegion,
+        points: [],
+      };
+      bucket.points.push({ eventId: event.id, date, severity: log.severity });
+      painTrendBuckets.set(log.bodyRegion, bucket);
+      painRegionCounts.set(log.bodyRegion, (painRegionCounts.get(log.bodyRegion) ?? 0) + 1);
+    }
+  }
+  const painTrend = [...painTrendBuckets.values()]
+    .map((bucket) => ({
+      ...bucket,
+      points: bucket.points.sort((a, b) => a.date.localeCompare(b.date)),
+    }))
+    .sort((a, b) => a.bodyRegionLabel.localeCompare(b.bodyRegionLabel));
+  const painByRegion = [...painRegionCounts.entries()]
+    .map(([bodyRegion, count]) => ({
+      bodyRegion,
+      bodyRegionLabel: PAIN_BODY_REGION_LABELS[bodyRegion] ?? bodyRegion,
+      count,
+    }))
+    .sort((a, b) => b.count - a.count);
+
   const byType: Record<string, number> = {};
   const byMember: Record<string, number> = {};
   let ongoingCount = 0;
@@ -882,6 +1012,10 @@ export async function buildHealthReports(
       dosesLogged: logsInLocalRange.length,
     },
     vitalsTrend,
+    exerciseTrend,
+    exerciseByActivity,
+    painTrend,
+    painByRegion,
     eventsByType: Object.entries(byType).map(([type, count]) => ({
       type,
       label: HEALTH_EVENT_TYPE_LABELS[type] ?? type,

@@ -144,6 +144,8 @@ describe("event type filter + grouping", () => {
 
   it("normalizes event types and rejects unknown values", () => {
     expect(normalizeHealthEventType("sickness")).toBe("sickness");
+    expect(normalizeHealthEventType("exercise")).toBe("exercise");
+    expect(normalizeHealthEventType("pain")).toBe("pain");
     expect(normalizeHealthEventType("nope")).toBeNull();
     expect(normalizeHealthEventType("")).toBeNull();
   });
