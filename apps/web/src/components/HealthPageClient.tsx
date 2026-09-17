@@ -9,6 +9,7 @@ import type { HealthAclGrants } from "./HealthPeopleAccessPanel";
 import { ModuleReportsLink } from "./reports/ModuleReportsLink";
 import { HealthEventSheet } from "./health/HealthEventSheet";
 import { MedicationManagerClient } from "./health/MedicationManagerClient";
+import { HealthTrendsTab } from "./health/HealthTrendsTab";
 import { LogVitalsSheet } from "./health/LogVitalsSheet";
 import { LogExerciseSheet } from "./health/LogExerciseSheet";
 import { LogPainSheet } from "./health/LogPainSheet";
@@ -75,7 +76,7 @@ export function HealthPageClient({
   };
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<"today" | "log" | "medications">("today");
+  const [tab, setTab] = useState<"today" | "log" | "medications" | "trends">("today");
   const [eventTypeFilter, setEventTypeFilter] = useState<HealthEventType | "all">("all");
   const [events, setEvents] = useState<HealthEvent[]>([]);
   const [pendingDoses, setPendingDoses] = useState<PendingDose[]>([]);
@@ -345,14 +346,20 @@ export function HealthPageClient({
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-2">
-        {(["today", "log", "medications"] as const).map((key) => (
+        {(["today", "log", "medications", "trends"] as const).map((key) => (
           <Button
             key={key}
             size="sm"
             variant={tab === key ? "primary" : "secondary"}
             onClick={() => setTab(key)}
           >
-            {key === "today" ? "Today" : key === "log" ? "Log" : "Medications"}
+            {key === "today"
+              ? "Today"
+              : key === "log"
+                ? "Log"
+                : key === "medications"
+                  ? "Medications"
+                  : "Trends"}
           </Button>
         ))}
         </div>
@@ -692,6 +699,8 @@ export function HealthPageClient({
           initialMedicationId={managerInitialMedicationId}
         />
       ) : null}
+
+      {tab === "trends" ? <HealthTrendsTab /> : null}
 
       <HealthEventSheet
         open={eventSheetOpen}

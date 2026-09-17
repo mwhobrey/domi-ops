@@ -51,6 +51,36 @@ export interface HealthMedicationListItem {
   endDate?: string | null;
 }
 
+export interface VitalsTrendEntry {
+  metric: string;
+  metricLabel: string;
+  points: { eventId: string; date: string; value: number; unit: string }[];
+}
+
+export interface ExerciseTrendPoint {
+  weekStart: string;
+  totalMinutes: number;
+  sessionCount: number;
+}
+
+export interface ExerciseByActivityEntry {
+  activity: string;
+  totalMinutes: number;
+  sessionCount: number;
+}
+
+export interface PainTrendEntry {
+  bodyRegion: string;
+  bodyRegionLabel: string;
+  points: { eventId: string; date: string; severity: number }[];
+}
+
+export interface PainByRegionEntry {
+  bodyRegion: string;
+  bodyRegionLabel: string;
+  count: number;
+}
+
 export interface HealthReportExport {
   from: string;
   to: string;
@@ -71,21 +101,11 @@ export interface HealthReportExport {
   };
   eventsByType: { type: string; label: string; count: number }[];
   eventsByMember: { memberId: string; label: string; count: number }[];
-  vitalsTrend?: {
-    metric: string;
-    metricLabel: string;
-    points: { eventId: string; date: string; value: number; unit: string }[];
-  }[];
-  exerciseTrend?: {
-    points: { weekStart: string; totalMinutes: number; sessionCount: number }[];
-  };
-  exerciseByActivity?: { activity: string; totalMinutes: number; sessionCount: number }[];
-  painTrend?: {
-    bodyRegion: string;
-    bodyRegionLabel: string;
-    points: { eventId: string; date: string; severity: number }[];
-  }[];
-  painByRegion?: { bodyRegion: string; bodyRegionLabel: string; count: number }[];
+  vitalsTrend?: VitalsTrendEntry[];
+  exerciseTrend?: { points: ExerciseTrendPoint[] };
+  exerciseByActivity?: ExerciseByActivityEntry[];
+  painTrend?: PainTrendEntry[];
+  painByRegion?: PainByRegionEntry[];
   medicationAdherence: {
     medicationId: string;
     name: string;

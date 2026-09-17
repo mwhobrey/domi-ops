@@ -9,10 +9,15 @@ import type {
 } from "../../lib/health-report-export";
 import { SectionHeader } from "../ui";
 import { LazyCategoryBarChart as CategoryBarChart, LazyTrendLineChart as TrendLineChart } from "../charts/lazy";
-import { BodyPainMap } from "../health/BodyPainMap";
-import type { HealthPainBodyRegion } from "../health/health-types";
+import {
+  ExerciseByActivitySection,
+  ExerciseWeeklyVolumeSection,
+  PainByRegionSection,
+  PainSeverityTrendSection,
+  VitalsTrendSection,
+} from "../health/HealthTrendCharts";
 
-function formatReportDate(iso: string): string {
+export function formatReportDate(iso: string): string {
   const [year, month, day] = iso.split("-").map(Number);
   if (!year || !month || !day) return iso;
   return new Date(year, month - 1, day).toLocaleDateString(undefined, {
@@ -48,7 +53,7 @@ function StatCard({ label, value }: { label: string; value: string | number }) {
   );
 }
 
-function ReportTable({
+export function ReportTable({
   columns,
   rows,
   empty,
@@ -194,36 +199,7 @@ export function HealthOverviewReportBody({
               />
             </section>
           ) : null}
-          {(report.vitalsTrend ?? []).length > 0 ? (
-            <section className="space-y-4">
-              <SectionHeader title="Vitals trend" />
-              {(report.vitalsTrend ?? []).map((trend) => (
-                <div key={trend.metric} className="space-y-2">
-                  <h3 className="text-sm font-medium text-[var(--color-text)]">
-                    {trend.metricLabel}
-                    <span className="ml-2 font-normal text-[var(--color-text-muted)]">
-                      ({trend.points.length} reading{trend.points.length === 1 ? "" : "s"})
-                    </span>
-                  </h3>
-                  <div className="print:hidden">
-                    <TrendLineChart
-                      data={trend.points.map((p) => ({ date: formatReportDate(p.date), value: p.value }))}
-                      series={[{ key: "value", label: trend.metricLabel }]}
-                      valueFormatter={(v) => `${v} ${trend.points[0]?.unit ?? ""}`.trim()}
-                      height={180}
-                    />
-                  </div>
-                  <ReportTable
-                    columns={["Date", "Value"]}
-                    rows={trend.points.map((p) => [
-                      formatReportDate(p.date),
-                      `${p.value} ${p.unit}`,
-                    ])}
-                  />
-                </div>
-              ))}
-            </section>
-          ) : null}
+          <VitalsTrendSection vitalsTrend={report.vitalsTrend ?? []} />
           {eventGroups.length > 0 ? (
             <section className="space-y-4">
               <SectionHeader title={historyTitle} />
@@ -405,55 +381,11 @@ export function HealthOverviewReportBody({
               />
             </div>
           </section>
-          {(report.exerciseTrend?.points ?? []).length > 0 ? (
-            <section className="space-y-2">
-              <SectionHeader title="Weekly volume" />
-              <div className="print:hidden">
-                <TrendLineChart
-                  data={(report.exerciseTrend?.points ?? []).map((p) => ({
-                    date: formatReportDate(p.weekStart),
-                    value: p.totalMinutes,
-                  }))}
-                  series={[{ key: "value", label: "Minutes" }]}
-                  valueFormatter={(v) => `${v} min`}
-                  height={180}
-                />
-              </div>
-              <ReportTable
-                columns={["Week of", "Sessions", "Total minutes"]}
-                rows={(report.exerciseTrend?.points ?? []).map((p) => [
-                  formatReportDate(p.weekStart),
-                  p.sessionCount,
-                  p.totalMinutes,
-                ])}
-              />
-            </section>
-          ) : (
-            <p className="text-sm text-[var(--color-text-muted)]">No exercise logged in this date range.</p>
-          )}
-          {(report.exerciseByActivity ?? []).length > 0 ? (
-            <section className="space-y-2">
-              <SectionHeader title="By activity" />
-              <div className="print:hidden">
-                <CategoryBarChart
-                  data={(report.exerciseByActivity ?? []).map((a) => ({
-                    label: a.activity,
-                    count: a.totalMinutes,
-                  }))}
-                  series={[{ key: "count", label: "Minutes" }]}
-                  height={Math.max(120, (report.exerciseByActivity ?? []).length * 36)}
-                />
-              </div>
-              <ReportTable
-                columns={["Activity", "Sessions", "Total minutes"]}
-                rows={(report.exerciseByActivity ?? []).map((a) => [
-                  a.activity,
-                  a.sessionCount,
-                  a.totalMinutes,
-                ])}
-              />
-            </section>
-          ) : null}
+          <ExerciseWeeklyVolumeSection
+            points={report.exerciseTrend?.points ?? []}
+            emptyMessage="No exercise logged in this date range."
+          />
+          <ExerciseByActivitySection byActivity={report.exerciseByActivity ?? []} />
         </>
       ) : null}
 
@@ -469,58 +401,11 @@ export function HealthOverviewReportBody({
               <StatCard label="Body regions affected" value={(report.painByRegion ?? []).length} />
             </div>
           </section>
-          {(report.painByRegion ?? []).length > 0 ? (
-            <section className="space-y-3">
-              <SectionHeader title="By body region" />
-              <p className="text-sm text-[var(--color-text-muted)] print:hidden">
-                Color shows how often each region was logged in this range, not current severity.
-              </p>
-              <div className="print:hidden">
-                <BodyPainMap
-                  entries={(report.painByRegion ?? []).map((r) => ({
-                    key: r.bodyRegion,
-                    region: r.bodyRegion as HealthPainBodyRegion,
-                    severity: Math.min(r.count, 10),
-                  }))}
-                  onChange={() => {}}
-                  disabled
-                />
-              </div>
-              <ReportTable
-                columns={["Body region", "Times logged"]}
-                rows={(report.painByRegion ?? []).map((r) => [r.bodyRegionLabel, r.count])}
-              />
-            </section>
-          ) : (
-            <p className="text-sm text-[var(--color-text-muted)]">No pain logged in this date range.</p>
-          )}
-          {(report.painTrend ?? []).length > 0 ? (
-            <section className="space-y-4">
-              <SectionHeader title="Severity over time" />
-              {(report.painTrend ?? []).map((trend) => (
-                <div key={trend.bodyRegion} className="space-y-2">
-                  <h3 className="text-sm font-medium text-[var(--color-text)]">
-                    {trend.bodyRegionLabel}
-                    <span className="ml-2 font-normal text-[var(--color-text-muted)]">
-                      ({trend.points.length} check-in{trend.points.length === 1 ? "" : "s"})
-                    </span>
-                  </h3>
-                  <div className="print:hidden">
-                    <TrendLineChart
-                      data={trend.points.map((p) => ({ date: formatReportDate(p.date), value: p.severity }))}
-                      series={[{ key: "value", label: trend.bodyRegionLabel }]}
-                      valueFormatter={(v) => `${v}/10`}
-                      height={180}
-                    />
-                  </div>
-                  <ReportTable
-                    columns={["Date", "Severity"]}
-                    rows={trend.points.map((p) => [formatReportDate(p.date), `${p.severity}/10`])}
-                  />
-                </div>
-              ))}
-            </section>
-          ) : null}
+          <PainByRegionSection
+            byRegion={report.painByRegion ?? []}
+            emptyMessage="No pain logged in this date range."
+          />
+          <PainSeverityTrendSection trend={report.painTrend ?? []} />
         </>
       ) : null}
     </div>
