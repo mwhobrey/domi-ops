@@ -6,7 +6,8 @@ export type HealthReportFocus =
   | "medications-today"
   | "medication-list"
   | "exercise"
-  | "pain";
+  | "pain"
+  | "nutrition";
 
 export interface HealthReportEventItem {
   id: string;
@@ -81,6 +82,15 @@ export interface PainByRegionEntry {
   count: number;
 }
 
+export interface NutritionTrendPoint {
+  date: string;
+  calories: number;
+  proteinG: number;
+  carbsG: number;
+  fatG: number;
+  entryCount: number;
+}
+
 export interface HealthReportExport {
   from: string;
   to: string;
@@ -106,6 +116,7 @@ export interface HealthReportExport {
   exerciseByActivity?: ExerciseByActivityEntry[];
   painTrend?: PainTrendEntry[];
   painByRegion?: PainByRegionEntry[];
+  nutritionTrend?: { points: NutritionTrendPoint[] };
   medicationAdherence: {
     medicationId: string;
     name: string;
@@ -173,4 +184,5 @@ export const HEALTH_REPORT_FOCUS_OPTIONS: { id: HealthReportFocus; label: string
   { id: "medication-list", label: "Medication list" },
   { id: "exercise", label: "Exercise" },
   { id: "pain", label: "Pain" },
+  { id: "nutrition", label: "Nutrition" },
 ];

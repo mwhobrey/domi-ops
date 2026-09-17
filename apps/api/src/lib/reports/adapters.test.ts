@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   healthExerciseToCanonical,
+  healthNutritionToCanonical,
   healthMedicationListToCanonical,
   healthMedicationsToCanonical,
   healthOverviewToCanonical,
@@ -37,6 +38,11 @@ const sample = {
     },
   ],
   painByRegion: [{ bodyRegion: "lower_back", bodyRegionLabel: "Lower back", count: 1 }],
+  nutritionTrend: {
+    points: [
+      { date: "2026-07-12", calories: 650, proteinG: 44, carbsG: 45, fatG: 8.5, entryCount: 2 },
+    ],
+  },
   eventsByType: [{ type: "appointment", label: "Appointment", count: 1 }],
   eventsByMember: [{ memberId: "a", label: "Alex", count: 1 }],
   medicationAdherence: [
@@ -202,5 +208,19 @@ describe("health canonical adapters", () => {
     const trend = report.sections.find((s) => s.key === "severity-trend")?.tables?.[0];
     expect(trend?.label).toBe("Lower back");
     expect(trend?.rows[0]).toEqual(["Jul 12, 2026", 6]);
+  });
+
+  it("builds a daily calorie + macro rollup", () => {
+    const report = healthNutritionToCanonical(sample);
+    expect(report.kind).toBe("nutrition");
+    const summary = report.sections.find((s) => s.key === "summary");
+    expect(summary?.stats).toEqual([
+      { label: "Days logged", value: "1" },
+      { label: "Food items logged", value: "2" },
+      { label: "Average daily calories", value: "650" },
+    ]);
+    const daily = report.sections.find((s) => s.key === "daily-totals")?.tables?.[0];
+    expect(daily?.columns).toEqual(["Date", "Calories", "Protein (g)", "Carbs (g)", "Fat (g)"]);
+    expect(daily?.rows[0]).toEqual(["Jul 12, 2026", 650, 44, 45, 8.5]);
   });
 });

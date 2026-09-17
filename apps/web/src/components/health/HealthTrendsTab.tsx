@@ -9,6 +9,8 @@ import { Alert, EmptyState, Input, Spinner } from "../ui";
 import {
   ExerciseByActivitySection,
   ExerciseWeeklyVolumeSection,
+  NutritionCaloriesSection,
+  NutritionMacrosSection,
   PainByRegionSection,
   PainSeverityTrendSection,
   VitalsTrendSection,
@@ -53,7 +55,8 @@ export function HealthTrendsTab() {
   const hasAnyData =
     (report?.vitalsTrend ?? []).length > 0 ||
     (report?.exerciseTrend?.points ?? []).length > 0 ||
-    (report?.painByRegion ?? []).length > 0;
+    (report?.painByRegion ?? []).length > 0 ||
+    (report?.nutritionTrend?.points ?? []).length > 0;
 
   return (
     <div className="space-y-6">
@@ -80,7 +83,7 @@ export function HealthTrendsTab() {
         <EmptyState
           icon={<TrendingUp className="h-8 w-8" aria-hidden />}
           title="No trends yet"
-          description="Log vitals, exercise, or pain to see trends here."
+          description="Log vitals, exercise, pain, or meals to see trends here."
         />
       ) : null}
 
@@ -91,6 +94,8 @@ export function HealthTrendsTab() {
           <ExerciseByActivitySection byActivity={report.exerciseByActivity ?? []} />
           <PainByRegionSection byRegion={report.painByRegion ?? []} />
           <PainSeverityTrendSection trend={report.painTrend ?? []} />
+          <NutritionCaloriesSection points={report.nutritionTrend?.points ?? []} />
+          <NutritionMacrosSection points={report.nutritionTrend?.points ?? []} />
         </>
       ) : null}
     </div>

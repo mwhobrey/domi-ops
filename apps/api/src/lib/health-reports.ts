@@ -27,6 +27,7 @@ import {
 import { decryptHealthFieldOrPassthrough } from "./health-crypto.js";
 import {
   loadExerciseDetailsForEvents,
+  loadFoodLogEntriesForEvents,
   loadPainLogsForEvents,
   loadVitalsReadingsForEvents,
   parseMedSchedule,
@@ -795,6 +796,40 @@ export async function buildHealthReports(
     }))
     .sort((a, b) => b.count - a.count);
 
+  const foodEventsInRange = eventsInRange.filter((row) => row.type === "food_intake");
+  const foodLogEntriesByEvent = await loadFoodLogEntriesForEvents(
+    db,
+    env,
+    foodEventsInRange.map((row) => row.id),
+  );
+  const nutritionDayBuckets = new Map<
+    string,
+    { date: string; calories: number; proteinG: number; carbsG: number; fatG: number; entryCount: number }
+  >();
+  for (const event of foodEventsInRange) {
+    const anchor = event.startedAt ?? event.createdAt;
+    const date = localDateOfInstant(anchor, timezone);
+    const dayBucket = nutritionDayBuckets.get(date) ?? {
+      date,
+      calories: 0,
+      proteinG: 0,
+      carbsG: 0,
+      fatG: 0,
+      entryCount: 0,
+    };
+    for (const entry of foodLogEntriesByEvent.get(event.id) ?? []) {
+      dayBucket.calories += entry.calories ?? 0;
+      dayBucket.proteinG += entry.proteinG ?? 0;
+      dayBucket.carbsG += entry.carbsG ?? 0;
+      dayBucket.fatG += entry.fatG ?? 0;
+      dayBucket.entryCount += 1;
+    }
+    nutritionDayBuckets.set(date, dayBucket);
+  }
+  const nutritionTrend = {
+    points: [...nutritionDayBuckets.values()].sort((a, b) => a.date.localeCompare(b.date)),
+  };
+
   const byType: Record<string, number> = {};
   const byMember: Record<string, number> = {};
   let ongoingCount = 0;
@@ -1039,6 +1074,7 @@ export async function buildHealthReports(
     exerciseByActivity,
     painTrend,
     painByRegion,
+    nutritionTrend,
     eventsByType: Object.entries(byType).map(([type, count]) => ({
       type,
       label: HEALTH_EVENT_TYPE_LABELS[type] ?? type,

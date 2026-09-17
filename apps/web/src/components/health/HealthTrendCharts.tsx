@@ -6,6 +6,7 @@ import { formatReportDate, ReportTable } from "../reports/HealthOverviewReportBo
 import type {
   ExerciseByActivityEntry,
   ExerciseTrendPoint,
+  NutritionTrendPoint,
   PainByRegionEntry,
   PainTrendEntry,
   VitalsTrendEntry,
@@ -158,6 +159,65 @@ export function PainSeverityTrendSection({ trend }: { trend: PainTrendEntry[] })
           />
         </div>
       ))}
+    </section>
+  );
+}
+
+export function NutritionCaloriesSection({
+  points,
+  emptyMessage,
+}: {
+  points: NutritionTrendPoint[];
+  emptyMessage?: string;
+}) {
+  if (points.length === 0) {
+    return emptyMessage ? <p className="text-sm text-[var(--color-text-muted)]">{emptyMessage}</p> : null;
+  }
+  return (
+    <section className="space-y-2">
+      <SectionHeader title="Daily calories" />
+      <div className="print:hidden">
+        <TrendLineChart
+          data={points.map((p) => ({ date: formatReportDate(p.date), value: p.calories }))}
+          series={[{ key: "value", label: "Calories" }]}
+          valueFormatter={(v) => `${v} cal`}
+          height={180}
+        />
+      </div>
+      <ReportTable
+        columns={["Date", "Calories"]}
+        rows={points.map((p) => [formatReportDate(p.date), p.calories])}
+      />
+    </section>
+  );
+}
+
+export function NutritionMacrosSection({ points }: { points: NutritionTrendPoint[] }) {
+  if (points.length === 0) return null;
+  return (
+    <section className="space-y-2">
+      <SectionHeader title="Daily macros" />
+      <div className="print:hidden">
+        <CategoryBarChart
+          data={points.map((p) => ({
+            label: formatReportDate(p.date),
+            proteinG: p.proteinG,
+            carbsG: p.carbsG,
+            fatG: p.fatG,
+          }))}
+          series={[
+            { key: "proteinG", label: "Protein (g)" },
+            { key: "carbsG", label: "Carbs (g)" },
+            { key: "fatG", label: "Fat (g)" },
+          ]}
+          orientation="vertical"
+          height={220}
+        />
+      </div>
+      <ReportTable
+        columns={["Date", "Protein (g)", "Carbs (g)", "Fat (g)"]}
+        rows={points.map((p) => [formatReportDate(p.date), p.proteinG, p.carbsG, p.fatG])}
+      />
     </section>
   );
 }
