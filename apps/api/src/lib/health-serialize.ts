@@ -347,20 +347,21 @@ export async function replaceFoodLogEntries(
   eventId: string,
   entries: FoodLogEntryInput[],
 ): Promise<void> {
+  // Encrypt before deleting — if a field fails to encrypt (e.g. HealthEncryptionError), the
+  // existing rows must survive rather than being wiped by a delete that already committed.
+  const values = entries.map((f) => ({
+    eventId,
+    foodName: encryptHealthField(f.foodName, env)!,
+    quantity: encryptHealthField(String(f.quantity), env)!,
+    unit: f.unit,
+    calories: f.calories != null ? encryptHealthField(String(f.calories), env) : null,
+    proteinG: f.proteinG != null ? encryptHealthField(String(f.proteinG), env) : null,
+    carbsG: f.carbsG != null ? encryptHealthField(String(f.carbsG), env) : null,
+    fatG: f.fatG != null ? encryptHealthField(String(f.fatG), env) : null,
+  }));
   await db.delete(healthFoodLogEntries).where(eq(healthFoodLogEntries.eventId, eventId));
-  if (entries.length === 0) return;
-  await db.insert(healthFoodLogEntries).values(
-    entries.map((f) => ({
-      eventId,
-      foodName: encryptHealthField(f.foodName, env)!,
-      quantity: encryptHealthField(String(f.quantity), env)!,
-      unit: f.unit,
-      calories: f.calories != null ? encryptHealthField(String(f.calories), env) : null,
-      proteinG: f.proteinG != null ? encryptHealthField(String(f.proteinG), env) : null,
-      carbsG: f.carbsG != null ? encryptHealthField(String(f.carbsG), env) : null,
-      fatG: f.fatG != null ? encryptHealthField(String(f.fatG), env) : null,
-    })),
-  );
+  if (values.length === 0) return;
+  await db.insert(healthFoodLogEntries).values(values);
 }
 
 export function serializeHealthEvent(
