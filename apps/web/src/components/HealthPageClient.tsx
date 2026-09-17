@@ -1,15 +1,19 @@
 "use client";
 
 import { ChevronDown, ChevronRight, Heart } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError, apiClient } from "../lib/client-api";
 import type { NoteShareMember } from "./NoteSharePicker";
 import type { HealthAclGrants } from "./HealthPeopleAccessPanel";
 import { ModuleReportsLink } from "./reports/ModuleReportsLink";
 import { HealthEventSheet } from "./health/HealthEventSheet";
-import { HealthMedicationSheet } from "./health/HealthMedicationSheet";
+import { MedicationManagerClient } from "./health/MedicationManagerClient";
+import { HealthTrendsTab } from "./health/HealthTrendsTab";
 import { LogVitalsSheet } from "./health/LogVitalsSheet";
+import { LogExerciseSheet } from "./health/LogExerciseSheet";
+import { LogPainSheet } from "./health/LogPainSheet";
+import { LogMealSheet } from "./health/LogMealSheet";
 import { HealthRow, MedGroupDoseCard } from "./health/TodayTabRows";
 import { PrnQuickLog } from "./health/PrnQuickLog";
 import {
@@ -19,15 +23,16 @@ import {
   memberLabel,
   mergeTodayEntriesForMember,
   formatEventWhen,
+  formatExerciseSummary,
+  formatFoodLogSummary,
+  formatPainSummary,
   formatReadingsSummary,
-  scheduleKindLabel,
 } from "./health/health-helpers";
 import {
   EVENT_TYPES,
   type HealthEvent,
   type HealthEventType,
   type HealthMedication,
-  type MedicationGroupOption,
   type LoggedDose,
   type PendingDose,
   type PendingGroupDose,
@@ -41,7 +46,6 @@ import {
   EmptyState,
   LinkButton,
   SectionHeader,
-  Select,
 } from "./ui";
 
 export function HealthPageClient({
@@ -74,11 +78,9 @@ export function HealthPageClient({
   };
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<"today" | "events" | "medications">("today");
+  const [tab, setTab] = useState<"today" | "log" | "medications" | "trends">("today");
   const [eventTypeFilter, setEventTypeFilter] = useState<HealthEventType | "all">("all");
   const [events, setEvents] = useState<HealthEvent[]>([]);
-  const [medications, setMedications] = useState<HealthMedication[]>([]);
-  const [groups, setGroups] = useState<MedicationGroupOption[]>([]);
   const [pendingDoses, setPendingDoses] = useState<PendingDose[]>([]);
   const [pendingGroupDoses, setPendingGroupDoses] = useState<PendingGroupDose[]>([]);
   const [loggedToday, setLoggedToday] = useState<LoggedDose[]>([]);
@@ -89,9 +91,10 @@ export function HealthPageClient({
   const [pushActionNotice, setPushActionNotice] = useState<string | null>(null);
   const [eventSheetOpen, setEventSheetOpen] = useState(false);
   const [vitalsSheetOpen, setVitalsSheetOpen] = useState(false);
-  const [medSheetOpen, setMedSheetOpen] = useState(false);
+  const [exerciseSheetOpen, setExerciseSheetOpen] = useState(false);
+  const [painSheetOpen, setPainSheetOpen] = useState(false);
+  const [mealSheetOpen, setMealSheetOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<HealthEvent | null>(null);
-  const [editingMed, setEditingMed] = useState<HealthMedication | null>(null);
   const [capabilities, setCapabilities] = useState<Record<string, HealthAclGrants>>({});
   const [loggingAllKey, setLoggingAllKey] = useState<string | null>(null);
   const [expandedGroupDoses, setExpandedGroupDoses] = useState<Set<string>>(new Set());
@@ -106,10 +109,8 @@ export function HealthPageClient({
     setLoading(true);
     setError(null);
     try {
-      const [eventsRes, medsRes, groupsRes, glanceRes, capsRes] = await Promise.all([
+      const [eventsRes, glanceRes, capsRes] = await Promise.all([
         apiClient.get<{ events: HealthEvent[] }>("/api/health/events"),
-        apiClient.get<{ medications: HealthMedication[] }>("/api/health/medications"),
-        apiClient.get<{ groups: MedicationGroupOption[] }>("/api/health/medication-groups"),
         apiClient.get<{
           pendingDoses: PendingDose[];
           pendingGroupDoses: PendingGroupDose[];
@@ -119,8 +120,6 @@ export function HealthPageClient({
         apiClient.get<{ bySubject: Record<string, HealthAclGrants> }>("/api/health/capabilities"),
       ]);
       setEvents(eventsRes.events);
-      setMedications(medsRes.medications);
-      setGroups(groupsRes.groups ?? []);
       setPendingDoses(glanceRes.pendingDoses);
       setPendingGroupDoses(glanceRes.pendingGroupDoses ?? []);
       setPrnMeds(glanceRes.prnMedications);
@@ -143,7 +142,7 @@ export function HealthPageClient({
     if (ev) {
       setEditingEvent(ev);
       setEventSheetOpen(true);
-      setTab("events");
+      setTab("log");
       return;
     }
     if (loading) return;
@@ -152,7 +151,7 @@ export function HealthPageClient({
       .then((res) => {
         setEditingEvent(res.event);
         setEventSheetOpen(true);
-        setTab("events");
+        setTab("log");
       })
       .catch(() => {
         setError("Could not open that health event.");
@@ -161,13 +160,11 @@ export function HealthPageClient({
 
   useEffect(() => {
     if (!initialMedicationId || pushAction || initialTakeMedicationId) return;
-    const med = medications.find((m) => m.id === initialMedicationId);
-    if (med) {
-      setEditingMed(med);
-      setMedSheetOpen(true);
-      setTab("medications");
-    }
-  }, [initialMedicationId, medications, pushAction, initialTakeMedicationId]);
+    setTab("medications");
+  }, [initialMedicationId, pushAction, initialTakeMedicationId]);
+
+  const managerInitialMedicationId =
+    initialMedicationId && !pushAction && !initialTakeMedicationId ? initialMedicationId : undefined;
 
   useEffect(() => {
     if (!initialTakeMedicationId || pushAction || takeHandled.current) return;
@@ -323,7 +320,23 @@ export function HealthPageClient({
   }
 
   const canAddEvent = members.some((m) => capabilities[m.memberId]?.events === "write");
-  const canAddMed = members.some((m) => capabilities[m.memberId]?.medications === "write");
+
+  // Only chip types with at least one logged event — a 9-way "All"-plus-every-type row is
+  // clutter for the common case (most households only ever log a couple of types).
+  const presentEventTypes = useMemo(
+    () => EVENT_TYPES.filter((t) => events.some((ev) => ev.type === t.value)),
+    [events],
+  );
+
+  // If an edit removes the last event of the selected type (e.g. retyping it, or deleting it),
+  // its chip disappears from presentEventTypes but the filter would otherwise keep pointing at
+  // it, showing "No matching events" even though other events exist.
+  useEffect(() => {
+    if (loading || eventTypeFilter === "all") return;
+    if (!presentEventTypes.some((t) => t.value === eventTypeFilter)) {
+      setEventTypeFilter("all");
+    }
+  }, [loading, eventTypeFilter, presentEventTypes]);
 
   function canLogForMember(memberId: string) {
     return capabilities[memberId]?.doses === "write";
@@ -336,14 +349,20 @@ export function HealthPageClient({
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-2">
-        {(["today", "events", "medications"] as const).map((key) => (
+        {(["today", "log", "medications", "trends"] as const).map((key) => (
           <Button
             key={key}
             size="sm"
             variant={tab === key ? "primary" : "secondary"}
             onClick={() => setTab(key)}
           >
-            {key === "today" ? "Today" : key === "events" ? "Events" : "Medications"}
+            {key === "today"
+              ? "Today"
+              : key === "log"
+                ? "Log"
+                : key === "medications"
+                  ? "Medications"
+                  : "Trends"}
           </Button>
         ))}
         </div>
@@ -572,28 +591,51 @@ export function HealthPageClient({
         </div>
       ) : null}
 
-      {tab === "events" ? (
+      {tab === "log" ? (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <label className="flex items-center gap-2 text-sm">
-              <span className="text-[var(--color-text-muted)]">Event type</span>
-              <Select
-                value={eventTypeFilter}
-                onChange={(e) => setEventTypeFilter(e.target.value as HealthEventType | "all")}
-                className="w-auto"
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by event type">
+              <button
+                type="button"
+                className={`inline-flex min-h-8 items-center rounded-full border px-3 py-1 text-xs font-medium transition-colors max-md:min-h-11 max-md:px-4 ${
+                  eventTypeFilter === "all"
+                    ? "border-[var(--color-accent)] bg-[var(--color-accent)] text-white"
+                    : "border-[var(--color-border)] bg-transparent text-[var(--color-text-muted)]"
+                }`}
+                aria-pressed={eventTypeFilter === "all"}
+                onClick={() => setEventTypeFilter("all")}
               >
-                <option value="all">All events</option>
-                {EVENT_TYPES.map((t) => (
-                  <option key={t.value} value={t.value}>
-                    {t.label}
-                  </option>
-                ))}
-              </Select>
-            </label>
+                All
+              </button>
+              {presentEventTypes.map((t) => (
+                <button
+                  key={t.value}
+                  type="button"
+                  className={`inline-flex min-h-8 items-center rounded-full border px-3 py-1 text-xs font-medium transition-colors max-md:min-h-11 max-md:px-4 ${
+                    eventTypeFilter === t.value
+                      ? "border-[var(--color-accent)] bg-[var(--color-accent)] text-white"
+                      : "border-[var(--color-border)] bg-transparent text-[var(--color-text-muted)]"
+                  }`}
+                  aria-pressed={eventTypeFilter === t.value}
+                  onClick={() => setEventTypeFilter(t.value)}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
             {canAddEvent ? (
-            <div className="flex justify-end gap-2">
+            <div className="flex flex-wrap justify-end gap-2">
               <Button size="sm" variant="secondary" onClick={() => setVitalsSheetOpen(true)}>
                 Log vitals
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => setExerciseSheetOpen(true)}>
+                Log exercise
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => setPainSheetOpen(true)}>
+                Log pain
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => setMealSheetOpen(true)}>
+                Log meal
               </Button>
               <Button
                 size="sm"
@@ -637,6 +679,9 @@ export function HealthPageClient({
                   when,
                   ev.durationKind === "ongoing" && !ev.endedAt ? "Ongoing" : null,
                   ev.type === "vitals" ? formatReadingsSummary(ev.readings) : null,
+                  ev.type === "exercise" ? formatExerciseSummary(ev.exerciseDetails) : null,
+                  ev.type === "pain" ? formatPainSummary(ev.painLogs) : null,
+                  ev.type === "food_intake" ? formatFoodLogSummary(ev.foodLogEntries) : null,
                 ]
                   .filter(Boolean)
                   .join(" · ")}
@@ -655,53 +700,14 @@ export function HealthPageClient({
       ) : null}
 
       {tab === "medications" ? (
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <LinkButton href="/health/medications" size="sm" variant="secondary">
-              Open medication manager
-            </LinkButton>
-            {canAddMed ? (
-              <Button
-                size="sm"
-                onClick={() => {
-                  setEditingMed(null);
-                  setMedSheetOpen(true);
-                }}
-              >
-                Add medication
-              </Button>
-            ) : null}
-          </div>
-          <p className="text-sm text-[var(--color-text-muted)]">
-            This list is for quick edits. Use the medication manager to set up reminder groups and see
-            everyone&apos;s schedule at a glance.
-          </p>
-          {medications.length === 0 && !loading ? (
-            <EmptyState
-              icon={<Heart className="h-8 w-8" aria-hidden />}
-              title="No medications"
-              description="Add scheduled or PRN medications."
-            />
-          ) : (
-            medications.map((med) => (
-              <HealthRow
-                key={med.id}
-                title={med.name}
-                subtitle={`${scheduleKindLabel(med.scheduleKind)} · ${memberLabel(members, med.memberId)}`}
-                trailing={
-                  <Badge tone={med.enabled ? "accent" : "default"}>
-                    {scheduleKindLabel(med.scheduleKind)}
-                  </Badge>
-                }
-                onClick={() => {
-                  setEditingMed(med);
-                  setMedSheetOpen(true);
-                }}
-              />
-            ))
-          )}
-        </div>
+        <MedicationManagerClient
+          members={members}
+          currentMemberId={currentMemberId}
+          initialMedicationId={managerInitialMedicationId}
+        />
       ) : null}
+
+      {tab === "trends" ? <HealthTrendsTab /> : null}
 
       <HealthEventSheet
         open={eventSheetOpen}
@@ -739,24 +745,44 @@ export function HealthPageClient({
         }}
       />
 
-      <HealthMedicationSheet
-        open={medSheetOpen}
-        medication={editingMed}
+      <LogExerciseSheet
+        open={exerciseSheetOpen}
         members={members}
         currentMemberId={currentMemberId}
         writableMemberIds={members
-          .filter((m) => capabilities[m.memberId]?.medications === "write")
+          .filter((m) => capabilities[m.memberId]?.events === "write")
           .map((m) => m.memberId)}
-        groups={groups}
-        readOnly={Boolean(editingMed && editingMed.canEdit === false)}
-        onClose={() => {
-          setMedSheetOpen(false);
-          setEditingMed(null);
-          router.replace("/health");
-        }}
+        onClose={() => setExerciseSheetOpen(false)}
         onSaved={() => {
-          setMedSheetOpen(false);
-          setEditingMed(null);
+          setExerciseSheetOpen(false);
+          void load();
+        }}
+      />
+
+      <LogPainSheet
+        open={painSheetOpen}
+        members={members}
+        currentMemberId={currentMemberId}
+        writableMemberIds={members
+          .filter((m) => capabilities[m.memberId]?.events === "write")
+          .map((m) => m.memberId)}
+        onClose={() => setPainSheetOpen(false)}
+        onSaved={() => {
+          setPainSheetOpen(false);
+          void load();
+        }}
+      />
+
+      <LogMealSheet
+        open={mealSheetOpen}
+        members={members}
+        currentMemberId={currentMemberId}
+        writableMemberIds={members
+          .filter((m) => capabilities[m.memberId]?.events === "write")
+          .map((m) => m.memberId)}
+        onClose={() => setMealSheetOpen(false)}
+        onSaved={() => {
+          setMealSheetOpen(false);
           void load();
         }}
       />

@@ -8,6 +8,9 @@ export type ReportKind =
   | "medications"
   | "medications-today"
   | "medication-list"
+  | "exercise"
+  | "pain"
+  | "nutrition"
   | "school-grades"
   | "school-open-work"
   | "school-transcript";
@@ -75,6 +78,9 @@ export const REPORT_KIND_LABELS: Record<ReportKind, string> = {
   medications: "Dose history",
   "medications-today": "Today's doses",
   "medication-list": "Medication list",
+  exercise: "Exercise",
+  pain: "Pain",
+  nutrition: "Nutrition",
   "school-grades": "Grade summary",
   "school-open-work": "Open work",
   "school-transcript": "Transcript",
@@ -100,5 +106,20 @@ export const HEALTH_REPORT_KINDS: { id: ReportKind; label: string; description: 
     id: "medication-list",
     label: "Medication list",
     description: "Current medications with dosage and instructions",
+  },
+  {
+    id: "exercise",
+    label: "Exercise",
+    description: "Weekly workout volume and activity breakdown",
+  },
+  {
+    id: "pain",
+    label: "Pain",
+    description: "Severity over time and body-region frequency",
+  },
+  {
+    id: "nutrition",
+    label: "Nutrition",
+    description: "Daily calorie and macro totals",
   },
 ];
