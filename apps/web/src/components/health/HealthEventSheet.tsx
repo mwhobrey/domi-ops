@@ -8,11 +8,14 @@ import { Alert, Button, Checkbox, Input, Select, Sheet, Textarea } from "../ui";
 import { VitalsReadingsEditor } from "./VitalsReadingsEditor";
 import { ExerciseDetailsEditor } from "./ExerciseDetailsEditor";
 import { BodyPainMap } from "./BodyPainMap";
+import { FoodLogEntriesEditor } from "./FoodLogEntriesEditor";
 import {
   draftToExerciseDetailInput,
+  draftsToFoodLogEntries,
   draftsToPainLogs,
   draftsToReadings,
   exerciseDetailToDraft,
+  foodLogEntriesToDrafts,
   painLogsToDrafts,
   readingsToDrafts,
   resolveDefaultMemberId,
@@ -21,6 +24,7 @@ import {
 import {
   EVENT_TYPES,
   type ExerciseDetailDraft,
+  type FoodLogEntryDraft,
   type HealthEvent,
   type HealthEventType,
   type PainLogDraft,
@@ -81,6 +85,9 @@ export function HealthEventSheet({
   const [painEntries, setPainEntries] = useState<PainLogDraft[]>(() =>
     painLogsToDrafts(event?.painLogs),
   );
+  const [foodDrafts, setFoodDrafts] = useState<FoodLogEntryDraft[]>(() =>
+    foodLogEntriesToDrafts(event?.foodLogEntries),
+  );
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -101,6 +108,7 @@ export function HealthEventSheet({
     setReadingDrafts(readingsToDrafts(event?.readings));
     setExerciseDraft(exerciseDetailToDraft(event?.exerciseDetails?.[0]));
     setPainEntries(painLogsToDrafts(event?.painLogs));
+    setFoodDrafts(foodLogEntriesToDrafts(event?.foodLogEntries));
     setSharedMemberIds(event?.sharedMemberIds ?? []);
   }, [open, event, defaultMemberId, householdTimezone]);
 
@@ -129,6 +137,7 @@ export function HealthEventSheet({
       readings,
       exerciseDetails: type === "exercise" ? (exerciseDetail ? [exerciseDetail] : []) : undefined,
       painLogs: type === "pain" ? draftsToPainLogs(painEntries) : undefined,
+      foodLogEntries: type === "food_intake" ? draftsToFoodLogEntries(foodDrafts) : undefined,
     };
     try {
       if (event) {
@@ -188,6 +197,9 @@ export function HealthEventSheet({
         ) : null}
         {type === "pain" ? (
           <BodyPainMap entries={painEntries} onChange={setPainEntries} disabled={readOnly} />
+        ) : null}
+        {type === "food_intake" ? (
+          <FoodLogEntriesEditor drafts={foodDrafts} onChange={setFoodDrafts} />
         ) : null}
         <label className="block space-y-1 text-sm">
           <span>Start date</span>
