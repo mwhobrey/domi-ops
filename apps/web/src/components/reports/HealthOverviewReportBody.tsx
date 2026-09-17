@@ -12,6 +12,8 @@ import { LazyCategoryBarChart as CategoryBarChart, LazyTrendLineChart as TrendLi
 import {
   ExerciseByActivitySection,
   ExerciseWeeklyVolumeSection,
+  NutritionCaloriesSection,
+  NutritionMacrosSection,
   PainByRegionSection,
   PainSeverityTrendSection,
   VitalsTrendSection,
@@ -99,6 +101,7 @@ function printTitle(focus: HealthReportFocus): string {
   if (focus === "medications") return "Dose history";
   if (focus === "exercise") return "Exercise";
   if (focus === "pain") return "Pain";
+  if (focus === "nutrition") return "Nutrition";
   return "Health events";
 }
 
@@ -406,6 +409,34 @@ export function HealthOverviewReportBody({
             emptyMessage="No pain logged in this date range."
           />
           <PainSeverityTrendSection trend={report.painTrend ?? []} />
+        </>
+      ) : null}
+
+      {focus === "nutrition" ? (
+        <>
+          <section className="space-y-3">
+            <SectionHeader title="Nutrition summary" />
+            <div className="grid gap-3 sm:grid-cols-3">
+              <StatCard label="Days logged" value={(report.nutritionTrend?.points ?? []).length} />
+              <StatCard
+                label="Food items logged"
+                value={(report.nutritionTrend?.points ?? []).reduce((sum, p) => sum + p.entryCount, 0)}
+              />
+              <StatCard
+                label="Avg. daily calories"
+                value={(() => {
+                  const points = report.nutritionTrend?.points ?? [];
+                  if (points.length === 0) return 0;
+                  return Math.round(points.reduce((sum, p) => sum + p.calories, 0) / points.length);
+                })()}
+              />
+            </div>
+          </section>
+          <NutritionCaloriesSection
+            points={report.nutritionTrend?.points ?? []}
+            emptyMessage="No meals logged in this date range."
+          />
+          <NutritionMacrosSection points={report.nutritionTrend?.points ?? []} />
         </>
       ) : null}
     </div>

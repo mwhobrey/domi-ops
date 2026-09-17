@@ -470,6 +470,55 @@ export function healthPainToCanonical(data: HealthReportData): CanonicalReport {
   };
 }
 
+export function healthNutritionToCanonical(data: HealthReportData): CanonicalReport {
+  const points = data.nutritionTrend?.points ?? [];
+  const totalCalories = points.reduce((sum, p) => sum + p.calories, 0);
+  const totalEntries = points.reduce((sum, p) => sum + p.entryCount, 0);
+  const avgCalories = points.length > 0 ? Math.round(totalCalories / points.length) : 0;
+
+  const sections: CanonicalReportSection[] = [
+    {
+      key: "summary",
+      label: "Nutrition summary",
+      stats: [
+        { label: "Days logged", value: String(points.length) },
+        { label: "Food items logged", value: String(totalEntries) },
+        { label: "Average daily calories", value: String(avgCalories) },
+      ],
+    },
+  ];
+
+  if (points.length > 0) {
+    sections.push({
+      key: "daily-totals",
+      label: "Daily totals",
+      tables: [
+        {
+          key: "daily-totals",
+          label: "Daily totals",
+          columns: ["Date", "Calories", "Protein (g)", "Carbs (g)", "Fat (g)"],
+          rows: points.map((p) => [
+            formatDateOnlyLabel(p.date),
+            p.calories,
+            p.proteinG,
+            p.carbsG,
+            p.fatG,
+          ]),
+        },
+      ],
+    });
+  }
+
+  return {
+    title: `Nutrition — ${data.from} to ${data.to}`,
+    module: "health",
+    kind: "nutrition",
+    generatedAt: new Date().toISOString(),
+    timezone: data.timezone,
+    sections,
+  };
+}
+
 export function choresOverviewToCanonical(data: ChoreReportsData): CanonicalReport {
   const sections: CanonicalReportSection[] = [
     {

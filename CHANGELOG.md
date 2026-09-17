@@ -50,7 +50,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 - Nutrition tracking: a `food_intake` health event type with one or more food entries per meal
   (name, quantity, calories, protein/carbs/fat) — manual entry only, no food database. Dedicated
   "Log meal" quick-log button alongside Log vitals/exercise/pain, plus full editing via the
-  generic "Add event" form for backdating (WHO-304/305). Calorie/macro rollup report is next.
+  generic "Add event" form for backdating (WHO-304/305). New "Nutrition" report kind (daily
+  calorie trend + protein/carbs/fat breakdown) in both the Reports hub and the Health Trends tab
+  — same running-totals treatment as vitals/exercise/pain, not just a food journal (WHO-306).
+  This closes out Phase 3 of the Health module expansion.
 - Split several large files (`apps/api/src/routes/core.ts`, `apps/api/src/routes/school.ts`,
   `HealthPageClient.tsx`, `SchoolClassDetail.tsx`) into focused modules for maintainability.
 - Health Today tab's "Logged today" list is now grouped by household member with a collapsible
