@@ -19,10 +19,12 @@ export function LoginForm({
   nextPath,
   googleEnabled,
   allowPublicSignup = false,
+  noHousehold = false,
 }: {
   nextPath: string;
   googleEnabled: boolean;
   allowPublicSignup?: boolean;
+  noHousehold?: boolean;
 }) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("sign-in");
@@ -36,6 +38,21 @@ export function LoginForm({
   const [pending, setPending] = useState(false);
   const nativeSocial = isNativeSocialAuthAvailable();
   const showApple = shouldOfferNativeApple(googleEnabled);
+
+  async function onSignOut() {
+    setError(null);
+    setPending(true);
+    try {
+      await authClient.signOut();
+      router.push("/login");
+      router.refresh();
+      window.location.reload();
+    } catch {
+      setError("Sign out failed. Try again.");
+    } finally {
+      setPending(false);
+    }
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -188,6 +205,20 @@ export function LoginForm({
         >
           {info}
         </p>
+      )}
+
+      {noHousehold && (
+        <div className="pt-1 text-center">
+          <Button
+            type="button"
+            variant="secondary"
+            className="w-full text-xs"
+            disabled={pending}
+            onClick={onSignOut}
+          >
+            Sign out of this session
+          </Button>
+        </div>
       )}
 
       {mode === "sign-in" && (

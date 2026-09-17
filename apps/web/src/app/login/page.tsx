@@ -177,6 +177,7 @@ export default async function LoginPage({
           nextPath={nextPath}
           googleEnabled={googleEnabled}
           allowPublicSignup={allowPublicSignup}
+          noHousehold={noHousehold || params.error === "no-household"}
         />
 
         <p className="text-center text-xs text-[var(--color-text-muted)]">

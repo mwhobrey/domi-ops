@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ApiError, apiClient } from "../../lib/client-api";
 import type { NoteShareMember } from "../NoteSharePicker";
 import { NoteSharePicker } from "../NoteSharePicker";
@@ -358,10 +359,15 @@ function MedGroupSheet({
 export function MedicationManagerClient({
   members,
   currentMemberId,
+  initialMedicationId,
 }: {
   members: NoteShareMember[];
   currentMemberId: string;
+  /** Deep-link (e.g. a push notification's `?medication=`) — opens that medication's edit sheet
+   *  once it loads, switching to its owning member first if needed. */
+  initialMedicationId?: string;
 }) {
+  const router = useRouter();
   const [selectedMemberId, setSelectedMemberId] = useState(() =>
     resolveDefaultMemberId(currentMemberId, members),
   );
@@ -374,6 +380,7 @@ export function MedicationManagerClient({
   const [editingMed, setEditingMed] = useState<HealthMedication | null>(null);
   const [groupSheetOpen, setGroupSheetOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<MedicationGroup | null>(null);
+  const initialMedHandled = useRef(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -397,6 +404,16 @@ export function MedicationManagerClient({
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!initialMedicationId || initialMedHandled.current || loading) return;
+    const med = medications.find((m) => m.id === initialMedicationId);
+    if (!med) return;
+    initialMedHandled.current = true;
+    setSelectedMemberId(med.memberId);
+    setEditingMed(med);
+    setMedSheetOpen(true);
+  }, [initialMedicationId, medications, loading]);
 
   const writableMemberIds = members
     .filter((m) => capabilities[m.memberId]?.medications === "write")
@@ -656,9 +673,11 @@ export function MedicationManagerClient({
         currentMemberId={selectedMemberId}
         writableMemberIds={writableMemberIds}
         groups={groups}
+        readOnly={Boolean(editingMed && editingMed.canEdit === false)}
         onClose={() => {
           setMedSheetOpen(false);
           setEditingMed(null);
+          router.replace("/health");
         }}
         onSaved={() => {
           setMedSheetOpen(false);

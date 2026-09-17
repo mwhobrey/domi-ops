@@ -11,6 +11,9 @@ export type HealthEventType =
   | "symptom"
   | "medication"
   | "vitals"
+  | "exercise"
+  | "pain"
+  | "food_intake"
   | "other";
 
 export type VitalsMetric =
@@ -32,6 +35,53 @@ export interface VitalsReading {
   unit: string;
 }
 
+export interface ExerciseDetail {
+  id?: string;
+  activity: string;
+  durationMinutes: number | null;
+  intensity: string | null;
+  distance: number | null;
+  distanceUnit: string | null;
+  sets: number | null;
+  reps: number | null;
+  caloriesEstimated: number | null;
+}
+
+/** Form-state mirror of ExerciseDetail — numeric fields stay strings while typing. */
+export type ExerciseDetailDraft = {
+  activity: string;
+  durationMinutes: string;
+  intensity: string;
+  distance: string;
+  distanceUnit: string;
+  sets: string;
+  reps: string;
+  caloriesEstimated: string;
+};
+
+export interface FoodLogEntry {
+  id?: string;
+  foodName: string;
+  quantity: number | null;
+  unit: string;
+  calories: number | null;
+  proteinG: number | null;
+  carbsG: number | null;
+  fatG: number | null;
+}
+
+/** Form-state mirror of FoodLogEntry — numeric fields stay strings while typing. */
+export type FoodLogEntryDraft = {
+  key: string;
+  foodName: string;
+  quantity: string;
+  unit: string;
+  calories: string;
+  proteinG: string;
+  carbsG: string;
+  fatG: string;
+};
+
 export interface HealthEvent {
   id: string;
   memberId: string;
@@ -52,6 +102,9 @@ export interface HealthEvent {
   sharedWithMe?: boolean;
   canEdit?: boolean;
   readings?: VitalsReading[];
+  exerciseDetails?: ExerciseDetail[];
+  painLogs?: PainLog[];
+  foodLogEntries?: FoodLogEntry[];
 }
 
 export interface HealthMedication {
@@ -139,8 +192,30 @@ export const EVENT_TYPES: { value: HealthEventType; label: string }[] = [
   { value: "symptom", label: "Symptom" },
   { value: "medication", label: "Medication" },
   { value: "vitals", label: "Vitals" },
+  { value: "exercise", label: "Exercise" },
+  { value: "pain", label: "Pain" },
+  { value: "food_intake", label: "Meal" },
   { value: "other", label: "Other" },
 ];
+
+export const EXERCISE_INTENSITIES: { value: string; label: string }[] = [
+  { value: "light", label: "Light" },
+  { value: "moderate", label: "Moderate" },
+  { value: "vigorous", label: "Vigorous" },
+];
+
+export function emptyExerciseDetailDraft(): ExerciseDetailDraft {
+  return {
+    activity: "",
+    durationMinutes: "",
+    intensity: "",
+    distance: "",
+    distanceUnit: "",
+    sets: "",
+    reps: "",
+    caloriesEstimated: "",
+  };
+}
 
 export const VITALS_METRICS: { value: VitalsMetric; label: string; defaultUnit: string }[] = [
   { value: "weight", label: "Weight", defaultUnit: "lb" },
@@ -162,3 +237,93 @@ export const DEFAULT_VITALS_METRICS: VitalsMetric[] = [
   "heart_rate",
   "temperature",
 ];
+
+/**
+ * Front/back body-map regions for pain logging (WHO-297/298) — mirrors the
+ * health_pain_body_region Postgres enum in packages/db/src/schema/health.ts. Shoulders, upper
+ * arms, forearms, hands, and feet are clickable from either view and share one region value;
+ * the back view additionally distinguishes hamstring/calf from the front-only thigh/shin.
+ */
+export type HealthPainBodyRegion =
+  | "front_head"
+  | "face"
+  | "neck_front"
+  | "chest"
+  | "abdomen"
+  | "groin"
+  | "left_shoulder"
+  | "right_shoulder"
+  | "left_upper_arm"
+  | "right_upper_arm"
+  | "left_forearm"
+  | "right_forearm"
+  | "left_hand"
+  | "right_hand"
+  | "left_thigh"
+  | "right_thigh"
+  | "left_shin"
+  | "right_shin"
+  | "left_foot"
+  | "right_foot"
+  | "back_head"
+  | "neck_back"
+  | "upper_back"
+  | "lower_back"
+  | "buttocks"
+  | "left_shoulder_blade"
+  | "right_shoulder_blade"
+  | "left_hamstring"
+  | "right_hamstring"
+  | "left_calf"
+  | "right_calf";
+
+export const PAIN_BODY_REGION_LABELS: Record<HealthPainBodyRegion, string> = {
+  front_head: "Top of head",
+  face: "Face",
+  neck_front: "Neck (front)",
+  chest: "Chest",
+  abdomen: "Abdomen",
+  groin: "Groin",
+  left_shoulder: "Left shoulder",
+  right_shoulder: "Right shoulder",
+  left_upper_arm: "Left upper arm",
+  right_upper_arm: "Right upper arm",
+  left_forearm: "Left forearm",
+  right_forearm: "Right forearm",
+  left_hand: "Left hand",
+  right_hand: "Right hand",
+  left_thigh: "Left thigh",
+  right_thigh: "Right thigh",
+  left_shin: "Left shin",
+  right_shin: "Right shin",
+  left_foot: "Left foot",
+  right_foot: "Right foot",
+  back_head: "Back of head",
+  neck_back: "Neck (back)",
+  upper_back: "Upper back",
+  lower_back: "Lower back",
+  buttocks: "Buttocks",
+  left_shoulder_blade: "Left shoulder blade",
+  right_shoulder_blade: "Right shoulder blade",
+  left_hamstring: "Left hamstring",
+  right_hamstring: "Right hamstring",
+  left_calf: "Left calf",
+  right_calf: "Right calf",
+};
+
+export type PainLogDraft = {
+  key: string;
+  region: HealthPainBodyRegion;
+  severity: number;
+  /** Not editable in the UI yet — carried through so a round trip doesn't silently drop it. */
+  qualityTags?: string[] | null;
+};
+
+/** Matches the API's SerializedPainLog shape — distinct from PainLogDraft, same split as
+ *  VitalsReading vs VitalsReadingDraft. */
+export interface PainLog {
+  id?: string;
+  bodyRegion: HealthPainBodyRegion;
+  severity: number;
+  qualityTags?: string[] | null;
+}
