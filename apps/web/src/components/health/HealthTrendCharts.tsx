@@ -25,7 +25,7 @@ export function VitalsTrendSection({ vitalsTrend }: { vitalsTrend: VitalsTrendEn
     <section className="space-y-4">
       <SectionHeader title="Vitals trend" />
       {vitalsTrend.map((trend) => (
-        <div key={trend.metric} className="space-y-2">
+        <div key={`${trend.metric}::${trend.points[0]?.unit ?? ""}`} className="space-y-2">
           <h3 className="text-sm font-medium text-[var(--color-text)]">
             {trend.metricLabel}
             <span className="ml-2 font-normal text-[var(--color-text-muted)]">

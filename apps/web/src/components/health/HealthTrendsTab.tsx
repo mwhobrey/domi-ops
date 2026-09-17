@@ -1,7 +1,7 @@
 "use client";
 
 import { TrendingUp } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, apiClient } from "../../lib/client-api";
 import type { HealthReportExport } from "../../lib/health-report-export";
 import { defaultHealthReportRange } from "../reports/HealthOverviewReportBody";
@@ -25,20 +25,24 @@ export function HealthTrendsTab() {
   const [report, setReport] = useState<HealthReportExport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const fetchGen = useRef(0);
 
   const load = useCallback(async () => {
+    const generation = ++fetchGen.current;
     setLoading(true);
     setError(null);
     try {
       const data = await apiClient.get<HealthReportExport>(
         `/api/health/reports?from=${from}&to=${to}&groupBy=date`,
       );
+      if (generation !== fetchGen.current) return;
       setReport(data);
     } catch (err) {
+      if (generation !== fetchGen.current) return;
       setError(err instanceof ApiError ? err.message : "Failed to load trends");
       setReport(null);
     } finally {
-      setLoading(false);
+      if (generation === fetchGen.current) setLoading(false);
     }
   }, [from, to]);
 
