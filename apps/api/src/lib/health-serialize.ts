@@ -91,16 +91,21 @@ export async function replaceVitalsReadings(
   eventId: string,
   readings: Array<{ metric: string; value: number; unit: string }>,
 ): Promise<void> {
-  await db.delete(healthVitalsReadings).where(eq(healthVitalsReadings.eventId, eventId));
-  if (readings.length === 0) return;
-  await db.insert(healthVitalsReadings).values(
-    readings.map((r) => ({
-      eventId,
-      metric: r.metric as typeof healthVitalsReadings.$inferInsert.metric,
-      value: encryptHealthField(String(r.value), env)!,
-      unit: r.unit,
-    })),
-  );
+  // Encrypt before touching the DB — if a field fails to encrypt (e.g. HealthEncryptionError),
+  // nothing has been deleted yet. The delete + insert then run in one transaction so an insert
+  // failure (e.g. a constraint violation) can't leave the delete committed with no replacement.
+  const values = readings.map((r) => ({
+    eventId,
+    metric: r.metric as typeof healthVitalsReadings.$inferInsert.metric,
+    value: encryptHealthField(String(r.value), env)!,
+    unit: r.unit,
+  }));
+  await db.transaction(async (tx) => {
+    await tx.delete(healthVitalsReadings).where(eq(healthVitalsReadings.eventId, eventId));
+    if (values.length > 0) {
+      await tx.insert(healthVitalsReadings).values(values);
+    }
+  });
 }
 
 function decryptedNumberOrNull(value: string | null, env: Env): number | null {
@@ -183,23 +188,28 @@ export async function replaceExerciseDetails(
   eventId: string,
   details: ExerciseDetailInput[],
 ): Promise<void> {
-  await db.delete(healthExerciseDetails).where(eq(healthExerciseDetails.eventId, eventId));
-  if (details.length === 0) return;
-  await db.insert(healthExerciseDetails).values(
-    details.map((d) => ({
-      eventId,
-      activity: encryptHealthField(d.activity, env)!,
-      durationMinutes:
-        d.durationMinutes != null ? encryptHealthField(String(d.durationMinutes), env) : null,
-      intensity: d.intensity ?? null,
-      distance: d.distance != null ? encryptHealthField(String(d.distance), env) : null,
-      distanceUnit: d.distanceUnit ?? null,
-      sets: d.sets != null ? encryptHealthField(String(d.sets), env) : null,
-      reps: d.reps != null ? encryptHealthField(String(d.reps), env) : null,
-      caloriesEstimated:
-        d.caloriesEstimated != null ? encryptHealthField(String(d.caloriesEstimated), env) : null,
-    })),
-  );
+  // Encrypt before touching the DB — if a field fails to encrypt (e.g. HealthEncryptionError),
+  // nothing has been deleted yet. The delete + insert then run in one transaction so an insert
+  // failure (e.g. a constraint violation) can't leave the delete committed with no replacement.
+  const values = details.map((d) => ({
+    eventId,
+    activity: encryptHealthField(d.activity, env)!,
+    durationMinutes:
+      d.durationMinutes != null ? encryptHealthField(String(d.durationMinutes), env) : null,
+    intensity: d.intensity ?? null,
+    distance: d.distance != null ? encryptHealthField(String(d.distance), env) : null,
+    distanceUnit: d.distanceUnit ?? null,
+    sets: d.sets != null ? encryptHealthField(String(d.sets), env) : null,
+    reps: d.reps != null ? encryptHealthField(String(d.reps), env) : null,
+    caloriesEstimated:
+      d.caloriesEstimated != null ? encryptHealthField(String(d.caloriesEstimated), env) : null,
+  }));
+  await db.transaction(async (tx) => {
+    await tx.delete(healthExerciseDetails).where(eq(healthExerciseDetails.eventId, eventId));
+    if (values.length > 0) {
+      await tx.insert(healthExerciseDetails).values(values);
+    }
+  });
 }
 
 export type SerializedPainLog = {
@@ -265,19 +275,24 @@ export async function replacePainLogs(
   eventId: string,
   logs: PainLogInput[],
 ): Promise<void> {
-  await db.delete(healthPainLogs).where(eq(healthPainLogs.eventId, eventId));
-  if (logs.length === 0) return;
-  await db.insert(healthPainLogs).values(
-    logs.map((l) => ({
-      eventId,
-      bodyRegion: l.bodyRegion as typeof healthPainLogs.$inferInsert.bodyRegion,
-      severity: encryptHealthField(String(l.severity), env)!,
-      qualityTags:
-        l.qualityTags && l.qualityTags.length > 0
-          ? encryptHealthField(JSON.stringify(l.qualityTags), env)
-          : null,
-    })),
-  );
+  // Encrypt before touching the DB — if a field fails to encrypt (e.g. HealthEncryptionError),
+  // nothing has been deleted yet. The delete + insert then run in one transaction so an insert
+  // failure (e.g. a constraint violation) can't leave the delete committed with no replacement.
+  const values = logs.map((l) => ({
+    eventId,
+    bodyRegion: l.bodyRegion as typeof healthPainLogs.$inferInsert.bodyRegion,
+    severity: encryptHealthField(String(l.severity), env)!,
+    qualityTags:
+      l.qualityTags && l.qualityTags.length > 0
+        ? encryptHealthField(JSON.stringify(l.qualityTags), env)
+        : null,
+  }));
+  await db.transaction(async (tx) => {
+    await tx.delete(healthPainLogs).where(eq(healthPainLogs.eventId, eventId));
+    if (values.length > 0) {
+      await tx.insert(healthPainLogs).values(values);
+    }
+  });
 }
 
 export type SerializedFoodLogEntry = {

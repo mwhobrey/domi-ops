@@ -114,6 +114,16 @@ export function HealthEventSheet({
 
   async function save() {
     if (readOnly || !title.trim()) return;
+    const readings = type === "vitals" ? draftsToReadings(readingDrafts) : undefined;
+    if (type === "vitals" && readings!.length === 0) {
+      setErr("Add at least one reading.");
+      return;
+    }
+    const painLogsToSave = type === "pain" ? draftsToPainLogs(painEntries) : undefined;
+    if (type === "pain" && painLogsToSave!.length === 0) {
+      setErr("Add at least one region.");
+      return;
+    }
     const foodLogEntries = type === "food_intake" ? draftsToFoodLogEntries(foodDrafts) : undefined;
     if (type === "food_intake" && foodLogEntries!.length === 0) {
       setErr("Add at least one food item.");
@@ -121,7 +131,6 @@ export function HealthEventSheet({
     }
     setBusy(true);
     setErr(null);
-    const readings = type === "vitals" ? draftsToReadings(readingDrafts) : undefined;
     const exerciseDetail = type === "exercise" ? draftToExerciseDetailInput(exerciseDraft) : null;
     const body = {
       memberId,
@@ -141,7 +150,7 @@ export function HealthEventSheet({
       sharedMemberIds: visibility === "private" ? sharedMemberIds : undefined,
       readings,
       exerciseDetails: type === "exercise" ? (exerciseDetail ? [exerciseDetail] : []) : undefined,
-      painLogs: type === "pain" ? draftsToPainLogs(painEntries) : undefined,
+      painLogs: painLogsToSave,
       foodLogEntries,
     };
     try {
