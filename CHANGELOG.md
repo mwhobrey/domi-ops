@@ -33,6 +33,8 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Changed
 
+- Health Events tab renamed to Log, with the type dropdown replaced by filter chips that only
+  show types you've actually logged, instead of all nine every time (WHO-300).
 - Split several large files (`apps/api/src/routes/core.ts`, `apps/api/src/routes/school.ts`,
   `HealthPageClient.tsx`, `SchoolClassDetail.tsx`) into focused modules for maintainability.
 - Health Today tab's "Logged today" list is now grouped by household member with a collapsible

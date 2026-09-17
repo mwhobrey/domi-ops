@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronDown, ChevronRight, Heart } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError, apiClient } from "../lib/client-api";
 import type { NoteShareMember } from "./NoteSharePicker";
@@ -45,7 +45,6 @@ import {
   EmptyState,
   LinkButton,
   SectionHeader,
-  Select,
 } from "./ui";
 
 export function HealthPageClient({
@@ -78,7 +77,7 @@ export function HealthPageClient({
   };
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<"today" | "events" | "medications">("today");
+  const [tab, setTab] = useState<"today" | "log" | "medications">("today");
   const [eventTypeFilter, setEventTypeFilter] = useState<HealthEventType | "all">("all");
   const [events, setEvents] = useState<HealthEvent[]>([]);
   const [medications, setMedications] = useState<HealthMedication[]>([]);
@@ -149,7 +148,7 @@ export function HealthPageClient({
     if (ev) {
       setEditingEvent(ev);
       setEventSheetOpen(true);
-      setTab("events");
+      setTab("log");
       return;
     }
     if (loading) return;
@@ -158,7 +157,7 @@ export function HealthPageClient({
       .then((res) => {
         setEditingEvent(res.event);
         setEventSheetOpen(true);
-        setTab("events");
+        setTab("log");
       })
       .catch(() => {
         setError("Could not open that health event.");
@@ -331,6 +330,13 @@ export function HealthPageClient({
   const canAddEvent = members.some((m) => capabilities[m.memberId]?.events === "write");
   const canAddMed = members.some((m) => capabilities[m.memberId]?.medications === "write");
 
+  // Only chip types with at least one logged event — a 9-way "All"-plus-every-type row is
+  // clutter for the common case (most households only ever log a couple of types).
+  const presentEventTypes = useMemo(
+    () => EVENT_TYPES.filter((t) => events.some((ev) => ev.type === t.value)),
+    [events],
+  );
+
   function canLogForMember(memberId: string) {
     return capabilities[memberId]?.doses === "write";
   }
@@ -342,14 +348,14 @@ export function HealthPageClient({
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-2">
-        {(["today", "events", "medications"] as const).map((key) => (
+        {(["today", "log", "medications"] as const).map((key) => (
           <Button
             key={key}
             size="sm"
             variant={tab === key ? "primary" : "secondary"}
             onClick={() => setTab(key)}
           >
-            {key === "today" ? "Today" : key === "events" ? "Events" : "Medications"}
+            {key === "today" ? "Today" : key === "log" ? "Log" : "Medications"}
           </Button>
         ))}
         </div>
@@ -578,24 +584,38 @@ export function HealthPageClient({
         </div>
       ) : null}
 
-      {tab === "events" ? (
+      {tab === "log" ? (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <label className="flex items-center gap-2 text-sm">
-              <span className="text-[var(--color-text-muted)]">Event type</span>
-              <Select
-                value={eventTypeFilter}
-                onChange={(e) => setEventTypeFilter(e.target.value as HealthEventType | "all")}
-                className="w-auto"
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by event type">
+              <button
+                type="button"
+                className={`inline-flex min-h-8 items-center rounded-full border px-3 py-1 text-xs font-medium transition-colors max-md:min-h-11 max-md:px-4 ${
+                  eventTypeFilter === "all"
+                    ? "border-[var(--color-accent)] bg-[var(--color-accent)] text-white"
+                    : "border-[var(--color-border)] bg-transparent text-[var(--color-text-muted)]"
+                }`}
+                aria-pressed={eventTypeFilter === "all"}
+                onClick={() => setEventTypeFilter("all")}
               >
-                <option value="all">All events</option>
-                {EVENT_TYPES.map((t) => (
-                  <option key={t.value} value={t.value}>
-                    {t.label}
-                  </option>
-                ))}
-              </Select>
-            </label>
+                All
+              </button>
+              {presentEventTypes.map((t) => (
+                <button
+                  key={t.value}
+                  type="button"
+                  className={`inline-flex min-h-8 items-center rounded-full border px-3 py-1 text-xs font-medium transition-colors max-md:min-h-11 max-md:px-4 ${
+                    eventTypeFilter === t.value
+                      ? "border-[var(--color-accent)] bg-[var(--color-accent)] text-white"
+                      : "border-[var(--color-border)] bg-transparent text-[var(--color-text-muted)]"
+                  }`}
+                  aria-pressed={eventTypeFilter === t.value}
+                  onClick={() => setEventTypeFilter(t.value)}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
             {canAddEvent ? (
             <div className="flex flex-wrap justify-end gap-2">
               <Button size="sm" variant="secondary" onClick={() => setVitalsSheetOpen(true)}>
