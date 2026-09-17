@@ -4,7 +4,9 @@ export type HealthReportFocus =
   | "overview"
   | "medications"
   | "medications-today"
-  | "medication-list";
+  | "medication-list"
+  | "exercise"
+  | "pain";
 
 export interface HealthReportEventItem {
   id: string;
@@ -74,6 +76,16 @@ export interface HealthReportExport {
     metricLabel: string;
     points: { eventId: string; date: string; value: number; unit: string }[];
   }[];
+  exerciseTrend?: {
+    points: { weekStart: string; totalMinutes: number; sessionCount: number }[];
+  };
+  exerciseByActivity?: { activity: string; totalMinutes: number; sessionCount: number }[];
+  painTrend?: {
+    bodyRegion: string;
+    bodyRegionLabel: string;
+    points: { eventId: string; date: string; severity: number }[];
+  }[];
+  painByRegion?: { bodyRegion: string; bodyRegionLabel: string; count: number }[];
   medicationAdherence: {
     medicationId: string;
     name: string;
@@ -122,6 +134,8 @@ export const HEALTH_REPORT_EVENT_TYPES: { value: string; label: string }[] = [
   { value: "symptom", label: "Symptom" },
   { value: "medication", label: "Medication" },
   { value: "vitals", label: "Vitals" },
+  { value: "exercise", label: "Exercise" },
+  { value: "pain", label: "Pain" },
   { value: "other", label: "Other" },
 ];
 
@@ -136,4 +150,6 @@ export const HEALTH_REPORT_FOCUS_OPTIONS: { id: HealthReportFocus; label: string
   { id: "medications-today", label: "Today's doses" },
   { id: "medications", label: "Dose history" },
   { id: "medication-list", label: "Medication list" },
+  { id: "exercise", label: "Exercise" },
+  { id: "pain", label: "Pain" },
 ];

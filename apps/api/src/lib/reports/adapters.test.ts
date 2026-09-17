@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  healthExerciseToCanonical,
   healthMedicationListToCanonical,
   healthMedicationsToCanonical,
   healthOverviewToCanonical,
+  healthPainToCanonical,
   healthTodayToCanonical,
 } from "./adapters.js";
 
@@ -25,6 +27,16 @@ const sample = {
     dosesLogged: 1,
   },
   vitalsTrend: [],
+  exerciseTrend: { points: [{ weekStart: "2026-07-06", totalMinutes: 90, sessionCount: 3 }] },
+  exerciseByActivity: [{ activity: "Running", totalMinutes: 90, sessionCount: 3 }],
+  painTrend: [
+    {
+      bodyRegion: "lower_back",
+      bodyRegionLabel: "Lower back",
+      points: [{ eventId: "e2", date: "2026-07-12", severity: 6 }],
+    },
+  ],
+  painByRegion: [{ bodyRegion: "lower_back", bodyRegionLabel: "Lower back", count: 1 }],
   eventsByType: [{ type: "appointment", label: "Appointment", count: 1 }],
   eventsByMember: [{ memberId: "a", label: "Alex", count: 1 }],
   medicationAdherence: [
@@ -160,5 +172,35 @@ describe("health canonical adapters", () => {
       "Daily at 8:00 AM",
       "Take with food",
     ]);
+  });
+
+  it("builds a weekly exercise volume + by-activity breakdown", () => {
+    const report = healthExerciseToCanonical(sample);
+    expect(report.kind).toBe("exercise");
+    const summary = report.sections.find((s) => s.key === "summary");
+    expect(summary?.stats).toEqual([
+      { label: "Sessions", value: "3" },
+      { label: "Total minutes", value: "90" },
+    ]);
+    const weekly = report.sections.find((s) => s.key === "weekly-volume")?.tables?.[0];
+    expect(weekly?.columns).toEqual(["Week of", "Sessions", "Total minutes"]);
+    expect(weekly?.rows[0]).toEqual(["Jul 6, 2026", 3, 90]);
+    const byActivity = report.sections.find((s) => s.key === "by-activity")?.tables?.[0];
+    expect(byActivity?.rows[0]).toEqual(["Running", 3, 90]);
+  });
+
+  it("builds a pain body-region frequency + severity trend", () => {
+    const report = healthPainToCanonical(sample);
+    expect(report.kind).toBe("pain");
+    const summary = report.sections.find((s) => s.key === "summary");
+    expect(summary?.stats).toEqual([
+      { label: "Logged check-ins", value: "1" },
+      { label: "Body regions affected", value: "1" },
+    ]);
+    const byRegion = report.sections.find((s) => s.key === "by-region")?.tables?.[0];
+    expect(byRegion?.rows[0]).toEqual(["Lower back", 1]);
+    const trend = report.sections.find((s) => s.key === "severity-trend")?.tables?.[0];
+    expect(trend?.label).toBe("Lower back");
+    expect(trend?.rows[0]).toEqual(["Jul 12, 2026", 6]);
   });
 });

@@ -25,6 +25,8 @@ import {
   healthMedicationsToCanonical,
   healthTodayToCanonical,
   healthMedicationListToCanonical,
+  healthExerciseToCanonical,
+  healthPainToCanonical,
   schoolGradesToCanonical,
   schoolOpenWorkToCanonical,
   schoolTranscriptToCanonical,
@@ -186,11 +188,15 @@ export async function buildCanonicalReport(
   if (module === "health") {
     const isToday = kind === "medications-today";
     const isList = kind === "medication-list";
+    const isExercise = kind === "exercise";
+    const isPain = kind === "pain";
     if (
       kind !== "overview" &&
       kind !== "medications" &&
       !isToday &&
-      !isList
+      !isList &&
+      !isExercise &&
+      !isPain
     ) {
       return null;
     }
@@ -219,14 +225,16 @@ export async function buildCanonicalReport(
         memberId: params.memberId,
         eventType: kind === "overview" ? params.eventType : null,
         groupBy: params.groupBy,
-        medicationId: kind === "overview" || isList ? null : params.medicationId,
-        scheduleKind: kind === "overview" || isList ? null : params.scheduleKind,
+        medicationId: kind === "overview" || isList || isExercise || isPain ? null : params.medicationId,
+        scheduleKind: kind === "overview" || isList || isExercise || isPain ? null : params.scheduleKind,
         pinToToday: isToday,
       },
     );
     if (kind === "medications") return healthMedicationsToCanonical(data);
     if (kind === "medications-today") return healthTodayToCanonical(data);
     if (kind === "medication-list") return healthMedicationListToCanonical(data);
+    if (kind === "exercise") return healthExerciseToCanonical(data);
+    if (kind === "pain") return healthPainToCanonical(data);
     return healthOverviewToCanonical(data);
   }
 
@@ -272,7 +280,7 @@ const MODULE_KINDS: Record<ReportModule, ReportKind[]> = {
   chores: ["weekly", "overview"],
   shopping: ["weekly", "overview"],
   expenses: ["weekly", "overview"],
-  health: ["overview", "medications-today", "medications", "medication-list"],
+  health: ["overview", "medications-today", "medications", "medication-list", "exercise", "pain"],
 };
 
 export async function buildReportCatalog(

@@ -30,6 +30,11 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
   purpose-built sheet — pain logging taps a front/back body map instead of typing a location.
   Both types are also fully editable via the general "Add event" form for backdating, same as
   vitals already was.
+- Exercise and pain report kinds (WHO-301): "Exercise" shows weekly workout volume and a
+  by-activity minutes breakdown; "Pain" shows a body-region frequency heatmap (reusing the
+  `BodyPainMap` diagram in read-only mode) and severity-over-time per region. Both are
+  selectable from the Health reports picker and support the same print/CSV/JSON/YAML export
+  as every other health report.
 
 ### Changed
 
@@ -63,5 +68,8 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
   used to spawn a second account and household that could never reach the app.
 - A household member with write access to another member's private health events/medications —
   not just the record's creator — no longer silently clears its shares when editing and saving.
+- The Health Events "Event type" filter (report + tab) silently dropped Exercise/Pain since
+  neither was in the type-label map the filter validates against; both were also missing from
+  the report filter's own dropdown options.
   The API previously only returned real share state to the creator; a non-creator editor saw an
   empty share list and unknowingly overwrote it on save (WHO-293).
