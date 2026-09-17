@@ -125,7 +125,9 @@ function normalizeExerciseDetails(value: unknown): ExerciseDetailInput[] | undef
     const activity = (entry as { activity?: unknown }).activity;
     if (typeof activity !== "string" || !activity.trim()) continue;
     const num = (v: unknown): number | null =>
-      typeof v === "number" && Number.isFinite(v) ? v : null;
+      typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null;
+    const int = (v: unknown): number | null =>
+      typeof v === "number" && Number.isInteger(v) && v >= 0 ? v : null;
     const str = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim() : null);
     out.push({
       activity: activity.trim(),
@@ -133,8 +135,8 @@ function normalizeExerciseDetails(value: unknown): ExerciseDetailInput[] | undef
       intensity: str((entry as { intensity?: unknown }).intensity),
       distance: num((entry as { distance?: unknown }).distance),
       distanceUnit: str((entry as { distanceUnit?: unknown }).distanceUnit),
-      sets: num((entry as { sets?: unknown }).sets),
-      reps: num((entry as { reps?: unknown }).reps),
+      sets: int((entry as { sets?: unknown }).sets),
+      reps: int((entry as { reps?: unknown }).reps),
       caloriesEstimated: num((entry as { caloriesEstimated?: unknown }).caloriesEstimated),
     });
   }
@@ -878,17 +880,21 @@ export function householdHealthRoutes(db: Database, env: Env) {
       }
 
       let exerciseDetails: SerializedExerciseDetail[] | undefined;
-      const exerciseDetailsInput = normalizeExerciseDetails(body.exerciseDetails);
-      if (exerciseDetailsInput) {
-        await replaceExerciseDetails(db, env, row.id, exerciseDetailsInput);
-        exerciseDetails = (await loadExerciseDetailsForEvents(db, env, [row.id])).get(row.id) ?? [];
+      if (row.type === "exercise") {
+        const exerciseDetailsInput = normalizeExerciseDetails(body.exerciseDetails);
+        if (exerciseDetailsInput) {
+          await replaceExerciseDetails(db, env, row.id, exerciseDetailsInput);
+          exerciseDetails = (await loadExerciseDetailsForEvents(db, env, [row.id])).get(row.id) ?? [];
+        }
       }
 
       let painLogs: SerializedPainLog[] | undefined;
-      const painLogsInput = normalizePainLogs(body.painLogs);
-      if (painLogsInput) {
-        await replacePainLogs(db, env, row.id, painLogsInput);
-        painLogs = (await loadPainLogsForEvents(db, env, [row.id])).get(row.id) ?? [];
+      if (row.type === "pain") {
+        const painLogsInput = normalizePainLogs(body.painLogs);
+        if (painLogsInput) {
+          await replacePainLogs(db, env, row.id, painLogsInput);
+          painLogs = (await loadPainLogsForEvents(db, env, [row.id])).get(row.id) ?? [];
+        }
       }
 
       return c.json(
@@ -1022,21 +1028,27 @@ export function householdHealthRoutes(db: Database, env: Env) {
       }
 
       let exerciseDetails: SerializedExerciseDetail[] | undefined;
-      const exerciseDetailsInput = normalizeExerciseDetails(body.exerciseDetails);
-      if (exerciseDetailsInput !== undefined) {
-        await replaceExerciseDetails(db, env, row.id, exerciseDetailsInput);
-      }
       if (row.type === "exercise") {
+        const exerciseDetailsInput = normalizeExerciseDetails(body.exerciseDetails);
+        if (exerciseDetailsInput !== undefined) {
+          await replaceExerciseDetails(db, env, row.id, exerciseDetailsInput);
+        }
         exerciseDetails = (await loadExerciseDetailsForEvents(db, env, [row.id])).get(row.id) ?? [];
+      } else if (body.type !== undefined) {
+        // Type changed away from exercise — clear now-incompatible rows so they can't
+        // silently reappear if the type is ever changed back.
+        await replaceExerciseDetails(db, env, row.id, []);
       }
 
       let painLogs: SerializedPainLog[] | undefined;
-      const painLogsInput = normalizePainLogs(body.painLogs);
-      if (painLogsInput !== undefined) {
-        await replacePainLogs(db, env, row.id, painLogsInput);
-      }
       if (row.type === "pain") {
+        const painLogsInput = normalizePainLogs(body.painLogs);
+        if (painLogsInput !== undefined) {
+          await replacePainLogs(db, env, row.id, painLogsInput);
+        }
         painLogs = (await loadPainLogsForEvents(db, env, [row.id])).get(row.id) ?? [];
+      } else if (body.type !== undefined) {
+        await replacePainLogs(db, env, row.id, []);
       }
 
       const shareMap = await loadHealthEventShareMap(

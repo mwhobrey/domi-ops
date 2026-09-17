@@ -285,7 +285,13 @@ export const PAIN_BODY_REGION_LABELS: Record<HealthPainBodyRegion, string> = {
   right_calf: "Right calf",
 };
 
-export type PainLogDraft = { key: string; region: HealthPainBodyRegion; severity: number };
+export type PainLogDraft = {
+  key: string;
+  region: HealthPainBodyRegion;
+  severity: number;
+  /** Not editable in the UI yet — carried through so a round trip doesn't silently drop it. */
+  qualityTags?: string[] | null;
+};
 
 /** Matches the API's SerializedPainLog shape — distinct from PainLogDraft, same split as
  *  VitalsReading vs VitalsReadingDraft. */

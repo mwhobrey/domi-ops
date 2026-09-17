@@ -197,11 +197,16 @@ function draftNumberOrNull(value: string): number | null {
 
 export function painLogsToDrafts(logs: PainLog[] | undefined): PainLogDraft[] {
   if (!logs) return [];
-  return logs.map((l) => ({ key: nextPainDraftKey(), region: l.bodyRegion, severity: l.severity }));
+  return logs.map((l) => ({
+    key: nextPainDraftKey(),
+    region: l.bodyRegion,
+    severity: l.severity,
+    qualityTags: l.qualityTags,
+  }));
 }
 
 export function draftsToPainLogs(drafts: PainLogDraft[]): PainLog[] {
-  return drafts.map((d) => ({ bodyRegion: d.region, severity: d.severity }));
+  return drafts.map((d) => ({ bodyRegion: d.region, severity: d.severity, qualityTags: d.qualityTags }));
 }
 
 export function draftToExerciseDetailInput(draft: ExerciseDetailDraft): ExerciseDetail | null {

@@ -186,7 +186,9 @@ export function HealthEventSheet({
         {type === "exercise" ? (
           <ExerciseDetailsEditor draft={exerciseDraft} onChange={setExerciseDraft} />
         ) : null}
-        {type === "pain" ? <BodyPainMap entries={painEntries} onChange={setPainEntries} /> : null}
+        {type === "pain" ? (
+          <BodyPainMap entries={painEntries} onChange={setPainEntries} disabled={readOnly} />
+        ) : null}
         <label className="block space-y-1 text-sm">
           <span>Start date</span>
           <Input
