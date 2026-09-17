@@ -347,8 +347,9 @@ export async function replaceFoodLogEntries(
   eventId: string,
   entries: FoodLogEntryInput[],
 ): Promise<void> {
-  // Encrypt before deleting — if a field fails to encrypt (e.g. HealthEncryptionError), the
-  // existing rows must survive rather than being wiped by a delete that already committed.
+  // Encrypt before touching the DB — if a field fails to encrypt (e.g. HealthEncryptionError),
+  // nothing has been deleted yet. The delete + insert then run in one transaction so an insert
+  // failure (e.g. a constraint violation) can't leave the delete committed with no replacement.
   const values = entries.map((f) => ({
     eventId,
     foodName: encryptHealthField(f.foodName, env)!,
@@ -359,9 +360,12 @@ export async function replaceFoodLogEntries(
     carbsG: f.carbsG != null ? encryptHealthField(String(f.carbsG), env) : null,
     fatG: f.fatG != null ? encryptHealthField(String(f.fatG), env) : null,
   }));
-  await db.delete(healthFoodLogEntries).where(eq(healthFoodLogEntries.eventId, eventId));
-  if (values.length === 0) return;
-  await db.insert(healthFoodLogEntries).values(values);
+  await db.transaction(async (tx) => {
+    await tx.delete(healthFoodLogEntries).where(eq(healthFoodLogEntries.eventId, eventId));
+    if (values.length > 0) {
+      await tx.insert(healthFoodLogEntries).values(values);
+    }
+  });
 }
 
 export function serializeHealthEvent(
