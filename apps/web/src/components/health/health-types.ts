@@ -13,6 +13,7 @@ export type HealthEventType =
   | "vitals"
   | "exercise"
   | "pain"
+  | "food_intake"
   | "other";
 
 export type VitalsMetric =
@@ -58,6 +59,17 @@ export type ExerciseDetailDraft = {
   caloriesEstimated: string;
 };
 
+export interface FoodLogEntry {
+  id?: string;
+  foodName: string;
+  quantity: number | null;
+  unit: string;
+  calories: number | null;
+  proteinG: number | null;
+  carbsG: number | null;
+  fatG: number | null;
+}
+
 export interface HealthEvent {
   id: string;
   memberId: string;
@@ -80,6 +92,7 @@ export interface HealthEvent {
   readings?: VitalsReading[];
   exerciseDetails?: ExerciseDetail[];
   painLogs?: PainLog[];
+  foodLogEntries?: FoodLogEntry[];
 }
 
 export interface HealthMedication {
@@ -169,6 +182,7 @@ export const EVENT_TYPES: { value: HealthEventType; label: string }[] = [
   { value: "vitals", label: "Vitals" },
   { value: "exercise", label: "Exercise" },
   { value: "pain", label: "Pain" },
+  { value: "food_intake", label: "Meal" },
   { value: "other", label: "Other" },
 ];
 

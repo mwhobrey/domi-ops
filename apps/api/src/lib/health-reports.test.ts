@@ -146,6 +146,7 @@ describe("event type filter + grouping", () => {
     expect(normalizeHealthEventType("sickness")).toBe("sickness");
     expect(normalizeHealthEventType("exercise")).toBe("exercise");
     expect(normalizeHealthEventType("pain")).toBe("pain");
+    expect(normalizeHealthEventType("food_intake")).toBe("food_intake");
     expect(normalizeHealthEventType("nope")).toBeNull();
     expect(normalizeHealthEventType("")).toBeNull();
   });
