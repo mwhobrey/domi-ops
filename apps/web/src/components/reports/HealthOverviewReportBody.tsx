@@ -9,8 +9,17 @@ import type {
 } from "../../lib/health-report-export";
 import { SectionHeader } from "../ui";
 import { LazyCategoryBarChart as CategoryBarChart, LazyTrendLineChart as TrendLineChart } from "../charts/lazy";
+import {
+  ExerciseByActivitySection,
+  ExerciseWeeklyVolumeSection,
+  NutritionCaloriesSection,
+  NutritionMacrosSection,
+  PainByRegionSection,
+  PainSeverityTrendSection,
+  VitalsTrendSection,
+} from "../health/HealthTrendCharts";
 
-function formatReportDate(iso: string): string {
+export function formatReportDate(iso: string): string {
   const [year, month, day] = iso.split("-").map(Number);
   if (!year || !month || !day) return iso;
   return new Date(year, month - 1, day).toLocaleDateString(undefined, {
@@ -46,7 +55,7 @@ function StatCard({ label, value }: { label: string; value: string | number }) {
   );
 }
 
-function ReportTable({
+export function ReportTable({
   columns,
   rows,
   empty,
@@ -90,6 +99,9 @@ function printTitle(focus: HealthReportFocus): string {
   if (focus === "medications-today") return "Today's medication doses";
   if (focus === "medication-list") return "Current medications";
   if (focus === "medications") return "Dose history";
+  if (focus === "exercise") return "Exercise";
+  if (focus === "pain") return "Pain";
+  if (focus === "nutrition") return "Nutrition";
   return "Health events";
 }
 
@@ -190,36 +202,7 @@ export function HealthOverviewReportBody({
               />
             </section>
           ) : null}
-          {(report.vitalsTrend ?? []).length > 0 ? (
-            <section className="space-y-4">
-              <SectionHeader title="Vitals trend" />
-              {(report.vitalsTrend ?? []).map((trend) => (
-                <div key={trend.metric} className="space-y-2">
-                  <h3 className="text-sm font-medium text-[var(--color-text)]">
-                    {trend.metricLabel}
-                    <span className="ml-2 font-normal text-[var(--color-text-muted)]">
-                      ({trend.points.length} reading{trend.points.length === 1 ? "" : "s"})
-                    </span>
-                  </h3>
-                  <div className="print:hidden">
-                    <TrendLineChart
-                      data={trend.points.map((p) => ({ date: formatReportDate(p.date), value: p.value }))}
-                      series={[{ key: "value", label: trend.metricLabel }]}
-                      valueFormatter={(v) => `${v} ${trend.points[0]?.unit ?? ""}`.trim()}
-                      height={180}
-                    />
-                  </div>
-                  <ReportTable
-                    columns={["Date", "Value"]}
-                    rows={trend.points.map((p) => [
-                      formatReportDate(p.date),
-                      `${p.value} ${p.unit}`,
-                    ])}
-                  />
-                </div>
-              ))}
-            </section>
-          ) : null}
+          <VitalsTrendSection vitalsTrend={report.vitalsTrend ?? []} />
           {eventGroups.length > 0 ? (
             <section className="space-y-4">
               <SectionHeader title={historyTitle} />
@@ -383,6 +366,77 @@ export function HealthOverviewReportBody({
           ) : (
             <p className="text-sm text-[var(--color-text-muted)]">No dose logs in this date range.</p>
           )}
+        </>
+      ) : null}
+
+      {focus === "exercise" ? (
+        <>
+          <section className="space-y-3">
+            <SectionHeader title="Exercise summary" />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <StatCard
+                label="Sessions"
+                value={(report.exerciseTrend?.points ?? []).reduce((sum, p) => sum + p.sessionCount, 0)}
+              />
+              <StatCard
+                label="Total minutes"
+                value={(report.exerciseTrend?.points ?? []).reduce((sum, p) => sum + p.totalMinutes, 0)}
+              />
+            </div>
+          </section>
+          <ExerciseWeeklyVolumeSection
+            points={report.exerciseTrend?.points ?? []}
+            emptyMessage="No exercise logged in this date range."
+          />
+          <ExerciseByActivitySection byActivity={report.exerciseByActivity ?? []} />
+        </>
+      ) : null}
+
+      {focus === "pain" ? (
+        <>
+          <section className="space-y-3">
+            <SectionHeader title="Pain summary" />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <StatCard
+                label="Logged check-ins"
+                value={(report.painByRegion ?? []).reduce((sum, r) => sum + r.count, 0)}
+              />
+              <StatCard label="Body regions affected" value={(report.painByRegion ?? []).length} />
+            </div>
+          </section>
+          <PainByRegionSection
+            byRegion={report.painByRegion ?? []}
+            emptyMessage="No pain logged in this date range."
+          />
+          <PainSeverityTrendSection trend={report.painTrend ?? []} />
+        </>
+      ) : null}
+
+      {focus === "nutrition" ? (
+        <>
+          <section className="space-y-3">
+            <SectionHeader title="Nutrition summary" />
+            <div className="grid gap-3 sm:grid-cols-3">
+              <StatCard label="Days logged" value={(report.nutritionTrend?.points ?? []).length} />
+              <StatCard
+                label="Food items logged"
+                value={(report.nutritionTrend?.points ?? []).reduce((sum, p) => sum + p.entryCount, 0)}
+              />
+              <StatCard
+                label="Avg. daily calories"
+                value={(() => {
+                  const points = report.nutritionTrend?.points ?? [];
+                  if (points.length === 0) return 0;
+                  return Math.round(points.reduce((sum, p) => sum + p.calories, 0) / points.length);
+                })()}
+              />
+            </div>
+          </section>
+          <NutritionCaloriesSection
+            points={report.nutritionTrend?.points ?? []}
+            emptyMessage="No meals logged in this date range."
+          />
+          <NutritionMacrosSection points={report.nutritionTrend?.points ?? []} />
         </>
       ) : null}
     </div>
