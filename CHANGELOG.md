@@ -40,6 +40,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 - Health Events tab renamed to Log, with the type dropdown replaced by filter chips that only
   show types you've actually logged, instead of all nine every time (WHO-300).
+- Medication editing consolidated to one place: the Health Medications tab is now the full
+  manager (groups, day timeline, schedule editor) instead of a separate quick-edit list that
+  linked out to `/health/medications` for anything more. That page is now a redirect back to
+  `/health` (WHO-302).
 - Split several large files (`apps/api/src/routes/core.ts`, `apps/api/src/routes/school.ts`,
   `HealthPageClient.tsx`, `SchoolClassDetail.tsx`) into focused modules for maintainability.
 - Health Today tab's "Logged today" list is now grouped by household member with a collapsible
@@ -68,8 +72,8 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
   used to spawn a second account and household that could never reach the app.
 - A household member with write access to another member's private health events/medications —
   not just the record's creator — no longer silently clears its shares when editing and saving.
+  The API previously only returned real share state to the creator; a non-creator editor saw an
+  empty share list and unknowingly overwrote it on save (WHO-293).
 - The Health Events "Event type" filter (report + tab) silently dropped Exercise/Pain since
   neither was in the type-label map the filter validates against; both were also missing from
   the report filter's own dropdown options.
-  The API previously only returned real share state to the creator; a non-creator editor saw an
-  empty share list and unknowingly overwrote it on save (WHO-293).
