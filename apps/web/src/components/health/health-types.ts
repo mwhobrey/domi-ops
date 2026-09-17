@@ -162,3 +162,78 @@ export const DEFAULT_VITALS_METRICS: VitalsMetric[] = [
   "heart_rate",
   "temperature",
 ];
+
+/**
+ * Front/back body-map regions for pain logging (WHO-297/298) — mirrors the
+ * health_pain_body_region Postgres enum in packages/db/src/schema/health.ts. Shoulders, upper
+ * arms, forearms, hands, and feet are clickable from either view and share one region value;
+ * the back view additionally distinguishes hamstring/calf from the front-only thigh/shin.
+ */
+export type HealthPainBodyRegion =
+  | "front_head"
+  | "face"
+  | "neck_front"
+  | "chest"
+  | "abdomen"
+  | "groin"
+  | "left_shoulder"
+  | "right_shoulder"
+  | "left_upper_arm"
+  | "right_upper_arm"
+  | "left_forearm"
+  | "right_forearm"
+  | "left_hand"
+  | "right_hand"
+  | "left_thigh"
+  | "right_thigh"
+  | "left_shin"
+  | "right_shin"
+  | "left_foot"
+  | "right_foot"
+  | "back_head"
+  | "neck_back"
+  | "upper_back"
+  | "lower_back"
+  | "buttocks"
+  | "left_shoulder_blade"
+  | "right_shoulder_blade"
+  | "left_hamstring"
+  | "right_hamstring"
+  | "left_calf"
+  | "right_calf";
+
+export const PAIN_BODY_REGION_LABELS: Record<HealthPainBodyRegion, string> = {
+  front_head: "Top of head",
+  face: "Face",
+  neck_front: "Neck (front)",
+  chest: "Chest",
+  abdomen: "Abdomen",
+  groin: "Groin",
+  left_shoulder: "Left shoulder",
+  right_shoulder: "Right shoulder",
+  left_upper_arm: "Left upper arm",
+  right_upper_arm: "Right upper arm",
+  left_forearm: "Left forearm",
+  right_forearm: "Right forearm",
+  left_hand: "Left hand",
+  right_hand: "Right hand",
+  left_thigh: "Left thigh",
+  right_thigh: "Right thigh",
+  left_shin: "Left shin",
+  right_shin: "Right shin",
+  left_foot: "Left foot",
+  right_foot: "Right foot",
+  back_head: "Back of head",
+  neck_back: "Neck (back)",
+  upper_back: "Upper back",
+  lower_back: "Lower back",
+  buttocks: "Buttocks",
+  left_shoulder_blade: "Left shoulder blade",
+  right_shoulder_blade: "Right shoulder blade",
+  left_hamstring: "Left hamstring",
+  right_hamstring: "Right hamstring",
+  left_calf: "Left calf",
+  right_calf: "Right calf",
+};
+
+export type PainLogDraft = { key: string; region: HealthPainBodyRegion; severity: number };
