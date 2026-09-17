@@ -659,27 +659,49 @@ export async function buildHealthReports(
     env,
     vitalsEventsInRange.map((row) => row.id),
   );
+  // Keyed by metric + unit, not metric alone — a metric logged under two units (e.g. weight in
+  // lb and kg) must not land in one trend, since the chart plots raw values on one axis and
+  // labels every point with the first point's unit.
   const vitalsTrendBuckets = new Map<
     string,
-    { metric: string; metricLabel: string; points: { eventId: string; date: string; value: number; unit: string }[] }
+    {
+      metric: string;
+      metricLabel: string;
+      unit: string;
+      points: { eventId: string; date: string; value: number; unit: string }[];
+    }
   >();
   for (const event of vitalsEventsInRange) {
     const anchor = event.startedAt ?? event.createdAt;
     const date = localDateOfInstant(anchor, timezone);
     for (const reading of vitalsReadingsByEvent.get(event.id) ?? []) {
       if (reading.value == null) continue;
-      const bucket = vitalsTrendBuckets.get(reading.metric) ?? {
+      const bucketKey = `${reading.metric}::${reading.unit}`;
+      const bucket = vitalsTrendBuckets.get(bucketKey) ?? {
         metric: reading.metric,
         metricLabel: VITALS_METRIC_LABELS[reading.metric] ?? reading.metric,
+        unit: reading.unit,
         points: [],
       };
       bucket.points.push({ eventId: event.id, date, value: reading.value, unit: reading.unit });
-      vitalsTrendBuckets.set(reading.metric, bucket);
+      vitalsTrendBuckets.set(bucketKey, bucket);
     }
+  }
+  const vitalsUnitsByMetric = new Map<string, Set<string>>();
+  for (const bucket of vitalsTrendBuckets.values()) {
+    const units = vitalsUnitsByMetric.get(bucket.metric) ?? new Set<string>();
+    units.add(bucket.unit);
+    vitalsUnitsByMetric.set(bucket.metric, units);
   }
   const vitalsTrend = [...vitalsTrendBuckets.values()]
     .map((bucket) => ({
-      ...bucket,
+      metric: bucket.metric,
+      // Disambiguate only when the same metric was actually logged under more than one unit —
+      // the common case (one unit per metric) keeps its plain label.
+      metricLabel:
+        (vitalsUnitsByMetric.get(bucket.metric)?.size ?? 1) > 1
+          ? `${bucket.metricLabel} (${bucket.unit})`
+          : bucket.metricLabel,
       points: bucket.points.sort((a, b) => a.date.localeCompare(b.date)),
     }))
     .sort((a, b) => a.metricLabel.localeCompare(b.metricLabel));

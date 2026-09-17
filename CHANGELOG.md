@@ -44,6 +44,9 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
   manager (groups, day timeline, schedule editor) instead of a separate quick-edit list that
   linked out to `/health/medications` for anything more. That page is now a redirect back to
   `/health` (WHO-302).
+- New Health **Trends** tab: vitals, exercise, and pain charts inline on `/health` instead of
+  only in Reports — the same "is BP trending up" gap now closed for exercise volume and pain
+  severity too (WHO-303).
 - Split several large files (`apps/api/src/routes/core.ts`, `apps/api/src/routes/school.ts`,
   `HealthPageClient.tsx`, `SchoolClassDetail.tsx`) into focused modules for maintainability.
 - Health Today tab's "Logged today" list is now grouped by household member with a collapsible
