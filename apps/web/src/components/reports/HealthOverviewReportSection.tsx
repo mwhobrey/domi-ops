@@ -56,7 +56,12 @@ export function HealthOverviewReportSection({
     NonNullable<HealthReportExport["medications"]>
   >([]);
 
-  const usesRange = focus === "overview" || focus === "medications";
+  const usesRange =
+    focus === "overview" ||
+    focus === "medications" ||
+    focus === "exercise" ||
+    focus === "pain" ||
+    focus === "nutrition";
   const usesMedFilters = focus === "medications" || focus === "medications-today";
 
   useEffect(() => {
@@ -128,7 +133,13 @@ export function HealthOverviewReportSection({
         ? "medications-today"
         : focus === "medication-list"
           ? "medication-list"
-          : "overview";
+          : focus === "exercise"
+            ? "exercise"
+            : focus === "pain"
+              ? "pain"
+              : focus === "nutrition"
+                ? "nutrition"
+                : "overview";
 
   const exportParams = useMemo(
     () => ({
@@ -150,7 +161,13 @@ export function HealthOverviewReportSection({
       ? `Today's doses — ${report.todayDoseDate ?? report.to}`
       : focus === "medication-list"
         ? "Current medications"
-        : `${focus === "medications" ? "Dose history" : "Health events"} — ${report.from} to ${report.to}`
+        : focus === "exercise"
+          ? `Exercise — ${report.from} to ${report.to}`
+          : focus === "pain"
+            ? `Pain — ${report.from} to ${report.to}`
+            : focus === "nutrition"
+              ? `Nutrition — ${report.from} to ${report.to}`
+              : `${focus === "medications" ? "Dose history" : "Health events"} — ${report.from} to ${report.to}`
     : HEALTH_REPORT_FOCUS_OPTIONS.find((o) => o.id === focus)?.label ?? "Health report";
 
   return (

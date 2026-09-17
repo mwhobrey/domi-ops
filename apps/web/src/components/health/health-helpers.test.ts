@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  defaultMealTitle,
+  draftsToFoodLogEntries,
+  foodLogEntriesToDrafts,
   formatEventWhen,
+  formatFoodLogSummary,
   groupMedsByMember,
   groupPendingDosesByMemberThenTime,
   memberLabel,
@@ -8,7 +12,13 @@ import {
   resolveDefaultMemberId,
   scheduleKindLabel,
 } from "./health-helpers";
-import type { HealthEvent, HealthMedication, PendingDose, PendingGroupDose } from "./health-types";
+import type {
+  FoodLogEntry,
+  HealthEvent,
+  HealthMedication,
+  PendingDose,
+  PendingGroupDose,
+} from "./health-types";
 
 describe("scheduleKindLabel", () => {
   it("labels each schedule kind", () => {
@@ -113,5 +123,54 @@ describe("formatEventWhen", () => {
 
   it("returns null when there's no date info at all", () => {
     expect(formatEventWhen(base)).toBeNull();
+  });
+});
+
+describe("food log entries", () => {
+  it("starts a fresh sheet with one blank row, not zero", () => {
+    const drafts = foodLogEntriesToDrafts(undefined);
+    expect(drafts).toHaveLength(1);
+    expect(drafts[0].foodName).toBe("");
+  });
+
+  it("round-trips entries into drafts and back", () => {
+    const entries: FoodLogEntry[] = [
+      { foodName: "Rice", quantity: 1, unit: "cup", calories: 200, proteinG: 4, carbsG: 45, fatG: 0.5 },
+    ];
+    const drafts = foodLogEntriesToDrafts(entries);
+    expect(drafts).toHaveLength(1);
+    expect(drafts[0].quantity).toBe("1");
+    expect(draftsToFoodLogEntries(drafts)).toEqual(entries);
+  });
+
+  it("drops rows missing a required field (name, unit, or a valid quantity)", () => {
+    const drafts = foodLogEntriesToDrafts(undefined);
+    drafts[0].foodName = "Chicken";
+    drafts[0].unit = "";
+    drafts[0].quantity = "150";
+    expect(draftsToFoodLogEntries(drafts)).toEqual([]);
+
+    drafts[0].unit = "g";
+    expect(draftsToFoodLogEntries(drafts)).toHaveLength(1);
+
+    drafts[0].quantity = "not a number";
+    expect(draftsToFoodLogEntries(drafts)).toEqual([]);
+  });
+
+  it("builds a default meal title from food names, falling back to Meal", () => {
+    const drafts = foodLogEntriesToDrafts(undefined);
+    expect(defaultMealTitle(drafts)).toBe("Meal");
+    drafts[0].foodName = "Chicken";
+    expect(defaultMealTitle(drafts)).toBe("Chicken");
+  });
+
+  it("summarizes food log entries by name", () => {
+    expect(formatFoodLogSummary(undefined)).toBeNull();
+    expect(
+      formatFoodLogSummary([
+        { foodName: "Chicken", quantity: 1, unit: "cup", calories: null, proteinG: null, carbsG: null, fatG: null },
+        { foodName: "Rice", quantity: 1, unit: "cup", calories: null, proteinG: null, carbsG: null, fatG: null },
+      ]),
+    ).toBe("Chicken, Rice");
   });
 });

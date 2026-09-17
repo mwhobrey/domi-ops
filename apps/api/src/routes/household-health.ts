@@ -12,6 +12,7 @@ import {
   healthMedicationGroups,
   healthMedicationLogs,
   healthMedications,
+  healthPainBodyRegionEnum,
   householdMembers,
   households,
 } from "@domi-ops/db";
@@ -49,14 +50,26 @@ import {
   encryptHealthTextFields,
   enrichHealthEvents,
   enrichHealthMedications,
+  loadExerciseDetailsForEvents,
+  loadFoodLogEntriesForEvents,
+  loadPainLogsForEvents,
   loadVitalsReadingsForEvents,
   normalizeMedSchedule,
   parseMedSchedule,
+  replaceExerciseDetails,
+  replaceFoodLogEntries,
+  replacePainLogs,
   replaceVitalsReadings,
   resolveEventInstant,
   serializeHealthEvent,
   serializeHealthLog,
   serializeHealthMedication,
+  type ExerciseDetailInput,
+  type FoodLogEntryInput,
+  type PainLogInput,
+  type SerializedExerciseDetail,
+  type SerializedFoodLogEntry,
+  type SerializedPainLog,
   type SerializedVitalsReading,
 } from "../lib/health-serialize.js";
 import { buildHealthReports, VITALS_METRICS } from "../lib/health-reports.js";
@@ -101,6 +114,97 @@ function normalizeVitalsReadings(value: unknown): VitalsReadingInput[] | undefin
       continue;
     }
     out.push({ metric, value: rawValue, unit: unit.trim() });
+  }
+  return out;
+}
+
+const PAIN_BODY_REGIONS: readonly string[] = healthPainBodyRegionEnum.enumValues;
+
+/** Drop malformed entries rather than reject the whole request — mirrors vitals readings. */
+function normalizeExerciseDetails(value: unknown): ExerciseDetailInput[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const out: ExerciseDetailInput[] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue;
+    const activity = (entry as { activity?: unknown }).activity;
+    if (typeof activity !== "string" || !activity.trim()) continue;
+    const num = (v: unknown): number | null =>
+      typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null;
+    const int = (v: unknown): number | null =>
+      typeof v === "number" && Number.isInteger(v) && v >= 0 ? v : null;
+    const str = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim() : null);
+    out.push({
+      activity: activity.trim(),
+      durationMinutes: num((entry as { durationMinutes?: unknown }).durationMinutes),
+      intensity: str((entry as { intensity?: unknown }).intensity),
+      distance: num((entry as { distance?: unknown }).distance),
+      distanceUnit: str((entry as { distanceUnit?: unknown }).distanceUnit),
+      sets: int((entry as { sets?: unknown }).sets),
+      reps: int((entry as { reps?: unknown }).reps),
+      caloriesEstimated: num((entry as { caloriesEstimated?: unknown }).caloriesEstimated),
+    });
+  }
+  return out;
+}
+
+/** Drop malformed entries rather than reject the whole request — mirrors vitals readings. */
+function normalizePainLogs(value: unknown): PainLogInput[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const out: PainLogInput[] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue;
+    const bodyRegion = (entry as { bodyRegion?: unknown }).bodyRegion;
+    const severity = (entry as { severity?: unknown }).severity;
+    if (
+      typeof bodyRegion !== "string" ||
+      !PAIN_BODY_REGIONS.includes(bodyRegion) ||
+      typeof severity !== "number" ||
+      !Number.isFinite(severity) ||
+      severity < 1 ||
+      severity > 10
+    ) {
+      continue;
+    }
+    const rawTags = (entry as { qualityTags?: unknown }).qualityTags;
+    const qualityTags = Array.isArray(rawTags)
+      ? rawTags.filter((t): t is string => typeof t === "string" && t.trim().length > 0)
+      : undefined;
+    out.push({ bodyRegion, severity: Math.round(severity), qualityTags });
+  }
+  return out;
+}
+
+/** Drop malformed entries rather than reject the whole request — mirrors vitals readings. */
+function normalizeFoodLogEntries(value: unknown): FoodLogEntryInput[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const out: FoodLogEntryInput[] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue;
+    const foodName = (entry as { foodName?: unknown }).foodName;
+    const quantity = (entry as { quantity?: unknown }).quantity;
+    const unit = (entry as { unit?: unknown }).unit;
+    if (
+      typeof foodName !== "string" ||
+      !foodName.trim() ||
+      typeof quantity !== "number" ||
+      !Number.isFinite(quantity) ||
+      quantity < 0 ||
+      typeof unit !== "string" ||
+      !unit.trim()
+    ) {
+      continue;
+    }
+    const num = (v: unknown): number | null =>
+      typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : null;
+    out.push({
+      foodName: foodName.trim(),
+      quantity,
+      unit: unit.trim(),
+      calories: num((entry as { calories?: unknown }).calories),
+      proteinG: num((entry as { proteinG?: unknown }).proteinG),
+      carbsG: num((entry as { carbsG?: unknown }).carbsG),
+      fatG: num((entry as { fatG?: unknown }).fatG),
+    });
   }
   return out;
 }
@@ -739,6 +843,9 @@ export function householdHealthRoutes(db: Database, env: Env) {
       sharedMemberIds?: string[];
       medicationId?: string;
       readings?: unknown;
+      exerciseDetails?: unknown;
+      painLogs?: unknown;
+      foodLogEntries?: unknown;
     }>();
 
     if (!body.memberId || !body.title?.trim()) {
@@ -812,6 +919,33 @@ export function householdHealthRoutes(db: Database, env: Env) {
         readings = (await loadVitalsReadingsForEvents(db, env, [row.id])).get(row.id) ?? [];
       }
 
+      let exerciseDetails: SerializedExerciseDetail[] | undefined;
+      if (row.type === "exercise") {
+        const exerciseDetailsInput = normalizeExerciseDetails(body.exerciseDetails);
+        if (exerciseDetailsInput) {
+          await replaceExerciseDetails(db, env, row.id, exerciseDetailsInput);
+          exerciseDetails = (await loadExerciseDetailsForEvents(db, env, [row.id])).get(row.id) ?? [];
+        }
+      }
+
+      let painLogs: SerializedPainLog[] | undefined;
+      if (row.type === "pain") {
+        const painLogsInput = normalizePainLogs(body.painLogs);
+        if (painLogsInput) {
+          await replacePainLogs(db, env, row.id, painLogsInput);
+          painLogs = (await loadPainLogsForEvents(db, env, [row.id])).get(row.id) ?? [];
+        }
+      }
+
+      let foodLogEntries: SerializedFoodLogEntry[] | undefined;
+      if (row.type === "food_intake") {
+        const foodLogEntriesInput = normalizeFoodLogEntries(body.foodLogEntries);
+        if (foodLogEntriesInput) {
+          await replaceFoodLogEntries(db, env, row.id, foodLogEntriesInput);
+          foodLogEntries = (await loadFoodLogEntriesForEvents(db, env, [row.id])).get(row.id) ?? [];
+        }
+      }
+
       return c.json(
         {
           event: serializeHealthEvent(row, env, {
@@ -819,6 +953,9 @@ export function householdHealthRoutes(db: Database, env: Env) {
             isOwnedByMe: true,
             canEdit: true,
             readings,
+            exerciseDetails,
+            painLogs,
+            foodLogEntries,
           }, tz),
         },
         201,
@@ -862,6 +999,9 @@ export function householdHealthRoutes(db: Database, env: Env) {
       sharedMemberIds?: string[];
       memberId?: string;
       readings?: unknown;
+      exerciseDetails?: unknown;
+      painLogs?: unknown;
+      foodLogEntries?: unknown;
     }>();
 
     try {
@@ -938,6 +1078,41 @@ export function householdHealthRoutes(db: Database, env: Env) {
         readings = (await loadVitalsReadingsForEvents(db, env, [row.id])).get(row.id) ?? [];
       }
 
+      let exerciseDetails: SerializedExerciseDetail[] | undefined;
+      if (row.type === "exercise") {
+        const exerciseDetailsInput = normalizeExerciseDetails(body.exerciseDetails);
+        if (exerciseDetailsInput !== undefined) {
+          await replaceExerciseDetails(db, env, row.id, exerciseDetailsInput);
+        }
+        exerciseDetails = (await loadExerciseDetailsForEvents(db, env, [row.id])).get(row.id) ?? [];
+      } else if (body.type !== undefined) {
+        // Type changed away from exercise — clear now-incompatible rows so they can't
+        // silently reappear if the type is ever changed back.
+        await replaceExerciseDetails(db, env, row.id, []);
+      }
+
+      let painLogs: SerializedPainLog[] | undefined;
+      if (row.type === "pain") {
+        const painLogsInput = normalizePainLogs(body.painLogs);
+        if (painLogsInput !== undefined) {
+          await replacePainLogs(db, env, row.id, painLogsInput);
+        }
+        painLogs = (await loadPainLogsForEvents(db, env, [row.id])).get(row.id) ?? [];
+      } else if (body.type !== undefined) {
+        await replacePainLogs(db, env, row.id, []);
+      }
+
+      let foodLogEntries: SerializedFoodLogEntry[] | undefined;
+      if (row.type === "food_intake") {
+        const foodLogEntriesInput = normalizeFoodLogEntries(body.foodLogEntries);
+        if (foodLogEntriesInput !== undefined) {
+          await replaceFoodLogEntries(db, env, row.id, foodLogEntriesInput);
+        }
+        foodLogEntries = (await loadFoodLogEntriesForEvents(db, env, [row.id])).get(row.id) ?? [];
+      } else if (body.type !== undefined) {
+        await replaceFoodLogEntries(db, env, row.id, []);
+      }
+
       const shareMap = await loadHealthEventShareMap(
         db,
         row.visibility === "private" ? [row.id] : [],
@@ -948,6 +1123,9 @@ export function householdHealthRoutes(db: Database, env: Env) {
           isOwnedByMe: row.createdByUserId === auth.userId,
           canEdit: true,
           readings,
+          exerciseDetails,
+          painLogs,
+          foodLogEntries,
         }, tz),
       });
     } catch (e) {
