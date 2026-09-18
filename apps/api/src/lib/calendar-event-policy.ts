@@ -104,6 +104,8 @@ export type CalendarEventDto = {
   endTime: string | null;
   timeZone: string | null;
   allDay: boolean;
+  driveBufferBeforeMinutes: number | null;
+  driveBufferAfterMinutes: number | null;
   source: "local" | "google";
   syncStatus: "synced" | "pending" | "conflict" | "error";
   googleEventId: string | null;
@@ -131,6 +133,8 @@ export type CalendarListEvent = {
   endTime: string | null;
   timeZone?: string | null;
   allDay: boolean;
+  driveBufferBeforeMinutes?: number | null;
+  driveBufferAfterMinutes?: number | null;
   source?: "local" | "google" | "school" | "health_event" | "health_med";
   syncStatus?: "synced" | "pending" | "conflict" | "error";
   googleEventId?: string | null;
@@ -157,6 +161,8 @@ export function toEventDto(row: CalendarEventRow, policy: EventPolicy): Calendar
     endTime: row.endTime,
     timeZone: row.timeZone,
     allDay: row.allDay,
+    driveBufferBeforeMinutes: row.driveBufferBeforeMinutes,
+    driveBufferAfterMinutes: row.driveBufferAfterMinutes,
     source: row.source,
     syncStatus: row.syncStatus,
     googleEventId: row.googleEventId,

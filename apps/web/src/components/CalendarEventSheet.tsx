@@ -93,6 +93,8 @@ export function CalendarEventSheet({
   const [categoryKey, setCategoryKey] = useState("");
   const [calendarId, setCalendarId] = useState("");
   const [timeZone, setTimeZone] = useState("");
+  const [driveBufferBefore, setDriveBufferBefore] = useState("");
+  const [driveBufferAfter, setDriveBufferAfter] = useState("");
   const [repeat, setRepeat] = useState<RepeatFreq>("none");
   const [reminderOffsets, setReminderOffsets] = useState<number[]>([]);
   const [categories, setCategories] = useState<EventCategory[]>([]);
@@ -163,6 +165,12 @@ export function CalendarEventSheet({
       setCategoryKey(selected.categoryKey ?? "");
       setCalendarId(selected.calendarId);
       setTimeZone(selected.timeZone ?? "");
+      setDriveBufferBefore(
+        selected.driveBufferBeforeMinutes != null ? String(selected.driveBufferBeforeMinutes) : "",
+      );
+      setDriveBufferAfter(
+        selected.driveBufferAfterMinutes != null ? String(selected.driveBufferAfterMinutes) : "",
+      );
       setRepeat(selected.recurringRuleId ? "weekly" : "none");
       setReminderOffsets(selected.reminderOffsets ?? []);
     } else if (open) {
@@ -183,11 +191,16 @@ export function CalendarEventSheet({
       setCategoryKey("");
       setCalendarId(defaultCalendarId ?? "");
       setTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+      setDriveBufferBefore("");
+      setDriveBufferAfter("");
       setRepeat("none");
       setReminderOffsets([]);
     }
     setError(null);
   }, [selected, open, createDraft, defaultCalendarId]);
+
+  // Buffers don't carry across a recurring series yet, so they're hidden (and sent as null) there.
+  const bufferHidden = allDay || repeat !== "none";
 
   function buildPayload() {
     const payload: Record<string, unknown> = {
@@ -202,6 +215,8 @@ export function CalendarEventSheet({
       categoryKey: categoryKey || undefined,
       calendarId: calendarId || undefined,
       timeZone: timeZone || undefined,
+      driveBufferBeforeMinutes: bufferHidden || !driveBufferBefore ? null : Number(driveBufferBefore),
+      driveBufferAfterMinutes: bufferHidden || !driveBufferAfter ? null : Number(driveBufferAfter),
       reminderOffsets,
     };
     if (!selected && repeat !== "none") {
@@ -408,6 +423,45 @@ export function CalendarEventSheet({
                   />
                 </label>
               </details>
+              {!bufferHidden && (
+                <details className="rounded-[var(--radius-md)] border border-[var(--color-border)]/80 bg-[var(--color-surface-subtle)]/40 px-3 py-2">
+                  <summary className="cursor-pointer text-sm font-medium text-[var(--color-text-muted)] marker:content-none hover:text-[var(--color-text)] [&::-webkit-details-marker]:hidden">
+                    Drive buffer
+                  </summary>
+                  <p className="mt-2 text-xs text-[var(--color-text-muted)]">
+                    Manually-entered travel time to pad around this event in the Schedule Conflict
+                    Checker. Not calculated automatically.
+                  </p>
+                  <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <label className="block space-y-1.5 text-sm">
+                      <span className="font-medium">Minutes before</span>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={1440}
+                        step={1}
+                        value={driveBufferBefore}
+                        onChange={(e) => setDriveBufferBefore(e.target.value)}
+                        disabled={readOnly}
+                        placeholder="0"
+                      />
+                    </label>
+                    <label className="block space-y-1.5 text-sm">
+                      <span className="font-medium">Minutes after</span>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={1440}
+                        step={1}
+                        value={driveBufferAfter}
+                        onChange={(e) => setDriveBufferAfter(e.target.value)}
+                        disabled={readOnly}
+                        placeholder="0"
+                      />
+                    </label>
+                  </div>
+                </details>
+              )}
             </FormSection>
 
             <FormSection title="Calendar & labels">

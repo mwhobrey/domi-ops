@@ -3,6 +3,7 @@
 import { DashboardMonthCalendar } from "./DashboardMonthCalendar";
 import { HouseholdPanel, type SelfStatus, type StatusRow } from "./HouseholdPanel";
 import { OnboardingChecklist, type OnboardingState } from "./OnboardingChecklist";
+import { ScheduleConflictChecker } from "./ScheduleConflictChecker";
 import { TodayAgenda } from "./TodayAgenda";
 import { TodayGlance } from "./TodayGlance";
 import { WeatherPanel } from "./WeatherPanel";
@@ -42,6 +43,7 @@ export function DashboardBoard({
         <TodayAgenda />
         <WeatherPanel compact />
       </div>
+      {calendarModuleEnabled && <ScheduleConflictChecker healthModuleEnabled={healthModuleEnabled} />}
       <HouseholdPanel initial={whosHome} self={self} />
       <DashboardMonthCalendar compact />
     </div>
