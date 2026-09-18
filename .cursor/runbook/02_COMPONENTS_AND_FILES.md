@@ -35,7 +35,7 @@ domi-ops/
 | `src/app/page.tsx` | Landing; server fetches `/health` |
 | `src/app/login/page.tsx` | Google sign-in entry |
 | `src/app/dashboard/page.tsx` | Core dashboard via `apiFetch` |
-| `src/components/DashboardBoard.tsx` | Home layout: sortable section cards (WHO-313); default glance → agenda+weather → household → month |
+| `src/components/DashboardBoard.tsx` | Home layout: sortable section cards (WHO-313); default glance → agenda+weather → conflicts (when calendar is on) → household → month |
 | `src/components/TodayGlance.tsx` | Chores/shopping/school/health glance tiles |
 | `src/components/TodayAgenda.tsx` | Today’s calendar events + overlays |
 | `src/app/calendar/page.tsx` | Calendar UI |

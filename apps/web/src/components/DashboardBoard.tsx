@@ -36,10 +36,14 @@ import { TodayGlance } from "./TodayGlance";
 import { WeatherPanel } from "./WeatherPanel";
 import { Button } from "./ui";
 
+let persistChain: Promise<unknown> = Promise.resolve();
+
 function persist(cards: DashboardCardId[] | null) {
-  apiClient.patch("/api/core/dashboard-layout", { cards }).catch(() => {
-    /* best-effort — next load falls back to the last successful save */
-  });
+  persistChain = persistChain
+    .then(() => apiClient.patch("/api/core/dashboard-layout", { cards }))
+    .catch(() => {
+      /* best-effort — next load falls back to the last successful save */
+    });
 }
 
 export function DashboardBoard({

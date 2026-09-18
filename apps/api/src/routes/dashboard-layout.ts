@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Env } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
 import { householdMembers } from "@domi-ops/db";
@@ -45,7 +45,9 @@ export function dashboardLayoutRoutes(db: Database, env: Env) {
     const [row] = await db
       .select({ dashboardLayout: householdMembers.dashboardLayout })
       .from(householdMembers)
-      .where(eq(householdMembers.id, auth.memberId))
+      .where(
+        and(eq(householdMembers.id, auth.memberId), eq(householdMembers.householdId, auth.householdId)),
+      )
       .limit(1);
 
     return c.json({ cards: parseCards(row?.dashboardLayout ?? null) });
@@ -55,7 +57,11 @@ export function dashboardLayoutRoutes(db: Database, env: Env) {
     const auth = c.get("auth")!;
     let body: { cards?: unknown };
     try {
-      body = await c.req.json();
+      const parsed: unknown = await c.req.json();
+      if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return c.json({ error: "invalid_cards" }, 400);
+      }
+      body = parsed as { cards?: unknown };
     } catch {
       return c.json({ error: "invalid_json" }, 400);
     }
@@ -79,7 +85,9 @@ export function dashboardLayoutRoutes(db: Database, env: Env) {
     await db
       .update(householdMembers)
       .set({ dashboardLayout: stored })
-      .where(eq(householdMembers.id, auth.memberId));
+      .where(
+        and(eq(householdMembers.id, auth.memberId), eq(householdMembers.householdId, auth.householdId)),
+      );
 
     return c.json({ ok: true });
   });
