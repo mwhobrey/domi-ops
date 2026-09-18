@@ -48,6 +48,11 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Changed
 
+- Pain body map (WHO-312): the front chest is now split into left and right so a side can be
+  selected, and the back view has a spine region down the middle. The old single `chest` region
+  is no longer selectable; existing entries keep their "Chest" label in lists and reports but
+  aren't drawn on the map. *(requires `npm run db:migrate`; no other manual steps for
+  self-hosters.)*
 - Health Events tab renamed to Log, with the type dropdown replaced by filter chips that only
   show types you've actually logged, instead of all nine every time (WHO-300).
 - Medication editing consolidated to one place: the Health Medications tab is now the full

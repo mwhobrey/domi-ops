@@ -78,6 +78,10 @@ export const healthPainBodyRegionEnum = pgEnum("health_pain_body_region", [
   "right_hamstring",
   "left_calf",
   "right_calf",
+  // WHO-312 (0070). "chest" above is legacy — kept so old logs stay valid, no longer selectable.
+  "left_chest",
+  "right_chest",
+  "spine",
 ]);
 
 export const medScheduleKindEnum = pgEnum("med_schedule_kind", [

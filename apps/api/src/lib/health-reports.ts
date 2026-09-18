@@ -78,6 +78,9 @@ export const PAIN_BODY_REGION_LABELS: Record<string, string> = {
   right_hamstring: "Right hamstring",
   left_calf: "Left calf",
   right_calf: "Right calf",
+  left_chest: "Left chest",
+  right_chest: "Right chest",
+  spine: "Spine",
 };
 
 export const HEALTH_EVENT_TYPES = Object.keys(HEALTH_EVENT_TYPE_LABELS);

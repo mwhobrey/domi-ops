@@ -275,7 +275,10 @@ export type HealthPainBodyRegion =
   | "left_hamstring"
   | "right_hamstring"
   | "left_calf"
-  | "right_calf";
+  | "right_calf"
+  | "left_chest"
+  | "right_chest"
+  | "spine";
 
 export const PAIN_BODY_REGION_LABELS: Record<HealthPainBodyRegion, string> = {
   front_head: "Top of head",
@@ -309,6 +312,9 @@ export const PAIN_BODY_REGION_LABELS: Record<HealthPainBodyRegion, string> = {
   right_hamstring: "Right hamstring",
   left_calf: "Left calf",
   right_calf: "Right calf",
+  left_chest: "Left chest",
+  right_chest: "Right chest",
+  spine: "Spine",
 };
 
 export type PainLogDraft = {
