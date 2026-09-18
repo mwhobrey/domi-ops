@@ -13,10 +13,12 @@ import {
   intervalForSpan,
   type CheckWindowInput,
 } from "./schedule-conflict-math.js";
+import { MAX_DRIVE_BUFFER_MINUTES, ScheduleConflictInputError } from "./schedule-conflict-input.js";
 
-/** Query-range padding around the checked window so a same-day buffer never gets excluded by
- * the SQL fetch. The actual red/yellow decision always uses each row's true buffer values. */
-const SCHEDULE_CONFLICT_QUERY_PAD_DAYS = 1;
+/** Query-range padding around the checked window, derived from the largest accepted buffer (plus
+ * one day for timezone date skew) so the SQL fetch never excludes an event a buffer could reach.
+ * The actual red/yellow decision always uses each row's true buffer values. */
+const SCHEDULE_CONFLICT_QUERY_PAD_DAYS = Math.ceil(MAX_DRIVE_BUFFER_MINUTES / (24 * 60)) + 1;
 
 /** For mode "at", an exact-instant match against dose times is almost always empty — widen the
  * meds lookup to a tolerance window so "what's due around now" reads as useful. Range checks
@@ -74,6 +76,9 @@ export async function computeScheduleConflicts(
   const resolvedTimeZone = input.timeZone || householdTimeZone;
 
   const checkInterval = intervalForCheckWindow(input, householdTimeZone);
+  if (checkInterval.end < checkInterval.start) {
+    throw new ScheduleConflictInputError("The end of the range must not be before its start.");
+  }
 
   const { from, to } = checkWindowDateBounds(input);
   const paddedFrom = addDaysIso(from, -SCHEDULE_CONFLICT_QUERY_PAD_DAYS);

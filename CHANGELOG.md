@@ -40,8 +40,9 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
   are flagged red; events whose own manually-entered drive-time buffer encroaches on the
   checked window are flagged yellow; meds due in the window are shown as informational only.
   New optional per-event `driveBufferBeforeMinutes`/`driveBufferAfterMinutes` fields (manual
-  entry — no maps/geocoding integration) are editable from the event sheet's "Drive buffer"
-  section and used automatically when that event is checked. New `GET
+  entry — no maps/geocoding integration, whole minutes from 0 to 1440) are editable from the
+  event sheet's "Drive buffer" section and used automatically when that event is checked.
+  Buffers aren't supported on recurring events yet. New `GET
   /api/schedule-conflicts/check` endpoint. *(requires `npm run db:migrate`; no other manual
   steps for self-hosters.)*
 

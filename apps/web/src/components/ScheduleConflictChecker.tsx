@@ -62,8 +62,8 @@ function formatEventWhen(ev: ScheduleConflictEvent): string {
   return ev.endTime ? `${time(ev.startTime)} – ${time(ev.endTime)}` : time(ev.startTime);
 }
 
-function formatDoseTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+function formatDoseTime(iso: string, timeZone: string): string {
+  return new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", timeZone });
 }
 
 export function ScheduleConflictChecker({ healthModuleEnabled = false }: { healthModuleEnabled?: boolean }) {
@@ -89,6 +89,8 @@ export function ScheduleConflictChecker({ healthModuleEnabled = false }: { healt
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setResult(null);
+    setHasChecked(false);
     try {
       const params = new URLSearchParams({ mode });
       if (mode === "at") {
@@ -201,11 +203,11 @@ export function ScheduleConflictChecker({ healthModuleEnabled = false }: { healt
             <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="block space-y-1.5 text-sm">
                 <span className="font-medium">Minutes before</span>
-                <Input type="number" min={0} value={bufferBefore} onChange={(e) => setBufferBefore(e.target.value)} placeholder="0" />
+                <Input type="number" min={0} max={1440} step={1} value={bufferBefore} onChange={(e) => setBufferBefore(e.target.value)} placeholder="0" />
               </label>
               <label className="block space-y-1.5 text-sm">
                 <span className="font-medium">Minutes after</span>
-                <Input type="number" min={0} value={bufferAfter} onChange={(e) => setBufferAfter(e.target.value)} placeholder="0" />
+                <Input type="number" min={0} max={1440} step={1} value={bufferAfter} onChange={(e) => setBufferAfter(e.target.value)} placeholder="0" />
               </label>
             </div>
           </details>
@@ -297,7 +299,7 @@ export function ScheduleConflictChecker({ healthModuleEnabled = false }: { healt
                       >
                         <span className="truncate font-medium">{med.title}</span>
                         <span className="shrink-0 text-xs text-[var(--color-text-muted)]">
-                          {formatDoseTime(med.scheduledAt)}
+                          {formatDoseTime(med.scheduledAt, result.checkedWindow.timeZone)}
                         </span>
                       </Link>
                     </li>

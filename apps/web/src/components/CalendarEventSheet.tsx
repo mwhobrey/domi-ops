@@ -199,6 +199,9 @@ export function CalendarEventSheet({
     setError(null);
   }, [selected, open, createDraft, defaultCalendarId]);
 
+  // Buffers don't carry across a recurring series yet, so they're hidden (and sent as null) there.
+  const bufferHidden = allDay || repeat !== "none";
+
   function buildPayload() {
     const payload: Record<string, unknown> = {
       title,
@@ -212,8 +215,8 @@ export function CalendarEventSheet({
       categoryKey: categoryKey || undefined,
       calendarId: calendarId || undefined,
       timeZone: timeZone || undefined,
-      driveBufferBeforeMinutes: allDay || !driveBufferBefore ? null : Number(driveBufferBefore),
-      driveBufferAfterMinutes: allDay || !driveBufferAfter ? null : Number(driveBufferAfter),
+      driveBufferBeforeMinutes: bufferHidden || !driveBufferBefore ? null : Number(driveBufferBefore),
+      driveBufferAfterMinutes: bufferHidden || !driveBufferAfter ? null : Number(driveBufferAfter),
       reminderOffsets,
     };
     if (!selected && repeat !== "none") {
@@ -420,7 +423,7 @@ export function CalendarEventSheet({
                   />
                 </label>
               </details>
-              {!allDay && (
+              {!bufferHidden && (
                 <details className="rounded-[var(--radius-md)] border border-[var(--color-border)]/80 bg-[var(--color-surface-subtle)]/40 px-3 py-2">
                   <summary className="cursor-pointer text-sm font-medium text-[var(--color-text-muted)] marker:content-none hover:text-[var(--color-text)] [&::-webkit-details-marker]:hidden">
                     Drive buffer
@@ -435,6 +438,8 @@ export function CalendarEventSheet({
                       <Input
                         type="number"
                         min={0}
+                        max={1440}
+                        step={1}
                         value={driveBufferBefore}
                         onChange={(e) => setDriveBufferBefore(e.target.value)}
                         disabled={readOnly}
@@ -446,6 +451,8 @@ export function CalendarEventSheet({
                       <Input
                         type="number"
                         min={0}
+                        max={1440}
+                        step={1}
                         value={driveBufferAfter}
                         onChange={(e) => setDriveBufferAfter(e.target.value)}
                         disabled={readOnly}

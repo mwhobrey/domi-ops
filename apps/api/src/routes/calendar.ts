@@ -69,7 +69,21 @@ import {
   replaceEventReminders,
 } from "../lib/calendar-event-reminders.js";
 import { buildRrule } from "../lib/calendar-repeat.js";
+import {
+  MAX_DRIVE_BUFFER_MINUTES,
+  parseDriveBufferMinutes,
+} from "../lib/schedule-conflict-input.js";
 import type { Context } from "hono";
+
+function driveBufferError(body: {
+  driveBufferBeforeMinutes?: unknown;
+  driveBufferAfterMinutes?: unknown;
+}): string | null {
+  const ok =
+    parseDriveBufferMinutes(body.driveBufferBeforeMinutes).ok &&
+    parseDriveBufferMinutes(body.driveBufferAfterMinutes).ok;
+  return ok ? null : `Drive buffers must be whole minutes from 0 to ${MAX_DRIVE_BUFFER_MINUTES}.`;
+}
 
 function calendarTokenRevokedResponse(c: Context, e: unknown): Response | null {
   if (e instanceof CalendarCredentialsError) {
@@ -840,6 +854,15 @@ export function calendarRoutes(db: Database, env: Env) {
     const repeatRule =
       body.repeatRule ?? (body.repeatWeekly && allDay ? { freq: "weekly" as const } : null);
 
+    const bufferError = driveBufferError(body);
+    if (bufferError) return c.json({ error: "invalid_drive_buffer", message: bufferError }, 400);
+    if (repeatRule?.freq && (body.driveBufferBeforeMinutes != null || body.driveBufferAfterMinutes != null)) {
+      return c.json(
+        { error: "invalid_drive_buffer", message: "Drive buffers aren't supported on recurring events yet." },
+        400,
+      );
+    }
+
     if (repeatRule?.freq) {
       const freq = repeatRule.freq;
       const offsets = normalizeReminderOffsets(body.reminderOffsets);
@@ -882,8 +905,6 @@ export function calendarRoutes(db: Database, env: Env) {
           allDay,
           color: eventColor,
           timeZone: body.timeZone,
-          driveBufferBeforeMinutes: body.driveBufferBeforeMinutes ?? null,
-          driveBufferAfterMinutes: body.driveBufferAfterMinutes ?? null,
           source: "local",
           recurringRuleId: rule!.id,
           createdByUserId: auth.userId,
@@ -1003,6 +1024,11 @@ export function calendarRoutes(db: Database, env: Env) {
       );
     }
 
+    const patchBufferError = driveBufferError(body);
+    if (patchBufferError) {
+      return c.json({ error: "invalid_drive_buffer", message: patchBufferError }, 400);
+    }
+
     const scheduleChange = isSchedulePatch(body, existing);
     const pushAfter =
       scheduleChange && policy.pushable && policy.linkedCalendarId && policy.connectionId;
@@ -1105,6 +1131,8 @@ export function calendarRoutes(db: Database, env: Env) {
         endTime: existing.endTime,
         timeZone: existing.timeZone,
         allDay: existing.allDay,
+        driveBufferBeforeMinutes: existing.driveBufferBeforeMinutes,
+        driveBufferAfterMinutes: existing.driveBufferAfterMinutes,
         source: "local",
         syncStatus: "synced",
         createdByUserId: auth.userId,
