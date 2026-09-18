@@ -57,7 +57,9 @@ Typography: **Inter** via `next/font` on `layout.tsx`.
 
 ## Dashboard widgets
 
-Layout (top → bottom): **Today at a glance** → **Today’s schedule** + **compact weather** (2-col `md+`) → **Household** → **Month** calendar (secondary).
+Default layout (top → bottom): **Today at a glance** → **Today’s schedule** + **compact weather** (2-col `md+`) → **Schedule conflict checker** (when calendar is on) → **Household** → **Month** calendar (secondary).
+
+Each member can **Customize** the dashboard and drag section cards into a different order. Saved per member (`GET/PATCH /api/core/dashboard-layout`); `null` means this default. Tile *contents* inside Today at a glance are still configured on Profile (`GlanceConfigCard`).
 
 - **Today at a glance:** actionable tiles only — Chores, Shopping, School (module), Health (module). Drive is not on the dashboard glance. Grid: 2 cols `sm+`, up to 4 at `xl`.
 - **Today’s schedule:** `TodayAgenda` — today’s calendar events + overlays; deep-links to `/calendar?event=` or overlay `deepLink`.

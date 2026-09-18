@@ -23,7 +23,7 @@ When the user asks for a git commit, or you are about to commit on their behalf:
 
 Skip runbook updates for typo-only or comment-only changes with zero behavioral impact.
 
-## Linear (WHO team)
+## Linear (WHO team — Domi Ops)
 
 Before **non-trivial** work (unless the user gave an issue id like `WHO-6`):
 

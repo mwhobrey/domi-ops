@@ -12,6 +12,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 - Browser + Next.js server Sentry for `apps/web` (`@sentry/nextjs`, WHO-292) — reuses
   runtime `SENTRY_DSN` on the web container; `error.tsx` / `global-error.tsx` report to Sentry.
+- Customizable dashboard layout (WHO-313): each member can drag the section cards
+  (glance, schedule, weather, conflict checker, household, month calendar) into their
+  own order from **Customize** on `/dashboard`. Saved per member; default order is
+  unchanged until they rearrange. *(requires `npm run db:migrate`.)*
 - Capacitor 8 store shell (`apps/mobile`, `appId: app.domiops`) with Bitwarden-style server URL
   picker, `/api/healthz` probe (CapacitorHttp), and remote WebView of live `apps/web` (ADR 005 /
   WHO-287). Native Google + Sign in with Apple idToken exchange, APNs/FCM push (FCM HTTP v1),
