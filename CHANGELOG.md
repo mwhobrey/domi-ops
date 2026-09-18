@@ -35,6 +35,15 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
   `BodyPainMap` diagram in read-only mode) and severity-over-time per region. Both are
   selectable from the Health reports picker and support the same print/CSV/JSON/YAML export
   as every other health report.
+- Schedule Conflict Checker (WHO-308): a dashboard widget that checks a date/time (or range)
+  for overlapping calendar events and medication doses due in that window. Overlapping events
+  are flagged red; events whose own manually-entered drive-time buffer encroaches on the
+  checked window are flagged yellow; meds due in the window are shown as informational only.
+  New optional per-event `driveBufferBeforeMinutes`/`driveBufferAfterMinutes` fields (manual
+  entry — no maps/geocoding integration) are editable from the event sheet's "Drive buffer"
+  section and used automatically when that event is checked. New `GET
+  /api/schedule-conflicts/check` endpoint. *(requires `npm run db:migrate`; no other manual
+  steps for self-hosters.)*
 
 ### Changed
 

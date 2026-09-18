@@ -26,7 +26,7 @@ import {
   materializeRecurringForHousehold,
   normalizeCategorySourceKey,
 } from "@domi-ops/calendar-sync";
-import { and, asc, eq, gte, ilike, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 import {
@@ -57,7 +57,7 @@ import {
   setHouseholdDefaultCalendar,
 } from "../lib/calendar-lanes.js";
 import { enrichEventDto } from "../lib/calendar-event-enrich.js";
-import type { CalendarListEvent } from "../lib/calendar-event-policy.js";
+import { listNativeCalendarEvents } from "../lib/calendar-native-events.js";
 import {
   buildAllCalendarOverlays,
   loadCalendarOverlayPrefs,
@@ -388,57 +388,7 @@ export function calendarRoutes(db: Database, env: Env) {
       new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10);
     const q = c.req.query("q")?.trim();
 
-    const visible = await listVisibleCalendars(db, auth.householdId, auth.userId);
-    const visibleIds = visible.map((cal) => cal.id);
-
-    let nativeList: CalendarListEvent[] = [];
-    if (visibleIds.length > 0) {
-      const conditions = [
-        eq(calendarEvents.householdId, auth.householdId),
-        inArray(calendarEvents.calendarId, visibleIds),
-        lte(calendarEvents.startDate, to),
-        gte(
-          sql`COALESCE(${calendarEvents.endDate}, ${calendarEvents.startDate})`,
-          from,
-        ),
-      ];
-      if (q) conditions.push(ilike(calendarEvents.title, `%${q}%`));
-
-      const rows = await db
-        .select()
-        .from(calendarEvents)
-        .where(and(...conditions))
-        .orderBy(asc(calendarEvents.startDate), asc(calendarEvents.startTime));
-
-      const policyCtx = await loadEventPolicyContext(db, auth.householdId, auth.userId);
-      const enriched = await Promise.all(
-        rows.map((row) =>
-          enrichEventDto(db, auth.householdId, row, computeEventPolicy(row, policyCtx)),
-        ),
-      );
-      nativeList = enriched.map((e) => ({
-        id: e.id,
-        calendarId: e.calendarId,
-        title: e.title,
-        description: e.description,
-        categoryKey: e.categoryKey,
-        categoryLabel: e.categoryLabel,
-        color: e.color,
-        startDate: e.startDate,
-        endDate: e.endDate,
-        startTime: e.startTime,
-        endTime: e.endTime,
-        timeZone: e.timeZone,
-        allDay: e.allDay,
-        source: e.source,
-        syncStatus: e.syncStatus,
-        googleEventId: e.googleEventId,
-        recurringRuleId: e.recurringRuleId,
-        editable: e.editable,
-        pushable: e.pushable,
-        reminderOffsets: e.reminderOffsets,
-      }));
-    }
+    const nativeList = await listNativeCalendarEvents(db, auth, from, to, { q });
 
     const prefs = await loadCalendarOverlayPrefs(db, auth.userId);
     const [schoolOn, healthOn] = await Promise.all([
@@ -862,6 +812,8 @@ export function calendarRoutes(db: Database, env: Env) {
       color?: string;
       categoryKey?: string;
       timeZone?: string;
+      driveBufferBeforeMinutes?: number | null;
+      driveBufferAfterMinutes?: number | null;
       calendarId?: string;
       repeatWeekly?: boolean;
       repeatRule?: { freq: "daily" | "weekly" | "monthly"; interval?: number; until?: string; count?: number };
@@ -930,6 +882,8 @@ export function calendarRoutes(db: Database, env: Env) {
           allDay,
           color: eventColor,
           timeZone: body.timeZone,
+          driveBufferBeforeMinutes: body.driveBufferBeforeMinutes ?? null,
+          driveBufferAfterMinutes: body.driveBufferAfterMinutes ?? null,
           source: "local",
           recurringRuleId: rule!.id,
           createdByUserId: auth.userId,
@@ -964,6 +918,8 @@ export function calendarRoutes(db: Database, env: Env) {
         allDay,
         color: eventColor,
         timeZone: body.timeZone,
+        driveBufferBeforeMinutes: body.driveBufferBeforeMinutes ?? null,
+        driveBufferAfterMinutes: body.driveBufferAfterMinutes ?? null,
         source: "local",
         createdByUserId: auth.userId,
       })
@@ -1027,6 +983,8 @@ export function calendarRoutes(db: Database, env: Env) {
       categoryKey?: string | null;
       calendarId?: string;
       timeZone?: string | null;
+      driveBufferBeforeMinutes?: number | null;
+      driveBufferAfterMinutes?: number | null;
       reminderOffsets?: number[];
     }>();
     const [existing] = await db

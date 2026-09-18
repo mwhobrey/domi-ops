@@ -9,6 +9,7 @@ import { createAuthMiddleware, type AppVariables } from "./middleware/auth.js";
 import { createTenantMiddleware } from "./middleware/tenant.js";
 import { whomeSessionRoutes } from "./routes/auth.js";
 import { calendarRoutes } from "./routes/calendar.js";
+import { scheduleConflictRoutes } from "./routes/schedule-conflicts.js";
 import { dashboardRoutes } from "./routes/dashboard.js";
 import { weatherRoutes } from "./routes/weather.js";
 import { noticesRoutes } from "./routes/notices.js";
@@ -149,6 +150,7 @@ app.on(["POST", "GET"], "/auth/*", async (c) => {
 
 app.route("/api", healthRoutes(db));
 app.route("/api/calendar", calendarRoutes(db, env));
+app.route("/api/schedule-conflicts", scheduleConflictRoutes(db, env));
 // Setup must mount before the routes below — they all apply requireAuth to every /api/core/*.
 app.route("/api/core/setup", setupRoutes(db, env));
 app.route("/api/core", dashboardRoutes(db, env));

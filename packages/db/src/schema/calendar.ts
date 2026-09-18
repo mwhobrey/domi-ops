@@ -84,6 +84,8 @@ export const calendarEvents = pgTable("calendar_events", {
   endTime: time("end_time"),
   timeZone: varchar("time_zone", { length: 64 }),
   allDay: boolean("all_day").notNull().default(false),
+  driveBufferBeforeMinutes: integer("drive_buffer_before_minutes"),
+  driveBufferAfterMinutes: integer("drive_buffer_after_minutes"),
   source: eventSourceEnum("source").notNull().default("local"),
   syncStatus: syncStatusEnum("sync_status").notNull().default("synced"),
   recurringRuleId: uuid("recurring_rule_id"),

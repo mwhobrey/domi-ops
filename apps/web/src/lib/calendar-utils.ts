@@ -18,6 +18,8 @@ export interface CalendarEventView {
   categoryKey?: string | null;
   categoryLabel?: string | null;
   timeZone?: string | null;
+  driveBufferBeforeMinutes?: number | null;
+  driveBufferAfterMinutes?: number | null;
   calendarId: string;
   source?: CalendarEventSource;
   googleEventId?: string | null;

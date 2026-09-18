@@ -18,6 +18,8 @@ function row(
     endTime: "10:00",
     timeZone: null,
     allDay: false,
+    driveBufferBeforeMinutes: null,
+    driveBufferAfterMinutes: null,
     source: "google",
     syncStatus: "synced",
     recurringRuleId: null,
