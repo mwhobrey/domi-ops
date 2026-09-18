@@ -35,7 +35,7 @@ domi-ops/
 | `src/app/page.tsx` | Landing; server fetches `/health` |
 | `src/app/login/page.tsx` | Google sign-in entry |
 | `src/app/dashboard/page.tsx` | Core dashboard via `apiFetch` |
-| `src/components/DashboardBoard.tsx` | Home layout: glance → agenda+weather → household → month |
+| `src/components/DashboardBoard.tsx` | Home layout: sortable section cards (WHO-313); default glance → agenda+weather → household → month |
 | `src/components/TodayGlance.tsx` | Chores/shopping/school/health glance tiles |
 | `src/components/TodayAgenda.tsx` | Today’s calendar events + overlays |
 | `src/app/calendar/page.tsx` | Calendar UI |
@@ -131,6 +131,8 @@ Web companions: `apps/web/src/lib/native-shell.ts`, `native-auth.ts`, `revenueca
 | `src/lib/expense-budget-access.ts` | Personal budget view/write + shares (WHO-237) |
 | `src/lib/expenses.ts` | Expense serialize, category spend, budget summaries, reports |
 | `src/routes/dashboard.ts` | `/dashboard`, home-status PATCH |
+| `src/routes/glance-config.ts` | `GET/PATCH /api/core/glance-config` — per-member Today-at-a-glance tile order |
+| `src/routes/dashboard-layout.ts` | `GET/PATCH /api/core/dashboard-layout` — per-member dashboard section-card order (WHO-313) |
 | `src/routes/weather.ts` | `/weather`, `/weather/geocode` |
 | `src/routes/notices.ts` | Household notice board + in-app `/notifications` |
 | `src/routes/push.ts` | VAPID + `POST /push/native-subscribe` (Capacitor APNs/FCM tokens) |

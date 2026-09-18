@@ -140,6 +140,10 @@ export const householdMembers = pgTable(
      *  currently-available tiles, sorted by urgency) — this is per-member, not per-household,
      *  since different people in the same household reasonably care about different things. */
     glanceConfig: text("glance_config"),
+    /** Dashboard section-card order (DashboardBoard.tsx) — JSON string array of card ids
+     *  (glance, agenda, weather, conflicts, household, month). Null = default order.
+     *  Unknown ids are dropped and newly added cards append; per-member, same as glance_config. */
+    dashboardLayout: text("dashboard_layout"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [uniqueIndex("household_members_household_user").on(t.householdId, t.userId)],

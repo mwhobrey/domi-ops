@@ -1,7 +1,8 @@
 # Linear workspace — Domi Ops (WHO)
 
-**Team:** [Whome](https://linear.app/mikewhob-whome/team/WHO) · key `WHO`  
-**MCP:** Cursor plugin `user-linear-whome` (`set_active_team` → `WHO`)
+**Team:** [Domi Ops](https://linear.app/mikewhob-whome/team/WHO) · key `WHO` (display name renamed; key kept)  
+**Workspace URL slug:** `mikewhob-whome` — Linear URLs still use this. Changing it is Settings → Workspace, not MCP.  
+**MCP:** Cursor plugin `user-linear-whome` (`set_active_team` → `WHO`; always pass `team: "WHO"` — the MCP default env name `WHOME` is leftover and does not match the team key)
 
 ## Workflow states
 
@@ -16,7 +17,7 @@ Configured on the WHO team (issue workflow):
 | Canceled | canceled | Declined |
 | Duplicate | duplicate | Duplicate of another issue |
 
-**Recommended (manual in Linear):** add **In Review** between In Progress and Done (Settings → Teams → Whome → Issue statuses). The MCP cannot create workflow states.
+**Recommended (manual in Linear):** add **In Review** between In Progress and Done (Settings → Teams → Domi Ops → Issue statuses). The MCP cannot create workflow states.
 
 ## Label taxonomy
 
@@ -72,6 +73,7 @@ Workspace-level **Bug** / **Feature** may exist; attach in Linear UI if needed. 
 | M1 — Weather reliability | [WHO-5](https://linear.app/mikewhob-whome/issue/WHO-5) |
 | M2 — Weather in day schedule | [WHO-12](https://linear.app/mikewhob-whome/issue/WHO-12) |
 | M3 — At-a-glance density | [WHO-13](https://linear.app/mikewhob-whome/issue/WHO-13) |
+| M4 — Customizable layout | [WHO-313](https://linear.app/mikewhob-whome/issue/WHO-313) |
 
 ### [Notifications](https://linear.app/mikewhob-whome/project/notifications-9c965c13ece0)
 
@@ -84,6 +86,19 @@ Workspace-level **Bug** / **Feature** may exist; attach in Linear UI if needed. 
 | M4 — Profile notification UX | [WHO-141](https://linear.app/mikewhob-whome/issue/WHO-141) |
 | M5 — Targeting & cadence | [WHO-143](https://linear.app/mikewhob-whome/issue/WHO-143), [WHO-144](https://linear.app/mikewhob-whome/issue/WHO-144) |
 | M6 — Deferred module push | [WHO-148](https://linear.app/mikewhob-whome/issue/WHO-148)–[WHO-151](https://linear.app/mikewhob-whome/issue/WHO-151) |
+
+### [Health Module Expansion](https://linear.app/mikewhob-whome/project/health-module-expansion-de3722c8b08b)
+
+Exercise / pain / nutrition tracking + Health IA (Today, Log, Trends). Spike: `docs/HEALTH_MODULE_EXPANSION_SPIKE.md`. Phases 0–3 are **Done**.
+
+| Milestone | Focus |
+|-----------|--------|
+| Phase 0 — Quick wins | Today/Log friction, including WHO-293 share-wipe fix |
+| Phase 1 — Exercise & pain | Schema, BodyPainMap, Log tab, report adapters |
+| Phase 2 — IA consolidation | Medications merge, Trends tab |
+| Phase 3 — Nutrition | `food_intake`, Log meal, nutrition report |
+
+Related (separate project): [Health — care team & provider contacts](https://linear.app/mikewhob-whome/project/health-care-team-and-provider-contacts-54c96fc5dfd8) (still backlog).
 
 ### [Native / store](https://linear.app/mikewhob-whome/project/native-store-fbc6e517c5f3)
 

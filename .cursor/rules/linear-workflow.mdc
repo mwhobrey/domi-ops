@@ -3,10 +3,10 @@ description: Linear (WHO team) issue lifecycle — find or create, commit with I
 alwaysApply: true
 ---
 
-# Linear workflow (whome / WHO)
+# Linear workflow (Domi Ops / WHO)
 
 **MCP server:** `user-linear-whome`  
-**Team:** `WHO` (Whome) — call `set_active_team` with `WHO` if tools fail with no team context.  
+**Team:** `WHO` (Domi Ops) — call `set_active_team` with `WHO` if tools fail with no team context. Always pass `team: "WHO"` on queries; the MCP default env name `WHOME` is leftover.  
 **Backlog doc:** `docs/LINEAR_BACKLOG.md` · **Workspace map:** `docs/LINEAR.md`
 
 ## Before starting work

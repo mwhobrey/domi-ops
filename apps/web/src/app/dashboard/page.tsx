@@ -17,9 +17,10 @@ export default async function DashboardPage() {
   let role: string | null = null;
   let onboarding: OnboardingState | null = null;
   let glanceConfig: string[] | null = null;
+  let dashboardLayout: string[] | null = null;
 
   try {
-    const [dashboard, profile, session, onboardingRes, glanceRes] = await Promise.all([
+    const [dashboard, profile, session, onboardingRes, glanceRes, layoutRes] = await Promise.all([
       apiFetch<{ whosHome: StatusRow[] }>("/api/core/dashboard"),
       apiFetch<{
         shownLabel: string;
@@ -37,6 +38,7 @@ export default async function DashboardPage() {
       })),
       apiFetch<OnboardingState>("/api/core/onboarding").catch(() => null),
       apiFetch<{ tiles: string[] | null }>("/api/core/glance-config").catch(() => ({ tiles: null })),
+      apiFetch<{ cards: string[] | null }>("/api/core/dashboard-layout").catch(() => ({ cards: null })),
     ]);
     whosHome = dashboard.whosHome;
     schoolModuleEnabled = (session.modulesEnabled ?? []).includes("school");
@@ -46,6 +48,7 @@ export default async function DashboardPage() {
     role = session.user?.role ?? null;
     onboarding = onboardingRes;
     glanceConfig = glanceRes.tiles;
+    dashboardLayout = layoutRes.cards;
     if (profile.homeStatusId) {
       self = {
         homeStatusId: profile.homeStatusId,
@@ -76,6 +79,7 @@ export default async function DashboardPage() {
           role={role}
           onboarding={onboarding}
           glanceConfig={glanceConfig}
+          initialLayout={dashboardLayout}
         />
       )}
     </AppShell>
