@@ -9,10 +9,31 @@ export const DASHBOARD_CARD_IDS = [
 
 export type DashboardCardId = (typeof DASHBOARD_CARD_IDS)[number];
 
+export const DASHBOARD_COLUMN_COUNTS = [1, 2, 3] as const;
+export type DashboardColumnCount = (typeof DASHBOARD_COLUMN_COUNTS)[number];
+
+export const DASHBOARD_SPANS = [1, 2, 3] as const;
+export type DashboardSpan = (typeof DASHBOARD_SPANS)[number];
+
+export type DashboardLayoutState = {
+  columns: DashboardColumnCount;
+  cards: DashboardCardId[];
+  spans: Partial<Record<DashboardCardId, DashboardSpan>>;
+};
+
+export type DashboardLayoutSaved = {
+  cards: string[] | null;
+  columns?: unknown;
+  spans?: unknown;
+};
+
 const KNOWN = new Set<string>(DASHBOARD_CARD_IDS);
 
 export const DEFAULT_DASHBOARD_LAYOUT: DashboardCardId[] = [...DASHBOARD_CARD_IDS];
 
+export const DEFAULT_DASHBOARD_COLUMNS: DashboardColumnCount = 2;
+
+/** Cards that default to one column so they can sit side by side in a 2+ col grid. */
 export const HALF_SPAN_CARD_IDS = new Set<DashboardCardId>(["agenda", "weather"]);
 
 export const DASHBOARD_CARD_LABELS: Record<DashboardCardId, string> = {
@@ -24,8 +45,18 @@ export const DASHBOARD_CARD_LABELS: Record<DashboardCardId, string> = {
   month: "Month calendar",
 };
 
+export const DASHBOARD_GRID_GAP_PX = 24;
+
 export function isDashboardCardId(value: string): value is DashboardCardId {
   return KNOWN.has(value);
+}
+
+export function isDashboardColumnCount(value: unknown): value is DashboardColumnCount {
+  return value === 1 || value === 2 || value === 3;
+}
+
+export function isDashboardSpan(value: unknown): value is DashboardSpan {
+  return value === 1 || value === 2 || value === 3;
 }
 
 /** Drop unknown ids, keep first occurrence, append any missing known ids in default order. */
@@ -47,9 +78,36 @@ export function mergeDashboardLayout(
   return out;
 }
 
-export function hydrateDashboardLayout(saved: string[] | null): DashboardCardId[] {
-  if (!saved || saved.length === 0) return [...DEFAULT_DASHBOARD_LAYOUT];
-  return mergeDashboardLayout(saved);
+export function parseDashboardSpans(raw: unknown): Partial<Record<DashboardCardId, DashboardSpan>> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Partial<Record<DashboardCardId, DashboardSpan>> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!isDashboardCardId(key) || !isDashboardSpan(value)) continue;
+    out[key] = value;
+  }
+  return out;
+}
+
+export function hydrateDashboardLayout(saved: DashboardLayoutSaved | string[] | null): DashboardLayoutState {
+  if (Array.isArray(saved)) {
+    return {
+      columns: DEFAULT_DASHBOARD_COLUMNS,
+      cards: saved.length === 0 ? [...DEFAULT_DASHBOARD_LAYOUT] : mergeDashboardLayout(saved),
+      spans: {},
+    };
+  }
+  if (!saved || !saved.cards || saved.cards.length === 0) {
+    return {
+      columns: isDashboardColumnCount(saved?.columns) ? saved.columns : DEFAULT_DASHBOARD_COLUMNS,
+      cards: [...DEFAULT_DASHBOARD_LAYOUT],
+      spans: parseDashboardSpans(saved?.spans),
+    };
+  }
+  return {
+    columns: isDashboardColumnCount(saved.columns) ? saved.columns : DEFAULT_DASHBOARD_COLUMNS,
+    cards: mergeDashboardLayout(saved.cards),
+    spans: parseDashboardSpans(saved.spans),
+  };
 }
 
 export function availableDashboardCards(opts: { calendarModuleEnabled: boolean }): Set<DashboardCardId> {
@@ -78,22 +136,31 @@ export function applyVisibleReorder(
   return full.map((id) => (visSet.has(id) ? vis.shift()! : id));
 }
 
-/** Consecutive half-span cards pair on md+. An orphan half stretches full-width. */
-export function dashboardCardSpan(
+export function defaultDashboardSpan(id: DashboardCardId, columns: DashboardColumnCount): DashboardSpan {
+  if (HALF_SPAN_CARD_IDS.has(id)) return 1;
+  return columns;
+}
+
+/** Stored span if set, otherwise agenda/weather=1 and everyone else=full row. Clamped to columns. */
+export function resolveDashboardSpan(
   id: DashboardCardId,
-  visible: readonly DashboardCardId[],
-): "full" | "half" {
-  if (!HALF_SPAN_CARD_IDS.has(id)) return "full";
-  const i = visible.indexOf(id);
-  if (i < 0) return "full";
-  const prev = i > 0 ? visible[i - 1] : undefined;
-  const next = visible[i + 1];
-  const prevHalf = prev !== undefined && HALF_SPAN_CARD_IDS.has(prev);
-  const nextHalf = next !== undefined && HALF_SPAN_CARD_IDS.has(next);
-  if (prevHalf) {
-    const prevPrev = i > 1 ? visible[i - 2] : undefined;
-    const prevPrevHalf = prevPrev !== undefined && HALF_SPAN_CARD_IDS.has(prevPrev);
-    return prevPrevHalf ? "full" : "half";
-  }
-  return nextHalf ? "half" : "full";
+  columns: DashboardColumnCount,
+  spans: Partial<Record<DashboardCardId, DashboardSpan>>,
+): DashboardSpan {
+  const stored = spans[id];
+  const raw = stored ?? defaultDashboardSpan(id, columns);
+  return Math.min(raw, columns) as DashboardSpan;
+}
+
+export function spanFromResize(
+  pointerX: number,
+  itemLeft: number,
+  gridWidth: number,
+  columns: DashboardColumnCount,
+  gapPx: number = DASHBOARD_GRID_GAP_PX,
+): DashboardSpan {
+  if (columns <= 1) return 1;
+  const colW = (gridWidth - gapPx * (columns - 1)) / columns;
+  const span = Math.round((pointerX - itemLeft + gapPx) / (colW + gapPx));
+  return Math.min(columns, Math.max(1, span)) as DashboardSpan;
 }

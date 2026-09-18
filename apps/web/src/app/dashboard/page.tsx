@@ -17,7 +17,11 @@ export default async function DashboardPage() {
   let role: string | null = null;
   let onboarding: OnboardingState | null = null;
   let glanceConfig: string[] | null = null;
-  let dashboardLayout: string[] | null = null;
+  let dashboardLayout: {
+    cards: string[] | null;
+    columns?: number;
+    spans?: Record<string, number>;
+  } | null = null;
 
   try {
     const [dashboard, profile, session, onboardingRes, glanceRes, layoutRes] = await Promise.all([
@@ -38,7 +42,9 @@ export default async function DashboardPage() {
       })),
       apiFetch<OnboardingState>("/api/core/onboarding").catch(() => null),
       apiFetch<{ tiles: string[] | null }>("/api/core/glance-config").catch(() => ({ tiles: null })),
-      apiFetch<{ cards: string[] | null }>("/api/core/dashboard-layout").catch(() => ({ cards: null })),
+      apiFetch<{ cards: string[] | null; columns?: number; spans?: Record<string, number> }>(
+        "/api/core/dashboard-layout",
+      ).catch(() => ({ cards: null })),
     ]);
     whosHome = dashboard.whosHome;
     schoolModuleEnabled = (session.modulesEnabled ?? []).includes("school");
@@ -48,7 +54,7 @@ export default async function DashboardPage() {
     role = session.user?.role ?? null;
     onboarding = onboardingRes;
     glanceConfig = glanceRes.tiles;
-    dashboardLayout = layoutRes.cards;
+    dashboardLayout = layoutRes;
     if (profile.homeStatusId) {
       self = {
         homeStatusId: profile.homeStatusId,
@@ -63,7 +69,7 @@ export default async function DashboardPage() {
   }
 
   return (
-    <AppShell title="Dashboard">
+    <AppShell title={loadError ? "Dashboard" : undefined}>
       {loadError ? (
         <Alert variant="error">
           {loadError}. <a href="/dashboard">Retry</a>

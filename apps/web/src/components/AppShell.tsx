@@ -12,7 +12,7 @@ export async function AppShell({
   breadcrumb,
 }: {
   children: React.ReactNode;
-  title: string;
+  title?: string;
   description?: string;
   descriptionVisibility?: "always" | "desktop" | "never";
   actions?: React.ReactNode;
@@ -69,12 +69,14 @@ export async function AppShell({
   return (
     <AppChrome user={user} modulesEnabled={modulesEnabled} telemetry={telemetry}>
       {breadcrumb && breadcrumb.length > 0 && <Breadcrumb items={breadcrumb} />}
-      <PageHeader
-        title={title}
-        description={description}
-        descriptionVisibility={resolvedDescriptionVisibility}
-        actions={actions}
-      />
+      {title ? (
+        <PageHeader
+          title={title}
+          description={description}
+          descriptionVisibility={resolvedDescriptionVisibility}
+          actions={actions}
+        />
+      ) : null}
       {children}
     </AppChrome>
   );

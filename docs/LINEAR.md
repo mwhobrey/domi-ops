@@ -73,7 +73,7 @@ Workspace-level **Bug** / **Feature** may exist; attach in Linear UI if needed. 
 | M1 — Weather reliability | [WHO-5](https://linear.app/mikewhob-whome/issue/WHO-5) |
 | M2 — Weather in day schedule | [WHO-12](https://linear.app/mikewhob-whome/issue/WHO-12) |
 | M3 — At-a-glance density | [WHO-13](https://linear.app/mikewhob-whome/issue/WHO-13) |
-| M4 — Customizable layout | [WHO-313](https://linear.app/mikewhob-whome/issue/WHO-313) |
+| M4 — Customizable layout | [WHO-313](https://linear.app/mikewhob-whome/issue/WHO-313), [WHO-314](https://linear.app/mikewhob-whome/issue/WHO-314) |
 
 ### [Notifications](https://linear.app/mikewhob-whome/project/notifications-9c965c13ece0)
 
