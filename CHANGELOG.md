@@ -12,10 +12,11 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 - Browser + Next.js server Sentry for `apps/web` (`@sentry/nextjs`, WHO-292) — reuses
   runtime `SENTRY_DSN` on the web container; `error.tsx` / `global-error.tsx` report to Sentry.
-- Customizable dashboard layout (WHO-313): each member can drag the section cards
+- Customizable dashboard layout (WHO-313 / WHO-314): each member can drag the section cards
   (glance, schedule, weather, conflict checker, household, month calendar) into their
-  own order from **Customize** on `/dashboard`. Saved per member; default order is
-  unchanged until they rearrange. *(requires `npm run db:migrate`.)*
+  own order from **Customize** on the Dashboard title row, pick a 1/2/3 column grid, and
+  resize a card across those columns. Saved per member; default 2-col order is unchanged
+  until they rearrange. *(WHO-313 requires `npm run db:migrate`; WHO-314 reuses that column.)*
 - Capacitor 8 store shell (`apps/mobile`, `appId: app.domiops`) with Bitwarden-style server URL
   picker, `/api/healthz` probe (CapacitorHttp), and remote WebView of live `apps/web` (ADR 005 /
   WHO-287). Native Google + Sign in with Apple idToken exchange, APNs/FCM push (FCM HTTP v1),
@@ -83,6 +84,8 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Fixed
 
+- Dashboard Customize drag no longer scales a small card up to the Today at a glance height
+  (WHO-314): the overlay is a compact label, and sortable transforms are translate-only.
 - Interval medications with a multi-day cadence (e.g. once every 7 days) no longer reappear every
   morning at the start time; next dose is last taken + interval across days
   (`packages/calendar-sync/src/med-interval-schedule.ts`).
