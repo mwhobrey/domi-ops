@@ -247,11 +247,13 @@ export function DashboardBoard({
                 gridRef={gridRef}
                 onSpanChange={(span: DashboardSpan) => {
                   setDirty(true);
-                  setLayout((prev) => {
-                    const next = { ...prev, spans: { ...prev.spans, [id]: span } };
-                    layoutRef.current = next;
-                    return next;
-                  });
+                  const current = layoutRef.current;
+                  const next = {
+                    ...current,
+                    spans: { ...current.spans, [id]: span },
+                  };
+                  layoutRef.current = next;
+                  setLayout(next);
                 }}
                 onSpanCommit={() => persist(layoutRef.current)}
               >

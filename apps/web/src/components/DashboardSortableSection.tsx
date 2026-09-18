@@ -81,6 +81,20 @@ export function DashboardSortableSection({
     if (next !== span) onSpanChange(next);
   }
 
+  function handleResizeKeyDown(event: React.KeyboardEvent<HTMLButtonElement>) {
+    let next: DashboardSpan | null = null;
+    if (event.key === "ArrowLeft" || event.key === "ArrowDown") {
+      next = Math.max(1, span - 1) as DashboardSpan;
+    } else if (event.key === "ArrowRight" || event.key === "ArrowUp") {
+      next = Math.min(columns, span + 1) as DashboardSpan;
+    }
+    if (next == null) return;
+    event.preventDefault();
+    if (next === span) return;
+    onSpanChange(next);
+    onSpanCommit();
+  }
+
   return (
     <div
       ref={setRefs}
@@ -106,11 +120,17 @@ export function DashboardSortableSection({
         {customizing && columns > 1 ? (
           <button
             type="button"
-            className="absolute inset-y-2 right-0 z-10 hidden w-5 cursor-ew-resize touch-none items-center justify-center md:flex"
+            role="slider"
             aria-label={`Resize ${DASHBOARD_CARD_LABELS[id]}`}
+            aria-valuemin={1}
+            aria-valuemax={columns}
+            aria-valuenow={span}
+            className="absolute inset-y-2 right-0 z-10 hidden w-5 cursor-ew-resize touch-none items-center justify-center md:flex"
             onPointerDown={handleResizePointerDown}
             onPointerMove={handleResizePointerMove}
             onPointerUp={onSpanCommit}
+            onPointerCancel={onSpanCommit}
+            onKeyDown={handleResizeKeyDown}
           >
             <span className="h-10 w-1 rounded-full bg-[var(--color-border)]" />
           </button>
