@@ -50,6 +50,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
   Buffers aren't supported on recurring events yet. New `GET
   /api/schedule-conflicts/check` endpoint. *(requires `npm run db:migrate`; no other manual
   steps for self-hosters.)*
+- Schedule conflict checker ↔ calendar integration (WHO-309): the **New event** sheet can run
+  the checker pre-filled from the in-progress date/time/duration (and drive buffers); dashboard
+  checker results include **Create event with this time**, which opens `/calendar` with the
+  checked window and ad-hoc buffer copied into the create form.
 
 ### Changed
 

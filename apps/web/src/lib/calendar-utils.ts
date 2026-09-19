@@ -166,7 +166,11 @@ export function eventInteractionTitle(ev: CalendarEventView): string | undefined
 export type CalendarCreateDraft = {
   startDate: string;
   startTime: string;
+  endDate?: string;
+  endTime?: string;
   allDay: boolean;
+  driveBufferBeforeMinutes?: number | null;
+  driveBufferAfterMinutes?: number | null;
 };
 
 export function startOfWeek(d: Date): Date {
