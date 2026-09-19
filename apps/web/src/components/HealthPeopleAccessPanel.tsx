@@ -140,7 +140,10 @@ export function HealthPeopleAccessPanel({
   }, [members]);
 
   useEffect(() => {
-    if (!subjectMemberId) return;
+    if (!subjectMemberId) {
+      setLoading(false);
+      return;
+    }
     void load(subjectMemberId);
   }, [subjectMemberId, load]);
 
@@ -176,8 +179,10 @@ export function HealthPeopleAccessPanel({
     }
   }
 
+  const hasSubject = Boolean(subjectMemberId);
+
   return (
-    <div className="space-y-4 pb-24">
+    <div className={hasSubject ? "space-y-4 pb-24" : "space-y-4"}>
       <p className="text-sm text-[var(--color-text-muted)]">
         Grant ongoing access to this person&apos;s health. Dose write also lets them read medications
         needed to log.
@@ -200,8 +205,12 @@ export function HealthPeopleAccessPanel({
         </label>
       ) : null}
       {err ? <Alert variant="error">{err}</Alert> : null}
-      {savedMsg && !dirty ? <Alert variant="success">{savedMsg}</Alert> : null}
-      {loading ? (
+      {savedMsg && !dirty && hasSubject ? <Alert variant="success">{savedMsg}</Alert> : null}
+      {!hasSubject ? (
+        <p className="text-sm text-[var(--color-text-muted)]">
+          Could not determine your household member. Try refreshing the page.
+        </p>
+      ) : loading ? (
         <p className="text-sm text-[var(--color-text-muted)]">Loading…</p>
       ) : grantees.length === 0 ? (
         <p className="text-sm text-[var(--color-text-muted)]">No other household members.</p>
@@ -284,17 +293,19 @@ export function HealthPeopleAccessPanel({
         </ul>
       )}
 
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 supports-[padding:max(0px)]:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        <div className="mx-auto flex max-w-3xl items-center justify-end gap-2">
-          <Button
-            type="button"
-            onClick={() => void save()}
-            disabled={busy || !dirty || grantees.length === 0 || loading}
-          >
-            {busy ? "Saving…" : dirty ? "Save changes" : "Saved"}
-          </Button>
+      {hasSubject ? (
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 supports-[padding:max(0px)]:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <div className="mx-auto flex max-w-3xl items-center justify-end gap-2">
+            <Button
+              type="button"
+              onClick={() => void save()}
+              disabled={busy || !dirty || grantees.length === 0 || loading}
+            >
+              {busy ? "Saving…" : dirty ? "Save changes" : "Saved"}
+            </Button>
+          </div>
         </div>
-      </div>
+      ) : null}
     </div>
   );
 }

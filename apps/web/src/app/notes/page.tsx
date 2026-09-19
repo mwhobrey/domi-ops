@@ -5,6 +5,7 @@ import { NotesList } from "../../components/NotesList";
 import type { NoteShareMember } from "../../components/NoteSharePicker";
 
 import { apiFetch } from "../../lib/api";
+import { sessionMemberId, type AuthSessionResponse } from "../../lib/session";
 
 import { Alert } from "../../components/ui";
 
@@ -53,7 +54,7 @@ export default async function NotesPage() {
 
       apiFetch<{ members: NoteShareMember[] }>("/api/core/household/roster"),
 
-      apiFetch<{ memberId?: string; modulesEnabled?: string[] }>("/auth/session"),
+      apiFetch<AuthSessionResponse>("/auth/session"),
 
     ]);
 
@@ -61,7 +62,7 @@ export default async function NotesPage() {
 
     members = rosterRes.members;
 
-    currentMemberId = sessionRes.memberId;
+    currentMemberId = sessionMemberId(sessionRes);
     driveEnabled = sessionRes.modulesEnabled?.includes("drive") ?? false;
 
   } catch (e) {

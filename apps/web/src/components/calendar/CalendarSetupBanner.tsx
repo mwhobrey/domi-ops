@@ -31,6 +31,20 @@ function writeDismissed() {
   }
 }
 
+/** Household calendar is usable when at least one lane exists and Google import is not pending. */
+export function calendarSetupComplete({
+  connected,
+  hasCalendars,
+  needsImport,
+}: {
+  connected: boolean;
+  hasCalendars: boolean;
+  needsImport: boolean;
+}): boolean {
+  void connected;
+  return hasCalendars && !needsImport;
+}
+
 export function CalendarSetupBanner({
   oauthConfigured,
   connected,
@@ -50,14 +64,16 @@ export function CalendarSetupBanner({
     setDismissed(readDismissed());
   }, []);
 
-  const complete =
-    connected && hasCalendars && !needsImport;
+  const complete = calendarSetupComplete({ connected, hasCalendars, needsImport });
 
-  const activeStep = !connected
-    ? "connect"
-    : needsImport || !hasCalendars
-      ? "import"
-      : "ready";
+  const activeStep =
+    hasCalendars && !needsImport
+      ? "ready"
+      : !connected
+        ? "connect"
+        : needsImport || !hasCalendars
+          ? "import"
+          : "ready";
 
   const dismiss = useCallback(() => {
     writeDismissed();
@@ -75,15 +91,16 @@ export function CalendarSetupBanner({
             Set up your household calendar
           </p>
           <p className="mt-1 text-sm text-[var(--color-text-muted)]">
-            Connect Google, pick which calendars to import, then events appear in month, week, and
-            day views.
+            Add events in Domi Ops, or connect Google to import and sync calendars — then they
+            appear in month, week, and day views.
           </p>
           <ol className="mt-4 flex flex-wrap gap-2 sm:gap-3" aria-label="Setup steps">
             {STEPS.map((step, idx) => {
+              const ready = hasCalendars && !needsImport;
               const done =
                 (step.id === "connect" && connected) ||
-                (step.id === "import" && connected && hasCalendars && !needsImport) ||
-                (step.id === "ready" && complete);
+                (step.id === "import" && ready) ||
+                (step.id === "ready" && ready);
               const active = step.id === activeStep;
               return (
                 <li
