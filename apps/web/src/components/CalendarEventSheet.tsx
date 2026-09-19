@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
 import type {
   CalendarCreateDraft,
@@ -25,6 +25,8 @@ import {
   Select,
   Sheet,
 } from "./ui";
+import { ScheduleConflictChecker } from "./ScheduleConflictChecker";
+import { eventFormToConflictFormState } from "../lib/schedule-conflict";
 
 type EventCategory = {
   id: string;
@@ -104,6 +106,8 @@ export function CalendarEventSheet({
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [recurringDeleteOpen, setRecurringDeleteOpen] = useState(false);
+  const [conflictCheckOpen, setConflictCheckOpen] = useState(false);
+  const [conflictCheckKey, setConflictCheckKey] = useState(0);
 
   const loadMeta = useCallback(async () => {
     try {
@@ -180,6 +184,18 @@ export function CalendarEventSheet({
         setStartDate(createDraft.startDate);
         setStartTime(createDraft.startTime);
         setAllDay(createDraft.allDay);
+        setEndDate(createDraft.endDate ?? "");
+        setEndTime(createDraft.endTime ?? "10:00");
+        setDriveBufferBefore(
+          createDraft.driveBufferBeforeMinutes != null
+            ? String(createDraft.driveBufferBeforeMinutes)
+            : "",
+        );
+        setDriveBufferAfter(
+          createDraft.driveBufferAfterMinutes != null
+            ? String(createDraft.driveBufferAfterMinutes)
+            : "",
+        );
       } else {
         setStartDate(formatDateLocal(new Date()));
         setStartTime("09:00");
@@ -197,7 +213,31 @@ export function CalendarEventSheet({
       setReminderOffsets([]);
     }
     setError(null);
+    setConflictCheckOpen(false);
   }, [selected, open, createDraft, defaultCalendarId]);
+
+  const conflictInitialForm = useMemo(() => {
+    if (!conflictCheckOpen) return null;
+    return eventFormToConflictFormState({
+      startDate,
+      endDate,
+      startTime,
+      endTime,
+      allDay,
+      driveBufferBefore,
+      driveBufferAfter,
+    });
+  }, [
+    conflictCheckOpen,
+    startDate,
+    endDate,
+    startTime,
+    endTime,
+    allDay,
+    driveBufferBefore,
+    driveBufferAfter,
+    conflictCheckKey,
+  ]);
 
   // Buffers don't carry across a recurring series yet, so they're hidden (and sent as null) there.
   const bufferHidden = allDay || repeat !== "none";
@@ -423,6 +463,29 @@ export function CalendarEventSheet({
                   />
                 </label>
               </details>
+              {!selected && !readOnly && (
+                <div className="space-y-3">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      setConflictCheckKey((k) => k + 1);
+                      setConflictCheckOpen(true);
+                    }}
+                  >
+                    Check schedule conflicts
+                  </Button>
+                  {conflictCheckOpen && conflictInitialForm && (
+                    <ScheduleConflictChecker
+                      embedded
+                      autoCheck
+                      initialForm={conflictInitialForm}
+                      showCreateEventAction={false}
+                    />
+                  )}
+                </div>
+              )}
               {!bufferHidden && (
                 <details className="rounded-[var(--radius-md)] border border-[var(--color-border)]/80 bg-[var(--color-surface-subtle)]/40 px-3 py-2">
                   <summary className="cursor-pointer text-sm font-medium text-[var(--color-text-muted)] marker:content-none hover:text-[var(--color-text)] [&::-webkit-details-marker]:hidden">
