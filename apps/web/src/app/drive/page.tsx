@@ -3,6 +3,7 @@ import { AppShell } from "../../components/AppShell";
 import { DriveList } from "../../components/DriveList";
 import type { NoteShareMember } from "../../components/NoteSharePicker";
 import { apiFetch } from "../../lib/api";
+import { sessionMemberId, type AuthSessionResponse } from "../../lib/session";
 import type { DriveFolder, DriveObject } from "../../lib/drive-types";
 import { Alert } from "../../components/ui";
 
@@ -21,7 +22,7 @@ async function DrivePageContent() {
         apiFetch<{ objects: DriveObject[] }>("/api/core/drive/objects"),
         apiFetch<{ folders: DriveFolder[] }>("/api/core/drive/folders"),
         apiFetch<{ members: NoteShareMember[] }>("/api/core/household/roster"),
-        apiFetch<{ memberId?: string }>("/auth/session"),
+        apiFetch<AuthSessionResponse>("/auth/session"),
         apiFetch<{ write?: boolean }>("/api/core/drive/access").catch(() => ({ write: true })),
         apiFetch<{ drivePublicSharesEnabled?: boolean }>("/api/core/household/settings").catch(
           () => ({ drivePublicSharesEnabled: true }),
@@ -30,7 +31,7 @@ async function DrivePageContent() {
     objects = objectsRes.objects;
     folders = foldersRes.folders;
     members = rosterRes.members;
-    currentMemberId = sessionRes.memberId;
+    currentMemberId = sessionMemberId(sessionRes);
     canWrite = accessRes.write !== false;
     publicSharesEnabled = settingsRes.drivePublicSharesEnabled !== false;
   } catch (e) {

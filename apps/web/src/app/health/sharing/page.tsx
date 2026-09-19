@@ -2,6 +2,7 @@ import { AppShell } from "../../../components/AppShell";
 import { HealthSharingClient } from "../../../components/HealthSharingClient";
 import type { NoteShareMember } from "../../../components/NoteSharePicker";
 import { apiFetch } from "../../../lib/api";
+import { sessionMemberId, sessionRole, type AuthSessionResponse } from "../../../lib/session";
 import { Alert, LinkButton } from "../../../components/ui";
 
 export default async function HealthSharingPage() {
@@ -13,11 +14,11 @@ export default async function HealthSharingPage() {
   try {
     const [rosterData, session] = await Promise.all([
       apiFetch<{ members: NoteShareMember[] }>("/api/core/household/roster"),
-      apiFetch<{ memberId?: string; role?: string }>("/auth/session"),
+      apiFetch<AuthSessionResponse>("/auth/session"),
     ]);
     members = rosterData.members ?? [];
-    currentMemberId = session.memberId ?? "";
-    householdRole = session.role ?? "member";
+    currentMemberId = sessionMemberId(session);
+    householdRole = sessionRole(session);
   } catch {
     loadError = "Could not load household roster.";
   }

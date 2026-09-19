@@ -2,6 +2,7 @@ import { AppShell } from "../../components/AppShell";
 import { HealthPageClient } from "../../components/HealthPageClient";
 import type { NoteShareMember } from "../../components/NoteSharePicker";
 import { apiFetch } from "../../lib/api";
+import { sessionMemberId, type AuthSessionResponse } from "../../lib/session";
 import { Alert } from "../../components/ui";
 
 export default async function HealthPage({
@@ -26,13 +27,13 @@ export default async function HealthPage({
   try {
     const [rosterData, session, settings] = await Promise.all([
       apiFetch<{ members: NoteShareMember[] }>("/api/core/household/roster"),
-      apiFetch<{ memberId?: string }>("/auth/session"),
+      apiFetch<AuthSessionResponse>("/auth/session"),
       apiFetch<{ timezone?: string }>("/api/core/household/settings").catch(
         () => ({ timezone: undefined }),
       ),
     ]);
     members = rosterData.members ?? [];
-    currentMemberId = session.memberId ?? "";
+    currentMemberId = sessionMemberId(session);
     householdTimezone = settings.timezone?.trim() || "UTC";
   } catch {
     loadError = "Could not load household roster.";

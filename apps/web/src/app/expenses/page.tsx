@@ -3,6 +3,7 @@ import { ExpensesList } from "../../components/ExpensesList";
 import type { NoteShareMember } from "../../components/NoteSharePicker";
 import { ModuleReportsLink } from "../../components/reports/ModuleReportsLink";
 import { apiFetch } from "../../lib/api";
+import { sessionMemberId, type AuthSessionResponse } from "../../lib/session";
 import { Alert } from "../../components/ui";
 
 export default async function ExpensesPage() {
@@ -21,11 +22,11 @@ export default async function ExpensesPage() {
     const [expRes, roster, session] = await Promise.all([
       apiFetch<{ expenses: typeof expenses }>("/api/core/expenses"),
       apiFetch<{ members: NoteShareMember[] }>("/api/core/household/roster"),
-      apiFetch<{ memberId?: string }>("/auth/session"),
+      apiFetch<AuthSessionResponse>("/auth/session"),
     ]);
     expenses = expRes.expenses;
     members = roster.members ?? [];
-    currentMemberId = session.memberId ?? "";
+    currentMemberId = sessionMemberId(session);
   } catch (e) {
     loadError = e instanceof Error ? e.message : "Could not load expenses";
   }
