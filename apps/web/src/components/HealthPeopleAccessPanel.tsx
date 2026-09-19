@@ -140,7 +140,10 @@ export function HealthPeopleAccessPanel({
   }, [members]);
 
   useEffect(() => {
-    if (!subjectMemberId) return;
+    if (!subjectMemberId) {
+      setLoading(false);
+      return;
+    }
     void load(subjectMemberId);
   }, [subjectMemberId, load]);
 
@@ -201,6 +204,11 @@ export function HealthPeopleAccessPanel({
       ) : null}
       {err ? <Alert variant="error">{err}</Alert> : null}
       {savedMsg && !dirty ? <Alert variant="success">{savedMsg}</Alert> : null}
+      {!subjectMemberId ? (
+        <p className="text-sm text-[var(--color-text-muted)]">
+          Could not determine your household member. Try refreshing the page.
+        </p>
+      ) : null}
       {loading ? (
         <p className="text-sm text-[var(--color-text-muted)]">Loading…</p>
       ) : grantees.length === 0 ? (
