@@ -72,6 +72,7 @@ import { CalendarToolbar } from "./calendar/CalendarToolbar";
 import { CalendarWeek } from "./CalendarWeek";
 import { Calendar } from "lucide-react";
 import { cn } from "../lib/cn";
+import { parseCalendarCreateDraftFromSearchParams } from "../lib/schedule-conflict";
 import { Alert, Button, IconButton, Input } from "./ui";
 
 function mapLoadedEvent(e: CalendarEventView): CalendarEventView {
@@ -157,6 +158,7 @@ export function CalendarPageClient({
   const [needsImportSetup, setNeedsImportSetup] = useState(false);
   const autoOpenedImportRef = useRef(false);
   const openedEventDeepLinkRef = useRef<string | null>(null);
+  const openedNewEventDeepLinkRef = useRef(false);
   const connected = initialConnections.length > 0;
   const { status: syncStatus, refresh: refreshSyncStatus, isActive: syncActive } =
     useCalendarSyncStatus(connected);
@@ -172,6 +174,21 @@ export function CalendarPageClient({
     const next = new URLSearchParams(searchParams.toString());
     if (!next.has("event")) return;
     next.delete("event");
+    const qs = next.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [pathname, router, searchParams]);
+
+  const clearNewEventDeepLink = useCallback(() => {
+    const next = new URLSearchParams(searchParams.toString());
+    if (!next.has("newEvent")) return;
+    next.delete("newEvent");
+    next.delete("startDate");
+    next.delete("startTime");
+    next.delete("endDate");
+    next.delete("endTime");
+    next.delete("allDay");
+    next.delete("bufferBefore");
+    next.delete("bufferAfter");
     const qs = next.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   }, [pathname, router, searchParams]);
@@ -230,6 +247,20 @@ export function CalendarPageClient({
 
     void openFromDeepLink();
   }, [searchParams, events, clearEventDeepLink]);
+
+  useEffect(() => {
+    if (openedNewEventDeepLinkRef.current) return;
+    const draft = parseCalendarCreateDraftFromSearchParams(
+      new URLSearchParams(searchParams.toString()),
+    );
+    if (!draft) return;
+    openedNewEventDeepLinkRef.current = true;
+    setSelected(null);
+    setCreateDraft(draft);
+    setSheetOpen(true);
+    setFocusDate(parseLocalDate(draft.startDate));
+    clearNewEventDeepLink();
+  }, [searchParams, clearNewEventDeepLink]);
 
   const persistView = useCallback(
     (v: CalendarViewMode) => {
