@@ -16,12 +16,14 @@ import { LogPainSheet } from "./health/LogPainSheet";
 import { LogMealSheet } from "./health/LogMealSheet";
 import { HealthRow, MedGroupDoseCard } from "./health/TodayTabRows";
 import { PrnQuickLog } from "./health/PrnQuickLog";
+import { avatarStyle } from "../lib/member-color";
 import {
   groupLoggedDosesByMember,
   groupPendingDosesByMemberThenTime,
   groupPendingGroupDosesByMember,
   memberLabel,
   mergeTodayEntriesForMember,
+  resolveDefaultMemberId,
   formatEventWhen,
   formatExerciseSummary,
   formatFoodLogSummary,
@@ -101,6 +103,11 @@ export function HealthPageClient({
   const [collapsedLoggedMembers, setCollapsedLoggedMembers] = useState<Set<string>>(new Set());
   const [highlightTakeKey, setHighlightTakeKey] = useState<string | null>(null);
   const [prnLoggingId, setPrnLoggingId] = useState<string | null>(null);
+  const [todayMemberId, setTodayMemberId] = useState(() =>
+    resolveDefaultMemberId(currentMemberId, members),
+  );
+  /** Caregiver must confirm before dose actions on another household member (WHO-318). */
+  const [managingOtherConfirmed, setManagingOtherConfirmed] = useState(false);
   const pushActionHandled = useRef(false);
   const takeHandled = useRef(false);
   const highlightTakeRef = useRef<HTMLDivElement | null>(null);
@@ -237,7 +244,7 @@ export function HealthPageClient({
   }
 
   async function logAllTaken(groupKey: string, doses: PendingDose[]) {
-    const actionable = doses.filter((d) => canLogForMember(d.memberId));
+    const actionable = doses.filter((d) => canLogDoseForToday(d.memberId));
     if (actionable.length === 0 || loggingAllKey) return;
     setError(null);
     setLoggingAllKey(groupKey);
@@ -262,7 +269,7 @@ export function HealthPageClient({
   /** Persisted-group "Take all" — one batch request to /medication-groups/:id/log-all. */
   async function logGroupAllTaken(group: PendingGroupDose) {
     const key = `group:${group.groupId}:${group.scheduledAt}`;
-    if (loggingAllKey) return;
+    if (loggingAllKey || !canLogDoseForToday(group.memberId)) return;
     setError(null);
     setLoggingAllKey(key);
     try {
@@ -342,6 +349,26 @@ export function HealthPageClient({
     return capabilities[memberId]?.doses === "write";
   }
 
+  function selectTodayMember(memberId: string) {
+    setTodayMemberId(memberId);
+    setManagingOtherConfirmed(memberId === currentMemberId);
+  }
+
+  function canActOnTodayMember(memberId: string) {
+    if (memberId !== todayMemberId) return false;
+    if (todayMemberId === currentMemberId) return true;
+    return managingOtherConfirmed;
+  }
+
+  function canLogDoseForToday(memberId: string) {
+    return canLogForMember(memberId) && canActOnTodayMember(memberId);
+  }
+
+  const todayMemberStyle = avatarStyle(todayMemberId);
+  const todayMemberName = memberLabel(members, todayMemberId);
+  const viewingOtherMember =
+    todayMemberId !== currentMemberId && todayMemberId.length > 0;
+
   return (
     <div className="space-y-4">
       {error ? <Alert variant="error">{error}</Alert> : null}
@@ -376,16 +403,61 @@ export function HealthPageClient({
 
       {tab === "today" ? (
         <div className="space-y-6">
+          {members.length > 1 ? (
+            <div className="space-y-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]">
+                Doses for
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {members.map((m) => (
+                  <Button
+                    key={m.memberId}
+                    size="sm"
+                    variant={todayMemberId === m.memberId ? "primary" : "secondary"}
+                    onClick={() => selectTodayMember(m.memberId)}
+                  >
+                    {m.label}
+                    {m.memberId === currentMemberId ? " (me)" : ""}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {viewingOtherMember && !managingOtherConfirmed ? (
+            <Alert variant="info">
+              <p className="text-sm">
+                You are viewing <strong>{todayMemberName}</strong>&apos;s doses. Confirm before
+                logging or skipping on their behalf.
+              </p>
+              <Button
+                className="mt-3"
+                size="sm"
+                type="button"
+                onClick={() => setManagingOtherConfirmed(true)}
+              >
+                Managing {todayMemberName}
+              </Button>
+            </Alert>
+          ) : null}
           <PrnQuickLog
-            meds={prnMeds}
+            meds={prnMeds.filter((m) => m.memberId === todayMemberId)}
             members={members}
-            canLog={(med) => med.canLog ?? canLogForMember(med.memberId)}
+            canLog={(med) => (med.canLog ?? canLogForMember(med.memberId)) && canLogDoseForToday(med.memberId)}
             logging={prnLoggingId}
             onLog={logPrnDose}
           />
-          <Card>
+          <Card
+            className="overflow-hidden border-l-4"
+            style={{ borderLeftColor: todayMemberStyle.background }}
+          >
             <CardBody className="space-y-4">
-              <SectionHeader title="Scheduled doses" />
+              <SectionHeader
+                title={
+                  todayMemberId === currentMemberId
+                    ? "My scheduled doses"
+                    : `${todayMemberName}'s scheduled doses`
+                }
+              />
               {loading ? (
                 <p className="text-sm text-[var(--color-text-muted)]">Loading…</p>
               ) : pendingDoses.length === 0 && pendingGroupDoses.length === 0 ? (
@@ -396,16 +468,20 @@ export function HealthPageClient({
                   const groupByMember = groupPendingGroupDosesByMember(pendingGroupDoses);
                   const memberIds = [
                     ...new Set([...adhocByMember.map((m) => m.memberId), ...groupByMember.keys()]),
-                  ];
+                  ].filter((id) => id === todayMemberId);
+                  if (memberIds.length === 0) {
+                    return (
+                      <p className="text-sm text-[var(--color-text-muted)]">
+                        No pending doses today for {todayMemberName}.
+                      </p>
+                    );
+                  }
                   return memberIds.map((memberId) => {
                     const adhocTimes = adhocByMember.find((m) => m.memberId === memberId)?.times ?? [];
                     const groupDoses = groupByMember.get(memberId) ?? [];
                     const merged = mergeTodayEntriesForMember(adhocTimes, groupDoses);
                     return (
                       <div key={memberId} className="space-y-3">
-                        <h3 className="text-sm font-semibold text-[var(--color-text)]">
-                          {memberLabel(members, memberId)}
-                        </h3>
                         {merged.map((entry) => {
                           if (entry.kind === "group") {
                             const group = entry.group;
@@ -414,7 +490,7 @@ export function HealthPageClient({
                               <MedGroupDoseCard
                                 key={doseKey}
                                 group={group}
-                                canLog={canLogForMember(group.memberId)}
+                                canLog={canLogDoseForToday(group.memberId)}
                                 expanded={expandedGroupDoses.has(doseKey)}
                                 onToggleExpand={() => toggleGroupDoseExpanded(doseKey)}
                                 onTakeAll={() => void logGroupAllTaken(group)}
@@ -432,7 +508,7 @@ export function HealthPageClient({
                             );
                           }
                           const timeGroup = entry.timeGroup;
-                          const loggable = timeGroup.doses.filter((d) => canLogForMember(d.memberId));
+                          const loggable = timeGroup.doses.filter((d) => canLogDoseForToday(d.memberId));
                           const groupKey = `${memberId}:${timeGroup.scheduledTime}`;
                           return (
                             <div key={timeGroup.scheduledTime} className="space-y-2">
@@ -467,7 +543,7 @@ export function HealthPageClient({
                                       title={dose.name}
                                       subtitle={dose.dosage?.trim() || undefined}
                                       trailing={
-                                        canLogForMember(dose.memberId) ? (
+                                        canLogDoseForToday(dose.memberId) ? (
                                           <div className="flex gap-2">
                                             <Button
                                               size="sm"
@@ -512,11 +588,22 @@ export function HealthPageClient({
             </CardBody>
           </Card>
 
-          {loggedToday.length > 0 ? (
-            <Card>
+          {loggedToday.some((d) => d.memberId === todayMemberId) ? (
+            <Card
+              className="overflow-hidden border-l-4"
+              style={{ borderLeftColor: todayMemberStyle.background }}
+            >
               <CardBody className="space-y-4">
-                <SectionHeader title="Logged today" />
-                {groupLoggedDosesByMember(loggedToday).map((memberGroup) => {
+                <SectionHeader
+                  title={
+                    todayMemberId === currentMemberId
+                      ? "My logged doses today"
+                      : `${todayMemberName} logged today`
+                  }
+                />
+                {groupLoggedDosesByMember(loggedToday)
+                  .filter((memberGroup) => memberGroup.memberId === todayMemberId)
+                  .map((memberGroup) => {
                   const collapsed = collapsedLoggedMembers.has(memberGroup.memberId);
                   return (
                     <div key={memberGroup.memberId} className="space-y-2">
@@ -566,7 +653,7 @@ export function HealthPageClient({
                                         ? "Skipped"
                                         : "Missed"}
                                   </Badge>
-                                  {canLogForMember(dose.memberId) ? (
+                                  {canLogDoseForToday(dose.memberId) ? (
                                     <Button
                                       size="sm"
                                       variant="secondary"
