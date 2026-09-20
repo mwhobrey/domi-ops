@@ -10,6 +10,9 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Added
 
+- Health OTC medications (WHO-319): new schedule kind **`otc`** — as-needed logging like PRN
+  (`scheduled_at` null), Today quick-log inclusion, no fixed dose slots. Requires
+  `npm run db:migrate` (`0072_med_schedule_otc`).
 - Browser + Next.js server Sentry for `apps/web` (`@sentry/nextjs`, WHO-292) — reuses
   runtime `SENTRY_DSN` on the web container; `error.tsx` / `global-error.tsx` report to Sentry.
 - Customizable dashboard layout (WHO-313 / WHO-314): each member can drag the section cards
