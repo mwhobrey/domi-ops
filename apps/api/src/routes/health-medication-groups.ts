@@ -12,6 +12,8 @@ import {
   healthMedicationGroups,
   healthMedications,
   householdMembers,
+  isAsNeededMedScheduleKind,
+  narrowGroupScheduleMeta,
 } from "@domi-ops/db";
 import { and, eq, inArray } from "drizzle-orm";
 import type { AppVariables } from "../middleware/auth.js";
@@ -306,7 +308,7 @@ export function healthMedicationGroupRoutes(db: Database, env: Env) {
     if (!body.memberId || !body.name?.trim()) {
       return c.json({ error: "invalid_body" }, 400);
     }
-    if (body.scheduleKind === "prn") {
+    if (isAsNeededMedScheduleKind(body.scheduleKind)) {
       return c.json({ error: "group_schedule_must_be_scheduled_or_interval" }, 400);
     }
     if (!(await hasHealthSegmentAccess(db, auth, body.memberId, "medications", "write"))) {
@@ -317,10 +319,11 @@ export function healthMedicationGroupRoutes(db: Database, env: Env) {
       let scheduleMeta: { scheduleKind: "scheduled" | "interval"; scheduleJson: string };
       try {
         const normalized = normalizeMedSchedule(body);
-        if (normalized.scheduleKind === "prn") {
+        const groupSchedule = narrowGroupScheduleMeta(normalized);
+        if (!groupSchedule) {
           return c.json({ error: "group_schedule_must_be_scheduled_or_interval" }, 400);
         }
-        scheduleMeta = normalized;
+        scheduleMeta = groupSchedule;
       } catch (e) {
         return c.json({ error: e instanceof Error ? e.message : "invalid_schedule" }, 400);
       }
@@ -417,7 +420,7 @@ export function healthMedicationGroupRoutes(db: Database, env: Env) {
       sharedMemberIds?: string[];
     }>();
 
-    if (body.scheduleKind === "prn") {
+    if (isAsNeededMedScheduleKind(body.scheduleKind)) {
       return c.json({ error: "group_schedule_must_be_scheduled_or_interval" }, 400);
     }
 
@@ -433,11 +436,12 @@ export function healthMedicationGroupRoutes(db: Database, env: Env) {
             scheduleKind: body.scheduleKind ?? existing.scheduleKind,
             schedule: body.schedule ?? parseMedSchedule(existing.scheduleJson),
           });
-          if (normalized.scheduleKind === "prn") {
+          const groupSchedule = narrowGroupScheduleMeta(normalized);
+          if (!groupSchedule) {
             return c.json({ error: "group_schedule_must_be_scheduled_or_interval" }, 400);
           }
-          patch.scheduleKind = normalized.scheduleKind;
-          patch.scheduleJson = normalized.scheduleJson;
+          patch.scheduleKind = groupSchedule.scheduleKind;
+          patch.scheduleJson = groupSchedule.scheduleJson;
         } catch (e) {
           return c.json({ error: e instanceof Error ? e.message : "invalid_schedule" }, 400);
         }

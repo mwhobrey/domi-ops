@@ -267,6 +267,7 @@ describe("health report timestamps + schedule copy", () => {
 
   it("summarizes scheduled, PRN, and interval instructions", () => {
     expect(formatMedScheduleSummary("prn", "{}")).toBe("As needed (PRN)");
+    expect(formatMedScheduleSummary("otc", "{}")).toBe("As needed (OTC)");
     expect(
       formatMedScheduleSummary("scheduled", JSON.stringify({ times: ["08:00", "20:00"] }), "UTC"),
     ).toBe("Daily at 8:00 AM, 8:00 PM");

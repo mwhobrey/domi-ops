@@ -505,6 +505,13 @@
       "when": 1789658903000,
       "tag": "0071_dashboard_layout",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1789658904000,
+      "tag": "0072_med_schedule_otc",
+      "breakpoints": true
     }
   ]
 }

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
 import type { HealthEvent, HealthMedication } from "./health/health-types";
+import { scheduleKindLabel } from "./health/health-helpers";
 import { HealthPeopleAccessPanel } from "./HealthPeopleAccessPanel";
 import type { NoteShareMember } from "./NoteSharePicker";
 import { NoteSharePicker } from "./NoteSharePicker";
@@ -180,12 +181,7 @@ export function HealthSharingClient({
                           <div className="min-w-0 text-left">
                             <p className="truncate font-medium text-[var(--color-text)]">{med.name}</p>
                             <p className="truncate text-sm text-[var(--color-text-muted)]">
-                              {memberLabel(members, med.memberId)} ·{" "}
-                              {med.scheduleKind === "prn"
-                                ? "PRN"
-                                : med.scheduleKind === "interval"
-                                  ? "Every…"
-                                  : "Scheduled"}
+                              {memberLabel(members, med.memberId)} · {scheduleKindLabel(med.scheduleKind)}
                             </p>
                           </div>
                           <Badge tone="default">Shared</Badge>
@@ -239,13 +235,7 @@ export function HealthSharingClient({
                     <SharedByMeRow
                       key={med.id}
                       title={med.name}
-                      subtitle={
-                        med.scheduleKind === "prn"
-                          ? "PRN"
-                          : med.scheduleKind === "interval"
-                            ? "Every…"
-                            : "Scheduled"
-                      }
+                      subtitle={scheduleKindLabel(med.scheduleKind)}
                       shareeIds={med.sharedMemberIds ?? []}
                       members={members}
                       onEdit={() => setShareEdit({ kind: "medication", record: med })}

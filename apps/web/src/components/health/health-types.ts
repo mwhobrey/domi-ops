@@ -116,7 +116,7 @@ export interface HealthMedication {
   name: string;
   dosage: string | null;
   instructions: string | null;
-  scheduleKind: "scheduled" | "prn" | "interval";
+  scheduleKind: "scheduled" | "prn" | "otc" | "interval";
   schedule: {
     times?: string[];
     daysOfWeek?: number[];
