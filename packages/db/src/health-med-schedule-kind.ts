@@ -8,3 +8,17 @@ export function isAsNeededMedScheduleKind(
 ): kind is AsNeededMedScheduleKind {
   return kind === "prn" || kind === "otc";
 }
+
+export type GroupMedScheduleKind = "scheduled" | "interval";
+
+/** Groups only accept fixed schedules — not PRN/OTC. */
+export function narrowGroupScheduleMeta(meta: {
+  scheduleKind: MedScheduleKind;
+  scheduleJson: string;
+}): { scheduleKind: GroupMedScheduleKind; scheduleJson: string } | null {
+  if (isAsNeededMedScheduleKind(meta.scheduleKind)) return null;
+  if (meta.scheduleKind === "scheduled" || meta.scheduleKind === "interval") {
+    return { scheduleKind: meta.scheduleKind, scheduleJson: meta.scheduleJson };
+  }
+  return null;
+}
