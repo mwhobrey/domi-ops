@@ -11,7 +11,7 @@ import {
   scheduleDraftToRequestBody,
   type MedScheduleDraft,
 } from "./MedScheduleEditor";
-import { resolveDefaultMemberId } from "./health-helpers";
+import { isAsNeededMedScheduleKind, resolveDefaultMemberId } from "./health-helpers";
 import type { HealthMedication, MedicationGroupOption } from "./health-types";
 
 export function HealthMedicationSheet({
@@ -133,7 +133,9 @@ export function HealthMedicationSheet({
       // shared due time to consolidate around (groups reject that schedule kind server-side too).
       if (medicationId) {
         const previousGroupIds = new Set(medication?.groupIds ?? []);
-        const desiredGroupIds = scheduleResult.scheduleKind === "prn" ? new Set<string>() : selectedGroupIds;
+        const desiredGroupIds = isAsNeededMedScheduleKind(scheduleResult.scheduleKind)
+          ? new Set<string>()
+          : selectedGroupIds;
         for (const groupId of desiredGroupIds) {
           if (previousGroupIds.has(groupId)) continue;
           await apiClient.post(`/api/health/medication-groups/${groupId}/members`, { medicationId });
@@ -142,7 +144,7 @@ export function HealthMedicationSheet({
           if (desiredGroupIds.has(groupId)) continue;
           await apiClient.delete(`/api/health/medication-groups/${groupId}/members/${medicationId}`);
         }
-        if (scheduleResult.scheduleKind !== "prn" && newGroupName.trim()) {
+        if (!isAsNeededMedScheduleKind(scheduleResult.scheduleKind) && newGroupName.trim()) {
           await apiClient.post("/api/health/medication-groups", {
             memberId,
             name: newGroupName.trim(),
@@ -196,7 +198,7 @@ export function HealthMedicationSheet({
           />
         </label>
         <MedScheduleEditor draft={scheduleDraft} onChange={setScheduleDraft} />
-        {scheduleDraft.scheduleKind !== "prn" ? (
+        {isAsNeededMedScheduleKind(scheduleDraft.scheduleKind) ? null : (
           <div className="space-y-2">
             <span className="text-sm font-medium text-[var(--color-text)]">
               Groups (reminders go out together — a med taken more than once a day can be in more
@@ -235,7 +237,7 @@ export function HealthMedicationSheet({
               />
             </label>
           </div>
-        ) : null}
+        )}
         <Checkbox checked={enabled} onChange={(e) => setEnabled(e.target.checked)} label="Enabled" />
         <label className="block space-y-1 text-sm">
           <span>Visibility</span>

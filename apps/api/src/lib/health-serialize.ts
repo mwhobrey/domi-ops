@@ -694,6 +694,9 @@ export function normalizeMedSchedule(body: {
   if (body.scheduleKind === "prn") {
     return { scheduleKind: "prn" as const, scheduleJson: "{}" };
   }
+  if (body.scheduleKind === "otc") {
+    return { scheduleKind: "otc" as const, scheduleJson: "{}" };
+  }
   if (body.scheduleKind === "interval") {
     const schedule = normalizeIntervalSchedule({
       everyMinutes: body.schedule?.everyMinutes,

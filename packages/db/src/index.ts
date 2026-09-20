@@ -11,3 +11,8 @@ export {
 } from "./tenant-context.js";
 export { createScopedDb, getBaseDb, runWithScopedDb } from "./scoped-db.js";
 export * from "./schema/index.js";
+export {
+  isAsNeededMedScheduleKind,
+  type AsNeededMedScheduleKind,
+  type MedScheduleKind,
+} from "./health-med-schedule-kind.js";

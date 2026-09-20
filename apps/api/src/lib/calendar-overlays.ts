@@ -5,6 +5,7 @@ import {
   healthMedicationGroups,
   healthMedications,
   households,
+  isAsNeededMedScheduleKind,
   schoolAssignments,
   schoolClasses,
   users,
@@ -495,7 +496,7 @@ export async function buildMedicationDoseOverlays(
   }
 
   for (const med of meds) {
-    if (med.scheduleKind === "prn") continue;
+    if (isAsNeededMedScheduleKind(med.scheduleKind)) continue;
     if (med.scheduleKind === "interval" && isDelegatedToIntervalGroup(med.id)) continue;
 
     const name = decryptHealthFieldOrPassthrough(med.name, env) ?? "Medication";
