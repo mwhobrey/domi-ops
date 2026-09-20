@@ -22,6 +22,7 @@ Matches the "~$30–40/mo fixed infra" already budgeted in [PRICING_TIERS.md](..
 - [ ] GHCR pull access — classic PAT with `read:packages` scope (same as [SETUP.md Path C](../docs/SETUP.md#path-c-production-with-pre-built-images))
 - [ ] Stripe account (existing per [ADR 001](../docs/adr/001-public-launch-scope.md)) — dashboard access
 - [ ] CI publishing images to GHCR on `main` — already true ([publish-images.yml](../.github/workflows/publish-images.yml))
+- [ ] **Hosted auto-deploy:** repository secret `HOSTED_DEPLOY_SSH_KEY` (see [HOSTED_OPS.md](./HOSTED_OPS.md#release-deploy-ci--preferred)) — required before the first tag-triggered deploy after merge
 
 The droplet runs a real `git clone` of this repo, authenticated with a **read-only deploy key**
 (`gh repo deploy-key add` — repo → Settings → Deploy keys) so `deploy/deploy-hosted.sh` can
