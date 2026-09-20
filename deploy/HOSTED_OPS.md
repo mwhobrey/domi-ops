@@ -34,6 +34,37 @@ PgBouncer in **transaction mode** for Starter prod (see ADR 003). Migrations run
 
 ## Routine updates
 
+### Release deploy (CI — preferred)
+
+Pushing a **`v*`** git tag triggers [`.github/workflows/publish-images.yml`](../.github/workflows/publish-images.yml):
+GHCR images for that release (`X.Y.Z`, matching semver without the `v` prefix), then an SSH job on the
+hosted droplet runs `deploy/deploy-hosted.sh` with `DOMI_OPS_IMAGE_TAG=X.Y.Z`.
+
+**Before you tag** a release that includes new migrations:
+
+1. Apply migrations from a machine on the Postgres **Trusted Sources** allowlist (admin connection string only — never in CI):
+   `DATABASE_URL="<admin connection string>" npm run db:migrate`
+2. If the migration added tables, re-run `npm run db:create-app-role` with the same admin URL (see [HOSTED_BETA_SETUP.md](./HOSTED_BETA_SETUP.md)).
+3. Cut the tag per [docs/RELEASE_PROCESS.md](../docs/RELEASE_PROCESS.md).
+
+If pending migrations exist when CI runs, `deploy-hosted.sh` **aborts before `compose up`**; the Actions log shows `ABORTING deploy — containers were NOT touched.` Fix migrations, then re-run deploy (re-push the tag only if images were never published, or use **workflow_dispatch** below).
+
+**GitHub repository secrets** (Settings → Secrets and variables → Actions):
+
+| Secret | Required | Purpose |
+|--------|----------|---------|
+| `HOSTED_DEPLOY_SSH_KEY` | **Yes** | Private key for SSH (matches droplet access — e.g. same key you use for `ssh domi-ops-hosted`) |
+| `HOSTED_DEPLOY_HOST` | No | Default `138.197.22.88` |
+| `HOSTED_DEPLOY_USER` | No | Default `root` |
+
+Do **not** store the admin `DATABASE_URL` in GitHub; migrations stay a human pre-step.
+
+**Emergency redeploy** (same image tag, or pin manually): Actions → **Publish images** → **Run workflow** → enable **deploy_hosted**, optional **domi_ops_image_tag** (semver without `v`, git sha, or leave empty for `latest` after a main publish).
+
+After deploy: smoke `https://app.domi-ops.com/login`, marketing site, and privacy-sensitive flows per your checklist.
+
+### Manual deploy (SSH)
+
 On the droplet, from `~/domi-ops` (a real git clone — read-only deploy key, see
 [HOSTED_BETA_SETUP.md](./HOSTED_BETA_SETUP.md#3-droplet-compute)):
 
