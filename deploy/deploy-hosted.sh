@@ -4,7 +4,13 @@
 #
 # Usage (on the droplet, from ~/domi-ops):
 #   deploy/deploy-hosted.sh
+#   deploy/deploy-hosted.sh --migrate
 #   DOMI_OPS_IMAGE_TAG=abc123 deploy/deploy-hosted.sh   # pin a specific build instead of latest
+#
+# --migrate applies pending DDL using DATABASE_URL_ADMIN from your *shell* (export it in
+# ~/.bashrc on the droplet — do not put the admin URL in compose .env). Order: migrate →
+# re-grant domi_ops_app → pending check → compose up. Never uses the restricted app
+# DATABASE_URL for DDL.
 #
 # The droplet is a git clone (read-only deploy key, HOSTED_BETA_SETUP.md
 # "Prerequisites") of this repo — plain `docker compose pull`, no image builds happen
@@ -19,15 +25,54 @@
 # Before touching any container, this script runs a read-only pending-migrations check
 # (packages/db/scripts/check-pending-migrations.mjs, using the same restricted role — it only
 # needs SELECT) and ABORTS if anything's unapplied, rather than trusting a human to remember.
-# If it blocks you, apply the pending migration(s) via the ADMIN connection string FIRST, from
-# any machine with this repo checked out (npm isn't installed on the droplet):
-#     DATABASE_URL="<DO admin connection string>" npm run db:migrate
-# then re-run this script.
+# If it blocks you, re-run with --migrate (after exporting DATABASE_URL_ADMIN in your shell)
+# or apply migrations from another machine: DATABASE_URL="<admin>" npm run db:migrate
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
+
+RUN_MIGRATE=0
+SHOW_HELP=0
+for arg in "$@"; do
+  case "$arg" in
+    --migrate) RUN_MIGRATE=1 ;;
+    -h|--help) SHOW_HELP=1 ;;
+    *)
+      echo "Unknown option: $arg (try --help)" >&2
+      exit 1
+      ;;
+  esac
+done
+
+usage() {
+  cat <<'EOF'
+Usage: deploy/deploy-hosted.sh [OPTIONS]
+
+  (no flags)   git pull, pull GHCR images, pending-migration check, compose up
+  --migrate    Apply pending DB migrations and re-grant domi_ops_app, then continue deploy
+
+  Requires DATABASE_URL_ADMIN in the shell (e.g. export in ~/.bashrc) when using --migrate.
+  Do not put the admin connection string in compose .env.
+
+  -h, --help   Show this help
+
+Environment:
+  DOMI_OPS_IMAGE_TAG   GHCR tag to pull (default: latest)
+EOF
+}
+
+if [[ "$SHOW_HELP" -eq 1 ]]; then
+  usage
+  exit 0
+fi
+
+# Admin URL for --migrate: capture from the caller's shell before .env is sourced (operators
+# export DATABASE_URL_ADMIN in ~/.bashrc — not stored in compose .env).
+if [[ "$RUN_MIGRATE" -eq 1 ]]; then
+  MIGRATE_ADMIN_URL="${DATABASE_URL_ADMIN:-}"
+fi
 
 # git pull can change this script's own content — a plain `bash deploy-hosted.sh` invocation may
 # keep executing whatever it had already buffered from the pre-pull version, silently skipping
@@ -60,6 +105,13 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
+if [[ "$RUN_MIGRATE" -eq 1 && -z "${MIGRATE_ADMIN_URL:-}" ]]; then
+  echo "ERROR: --migrate requires DATABASE_URL_ADMIN in your shell environment." >&2
+  echo "       Export the DO admin connection string (e.g. in ~/.bashrc), open a new shell or" >&2
+  echo "       source ~/.bashrc, then re-run: deploy/deploy-hosted.sh --migrate" >&2
+  exit 1
+fi
+
 set -a
 # shellcheck disable=SC1091
 source .env
@@ -71,6 +123,21 @@ echo "==> Domi Ops hosted update (tag: ${DOMI_OPS_IMAGE_TAG})"
 
 echo "==> docker compose pull"
 "${COMPOSE[@]}" pull
+
+if [[ "$RUN_MIGRATE" -eq 1 ]]; then
+  echo "==> applying database migrations (admin connection)"
+  "${COMPOSE[@]}" run --rm -T --no-deps \
+    -e "DATABASE_URL=${MIGRATE_ADMIN_URL}" \
+    --entrypoint node api \
+    packages/db/dist/migrate.js
+
+  echo "==> re-granting domi_ops_app (new tables need grants)"
+  # DOMI_OPS_APP_PASSWORD comes from api's env_file (.env); DATABASE_URL is admin only here.
+  "${COMPOSE[@]}" run --rm -T --no-deps \
+    -e "DATABASE_URL=${MIGRATE_ADMIN_URL}" \
+    --entrypoint node api \
+    packages/db/scripts/create-hosted-app-role.mjs
+fi
 
 echo "==> checking for pending migrations"
 # Must run on the compose network, not a bare `docker run` — DATABASE_URL can point at a
@@ -84,6 +151,10 @@ if ! "${COMPOSE[@]}" run --rm -T --no-deps --entrypoint node api \
     packages/db/scripts/check-pending-migrations.mjs; then
   echo "" >&2
   echo "ABORTING deploy — containers were NOT touched. See message above." >&2
+  if [[ "$RUN_MIGRATE" -ne 1 ]]; then
+    echo "Hint: on the droplet, export DATABASE_URL_ADMIN in ~/.bashrc, then re-run with:" >&2
+    echo "      deploy/deploy-hosted.sh --migrate" >&2
+  fi
   exit 1
 fi
 

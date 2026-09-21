@@ -122,6 +122,21 @@ For every deploy after this first stand-up, use `deploy/deploy-hosted.sh` (from 
 it does the `git pull` + `docker compose pull` + `up` + health-check sequence above in one step.
 See [HOSTED_OPS.md](./HOSTED_OPS.md#routine-updates).
 
+**Applying migrations on the droplet (no local npm):** export the DO **admin** connection string in your shell — not in compose `.env` (that file holds the restricted app `DATABASE_URL` only):
+
+```bash
+# once, in ~/.bashrc on the droplet (doadmin URL — same as step 1 above)
+export DATABASE_URL_ADMIN='postgresql://doadmin:…@…/domi_ops?sslmode=require'
+```
+
+Then from `~/domi-ops` after `source ~/.bashrc` (or a new SSH session):
+
+```bash
+deploy/deploy-hosted.sh --migrate
+```
+
+That runs pending DDL via the pulled `api` image, re-runs `create-hosted-app-role.mjs` so new tables get grants, then continues with the normal pending check and `compose up`. Order: **migrate → grant → restart** (the script recreates changed containers at the end). Without `--migrate`, the script still aborts if migrations are pending and points you at this flag.
+
 ---
 
 ## 4. Caddy (reverse proxy / TLS)
