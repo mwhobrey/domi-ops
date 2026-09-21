@@ -40,14 +40,14 @@ Pushing a **`v*`** git tag triggers [`.github/workflows/publish-images.yml`](../
 GHCR images for that release (`X.Y.Z`, matching semver without the `v` prefix), then an SSH job on the
 hosted droplet runs `deploy/deploy-hosted.sh` with `DOMI_OPS_IMAGE_TAG=X.Y.Z`.
 
-**Before you tag** a release that includes new migrations:
+**Before you tag** a release that includes new migrations, either:
 
-1. Apply migrations from a machine on the Postgres **Trusted Sources** allowlist (admin connection string only — never in CI):
-   `DATABASE_URL="<admin connection string>" npm run db:migrate`
-2. If the migration added tables, re-run `npm run db:create-app-role` with the same admin URL (see [HOSTED_BETA_SETUP.md](./HOSTED_BETA_SETUP.md)).
-3. Cut the tag per [docs/RELEASE_PROCESS.md](../docs/RELEASE_PROCESS.md).
+- **On the droplet:** `export DATABASE_URL_ADMIN='…'` in `~/.bashrc`, then `deploy/deploy-hosted.sh --migrate` (applies DDL, re-grants `domi_ops_app`, then deploys), or
+- **From a dev machine** on the Postgres **Trusted Sources** allowlist: `DATABASE_URL="<admin connection string>" npm run db:migrate`, then re-run `npm run db:create-app-role` with the same admin URL if the migration added tables (see [HOSTED_BETA_SETUP.md](./HOSTED_BETA_SETUP.md)).
 
-If pending migrations exist when CI runs, `deploy-hosted.sh` **aborts before `compose up`**; the Actions log shows `ABORTING deploy — containers were NOT touched.` Fix migrations, then re-run deploy (re-push the tag only if images were never published, or use **workflow_dispatch** below).
+Then cut the tag per [docs/RELEASE_PROCESS.md](../docs/RELEASE_PROCESS.md).
+
+If pending migrations exist when CI runs, `deploy-hosted.sh` **aborts before `compose up`**; the Actions log shows `ABORTING deploy — containers were NOT touched.` SSH to the droplet and run `deploy/deploy-hosted.sh --migrate` (with `DATABASE_URL_ADMIN` exported in the shell), or apply migrations from another machine, then re-run deploy (re-push the tag only if images were never published, or use **workflow_dispatch** below).
 
 **GitHub repository secrets** (Settings → Secrets and variables → Actions):
 
@@ -70,19 +70,21 @@ On the droplet, from `~/domi-ops` (a real git clone — read-only deploy key, se
 
 ```bash
 deploy/deploy-hosted.sh
+# release with pending migrations (admin URL in shell, not in .env):
+export DATABASE_URL_ADMIN='postgresql://doadmin:…'   # usually in ~/.bashrc
+deploy/deploy-hosted.sh --migrate
 ```
 
 `git pull`s the compose files/scripts, pulls the latest GHCR images (`DOMI_OPS_IMAGE_TAG`,
 default `latest`), then runs a **read-only pending-migrations check**
 (`packages/db/scripts/check-pending-migrations.mjs`, using the same restricted role the app
 already connects as — it only needs `SELECT`) and **aborts before touching any container** if
-anything's unapplied, rather than trusting a human to remember. If it blocks you, apply the
-migration via the admin Postgres connection string first (the droplet has no build tooling —
-that step happens from a machine that does):
-`DATABASE_URL="<admin connection string>" npm run db:migrate`, then re-run the script. Once
-that check passes, it recreates only the containers whose image actually changed and
-smoke-checks `/health` and the marketing site. `.env` and `Caddyfile` are untracked and
-untouched by `git pull`.
+anything's unapplied. Re-run with `--migrate` after exporting `DATABASE_URL_ADMIN` in your
+shell (`~/.bashrc` on the droplet) to apply DDL and re-grant `domi_ops_app`, then continue the
+deploy; or apply migrations from another machine with `npm run db:migrate` (admin
+`DATABASE_URL`) and re-run the script without `--migrate`. Once the check passes, it recreates
+only the containers whose image actually changed and smoke-checks `/health` and the marketing
+site. `.env` and `Caddyfile` are untracked and untouched by `git pull`.
 
 To pin a specific build instead of `latest`: `DOMI_OPS_IMAGE_TAG=<sha> deploy/deploy-hosted.sh`.
 
