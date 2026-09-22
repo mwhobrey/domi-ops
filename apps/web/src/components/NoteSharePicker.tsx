@@ -40,12 +40,16 @@ export function NoteSharePicker({
 
   // If who's excluded changes — most commonly the caller lets you switch which member a record
   // is about — drop any already-checked share target that's now implicitly covered instead of
-  // silently submitting a stale "share with the subject" selection.
+  // silently submitting a stale "share with the subject" selection. Also re-runs when `value`
+  // itself changes (e.g. the parent reopens this sheet for a different record with the same
+  // exclude set but a stale-inclusive `sharedMemberIds`), not just when `excludeKey` changes —
+  // otherwise a controlled `value` swap that lands on an already-excluded id never gets pruned.
+  // The length check keeps this from looping: onChange only fires when something actually changes.
   useEffect(() => {
     const pruned = value.filter((id) => !excluded.has(id));
     if (pruned.length !== value.length) onChange(pruned);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [excludeKey]);
+  }, [excludeKey, value, onChange]);
 
   if (shareable.length === 0) return null;
 
