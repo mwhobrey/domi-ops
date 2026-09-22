@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { googleCalendarConnectUrl } from "../../lib/auth-links";
 import { cn } from "../../lib/cn";
 import { Alert, AnchorButton, Button } from "../ui";
+import { calendarSetupComplete } from "./calendar-setup";
 
 const DISMISS_KEY = "domi-ops:calendar-setup-dismissed";
 
@@ -29,20 +30,6 @@ function writeDismissed() {
   } catch {
     /* ignore */
   }
-}
-
-/** Household calendar is usable when at least one lane exists and Google import is not pending. */
-export function calendarSetupComplete({
-  connected,
-  hasCalendars,
-  needsImport,
-}: {
-  connected: boolean;
-  hasCalendars: boolean;
-  needsImport: boolean;
-}): boolean {
-  void connected;
-  return hasCalendars && !needsImport;
 }
 
 export function CalendarSetupBanner({
