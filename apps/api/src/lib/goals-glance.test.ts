@@ -53,10 +53,21 @@ describe("buildGoalsGlance", () => {
     expect(result.summary.headline).toBe("1 in progress");
   });
 
-  it("caps the overflow count against the first three ordered items", () => {
+  it("counts overflow as whatever's left beyond the shown preview items", () => {
     const rows = Array.from({ length: 5 }, (_, i) => row({ id: `g${i}` }));
     const result = buildGoalsGlance(rows, 0, false);
     expect(result.items.length).toBe(4);
-    expect(result.overflow).toBe(2);
+    expect(result.overflow).toBe(1);
+  });
+
+  it("never counts a completed goal's claimable reward toward the claim headline or items", () => {
+    const result = buildGoalsGlance(
+      [row({ id: "g1", completed: true, claimableCount: 1 }), row({ id: "g2" })],
+      0,
+      false,
+    );
+    expect(result.summary.headline).toBe("1 in progress");
+    expect(result.summary.tone).toBe("default");
+    expect(result.items.map((i) => i.id)).toEqual(["g2"]);
   });
 });

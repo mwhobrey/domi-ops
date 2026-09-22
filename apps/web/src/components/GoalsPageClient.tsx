@@ -49,9 +49,13 @@ function GoalCard({
 }) {
   const canManage = canManageGoalClient(role, goal.ownerMemberId, currentMemberId);
   const lastMilestone = goal.milestones[goal.milestones.length - 1];
-  const progressPct = lastMilestone
-    ? Math.min(100, Math.max(0, (goal.totalProgress / lastMilestone.threshold) * 100))
-    : 0;
+  // A threshold of 0 or negative is a degenerate case the API's validation floor technically
+  // allows for a goal's very first milestone (finite and > -Infinity) — guard it here so the bar
+  // never divides by zero/negative and renders NaN% / a negative width.
+  const progressPct =
+    lastMilestone && lastMilestone.threshold > 0
+      ? Math.min(100, Math.max(0, (goal.totalProgress / lastMilestone.threshold) * 100))
+      : 0;
 
   return (
     <Card>

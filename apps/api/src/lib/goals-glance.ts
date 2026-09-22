@@ -16,7 +16,10 @@ export function buildGoalsGlance(
   isApprover: boolean,
 ) {
   const open = rows.filter((r) => !r.completed);
-  const claimable = rows.filter((r) => r.claimableCount > 0);
+  // Filter from `open`, not `rows` — a completed goal can still carry a claimable-but-unclaimed
+  // reward on one of its milestones, and that shouldn't count toward the actionable headline or
+  // push a "done" goal back into the items list.
+  const claimable = open.filter((r) => r.claimableCount > 0);
   const totalClaimable = claimable.reduce((sum, r) => sum + r.claimableCount, 0);
 
   const ordered = [
@@ -34,7 +37,7 @@ export function buildGoalsGlance(
           ? `Next: ${r.nextMilestoneTitle}`
           : undefined,
   }));
-  const overflow = Math.max(0, ordered.length - 3);
+  const overflow = Math.max(0, ordered.length - previewLimit);
 
   let headline: string;
   let tone: GoalGlanceTone = "default";

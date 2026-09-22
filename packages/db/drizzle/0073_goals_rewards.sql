@@ -188,3 +188,5 @@ END $$;
 
 CREATE UNIQUE INDEX IF NOT EXISTS "goal_milestones_goal_sort" ON "goal_milestones" USING btree ("goal_id","sort_order");
 CREATE UNIQUE INDEX IF NOT EXISTS "goal_reward_redemptions_milestone_unique" ON "goal_reward_redemptions" USING btree ("milestone_id");
+CREATE INDEX IF NOT EXISTS "goal_progress_events_goal" ON "goal_progress_events" USING btree ("goal_id","logged_at");
+CREATE INDEX IF NOT EXISTS "goal_reward_redemptions_reward" ON "goal_reward_redemptions" USING btree ("reward_id");

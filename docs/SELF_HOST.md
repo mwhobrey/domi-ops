@@ -126,6 +126,7 @@ Controlled by `MODULES_ENABLED` at deploy time and per-household toggles in **Se
 | Google Calendar sync | `calendar_sync` | `GOOGLE_OAUTH_*`, worker |
 | Household Drive | `drive` | `S3_*` configured |
 | Health tracker | `health` | `ENCRYPTION_KEY` in production |
+| Goals & Rewards | `goals` | Nothing extra |
 
 `core` cannot be disabled. Other modules can be turned off per household without redeploying.
 

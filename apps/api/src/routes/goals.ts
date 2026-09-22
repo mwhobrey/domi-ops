@@ -18,6 +18,7 @@ import {
   GoalValidationError,
   loadAchievedMilestones,
   recomputeGoalProgress,
+  recomputeGoalsProgressBatch,
   serializeRedemption,
   serializeReward,
   validateMilestonesPayload,
@@ -220,7 +221,7 @@ export function goalsRoutes(db: Database, env: Env) {
       if (!title) return c.json({ error: "title_required" }, 400);
       patch.title = title;
     }
-    if (body.description !== undefined) patch.description = body.description.trim() || null;
+    if (body.description !== undefined) patch.description = body.description?.trim() || null;
     if (body.archived !== undefined) patch.archivedAt = body.archived ? new Date() : null;
     const [row] = await db
       .update(goalRewards)
@@ -260,8 +261,8 @@ export function goalsRoutes(db: Database, env: Env) {
       .where(and(...conditions))
       .orderBy(desc(goals.createdAt))
       .limit(100);
-    const dtos = await Promise.all(rows.map((row) => recomputeGoalProgress(db, row.id)));
-    return c.json({ goals: dtos.filter((d) => d !== null) });
+    const dtos = await recomputeGoalsProgressBatch(db, rows);
+    return c.json({ goals: dtos });
   });
 
   app.post("/", async (c) => {
@@ -349,7 +350,10 @@ export function goalsRoutes(db: Database, env: Env) {
       if (!title) return c.json({ error: "title_required" }, 400);
       patch.title = title;
     }
-    if (body.description !== undefined) patch.description = body.description.trim() || null;
+    // description is sent as null (not omitted) when the editor's field is blank — same "clear it"
+    // convention as GoalEditSheet's `description.trim() || null`, so a plain .trim() here would
+    // throw on null.
+    if (body.description !== undefined) patch.description = body.description?.trim() || null;
     if (body.visibility !== undefined) {
       patch.visibility = body.visibility === "private" ? "private" : "household";
     }
@@ -397,17 +401,25 @@ export function goalsRoutes(db: Database, env: Env) {
 
     const pendingInputs = incoming.slice(achieved.length);
     const minThreshold = achieved.length > 0 ? achieved[achieved.length - 1].threshold : -Infinity;
-    let normalizedPending;
-    try {
-      normalizedPending = await validateMilestonesPayload(
-        db,
-        auth.householdId,
-        pendingInputs,
-        minThreshold,
-      );
-    } catch (err) {
-      if (err instanceof GoalValidationError) return c.json({ error: err.code, message: err.message }, 400);
-      throw err;
+    // A goal whose milestones are ALL achieved resends nothing beyond the achieved prefix — that's
+    // valid (nothing left to edit), not "no milestones at all". Only require at least one pending
+    // milestone via validateMilestonesPayload's "milestones_required" when there's no achieved
+    // prefix either, matching the create-goal requirement of at least one milestone overall.
+    let normalizedPending: { title: string; threshold: number; rewardId: string | null }[] = [];
+    if (pendingInputs.length > 0) {
+      try {
+        normalizedPending = await validateMilestonesPayload(
+          db,
+          auth.householdId,
+          pendingInputs,
+          minThreshold,
+        );
+      } catch (err) {
+        if (err instanceof GoalValidationError) return c.json({ error: err.code, message: err.message }, 400);
+        throw err;
+      }
+    } else if (achieved.length === 0) {
+      return c.json({ error: "milestones_required", message: "At least one milestone is required" }, 400);
     }
 
     await db.transaction(async (tx) => {
@@ -526,13 +538,11 @@ export function goalsRoutes(db: Database, env: Env) {
     if (!milestone) return c.json({ error: "not_found" }, 404);
     if (!milestone.achievedAt) return c.json({ error: "not_achieved" }, 409);
     if (!milestone.rewardId) return c.json({ error: "no_reward" }, 409);
-    const [existing] = await db
-      .select({ id: goalRewardRedemptions.id })
-      .from(goalRewardRedemptions)
-      .where(eq(goalRewardRedemptions.milestoneId, milestoneId))
-      .limit(1);
-    if (existing) return c.json({ error: "already_claimed" }, 409);
 
+    // onConflictDoNothing against the unique milestone_id index is the real guard — it makes this
+    // race-safe against two concurrent claims on the same milestone (a plain SELECT-then-INSERT
+    // would let both requests pass the check and one insert would 500 on the constraint). A no-op
+    // insert returns no row, which reads the same as "someone already claimed it".
     const [redemption] = await db
       .insert(goalRewardRedemptions)
       .values({
@@ -543,7 +553,9 @@ export function goalsRoutes(db: Database, env: Env) {
         status: "pending",
         claimedByUserId: auth.userId,
       })
+      .onConflictDoNothing({ target: goalRewardRedemptions.milestoneId })
       .returning();
+    if (!redemption) return c.json({ error: "already_claimed" }, 409);
     return c.json({ redemption: serializeRedemption(redemption) }, 201);
   });
 

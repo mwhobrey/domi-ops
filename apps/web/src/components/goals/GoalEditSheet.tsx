@@ -66,7 +66,9 @@ export function GoalEditSheet({
     }
     const parsedMilestones = milestones.map((m) => ({
       id: m.id,
-      threshold: Number(m.threshold),
+      // Number("") is 0, not NaN — a blank field must fail the finite check below, not silently
+      // become a threshold-0 milestone (which reads as instantly-achieved on goal creation).
+      threshold: m.threshold.trim() === "" ? NaN : Number(m.threshold),
       title: m.title,
       rewardId: m.rewardId || null,
     }));
@@ -76,6 +78,11 @@ export function GoalEditSheet({
     }
     setLoading(true);
     setError(null);
+    // Edit mode is two requests (metadata, then milestones) — not atomic. If the metadata PATCH
+    // lands but the milestones PATCH then fails, the list's cached copy of this goal is stale
+    // (server has the new title, client doesn't). Track whether metadata committed so the catch
+    // block can refetch and hand the list the real state instead of silently going out of sync.
+    let metadataCommitted = false;
     try {
       if (goal) {
         const patch = await apiClient.patch<{ goal: GoalDto }>(`/api/goals/${goal.id}`, {
@@ -83,6 +90,7 @@ export function GoalEditSheet({
           description: description.trim() || null,
           visibility,
         });
+        metadataCommitted = true;
         const withMilestones = await apiClient.patch<{ goal: GoalDto }>(
           `/api/goals/${goal.id}/milestones`,
           { milestones: parsedMilestones },
@@ -101,6 +109,14 @@ export function GoalEditSheet({
       onClose();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not save goal");
+      if (goal && metadataCommitted) {
+        try {
+          const refreshed = await apiClient.get<{ goal: GoalDto }>(`/api/goals/${goal.id}`);
+          onSaved(refreshed.goal);
+        } catch {
+          /* best-effort — the list just keeps showing the pre-edit copy until next reload */
+        }
+      }
     } finally {
       setLoading(false);
     }

@@ -197,7 +197,7 @@ Optional leftover (not the default queue): HomeHub retirement on `home.whobrey.m
 ## Module enablement (default)
 
 ```
-MODULES_ENABLED=core,school,calendar_sync,drive,health
+MODULES_ENABLED=core,school,calendar_sync,drive,health,goals
 ```
 
 In **development**, `@domi-ops/config` auto-merges any missing `KNOWN_HOUSEHOLD_MODULES` into the deploy catalog (warns once at boot) so stale local `.env` files still list new modules on `/settings`. Production uses `MODULES_ENABLED` as-is.

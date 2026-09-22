@@ -260,6 +260,9 @@ export async function recomputeGoalProgress(db: Database, goalId: string): Promi
       .set({ completedAt: new Date() })
       .where(eq(goals.id, goalId))
       .returning({ completedAt: goals.completedAt });
+    // The goal can have been deleted between the initial read above and this update (e.g. a
+    // concurrent DELETE) — updated is then undefined, not a row with a null completedAt.
+    if (!updated) return null;
     completedAt = updated.completedAt;
   }
 
@@ -269,6 +272,101 @@ export async function recomputeGoalProgress(db: Database, goalId: string): Promi
   dto.completed = completedAt !== null;
   dto.completedAt = completedAt ? completedAt.toISOString() : null;
   return dto;
+}
+
+/**
+ * Batched equivalent of calling `recomputeGoalProgress` once per goal — used by `GET /api/goals`
+ * so the list endpoint issues a fixed handful of queries instead of ~4-5 per goal (N+1). Ratchet
+ * semantics are identical to the single-goal path (ascending-threshold crossings are computed
+ * with the same `milestonesCrossedByTotal` helper and persisted the same way); the only
+ * difference is every goal's crossings are applied in one bulk UPDATE instead of one per goal.
+ */
+export async function recomputeGoalsProgressBatch(
+  db: Database,
+  goalRows: GoalRow[],
+): Promise<GoalDto[]> {
+  if (goalRows.length === 0) return [];
+  const goalIds = goalRows.map((g) => g.id);
+
+  const sums = await db
+    .select({
+      goalId: goalProgressEvents.goalId,
+      total: sql<number>`coalesce(sum(${goalProgressEvents.amount}), 0)`,
+    })
+    .from(goalProgressEvents)
+    .where(inArray(goalProgressEvents.goalId, goalIds))
+    .groupBy(goalProgressEvents.goalId);
+  const totalByGoal = new Map(sums.map((s) => [s.goalId, Number(s.total)]));
+
+  let milestoneRows = await db
+    .select()
+    .from(goalMilestones)
+    .where(inArray(goalMilestones.goalId, goalIds))
+    .orderBy(asc(goalMilestones.sortOrder));
+
+  const groupByGoal = (rows: MilestoneRow[]) => {
+    const map = new Map<string, MilestoneRow[]>();
+    for (const row of rows) {
+      const list = map.get(row.goalId) ?? [];
+      list.push(row);
+      map.set(row.goalId, list);
+    }
+    return map;
+  };
+
+  let milestonesByGoal = groupByGoal(milestoneRows);
+  const allCrossedIds = goalIds.flatMap((goalId) =>
+    milestonesCrossedByTotal(milestonesByGoal.get(goalId) ?? [], totalByGoal.get(goalId) ?? 0),
+  );
+  if (allCrossedIds.length > 0) {
+    await db
+      .update(goalMilestones)
+      .set({ achievedAt: new Date() })
+      .where(inArray(goalMilestones.id, allCrossedIds));
+    milestoneRows = await db
+      .select()
+      .from(goalMilestones)
+      .where(inArray(goalMilestones.goalId, goalIds))
+      .orderBy(asc(goalMilestones.sortOrder));
+    milestonesByGoal = groupByGoal(milestoneRows);
+  }
+
+  const completedAtByGoal = new Map(goalRows.map((g) => [g.id, g.completedAt]));
+  const justCompletedGoalIds = goalRows
+    .filter((g) => {
+      if (g.completedAt) return false;
+      const ms = milestonesByGoal.get(g.id) ?? [];
+      return ms.length > 0 && ms[ms.length - 1].achievedAt !== null;
+    })
+    .map((g) => g.id);
+  if (justCompletedGoalIds.length > 0) {
+    const now = new Date();
+    await db.update(goals).set({ completedAt: now }).where(inArray(goals.id, justCompletedGoalIds));
+    for (const id of justCompletedGoalIds) completedAtByGoal.set(id, now);
+  }
+
+  const milestoneIds = milestoneRows.map((m) => m.id);
+  const redemptions =
+    milestoneIds.length > 0
+      ? await db
+          .select()
+          .from(goalRewardRedemptions)
+          .where(inArray(goalRewardRedemptions.milestoneId, milestoneIds))
+      : [];
+  const redemptionByMilestone = new Map(redemptions.map((r) => [r.milestoneId, r]));
+
+  return goalRows.map((g) => {
+    const completedAt = completedAtByGoal.get(g.id) ?? null;
+    const milestoneDtos = (milestonesByGoal.get(g.id) ?? []).map((row) => {
+      const redemption = redemptionByMilestone.get(row.id);
+      return serializeMilestone(row, redemption !== undefined, redemption?.status ?? null);
+    });
+    const dto = serializeGoal({ ...g, completedAt }, milestoneDtos);
+    dto.totalProgress = totalByGoal.get(g.id) ?? 0;
+    dto.completed = completedAt !== null;
+    dto.completedAt = completedAt ? completedAt.toISOString() : null;
+    return dto;
+  });
 }
 
 /** Not-yet-achieved milestones for a goal, ordered — used by the milestone-replace endpoint. */

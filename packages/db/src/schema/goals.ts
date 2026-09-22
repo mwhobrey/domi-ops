@@ -1,4 +1,5 @@
 import {
+  index,
   integer,
   pgEnum,
   pgTable,
@@ -85,25 +86,32 @@ export const goalMilestones = pgTable(
   (t) => [uniqueIndex("goal_milestones_goal_sort").on(t.goalId, t.sortOrder)],
 );
 
-export const goalProgressEvents = pgTable("goal_progress_events", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  goalId: uuid("goal_id")
-    .notNull()
-    .references(() => goals.id, { onDelete: "cascade" }),
-  householdId: uuid("household_id")
-    .notNull()
-    .references(() => households.id, { onDelete: "cascade" }),
-  sourceType: goalProgressSourceTypeEnum("source_type").notNull().default("manual"),
-  /** Reserved for WHO-324 (health auto-progress) — which health_event_type to count. Plain text,
-   *  not an FK/enum into health.ts, so this schema has no import dependency on the health module
-   *  and goals keeps working with Health disabled. */
-  sourceEventType: text("source_event_type"),
-  /** May be negative — corrections/undo, same spirit as deleting a health med dose log. */
-  amount: real("amount").notNull(),
-  note: text("note"),
-  loggedAt: timestamp("logged_at", { withTimezone: true }).notNull().defaultNow(),
-  createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
-});
+export const goalProgressEvents = pgTable(
+  "goal_progress_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    goalId: uuid("goal_id")
+      .notNull()
+      .references(() => goals.id, { onDelete: "cascade" }),
+    householdId: uuid("household_id")
+      .notNull()
+      .references(() => households.id, { onDelete: "cascade" }),
+    sourceType: goalProgressSourceTypeEnum("source_type").notNull().default("manual"),
+    /** Reserved for WHO-324 (health auto-progress) — which health_event_type to count. Plain text,
+     *  not an FK/enum into health.ts, so this schema has no import dependency on the health module
+     *  and goals keeps working with Health disabled. */
+    sourceEventType: text("source_event_type"),
+    /** May be negative — corrections/undo, same spirit as deleting a health med dose log. */
+    amount: real("amount").notNull(),
+    note: text("note"),
+    loggedAt: timestamp("logged_at", { withTimezone: true }).notNull().defaultNow(),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  },
+  // recomputeGoalProgress sums by goalId on every read/write, and the progress-history route
+  // filters by goalId ordered by loggedAt — both would sequential-scan without this as the table
+  // grows.
+  (t) => [index("goal_progress_events_goal").on(t.goalId, t.loggedAt)],
+);
 
 export const goalRewardRedemptions = pgTable(
   "goal_reward_redemptions",
@@ -130,5 +138,9 @@ export const goalRewardRedemptions = pgTable(
     decidedAt: timestamp("decided_at", { withTimezone: true }),
     decisionNote: text("decision_note"),
   },
-  (t) => [uniqueIndex("goal_reward_redemptions_milestone_unique").on(t.milestoneId)],
+  (t) => [
+    uniqueIndex("goal_reward_redemptions_milestone_unique").on(t.milestoneId),
+    // DELETE /api/goals/rewards/:id checks for an in-use reward by rewardId before deleting.
+    index("goal_reward_redemptions_reward").on(t.rewardId),
+  ],
 );
