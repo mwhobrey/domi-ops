@@ -102,6 +102,11 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Fixed
 
+- Health log sheets' "Share with" picker now tracks who you're actually logging for (WHO-326):
+  switching the Member dropdown (vitals/exercise/pain/meal/event/medication) no longer leaves the
+  previous subject offered — or, if already checked, silently retained — as a share target once
+  they become the record's subject. `NoteSharePicker` gained an `excludeMemberIds` prop and prunes
+  a now-redundant selection instead of submitting it.
 - Dashboard Customize drag no longer scales a small card up to the Today at a glance height
   (WHO-314): the overlay is a compact label, and sortable transforms are translate-only.
 - Interval medications with a multi-day cadence (e.g. once every 7 days) no longer reappear every
