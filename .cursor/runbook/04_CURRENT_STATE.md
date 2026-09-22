@@ -161,6 +161,7 @@
 - Prod compose + **`docker-compose.proxy-external.yml`** — full stack (Postgres, Redis, MinIO, api, worker, web); optional overlay joins Caddy/HomeHub network.
 - **Dev MinIO:** `scripts/ensure-minio.mjs` creates S3 bucket after `dev:reset`; API boot calls `ensureS3Bucket` (`apps/api/src/lib/s3.ts`).
 - **Single-tenant auth:** `packages/auth/src/single-tenant.ts` â€” second login joins canonical household; repairs orphan shadow households.
+- **BullMQ 6 job schedulers (queue.ts):** the 7 repeating scans (`ensureCalendarReminderScheduler` and siblings, `packages/calendar-sync/src/queue.ts`) use `Queue.upsertJobScheduler(schedulerId, repeatOpts, jobTemplate)`, not the old `Queue.add(name, data, {repeat, jobId})` — v6 removed `repeat`/`jobId` from `JobsOptions` entirely. Job schedulers are idempotent create-or-update, so each `ensureXScheduler` is still safe to call on every worker boot. **One-time per environment**: old repeatable-job records from any pre-v6 worker boot are NOT migrated or removed automatically — v6 keeps firing them (they show up in `getJobSchedulers()` under an auto-generated hash key, alongside the new human-readable-keyed ones), which doubles every reminder scan until cleaned up. Run `REDIS_URL=<...> node packages/calendar-sync/scripts/remove-legacy-repeatable-jobs.mjs` once against local dev / dogfood / hosted after this ships.
 
 ## Broken, stubbed, or incomplete
 

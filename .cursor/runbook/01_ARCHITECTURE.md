@@ -7,7 +7,7 @@
 | Monorepo | npm workspaces + Turborepo 2.x | Root `package.json`, `turbo.json` |
 | UI | Next.js 15, React 19, Tailwind 4 | `apps/web` |
 | API | Hono 4 + `@hono/node-server` | `apps/api` |
-| Jobs | BullMQ 5 + Redis 7 | `apps/worker`, `packages/calendar-sync` |
+| Jobs | BullMQ 6 + Redis 7 | `apps/worker`, `packages/calendar-sync` |
 | ORM / DB | Drizzle ORM + PostgreSQL 16 | `packages/db` |
 | Auth | Cookie sessions + Google OAuth | `packages/auth`, `packages/crypto` |
 | Config | Zod env validation | `packages/config` |
