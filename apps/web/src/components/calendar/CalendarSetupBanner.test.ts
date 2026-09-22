@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calendarSetupComplete } from "./CalendarSetupBanner";
+import { calendarSetupComplete } from "./calendar-setup";
 
 describe("calendarSetupComplete", () => {
   it("treats local/HomeHub calendars as complete without Google OAuth", () => {
