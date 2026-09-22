@@ -53,6 +53,10 @@ const MODULE_META: Record<string, { label: string; description: string; locked?:
     label: "Health",
     description: "Symptoms, medications, and household health tracking",
   },
+  goals: {
+    label: "Goals & Rewards",
+    description: "Milestones, manual progress tracking, and a household reward catalog",
+  },
 };
 
 export function HouseholdSettingsEditor({ initial }: { initial: HouseholdSettings }) {

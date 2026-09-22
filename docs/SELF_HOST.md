@@ -50,7 +50,7 @@ Copy `.env.example` and set at minimum:
 | `SETUP_TOKEN` | Greenfield only: min 16 chars; `/setup` or `bootstrap:owner` (see [SETUP.md](./SETUP.md)) |
 | `POSTGRES_PASSWORD` | Required for `docker-compose.prod.yml` (compose builds `DATABASE_URL`) |
 | `S3_*` | MinIO locally; S3-compatible in prod |
-| `MODULES_ENABLED` | Comma list: `core,school,calendar_sync,drive,health` |
+| `MODULES_ENABLED` | Comma list: `core,school,calendar_sync,drive,health,goals` |
 
 Production boot **fails** if `SESSION_SECRET` is too short, `ENCRYPTION_KEY` is missing, `AUTH_REQUIRED` is off, or `calendar_sync` is enabled without Google OAuth credentials. With `health` in `MODULES_ENABLED`, `ENCRYPTION_KEY` is also required in production (field encryption for health records).
 

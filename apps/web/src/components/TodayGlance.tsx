@@ -64,6 +64,12 @@ type ExpensesGlance = {
   overflow: number;
 };
 
+type GoalsGlance = {
+  summary: { headline: string; tone: GlanceTone };
+  items: { id: string; title: string; meta?: string }[];
+  overflow: number;
+};
+
 type CalendarEvent = {
   id: string;
   title: string;
@@ -203,6 +209,24 @@ function buildNotesTile(glance: NotesGlance | null): GlanceTileModel | null {
   };
 }
 
+function buildGoalsTile(glance: GoalsGlance | null): GlanceTileModel | null {
+  if (!glance) return null;
+  return {
+    key: "goals",
+    label: "Goals",
+    href: "/goals",
+    headline: glance.summary.headline,
+    tone: glance.summary.tone,
+    items: glance.items.map((g) => ({
+      key: g.id,
+      label: g.title,
+      meta: g.meta,
+    })),
+    overflowCount: glance.overflow,
+    emptyHint: glance.summary.tone === "success" ? "No goals in progress." : undefined,
+  };
+}
+
 function buildExpensesTile(glance: ExpensesGlance | null): GlanceTileModel | null {
   if (!glance) return null;
   return {
@@ -271,12 +295,14 @@ export function TodayGlance({
   healthModuleEnabled = false,
   driveModuleEnabled = false,
   calendarModuleEnabled = false,
+  goalsModuleEnabled = false,
   glanceConfig = null,
 }: {
   schoolModuleEnabled?: boolean;
   healthModuleEnabled?: boolean;
   driveModuleEnabled?: boolean;
   calendarModuleEnabled?: boolean;
+  goalsModuleEnabled?: boolean;
   /** Per-member tile visibility + order (GlanceConfigCard.tsx, /profile). Null = no preference
    *  set — falls back to showing every currently-available tile, sorted by urgency. */
   glanceConfig?: string[] | null;
@@ -290,35 +316,48 @@ export function TodayGlance({
   const [notesGlance, setNotesGlance] = useState<NotesGlance | null>(null);
   const [expensesGlance, setExpensesGlance] = useState<ExpensesGlance | null>(null);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEventsResponse | null>(null);
+  const [goalsGlance, setGoalsGlance] = useState<GoalsGlance | null>(null);
   const today = new Date().toISOString().slice(0, 10);
   const narrow = useNarrowViewport();
 
   useEffect(() => {
     (async () => {
       try {
-        const [choresRes, shoppingRes, schoolRes, healthRes, driveRes, notesRes, expensesRes, calendarRes] =
-          await Promise.all([
-            apiClient.get<ChoresGlance>("/api/core/chores/glance"),
-            apiClient.get<ShoppingGlance>("/api/core/shopping/glance"),
-            schoolModuleEnabled
-              ? apiClient.get<SchoolGlance>("/api/school/glance").catch(() => ({ enabled: false }))
-              : Promise.resolve({ enabled: false } as SchoolGlance),
-            healthModuleEnabled
-              ? apiClient
-                  .get<HealthGlance>("/api/health/glance")
-                  .catch(() => ({ enabled: false, pendingDoses: [] }))
-              : Promise.resolve(null),
-            driveModuleEnabled
-              ? apiClient.get<DriveGlance>("/api/core/drive/glance").catch(() => null)
-              : Promise.resolve(null),
-            apiClient.get<NotesGlance>("/api/core/notes/glance").catch(() => null),
-            apiClient.get<ExpensesGlance>("/api/core/expenses/glance").catch(() => null),
-            calendarModuleEnabled
-              ? apiClient
-                  .get<CalendarEventsResponse>(`/api/calendar/events?from=${today}&to=${today}`)
-                  .catch(() => null)
-              : Promise.resolve(null),
-          ]);
+        const [
+          choresRes,
+          shoppingRes,
+          schoolRes,
+          healthRes,
+          driveRes,
+          notesRes,
+          expensesRes,
+          calendarRes,
+          goalsRes,
+        ] = await Promise.all([
+          apiClient.get<ChoresGlance>("/api/core/chores/glance"),
+          apiClient.get<ShoppingGlance>("/api/core/shopping/glance"),
+          schoolModuleEnabled
+            ? apiClient.get<SchoolGlance>("/api/school/glance").catch(() => ({ enabled: false }))
+            : Promise.resolve({ enabled: false } as SchoolGlance),
+          healthModuleEnabled
+            ? apiClient
+                .get<HealthGlance>("/api/health/glance")
+                .catch(() => ({ enabled: false, pendingDoses: [] }))
+            : Promise.resolve(null),
+          driveModuleEnabled
+            ? apiClient.get<DriveGlance>("/api/core/drive/glance").catch(() => null)
+            : Promise.resolve(null),
+          apiClient.get<NotesGlance>("/api/core/notes/glance").catch(() => null),
+          apiClient.get<ExpensesGlance>("/api/core/expenses/glance").catch(() => null),
+          calendarModuleEnabled
+            ? apiClient
+                .get<CalendarEventsResponse>(`/api/calendar/events?from=${today}&to=${today}`)
+                .catch(() => null)
+            : Promise.resolve(null),
+          goalsModuleEnabled
+            ? apiClient.get<GoalsGlance>("/api/goals/glance").catch(() => null)
+            : Promise.resolve(null),
+        ]);
         setChores(choresRes);
         setShopping(shoppingRes);
         setSchool(schoolRes.enabled ? schoolRes : null);
@@ -327,13 +366,21 @@ export function TodayGlance({
         setNotesGlance(notesRes);
         setExpensesGlance(expensesRes);
         setCalendarEvents(calendarModuleEnabled ? calendarRes : null);
+        setGoalsGlance(goalsModuleEnabled ? goalsRes : null);
       } catch {
         /* ignore widget errors */
       } finally {
         setLoading(false);
       }
     })();
-  }, [schoolModuleEnabled, healthModuleEnabled, driveModuleEnabled, calendarModuleEnabled, today]);
+  }, [
+    schoolModuleEnabled,
+    healthModuleEnabled,
+    driveModuleEnabled,
+    calendarModuleEnabled,
+    goalsModuleEnabled,
+    today,
+  ]);
 
   const tiles = useMemo(() => {
     const built: GlanceTileModel[] = [];
@@ -402,6 +449,8 @@ export function TodayGlance({
     if (expensesTile) built.push(expensesTile);
     const calendarTile = buildCalendarTile(calendarEvents);
     if (calendarTile) built.push(calendarTile);
+    const goalsTile = buildGoalsTile(goalsGlance);
+    if (goalsTile) built.push(goalsTile);
 
     // A member's explicit choice (GlanceConfigCard) wins outright — their order, only their
     // chosen tiles (a stale key for a since-disabled module just quietly filters out, since
@@ -428,6 +477,7 @@ export function TodayGlance({
     notesGlance,
     expensesGlance,
     calendarEvents,
+    goalsGlance,
     today,
     narrow,
     glanceConfig,
@@ -449,10 +499,24 @@ export function TodayGlance({
     if (et) all.push(et.tone);
     const ct = buildCalendarTile(calendarEvents);
     if (ct) all.push(ct.tone);
+    const gt = buildGoalsTile(goalsGlance);
+    if (gt) all.push(gt.tone);
     const actionable = all.some((t) => t !== "success");
     if (!actionable) return 0;
     return all.filter((t) => t === "success").length;
-  }, [narrow, chores, shopping, school, health, drive, notesGlance, expensesGlance, calendarEvents, glanceConfig]);
+  }, [
+    narrow,
+    chores,
+    shopping,
+    school,
+    health,
+    drive,
+    notesGlance,
+    expensesGlance,
+    calendarEvents,
+    goalsGlance,
+    glanceConfig,
+  ]);
 
   const gridClass =
     tiles.length <= 1
