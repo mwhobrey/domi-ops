@@ -80,7 +80,7 @@ export function PrnQuickLog({
         aria-controls={listId}
         aria-autocomplete="list"
         aria-activedescendant={activeIndex >= 0 ? `${id}-option-${activeIndex}` : undefined}
-        placeholder="Search PRN meds…"
+        placeholder="Search as-needed meds…"
         value={query}
         disabled={Boolean(logging)}
         onChange={(e) => {

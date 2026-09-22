@@ -75,7 +75,7 @@ export const envSchema = z
     GOOGLE_CALENDAR_DEFAULT_SYNC_MODE: syncMode.default("import_only"),
     MODULES_ENABLED: z
       .string()
-      .default("core,school,calendar_sync,drive,health")
+      .default("core,school,calendar_sync,drive,health,goals")
       .transform((s) =>
         s
           .split(",")
@@ -171,21 +171,21 @@ export const envSchema = z
     if (data.NODE_ENV === "production") {
       if (!data.SESSION_SECRET || data.SESSION_SECRET.length < 32) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           message: "SESSION_SECRET (min 32 chars) is required in production",
           path: ["SESSION_SECRET"],
         });
       }
       if (!data.ENCRYPTION_KEY) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           message: "ENCRYPTION_KEY is required in production (OAuth token encryption)",
           path: ["ENCRYPTION_KEY"],
         });
       }
       if (data.AUTH_REQUIRED === false) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           message: "AUTH_REQUIRED cannot be disabled in production",
           path: ["AUTH_REQUIRED"],
         });
@@ -194,14 +194,14 @@ export const envSchema = z
     if (data.NODE_ENV === "production" && data.DEPLOYMENT_MODE === "shared") {
       if (!data.STRIPE_SECRET_KEY) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           message: "STRIPE_SECRET_KEY is required in production hosted (DEPLOYMENT_MODE=shared)",
           path: ["STRIPE_SECRET_KEY"],
         });
       }
       if (!data.STRIPE_WEBHOOK_SECRET) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           message: "STRIPE_WEBHOOK_SECRET is required in production hosted (DEPLOYMENT_MODE=shared)",
           path: ["STRIPE_WEBHOOK_SECRET"],
         });
@@ -220,7 +220,14 @@ export const envSchema = z
 
 export type Env = z.infer<typeof envSchema>;
 
-export const KNOWN_HOUSEHOLD_MODULES = ["core", "school", "calendar_sync", "drive", "health"] as const;
+export const KNOWN_HOUSEHOLD_MODULES = [
+  "core",
+  "school",
+  "calendar_sync",
+  "drive",
+  "health",
+  "goals",
+] as const;
 
 /** Deploy catalog ∩ known modules — used for household settings `availableModules`. */
 export function deployAvailableModules(envModules: readonly string[]): string[] {

@@ -27,6 +27,7 @@ import {
 } from "./ui";
 import { ScheduleConflictChecker } from "./ScheduleConflictChecker";
 import { eventFormToConflictFormState } from "../lib/schedule-conflict";
+import { adjustTimedEventEndOnStartChange } from "../lib/event-form-times";
 
 type EventCategory = {
   id: string;
@@ -242,6 +243,26 @@ export function CalendarEventSheet({
   // Buffers don't carry across a recurring series yet, so they're hidden (and sent as null) there.
   const bufferHidden = allDay || repeat !== "none";
 
+  function applyTimedEndAfterStartChange(
+    previousStartDate: string,
+    previousStartTime: string,
+    newStartDate: string,
+    newStartTime: string,
+  ) {
+    if (allDay) return;
+    const adjusted = adjustTimedEventEndOnStartChange({
+      startDate,
+      endDate,
+      previousStartDate,
+      previousStartTime,
+      newStartDate,
+      newStartTime,
+      endTime,
+    });
+    setEndTime(adjusted.endTime);
+    setEndDate(adjusted.endDate === newStartDate ? "" : adjusted.endDate);
+  }
+
   function buildPayload() {
     const payload: Record<string, unknown> = {
       title,
@@ -406,7 +427,11 @@ export function CalendarEventSheet({
                   <Input
                     type="date"
                     value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      applyTimedEndAfterStartChange(startDate, startTime, next, startTime);
+                      setStartDate(next);
+                    }}
                     required
                     disabled={readOnly}
                   />
@@ -434,7 +459,11 @@ export function CalendarEventSheet({
                     <Input
                       type="time"
                       value={startTime}
-                      onChange={(e) => setStartTime(e.target.value)}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        applyTimedEndAfterStartChange(startDate, startTime, startDate, next);
+                        setStartTime(next);
+                      }}
                       disabled={readOnly}
                     />
                   </label>

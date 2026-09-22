@@ -175,6 +175,7 @@ export const HEALTH_REPORT_SCHEDULE_KINDS: { value: string; label: string }[] = 
   { value: "scheduled", label: "Scheduled" },
   { value: "interval", label: "Interval" },
   { value: "prn", label: "PRN" },
+  { value: "otc", label: "OTC" },
 ];
 
 export const HEALTH_REPORT_FOCUS_OPTIONS: { id: HealthReportFocus; label: string }[] = [

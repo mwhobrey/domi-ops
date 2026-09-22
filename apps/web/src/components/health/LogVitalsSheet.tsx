@@ -120,6 +120,7 @@ export function LogVitalsSheet({
           <NoteSharePicker
             members={members}
             currentMemberId={currentMemberId}
+            excludeMemberIds={[memberId]}
             value={sharedMemberIds}
             onChange={setSharedMemberIds}
             namePrefix="health-vitals-share"
