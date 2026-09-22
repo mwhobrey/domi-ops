@@ -103,6 +103,35 @@
 - **Multi-day interval meds:** `everyMinutes >= 24*60` (e.g. once every 7 days) uses global last-taken + interval in `med-interval-schedule.ts` — does **not** reset each local morning (was showing the start time every day).
 - Docs: `docs/SECURITY_REVIEW.md` health ACL (no admin override); `/privacy` health note.
 
+### Goals module
+
+- API: `/api/goals` (`goals.ts`, `requireHouseholdModule(..., "goals")`) — goals CRUD, **`PATCH
+  .../milestones`** (full ordered-array replace of not-yet-achieved milestones; achieved
+  milestones are immutable — server enforces ascending thresholds), **`POST .../progress`** /
+  **`DELETE .../progress/:eventId`** (manual amount+note log/undo), **`POST
+  .../milestones/:id/claim`**, **`GET/PATCH /redemptions`** (owner/admin approve|deny), **`GET/
+  POST/PATCH/DELETE /rewards`** (owner/admin catalog write; archive instead of delete once a
+  reward has redemption history), `GET /glance`.
+- **Model:** a goal has ordered milestones (threshold/title/optional reward) — the last milestone
+  is the goal's completion, no separate target field. `goal_progress_events.sourceType` is an
+  enum already covering `chores`/`health`/`school` for WHO-323/324/325, plus a reserved
+  `sourceEventType` text column for the health phase — only `manual` is wired up this phase.
+  Milestone `achievedAt` / goal `completedAt` are a ratchet (never unset by a later correction).
+  Progress is recomputed live from `goal_progress_events` by `recomputeGoalProgress` on every
+  read/write — no denormalized running total, no hooks into chores/health/school's write paths.
+- **Visibility:** reuses `note_visibility` (`household`/`private`) — unlike health, **owner/admin
+  do get an override** on private goals (they must be able to see/approve a kid's private goal).
+- DB: migration `0073_goals_rewards` — `goals`, `goal_milestones` (unique `(goal_id,
+  sort_order)`), `goal_progress_events`, `goal_rewards`, `goal_reward_redemptions` (unique
+  `milestone_id` — one claim per milestone).
+- UI: `/goals` — Goals / Rewards / Approvals tabs (`GoalsPageClient.tsx`, same tab-bar pattern as
+  Health); milestone editor is an in-memory ordered array (`goals/MilestoneListEditor.tsx`,
+  modeled on `MedTimesEditor`) submitted as one array, not per-row API calls. Dashboard glance
+  tile (`buildGoalsTile` in `TodayGlance.tsx`).
+- **Not built this phase:** pooled/multi-contributor goals, push notification on milestone-cross
+  or redemption-decided, points/karma integration, chores/health/school auto-progress (WHO-323/
+  324/325) — natural follow-ups, not started.
+
 ### Calendar sync module
 
 - Google OAuth connect discovers linked sources (`sync_enabled` false until import wizard commit).
@@ -168,7 +197,7 @@ Optional leftover (not the default queue): HomeHub retirement on `home.whobrey.m
 ## Module enablement (default)
 
 ```
-MODULES_ENABLED=core,school,calendar_sync,drive,health
+MODULES_ENABLED=core,school,calendar_sync,drive,health,goals
 ```
 
 In **development**, `@domi-ops/config` auto-merges any missing `KNOWN_HOUSEHOLD_MODULES` into the deploy catalog (warns once at boot) so stale local `.env` files still list new modules on `/settings`. Production uses `MODULES_ENABLED` as-is.

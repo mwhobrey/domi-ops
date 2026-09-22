@@ -75,7 +75,7 @@ export const envSchema = z
     GOOGLE_CALENDAR_DEFAULT_SYNC_MODE: syncMode.default("import_only"),
     MODULES_ENABLED: z
       .string()
-      .default("core,school,calendar_sync,drive,health")
+      .default("core,school,calendar_sync,drive,health,goals")
       .transform((s) =>
         s
           .split(",")
@@ -220,7 +220,14 @@ export const envSchema = z
 
 export type Env = z.infer<typeof envSchema>;
 
-export const KNOWN_HOUSEHOLD_MODULES = ["core", "school", "calendar_sync", "drive", "health"] as const;
+export const KNOWN_HOUSEHOLD_MODULES = [
+  "core",
+  "school",
+  "calendar_sync",
+  "drive",
+  "health",
+  "goals",
+] as const;
 
 /** Deploy catalog ∩ known modules — used for household settings `availableModules`. */
 export function deployAvailableModules(envModules: readonly string[]): string[] {

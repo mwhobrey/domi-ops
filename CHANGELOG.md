@@ -10,6 +10,14 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Added
 
+- **Goals & Rewards module** (WHO-322): new optional household module — creator-defined ordered
+  milestones per goal (threshold + title + optional linked reward; the final milestone is the
+  goal's completion, no separate target field), manual progress logging (amount + note), and a
+  household reward catalog with claim → owner/admin approve/deny redemption flow. `/goals` page
+  with Goals / Rewards / Approvals tabs; dashboard glance tile. Auto-progress from chores/health/
+  school is a follow-up (WHO-323/324/325) — this phase only wires `sourceType: "manual"`, but the
+  schema already reserves `sourceType`/`sourceEventType` for them. *(requires `npm run db:migrate`
+  (`0073_goals_rewards`); self-hosters get the module on by default via `MODULES_ENABLED`.)*
 - Health OTC medications (WHO-319): new schedule kind **`otc`** — as-needed logging like PRN
   (`scheduled_at` null), Today quick-log inclusion, no fixed dose slots. Requires
   `npm run db:migrate` (`0072_med_schedule_otc`).

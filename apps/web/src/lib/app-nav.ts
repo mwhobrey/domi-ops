@@ -9,6 +9,7 @@ import {
   NotebookPen,
   Receipt,
   ShoppingCart,
+  Target,
   type LucideIcon,
 } from "lucide-react";
 
@@ -28,6 +29,7 @@ export const APP_NAV: AppNavItem[] = [
   { href: "/notes", label: "Notes", icon: NotebookPen },
   { href: "/drive", label: "Drive", icon: FolderOpen, module: "drive" },
   { href: "/health", label: "Health", icon: Heart, module: "health" },
+  { href: "/goals", label: "Goals", icon: Target, module: "goals" },
   { href: "/expenses", label: "Expenses", icon: Receipt },
   { href: "/reports", label: "Reports", icon: BarChart3 },
 ];
