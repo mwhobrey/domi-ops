@@ -33,7 +33,7 @@
     "fixture:homehub": "node packages/import-homehub/scripts/create-fixture.mjs"
   },
   "devDependencies": {
-    "playwright": "^1.51.1",
+    "playwright": "^1.63.0",
     "node-gyp": "^11.5.0",
     "turbo": "^2.5.4",
     "typescript": "^5.8.3",
