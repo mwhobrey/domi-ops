@@ -7,6 +7,7 @@ import {
   formatFoodLogSummary,
   groupMedsByMember,
   groupPendingDosesByMemberThenTime,
+  isAsNeededMedScheduleKind,
   memberLabel,
   mergeTodayEntriesForMember,
   resolveDefaultMemberId,
@@ -22,9 +23,17 @@ import type {
 
 describe("scheduleKindLabel", () => {
   it("labels each schedule kind", () => {
+    expect(scheduleKindLabel("otc")).toBe("OTC");
     expect(scheduleKindLabel("prn")).toBe("PRN");
     expect(scheduleKindLabel("interval")).toBe("Every…");
     expect(scheduleKindLabel("scheduled")).toBe("Scheduled");
+  });
+});
+
+describe("isAsNeededMedScheduleKind", () => {
+  it("includes OTC for Today quick-log filtering", () => {
+    expect(isAsNeededMedScheduleKind("otc")).toBe(true);
+    expect(isAsNeededMedScheduleKind("scheduled")).toBe(false);
   });
 });
 

@@ -55,6 +55,7 @@
 - **Package manager:** npm 10.9.2 workspaces + Turborepo (`@domi-ops/*` scope). Agent/CI shells without mise shims: `mise exec -- npm …`
 - **Repo:** `mwhobrey/domi-ops`, public, default branch `main`. PR workflow (see `03`); `master` is retired.
 - **CI** (`.github/workflows/ci.yml`): `build` job (typecheck + build + `npm run test`) and `test-hosted` job (Postgres service, migrate, `seed:hosted-qa`, `db:create-app-role`, `npm run test:hosted`). `main` branch protection requires both green + all review threads resolved; 0 required approvals.
+- **Hosted prod deploy:** `.github/workflows/publish-images.yml` job `deploy-hosted` runs on **`v*` tag push** only (after GHCR publish), SSH + `deploy/deploy-hosted.sh`; secrets `HOSTED_DEPLOY_SSH_KEY` (+ optional host/user). See `deploy/HOSTED_OPS.md`.
 - **Tests:** Vitest — `npm run test`; `npm run test:hosted` needs a live Postgres.
 
 ## Quick commands

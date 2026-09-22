@@ -14,6 +14,7 @@ export default async function DashboardPage() {
   let healthModuleEnabled = false;
   let driveModuleEnabled = false;
   let calendarModuleEnabled = false;
+  let goalsModuleEnabled = false;
   let role: string | null = null;
   let onboarding: OnboardingState | null = null;
   let glanceConfig: string[] | null = null;
@@ -51,6 +52,7 @@ export default async function DashboardPage() {
     healthModuleEnabled = (session.modulesEnabled ?? []).includes("health");
     driveModuleEnabled = (session.modulesEnabled ?? []).includes("drive");
     calendarModuleEnabled = (session.modulesEnabled ?? []).includes("calendar_sync");
+    goalsModuleEnabled = (session.modulesEnabled ?? []).includes("goals");
     role = session.user?.role ?? null;
     onboarding = onboardingRes;
     glanceConfig = glanceRes.tiles;
@@ -82,6 +84,7 @@ export default async function DashboardPage() {
           healthModuleEnabled={healthModuleEnabled}
           driveModuleEnabled={driveModuleEnabled}
           calendarModuleEnabled={calendarModuleEnabled}
+          goalsModuleEnabled={goalsModuleEnabled}
           role={role}
           onboarding={onboarding}
           glanceConfig={glanceConfig}

@@ -1,4 +1,4 @@
-export const LEGAL_LAST_UPDATED = "August 25, 2026";
+export const LEGAL_LAST_UPDATED = "September 19, 2026";
 export const LEGAL_CONTACT_EMAIL = "privacy@domi-ops.com";
 
 const bodyClass =
@@ -53,6 +53,111 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
           <li>Session and authentication cookies (HTTP-only on the app domain)</li>
           <li>Optional Web Push subscription endpoints if you enable notifications</li>
         </ul>
+      </section>
+
+      <section>
+        <h2>Data protection mechanisms for sensitive data</h2>
+        <p>
+          <strong className="text-[var(--color-text)]">
+            Security procedures are in place to protect the confidentiality of your data.
+          </strong>{" "}
+          <strong className="text-[var(--color-text)]">
+            We use encryption to protect your information
+          </strong>{" "}
+          when it is stored or sent over the network.
+        </p>
+        <ul>
+          <li>
+            <strong className="text-[var(--color-text)]">In transit:</strong> Domi Ops Cloud serves
+            the app and API over HTTPS (TLS). Browsers and our servers negotiate encrypted
+            connections for sign-in, household data, and Google OAuth flows.
+          </li>
+          <li>
+            <strong className="text-[var(--color-text)]">At rest (OAuth):</strong> Google OAuth
+            access and refresh tokens stored on your instance are encrypted at rest using the
+            instance <code>ENCRYPTION_KEY</code> before they are written to the database.
+          </li>
+          <li>
+            <strong className="text-[var(--color-text)]">At rest (health):</strong> When the health
+            module is enabled, sensitive health fields (for example titles, notes, medication names,
+            dosage, instructions, and comparable vitals or log values) are encrypted at rest with
+            the same <code>ENCRYPTION_KEY</code>. Dates, member assignment, and schedule times stay
+            queryable without storing those values in plaintext.
+          </li>
+          <li>
+            <strong className="text-[var(--color-text)]">Access controls:</strong> Household members
+            see only content their role and per-module permissions allow. Private notes, Drive
+            objects, and health records are further limited by per-record visibility and segment ACLs
+            — there is no operator back door to read private health data on Cloud.
+          </li>
+          <li>
+            <strong className="text-[var(--color-text)]">We do not sell your data</strong> to
+            advertisers, data brokers, or other third parties.
+          </li>
+          <li>
+            <strong className="text-[var(--color-text)]">Revoking Google access:</strong> Disconnect
+            Google Calendar or Docs in household settings, or remove Domi Ops from your Google
+            Account under{" "}
+            <a
+              href="https://myaccount.google.com/permissions"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Third-party access
+            </a>
+            . That stops Domi Ops from accessing Google on your behalf.
+          </li>
+        </ul>
+        <p>
+          <strong className="text-[var(--color-text)]">Self-hosted:</strong> the person who operates
+          the server is responsible for HTTPS, backups, and protecting <code>ENCRYPTION_KEY</code> —
+          the same encryption behavior applies when the key is configured.
+        </p>
+      </section>
+
+      <section>
+        <h2>Google account data</h2>
+        <p>
+          If you choose Google sign-in or connect Google services, Domi Ops accesses only the Google
+          user data needed for the features you enable:
+        </p>
+        <ul>
+          <li>
+            <strong className="text-[var(--color-text)]">Sign-in</strong> — basic profile (name,
+            email, profile photo) via OpenID Connect scopes used for authentication.
+          </li>
+          <li>
+            <strong className="text-[var(--color-text)]">Calendar</strong> — when you connect
+            Calendar sync, calendars and events you select so Domi Ops can display and sync household
+            events.
+          </li>
+          <li>
+            <strong className="text-[var(--color-text)]">Drive</strong> — when you enable Docs or
+            Drive features, only files you create or open through Domi Ops (Google{" "}
+            <code>drive.file</code> scope and the Google Picker), not your entire Drive.
+          </li>
+        </ul>
+        <p>
+          We use this Google user data <strong className="text-[var(--color-text)]">only</strong> to
+          provide those features — for example signing you in, showing synced events, or exporting
+          reports you request. We do <strong className="text-[var(--color-text)]">not</strong> use it
+          for advertising, and we do <strong className="text-[var(--color-text)]">not</strong> use it
+          to train general-purpose artificial intelligence or machine learning models.
+        </p>
+        <p>
+          We do <strong className="text-[var(--color-text)]">not sell or transfer</strong> Google
+          user data to third parties except service providers that help us run Domi Ops Cloud (for
+          example hosting and email), and only as needed to operate the service. Our use and transfer
+          of information received from Google APIs adheres to the{" "}
+          <a
+            href="https://developers.google.com/terms/api-services-user-data-policy"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Google API Services User Data Policy
+          </a>
+          , including the Limited Use requirements.
+        </p>
       </section>
 
       <section>
@@ -168,9 +273,12 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
         <p>
           <strong className="text-[var(--color-text)]">Cloud:</strong> email{" "}
           <a href={`mailto:${LEGAL_CONTACT_EMAIL}`}>{LEGAL_CONTACT_EMAIL}</a> to update profile
-          data, revoke Google connections, or request account and household deletion. We will
-          delete or anonymize hosted records within a reasonable time unless we must retain them
-          for legal or billing disputes.
+          data, revoke Google connections, or request account and household deletion. You may
+          request deletion of your Cloud account and associated household data by emailing that
+          address; we will delete or anonymize hosted records within{" "}
+          <strong className="text-[var(--color-text)]">30 days</strong> of verifying your request,
+          unless we must retain specific records for legal, security, or billing disputes (for
+          example open invoices).
         </p>
         <p>
           <strong className="text-[var(--color-text)]">Self-host:</strong> the instance operator
@@ -181,9 +289,16 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
       <section>
         <h2>Your choices</h2>
         <p>
-          You can disconnect Google Calendar or Docs, disable Web Push, turn off optional modules
-          (within what the instance enables), and turn anonymized metrics on or off — all in
-          household settings. See also the <a href={termsHref}>Terms of Service</a>.
+          You can disconnect Google Calendar or Docs in household settings, revoke Domi Ops in your{" "}
+          <a
+            href="https://myaccount.google.com/permissions"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Google Account
+          </a>
+          , disable Web Push, turn off optional modules (within what the instance enables), and
+          turn anonymized metrics on or off. See also the <a href={termsHref}>Terms of Service</a>.
         </p>
       </section>
 

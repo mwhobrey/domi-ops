@@ -87,6 +87,7 @@ export const healthPainBodyRegionEnum = pgEnum("health_pain_body_region", [
 export const medScheduleKindEnum = pgEnum("med_schedule_kind", [
   "scheduled",
   "prn",
+  "otc",
   "interval",
 ]);
 
