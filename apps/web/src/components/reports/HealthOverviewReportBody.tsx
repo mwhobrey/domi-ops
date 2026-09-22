@@ -18,6 +18,7 @@ import {
   PainSeverityTrendSection,
   VitalsTrendSection,
 } from "../health/HealthTrendCharts";
+import { isAsNeededMedScheduleKind } from "../health/health-helpers";
 
 export function formatReportDate(iso: string): string {
   const [year, month, day] = iso.split("-").map(Number);
@@ -324,9 +325,11 @@ export function HealthOverviewReportBody({
                   row.name,
                   row.memberLabel ?? "—",
                   row.scheduleKind,
-                  row.scheduleKind === "prn" ? `${row.prn} PRN` : row.taken,
-                  row.scheduleKind === "prn" ? "—" : row.missed,
-                  row.scheduleKind === "prn"
+                  isAsNeededMedScheduleKind(row.scheduleKind)
+                    ? `${row.prn} as-needed`
+                    : row.taken,
+                  isAsNeededMedScheduleKind(row.scheduleKind) ? "—" : row.missed,
+                  isAsNeededMedScheduleKind(row.scheduleKind)
                     ? "—"
                     : row.adherencePct != null
                       ? `${row.adherencePct}%`

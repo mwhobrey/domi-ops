@@ -7,7 +7,7 @@ import type { NoteShareMember } from "../NoteSharePicker";
 import { NoteSharePicker } from "../NoteSharePicker";
 import type { HealthAclGrants } from "../HealthPeopleAccessPanel";
 import { HealthMedicationSheet } from "./HealthMedicationSheet";
-import { memberLabel, resolveDefaultMemberId } from "./health-helpers";
+import { isAsNeededMedScheduleKind, memberLabel, resolveDefaultMemberId, scheduleKindLabel } from "./health-helpers";
 import type { HealthMedication } from "./health-types";
 import {
   Alert,
@@ -193,8 +193,8 @@ function MedGroupSheet({
       setErr(scheduleResult.error);
       return;
     }
-    if (scheduleResult.scheduleKind === "prn") {
-      setErr("Groups can't be PRN — pick Scheduled or Every N.");
+    if (isAsNeededMedScheduleKind(scheduleResult.scheduleKind)) {
+      setErr("Groups can't be as-needed — pick Scheduled or Every N.");
       return;
     }
     const reminderOffsets = offsetsText
@@ -519,7 +519,7 @@ export function MedicationManagerClient({
                   ))}
                   {intervalOrPrnMeds.map((m) => (
                     <Badge key={m.id}>
-                      {m.name} · {m.scheduleKind === "prn" ? "PRN" : "interval"}
+                      {m.name} · {scheduleKindLabel(m.scheduleKind)}
                     </Badge>
                   ))}
                 </div>
@@ -692,7 +692,7 @@ export function MedicationManagerClient({
         memberId={selectedMemberId}
         memberLabelText={memberLabel(members, selectedMemberId)}
         members={members}
-        candidateMedications={memberMeds.filter((m) => m.scheduleKind !== "prn")}
+        candidateMedications={memberMeds.filter((m) => !isAsNeededMedScheduleKind(m.scheduleKind))}
         onClose={() => {
           setGroupSheetOpen(false);
           setEditingGroup(null);

@@ -12,3 +12,4 @@ export * from "./google-docs.js";
 export * from "./health.js";
 export * from "./billing.js";
 export * from "./telemetry.js";
+export * from "./goals.js";

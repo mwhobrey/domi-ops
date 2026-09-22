@@ -117,6 +117,7 @@ export function LogPainSheet({
           <NoteSharePicker
             members={members}
             currentMemberId={currentMemberId}
+            excludeMemberIds={[memberId]}
             value={sharedMemberIds}
             onChange={setSharedMemberIds}
             namePrefix="health-pain-share"

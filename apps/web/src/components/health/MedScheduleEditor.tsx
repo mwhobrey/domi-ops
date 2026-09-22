@@ -5,7 +5,7 @@ import { Button, Input, Select } from "../ui";
 
 /** Duck-typed against both HealthMedication and a medication group — same schedule shape. */
 export type ScheduleSource = {
-  scheduleKind?: "scheduled" | "prn" | "interval";
+  scheduleKind?: "scheduled" | "prn" | "otc" | "interval";
   schedule?: {
     times?: string[];
     everyMinutes?: number;
@@ -17,7 +17,7 @@ export type ScheduleSource = {
 } | null;
 
 export type MedScheduleDraft = {
-  scheduleKind: "scheduled" | "prn" | "interval";
+  scheduleKind: "scheduled" | "prn" | "otc" | "interval";
   times: string[];
   everyAmount: string;
   everyUnit: "minutes" | "hours" | "days";
@@ -101,6 +101,9 @@ export function scheduleDraftToRequestBody(
         },
       },
     };
+  }
+  if (draft.scheduleKind === "otc") {
+    return { ok: true, scheduleKind: "otc", schedule: undefined };
   }
   return { ok: true, scheduleKind: "prn", schedule: undefined };
 }
@@ -187,6 +190,7 @@ export function MedScheduleEditor({
           <option value="scheduled">Scheduled times</option>
           <option value="interval">Every N (interval)</option>
           {allowPrn ? <option value="prn">PRN (as needed)</option> : null}
+          {allowPrn ? <option value="otc">OTC (as needed)</option> : null}
         </Select>
       </label>
       {draft.scheduleKind === "scheduled" ? (

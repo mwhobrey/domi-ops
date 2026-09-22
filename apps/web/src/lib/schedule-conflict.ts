@@ -1,4 +1,8 @@
 import type { CalendarCreateDraft } from "./calendar-utils";
+import {
+  addMinutesToLocalDateTime,
+  DEFAULT_TIMED_EVENT_DURATION_MINUTES,
+} from "./event-form-times";
 
 export type ScheduleConflictMode = "at" | "range";
 
@@ -49,20 +53,6 @@ export function zonedPartsFromIso(
   const normalizedHour =
     hourNum === 24 ? "00" : String(hourNum).padStart(2, "0");
   return { date, time: `${normalizedHour}:${minute}` };
-}
-
-function addMinutesToLocalTime(date: string, time: string, minutes: number): {
-  date: string;
-  time: string;
-} {
-  const [y, m, d] = date.split("-").map(Number);
-  const [hh, mm] = time.split(":").map(Number);
-  const base = new Date(y, m - 1, d, hh, mm, 0, 0);
-  base.setMinutes(base.getMinutes() + minutes);
-  return {
-    date: `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, "0")}-${String(base.getDate()).padStart(2, "0")}`,
-    time: `${String(base.getHours()).padStart(2, "0")}:${String(base.getMinutes()).padStart(2, "0")}`,
-  };
 }
 
 /** Map in-progress event sheet fields to a checker form (range when duration is known). */
@@ -119,7 +109,13 @@ export function eventFormToConflictFormState(args: {
     rangeStartDate: args.startDate,
     rangeStartTime: args.startTime,
     rangeEndDate: endDay,
-    rangeEndTime: args.endTime || addMinutesToLocalTime(args.startDate, args.startTime, 60).time,
+    rangeEndTime:
+      args.endTime ||
+      addMinutesToLocalDateTime(
+        args.startDate,
+        args.startTime,
+        DEFAULT_TIMED_EVENT_DURATION_MINUTES,
+      ).time,
     bufferBefore: args.driveBufferBefore,
     bufferAfter: args.driveBufferAfter,
     bufferOpen,
@@ -152,7 +148,11 @@ export function createDraftFromCheckedWindow(
   let endDate = end.date;
   let endTime = end.time;
   if (pointInstant) {
-    const bumped = addMinutesToLocalTime(start.date, start.time, 60);
+    const bumped = addMinutesToLocalDateTime(
+      start.date,
+      start.time,
+      DEFAULT_TIMED_EVENT_DURATION_MINUTES,
+    );
     endDate = bumped.date;
     endTime = bumped.time;
   }
@@ -168,7 +168,11 @@ export function createDraftFromCheckedWindow(
   };
 
   if (draft.endDate === start.date && draft.endTime === start.time) {
-    const bumped = addMinutesToLocalTime(start.date, start.time, 60);
+    const bumped = addMinutesToLocalDateTime(
+      start.date,
+      start.time,
+      DEFAULT_TIMED_EVENT_DURATION_MINUTES,
+    );
     draft.endTime = bumped.time;
     if (bumped.date !== start.date) draft.endDate = bumped.date;
   }

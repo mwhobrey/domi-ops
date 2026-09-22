@@ -36,10 +36,12 @@ Any PR that adds a file to `packages/db/drizzle/` (a new migration) must:
 3. Commit: `:bookmark: chore(release): vX.Y.Z`.
 4. Tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z` — this triggers
    `.github/workflows/publish-images.yml`, which builds and pushes GHCR images tagged `latest`,
-   `X.Y.Z`, and `sha-<short>`.
+   `X.Y.Z`, and the commit sha, then **deploys hosted production** (`app.domi-ops.com`) over SSH
+   with `DOMI_OPS_IMAGE_TAG=X.Y.Z` (see [deploy/HOSTED_OPS.md](../deploy/HOSTED_OPS.md)).
 5. Create a GitHub Release from the tag. GitHub auto-drafts notes from merged PRs via
    `.github/release.yml`; edit for clarity and paste in the matching CHANGELOG section.
-6. If the release includes a migration, say so at the top of the release notes.
+6. If the release includes a migration, say so at the top of the release notes **and apply it to
+   hosted Postgres before pushing the tag** (admin URL from an allowlisted machine — not CI).
 
 If a release goes bad, see [docs/ROLLBACK.md](ROLLBACK.md).
 

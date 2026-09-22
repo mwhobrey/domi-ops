@@ -34,24 +34,57 @@ PgBouncer in **transaction mode** for Starter prod (see ADR 003). Migrations run
 
 ## Routine updates
 
+### Release deploy (CI — preferred)
+
+Pushing a **`v*`** git tag triggers [`.github/workflows/publish-images.yml`](../.github/workflows/publish-images.yml):
+GHCR images for that release (`X.Y.Z`, matching semver without the `v` prefix), then an SSH job on the
+hosted droplet runs `deploy/deploy-hosted.sh` with `DOMI_OPS_IMAGE_TAG=X.Y.Z`.
+
+**Before you tag** a release that includes new migrations, either:
+
+- **On the droplet:** `export DATABASE_URL_ADMIN='…'` in `~/.bashrc`, then `deploy/deploy-hosted.sh --migrate` (applies DDL, re-grants `domi_ops_app`, then deploys), or
+- **From a dev machine** on the Postgres **Trusted Sources** allowlist: `DATABASE_URL="<admin connection string>" npm run db:migrate`, then re-run `npm run db:create-app-role` with the same admin URL if the migration added tables (see [HOSTED_BETA_SETUP.md](./HOSTED_BETA_SETUP.md)).
+
+Then cut the tag per [docs/RELEASE_PROCESS.md](../docs/RELEASE_PROCESS.md).
+
+If pending migrations exist when CI runs, `deploy-hosted.sh` **aborts before `compose up`**; the Actions log shows `ABORTING deploy — containers were NOT touched.` SSH to the droplet and run `deploy/deploy-hosted.sh --migrate` (with `DATABASE_URL_ADMIN` exported in the shell), or apply migrations from another machine, then re-run deploy (re-push the tag only if images were never published, or use **workflow_dispatch** below).
+
+**GitHub repository secrets** (Settings → Secrets and variables → Actions):
+
+| Secret | Required | Purpose |
+|--------|----------|---------|
+| `HOSTED_DEPLOY_SSH_KEY` | **Yes** | Private key for SSH (matches droplet access — e.g. same key you use for `ssh domi-ops-hosted`) |
+| `HOSTED_DEPLOY_HOST` | No | Default `138.197.22.88` |
+| `HOSTED_DEPLOY_USER` | No | Default `root` |
+
+Do **not** store the admin `DATABASE_URL` in GitHub; migrations stay a human pre-step.
+
+**Emergency redeploy** (same image tag, or pin manually): Actions → **Publish images** → **Run workflow** → enable **deploy_hosted**, optional **domi_ops_image_tag** (semver without `v`, git sha, or leave empty for `latest` after a main publish).
+
+After deploy: smoke `https://app.domi-ops.com/login`, marketing site, and privacy-sensitive flows per your checklist.
+
+### Manual deploy (SSH)
+
 On the droplet, from `~/domi-ops` (a real git clone — read-only deploy key, see
 [HOSTED_BETA_SETUP.md](./HOSTED_BETA_SETUP.md#3-droplet-compute)):
 
 ```bash
 deploy/deploy-hosted.sh
+# release with pending migrations (admin URL in shell, not in .env):
+export DATABASE_URL_ADMIN='postgresql://doadmin:…'   # usually in ~/.bashrc
+deploy/deploy-hosted.sh --migrate
 ```
 
 `git pull`s the compose files/scripts, pulls the latest GHCR images (`DOMI_OPS_IMAGE_TAG`,
 default `latest`), then runs a **read-only pending-migrations check**
 (`packages/db/scripts/check-pending-migrations.mjs`, using the same restricted role the app
 already connects as — it only needs `SELECT`) and **aborts before touching any container** if
-anything's unapplied, rather than trusting a human to remember. If it blocks you, apply the
-migration via the admin Postgres connection string first (the droplet has no build tooling —
-that step happens from a machine that does):
-`DATABASE_URL="<admin connection string>" npm run db:migrate`, then re-run the script. Once
-that check passes, it recreates only the containers whose image actually changed and
-smoke-checks `/health` and the marketing site. `.env` and `Caddyfile` are untracked and
-untouched by `git pull`.
+anything's unapplied. Re-run with `--migrate` after exporting `DATABASE_URL_ADMIN` in your
+shell (`~/.bashrc` on the droplet) to apply DDL and re-grant `domi_ops_app`, then continue the
+deploy; or apply migrations from another machine with `npm run db:migrate` (admin
+`DATABASE_URL`) and re-run the script without `--migrate`. Once the check passes, it recreates
+only the containers whose image actually changed and smoke-checks `/health` and the marketing
+site. `.env` and `Caddyfile` are untracked and untouched by `git pull`.
 
 To pin a specific build instead of `latest`: `DOMI_OPS_IMAGE_TAG=<sha> deploy/deploy-hosted.sh`.
 

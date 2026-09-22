@@ -74,6 +74,7 @@ export function DashboardBoard({
   healthModuleEnabled = false,
   driveModuleEnabled = false,
   calendarModuleEnabled = false,
+  goalsModuleEnabled = false,
   role = null,
   onboarding = null,
   glanceConfig = null,
@@ -85,6 +86,7 @@ export function DashboardBoard({
   healthModuleEnabled?: boolean;
   driveModuleEnabled?: boolean;
   calendarModuleEnabled?: boolean;
+  goalsModuleEnabled?: boolean;
   role?: string | null;
   onboarding?: OnboardingState | null;
   glanceConfig?: string[] | null;
@@ -154,6 +156,7 @@ export function DashboardBoard({
             healthModuleEnabled={healthModuleEnabled}
             driveModuleEnabled={driveModuleEnabled}
             calendarModuleEnabled={calendarModuleEnabled}
+            goalsModuleEnabled={goalsModuleEnabled}
             glanceConfig={glanceConfig}
           />
         );
