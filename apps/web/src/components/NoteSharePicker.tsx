@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { Checkbox } from "./ui";
 
 export interface NoteShareMember {
@@ -10,6 +11,7 @@ export interface NoteShareMember {
 export function NoteSharePicker({
   members,
   currentMemberId,
+  excludeMemberIds,
   value,
   onChange,
   disabled,
@@ -19,6 +21,10 @@ export function NoteSharePicker({
 }: {
   members: NoteShareMember[];
   currentMemberId?: string;
+  /** Additional members who already have implicit access and so shouldn't be offered as an
+   *  explicit share target — e.g. a health record's subject, which can differ from (and change
+   *  independently of) `currentMemberId` when the caller lets you log on someone else's behalf. */
+  excludeMemberIds?: string[];
   value: string[];
   onChange: (memberIds: string[]) => void;
   disabled?: boolean;
@@ -26,7 +32,25 @@ export function NoteSharePicker({
   hint?: string;
   legend?: string;
 }) {
-  const shareable = members.filter((m) => m.memberId !== currentMemberId);
+  // Keying on a joined string (not the array/Set) keeps this stable across renders where the
+  // caller passes a fresh `excludeMemberIds` array literal (e.g. `excludeMemberIds={[memberId]}`).
+  const excludeKey = [currentMemberId, ...(excludeMemberIds ?? [])].filter(Boolean).sort().join(",");
+  const excluded = new Set(excludeKey ? excludeKey.split(",") : []);
+  const shareable = members.filter((m) => !excluded.has(m.memberId));
+
+  // If who's excluded changes — most commonly the caller lets you switch which member a record
+  // is about — drop any already-checked share target that's now implicitly covered instead of
+  // silently submitting a stale "share with the subject" selection. Also re-runs when `value`
+  // itself changes (e.g. the parent reopens this sheet for a different record with the same
+  // exclude set but a stale-inclusive `sharedMemberIds`), not just when `excludeKey` changes —
+  // otherwise a controlled `value` swap that lands on an already-excluded id never gets pruned.
+  // The length check keeps this from looping: onChange only fires when something actually changes.
+  useEffect(() => {
+    const pruned = value.filter((id) => !excluded.has(id));
+    if (pruned.length !== value.length) onChange(pruned);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [excludeKey, value, onChange]);
+
   if (shareable.length === 0) return null;
 
   const hintText =

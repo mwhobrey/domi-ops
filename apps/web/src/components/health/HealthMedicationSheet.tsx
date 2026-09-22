@@ -253,6 +253,7 @@ export function HealthMedicationSheet({
           <NoteSharePicker
             members={members}
             currentMemberId={currentMemberId}
+            excludeMemberIds={[memberId]}
             value={sharedMemberIds}
             onChange={setSharedMemberIds}
             namePrefix="health-med-share"
