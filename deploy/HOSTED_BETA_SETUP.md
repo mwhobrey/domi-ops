@@ -22,6 +22,7 @@ Matches the "~$30–40/mo fixed infra" already budgeted in [PRICING_TIERS.md](..
 - [ ] GHCR pull access — classic PAT with `read:packages` scope (same as [SETUP.md Path C](../docs/SETUP.md#path-c-production-with-pre-built-images))
 - [ ] Stripe account (existing per [ADR 001](../docs/adr/001-public-launch-scope.md)) — dashboard access
 - [ ] CI publishing images to GHCR on `main` — already true ([publish-images.yml](../.github/workflows/publish-images.yml))
+- [ ] **Hosted auto-deploy:** repository secret `HOSTED_DEPLOY_SSH_KEY` (see [HOSTED_OPS.md](./HOSTED_OPS.md#release-deploy-ci--preferred)) — required before the first tag-triggered deploy after merge
 
 The droplet runs a real `git clone` of this repo, authenticated with a **read-only deploy key**
 (`gh repo deploy-key add` — repo → Settings → Deploy keys) so `deploy/deploy-hosted.sh` can
@@ -120,6 +121,21 @@ Trusted Sources: once the droplet exists (step 3), add its private/public IP to 
 For every deploy after this first stand-up, use `deploy/deploy-hosted.sh` (from `~/domi-ops`) —
 it does the `git pull` + `docker compose pull` + `up` + health-check sequence above in one step.
 See [HOSTED_OPS.md](./HOSTED_OPS.md#routine-updates).
+
+**Applying migrations on the droplet (no local npm):** export the DO **admin** connection string in your shell — not in compose `.env` (that file holds the restricted app `DATABASE_URL` only):
+
+```bash
+# once, in ~/.bashrc on the droplet (doadmin URL — same as step 1 above)
+export DATABASE_URL_ADMIN='postgresql://doadmin:…@…/domi_ops?sslmode=require'
+```
+
+Then from `~/domi-ops` after `source ~/.bashrc` (or a new SSH session):
+
+```bash
+deploy/deploy-hosted.sh --migrate
+```
+
+That runs pending DDL via the pulled `api` image, re-runs `create-hosted-app-role.mjs` so new tables get grants, then continues with the normal pending check and `compose up`. Order: **migrate → grant → restart** (the script recreates changed containers at the end). Without `--migrate`, the script still aborts if migrations are pending and points you at this flag.
 
 ---
 

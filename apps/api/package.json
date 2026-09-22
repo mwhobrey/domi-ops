@@ -26,7 +26,7 @@
     "sharp": "^0.35.4",
     "stripe": "^22.6.2",
     "web-push": "^3.6.7",
-    "yaml": "^2.8.0"
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "@types/node": "^22.15.30",

@@ -1,4 +1,5 @@
 # Build and push private GHCR images for pull-only prod deploy (WHO-133).
+# On v* tags: after publish succeeds, SSH to the hosted droplet and run deploy/deploy-hosted.sh.
 # Droplet: docker login ghcr.io, then compose pull + up --no-build.
 name: Publish images
 
@@ -11,6 +12,15 @@ on:
       - "**/*.md"
       - ".cursor/**"
   workflow_dispatch:
+    inputs:
+      deploy_hosted:
+        description: After publish, run deploy/deploy-hosted.sh on the hosted droplet (emergency redeploy)
+        type: boolean
+        default: false
+      domi_ops_image_tag:
+        description: DOMI_OPS_IMAGE_TAG for deploy (semver without v, or git sha). Empty = latest when manual; tag push uses the tag version.
+        required: false
+        type: string
 
 env:
   REGISTRY: ghcr.io
@@ -73,3 +83,74 @@ jobs:
           # ignore-error: cache API timeouts (results-receiver) should not fail the build
           cache-from: type=gha,ignore-error=true
           cache-to: type=gha,mode=max,ignore-error=true
+
+  deploy-hosted:
+    name: Deploy hosted (app.domi-ops.com)
+    needs: publish
+    if: >-
+      ${{
+        needs.publish.result == 'success' &&
+        (
+          startsWith(github.ref, 'refs/tags/v') ||
+          (github.event_name == 'workflow_dispatch' && inputs.deploy_hosted)
+        )
+      }}
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - name: Require deploy SSH key
+        env:
+          HAS_KEY: ${{ secrets.HOSTED_DEPLOY_SSH_KEY != '' }}
+        run: |
+          if [[ "$HAS_KEY" != "true" ]]; then
+            echo "::error::Repository secret HOSTED_DEPLOY_SSH_KEY is not set. Add it under Settings → Secrets and variables → Actions (see deploy/HOSTED_OPS.md)."
+            exit 1
+          fi
+
+      - name: Resolve DOMI_OPS_IMAGE_TAG
+        id: image
+        run: |
+          set -euo pipefail
+          manual_tag="${{ inputs.domi_ops_image_tag }}"
+          if [[ -n "$manual_tag" ]]; then
+            echo "tag=$manual_tag" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            echo "tag=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Record deploy target (no secrets)
+        id: ssh
+        run: |
+          set -euo pipefail
+          host="${{ secrets.HOSTED_DEPLOY_HOST }}"
+          user="${{ secrets.HOSTED_DEPLOY_USER }}"
+          if [[ -z "$host" ]]; then host="138.197.22.88"; fi
+          if [[ -z "$user" ]]; then user="root"; fi
+          echo "host=$host" >> "$GITHUB_OUTPUT"
+          echo "user=$user" >> "$GITHUB_OUTPUT"
+          echo "SSH host: $host"
+          echo "SSH user: $user"
+          echo "DOMI_OPS_IMAGE_TAG: ${{ steps.image.outputs.tag }}"
+          {
+            echo "known_hosts<<EOF"
+            ssh-keyscan -H "$host"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Deploy via deploy/deploy-hosted.sh
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ steps.ssh.outputs.host }}
+          username: ${{ steps.ssh.outputs.user }}
+          key: ${{ secrets.HOSTED_DEPLOY_SSH_KEY }}
+          known_hosts: ${{ steps.ssh.outputs.known_hosts }}
+          script_stop: true
+          command_timeout: 30m
+          script: |
+            set -euo pipefail
+            cd ~/domi-ops
+            export DOMI_OPS_IMAGE_TAG='${{ steps.image.outputs.tag }}'
+            bash deploy/deploy-hosted.sh

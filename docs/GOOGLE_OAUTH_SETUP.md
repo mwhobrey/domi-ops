@@ -55,7 +55,7 @@ Optional override: set `GOOGLE_OAUTH_REDIRECT_URI` only for calendar if you need
 2. **Publishing status:** **Testing** for personal/homelab use.
 3. **Test users:** Add every Google account that will sign in (required in Testing mode).
 4. **App domain:** Set **Application home page** and **Privacy policy** URLs. Google often blocks sign-in without a privacy policy link, even for localhost dev. Use your real domain or a static page you control.
-5. **Scopes:** Login uses `openid`, email, profile. Calendar connect adds the Calendar scope. Docs/Drive connect uses **`drive.file` only** (non-sensitive, Family Link–friendly): create and open files via Picker or app uploads. Enable **Google Drive API** in the same GCP project (Docs API optional; we no longer call Docs REST).
+5. **Scopes:** Login uses `openid`, email, profile. Calendar connect adds the Calendar scope. Docs/Drive connect uses **`drive.file` only** (non-sensitive, Family Link–friendly): create and open files via Picker or app uploads. Enable **Google Drive API** in the same GCP project (Docs API optional; we no longer call Docs REST). For **Google OAuth verification** demo recording, see [google-oauth-verification-demo-script.md](./google-oauth-verification-demo-script.md).
 
 ## 6. `.env` alignment
 

@@ -5,6 +5,7 @@ import {
   healthMedicationLogs,
   healthMedications,
   households,
+  isAsNeededMedScheduleKind,
 } from "@domi-ops/db";
 import {
   addDaysIso,
@@ -101,7 +102,7 @@ export const VITALS_METRIC_LABELS: Record<string, string> = {
 export const VITALS_METRICS = Object.keys(VITALS_METRIC_LABELS);
 
 export type HealthReportGroupBy = "date" | "eventType" | "none";
-export type HealthReportScheduleKind = "scheduled" | "prn" | "interval";
+export type HealthReportScheduleKind = "scheduled" | "prn" | "otc" | "interval";
 
 /** Soft cap for full history sections (UI + CSV). */
 export const HEALTH_EVENT_HISTORY_CAP = 500;
@@ -206,6 +207,7 @@ export function formatMedScheduleSummary(
   scheduleJson: string | null | undefined,
   timeZone = "UTC",
 ): string {
+  if (scheduleKind === "otc") return "As needed (OTC)";
   if (scheduleKind === "prn") return "As needed (PRN)";
   if (scheduleKind === "interval") {
     const schedule = parseIntervalSchedule(scheduleJson);
@@ -345,7 +347,7 @@ export function buildTodayDoseRows(input: {
       continue;
     }
 
-    if (med.scheduleKind === "prn") {
+    if (isAsNeededMedScheduleKind(med.scheduleKind)) {
       for (const log of logs) {
         if (log.scheduledAt != null) continue;
         if (localDateOfInstant(log.loggedAt, input.timeZone) !== input.date) continue;
@@ -526,7 +528,7 @@ export function buildPrnFrequencyByDay(input: {
 }
 
 export function normalizeHealthScheduleKind(value: unknown): HealthReportScheduleKind | null {
-  if (value === "scheduled" || value === "prn" || value === "interval") return value;
+  if (value === "scheduled" || value === "prn" || value === "otc" || value === "interval") return value;
   return null;
 }
 
@@ -949,7 +951,7 @@ export async function buildHealthReports(
       prn,
       scheduledTotal,
       adherencePct:
-        scheduledTotal > 0 ? Math.round((taken / scheduledTotal) * 100) : med.scheduleKind === "prn" ? null : null,
+        scheduledTotal > 0 ? Math.round((taken / scheduledTotal) * 100) : isAsNeededMedScheduleKind(med.scheduleKind) ? null : null,
     };
   });
 
@@ -1069,7 +1071,7 @@ export async function buildHealthReports(
         .length,
       intervalMedications: medRows.filter((m) => m.enabled && m.scheduleKind === "interval")
         .length,
-      prnMedications: medRows.filter((m) => m.enabled && m.scheduleKind === "prn").length,
+      prnMedications: medRows.filter((m) => m.enabled && isAsNeededMedScheduleKind(m.scheduleKind)).length,
       dosesLogged: logsInLocalRange.length,
     },
     vitalsTrend,

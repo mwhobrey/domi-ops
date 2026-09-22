@@ -114,6 +114,7 @@ export function LogExerciseSheet({
           <NoteSharePicker
             members={members}
             currentMemberId={currentMemberId}
+            excludeMemberIds={[memberId]}
             value={sharedMemberIds}
             onChange={setSharedMemberIds}
             namePrefix="health-exercise-share"

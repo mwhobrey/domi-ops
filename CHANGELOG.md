@@ -10,6 +10,17 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Added
 
+- **Goals & Rewards module** (WHO-322): new optional household module — creator-defined ordered
+  milestones per goal (threshold + title + optional linked reward; the final milestone is the
+  goal's completion, no separate target field), manual progress logging (amount + note), and a
+  household reward catalog with claim → owner/admin approve/deny redemption flow. `/goals` page
+  with Goals / Rewards / Approvals tabs; dashboard glance tile. Auto-progress from chores/health/
+  school is a follow-up (WHO-323/324/325) — this phase only wires `sourceType: "manual"`, but the
+  schema already reserves `sourceType`/`sourceEventType` for them. *(requires `npm run db:migrate`
+  (`0073_goals_rewards`); self-hosters get the module on by default via `MODULES_ENABLED`.)*
+- Health OTC medications (WHO-319): new schedule kind **`otc`** — as-needed logging like PRN
+  (`scheduled_at` null), Today quick-log inclusion, no fixed dose slots. Requires
+  `npm run db:migrate` (`0072_med_schedule_otc`).
 - Browser + Next.js server Sentry for `apps/web` (`@sentry/nextjs`, WHO-292) — reuses
   runtime `SENTRY_DSN` on the web container; `error.tsx` / `global-error.tsx` report to Sentry.
 - Customizable dashboard layout (WHO-313 / WHO-314): each member can drag the section cards
@@ -57,7 +68,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Changed
 
-- Pain body map (WHO-312): the front chest is now split into left and right so a side can be
+- Calendar event create/edit: changing the start time on a timed event now moves the end time
+  to one hour later when the end was still the default (or invalid); custom durations are
+  preserved when the end was set manually.
+ the front chest is now split into left and right so a side can be
   selected, and the back view has a spine region down the middle. The old single `chest` region
   is no longer selectable; existing entries keep their "Chest" label in lists and reports but
   aren't drawn on the map. *(requires `npm run db:migrate`; no other manual steps for
@@ -88,6 +102,11 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Fixed
 
+- Health log sheets' "Share with" picker now tracks who you're actually logging for (WHO-326):
+  switching the Member dropdown (vitals/exercise/pain/meal/event/medication) no longer leaves the
+  previous subject offered — or, if already checked, silently retained — as a share target once
+  they become the record's subject. `NoteSharePicker` gained an `excludeMemberIds` prop and prunes
+  a now-redundant selection instead of submitting it.
 - Dashboard Customize drag no longer scales a small card up to the Today at a glance height
   (WHO-314): the overlay is a compact label, and sortable transforms are translate-only.
 - Interval medications with a multi-day cadence (e.g. once every 7 days) no longer reappear every

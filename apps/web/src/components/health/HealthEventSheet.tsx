@@ -300,6 +300,7 @@ export function HealthEventSheet({
           <NoteSharePicker
             members={members}
             currentMemberId={currentMemberId}
+            excludeMemberIds={[memberId]}
             value={sharedMemberIds}
             onChange={setSharedMemberIds}
             namePrefix="health-event-share"

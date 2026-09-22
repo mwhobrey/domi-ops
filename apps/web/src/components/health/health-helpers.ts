@@ -26,7 +26,12 @@ import {
   type VitalsReadingDraft,
 } from "./health-types";
 
+export function isAsNeededMedScheduleKind(kind: string | null | undefined): boolean {
+  return kind === "prn" || kind === "otc";
+}
+
 export function scheduleKindLabel(kind: HealthMedication["scheduleKind"]): string {
+  if (kind === "otc") return "OTC";
   if (kind === "prn") return "PRN";
   if (kind === "interval") return "Every…";
   return "Scheduled";

@@ -15,6 +15,7 @@ import {
   healthPainBodyRegionEnum,
   householdMembers,
   households,
+  isAsNeededMedScheduleKind,
 } from "@domi-ops/db";
 import { and, desc, eq, gte, inArray, isNull, lt, lte, or } from "drizzle-orm";
 import type { AppVariables } from "../middleware/auth.js";
@@ -503,7 +504,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
     const intervalMeds = medRows.filter(
       (m) => m.scheduleKind === "interval" && !isDelegatedToIntervalGroup(m.id),
     );
-    const prnMeds = medRows.filter((m) => m.scheduleKind === "prn");
+    const prnMeds = medRows.filter((m) => isAsNeededMedScheduleKind(m.scheduleKind));
 
     // Group member medications, keyed by groupId — fetched independent of each medication's own
     // visibility (the group's own visibility, already checked above, is what gates seeing it and
@@ -1190,7 +1191,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
     }
 
     try {
-      let scheduleMeta: { scheduleKind: "scheduled" | "prn" | "interval"; scheduleJson: string };
+      let scheduleMeta: { scheduleKind: "scheduled" | "prn" | "otc" | "interval"; scheduleJson: string };
       try {
         scheduleMeta = normalizeMedSchedule(body);
       } catch (e) {
@@ -1420,12 +1421,12 @@ export function householdHealthRoutes(db: Database, env: Env) {
     }>();
 
     const status = body.status === "skipped" || body.status === "missed" ? body.status : "taken";
-    const isPrn = med.scheduleKind === "prn";
+    const isAsNeeded = isAsNeededMedScheduleKind(med.scheduleKind);
     const isInterval = med.scheduleKind === "interval";
-    const alsoCreateEvent = body.alsoCreateEvent ?? isPrn;
+    const alsoCreateEvent = body.alsoCreateEvent ?? isAsNeeded;
     const loggedAt = body.loggedAt ? new Date(body.loggedAt) : new Date();
     let scheduledAt: Date | null = body.scheduledAt ? new Date(body.scheduledAt) : null;
-    if (!isPrn && !isInterval && !scheduledAt) {
+    if (!isAsNeeded && !isInterval && !scheduledAt) {
       return c.json({ error: "scheduled_at_required" }, 400);
     }
     if (isInterval && !scheduledAt) {
@@ -1558,7 +1559,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
       }
       const status = entry.status === "skipped" || entry.status === "missed" ? entry.status : "taken";
       const scheduledAt = scheduledAtRaw ? new Date(scheduledAtRaw) : null;
-      if (med.scheduleKind !== "prn" && (!scheduledAt || Number.isNaN(scheduledAt.getTime()))) {
+      if (!isAsNeededMedScheduleKind(med.scheduleKind) && (!scheduledAt || Number.isNaN(scheduledAt.getTime()))) {
         results.push({ medicationId: med.id, scheduledAt: scheduledAtRaw, error: "scheduled_at_required" });
         continue;
       }
