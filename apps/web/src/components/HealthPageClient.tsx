@@ -510,25 +510,29 @@ export function HealthPageClient({
                           const timeGroup = entry.timeGroup;
                           const loggable = timeGroup.doses.filter((d) => canLogDoseForToday(d.memberId));
                           const groupKey = `${memberId}:${timeGroup.scheduledTime}`;
+                          // A lone dose at this time has no group to head up — folding the time into
+                          // its own card's subtitle (like the "logged today" rows do) instead of a
+                          // standalone header line above it keeps it from reading as an orphaned label
+                          // floating outside the card.
+                          const showHeader = timeGroup.doses.length > 1;
                           return (
                             <div key={timeGroup.scheduledTime} className="space-y-2">
-                              <div className="flex flex-wrap items-center justify-between gap-2">
-                                <p className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]">
-                                  {timeGroup.label}
-                                  {timeGroup.doses.length > 1
-                                    ? ` · ${timeGroup.doses.length} meds`
-                                    : null}
-                                </p>
-                                {loggable.length > 1 ? (
-                                  <Button
-                                    size="sm"
-                                    disabled={loggingAllKey !== null}
-                                    onClick={() => void logAllTaken(groupKey, loggable)}
-                                  >
-                                    {loggingAllKey === groupKey ? "Saving…" : "Taken all"}
-                                  </Button>
-                                ) : null}
-                              </div>
+                              {showHeader ? (
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <p className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]">
+                                    {timeGroup.label} · {timeGroup.doses.length} meds
+                                  </p>
+                                  {loggable.length > 1 ? (
+                                    <Button
+                                      size="sm"
+                                      disabled={loggingAllKey !== null}
+                                      onClick={() => void logAllTaken(groupKey, loggable)}
+                                    >
+                                      {loggingAllKey === groupKey ? "Saving…" : "Taken all"}
+                                    </Button>
+                                  ) : null}
+                                </div>
+                              ) : null}
                               <ul className="space-y-2">
                                 {timeGroup.doses.map((dose) => {
                                   const doseKey = `${dose.medicationId}-${dose.scheduledAt}`;
@@ -541,7 +545,11 @@ export function HealthPageClient({
                                       rowRef={highlighted ? highlightTakeRef : undefined}
                                       highlighted={highlighted}
                                       title={dose.name}
-                                      subtitle={dose.dosage?.trim() || undefined}
+                                      subtitle={
+                                        showHeader
+                                          ? dose.dosage?.trim() || undefined
+                                          : [dose.dosage?.trim(), timeGroup.label].filter(Boolean).join(" · ")
+                                      }
                                       trailing={
                                         canLogDoseForToday(dose.memberId) ? (
                                           <div className="flex gap-2">
