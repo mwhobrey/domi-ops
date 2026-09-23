@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
 import { ExpenseEditSheet, type Expense } from "./ExpenseEditSheet";
 import type { NoteShareMember } from "./NoteSharePicker";
+import { formatDateLocal } from "../lib/calendar-utils";
 import {
   Alert,
   Badge,
@@ -100,7 +101,7 @@ export function ExpensesList({
   const [title, setTitle] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
-  const [expenseDate, setExpenseDate] = useState(new Date().toISOString().slice(0, 10));
+  const [expenseDate, setExpenseDate] = useState(() => formatDateLocal(new Date()));
   const [attributeMemberId, setAttributeMemberId] = useState(currentMemberId);
   const [budgetCategory, setBudgetCategory] = useState("");
   const [budgetTarget, setBudgetTarget] = useState("");

@@ -23,6 +23,7 @@ import {
 } from "./ui";
 import { ListPage } from "./lists/ListPage";
 import { CollapsibleAddForm } from "./lists/CollapsibleAddForm";
+import { formatDateLocal } from "../lib/calendar-utils";
 
 export type ChorePriority = 0 | 1 | 2 | 3;
 
@@ -99,7 +100,7 @@ function priorityTone(priority: ChorePriority): "default" | "accent" | "warning"
 
 function isOverdue(dueDate: string | null, done: boolean): boolean {
   if (done || !dueDate) return false;
-  return dueDate < new Date().toISOString().slice(0, 10);
+  return dueDate < formatDateLocal(new Date());
 }
 
 function parseTagsInput(raw: string): string[] {

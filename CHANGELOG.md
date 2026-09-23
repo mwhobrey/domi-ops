@@ -17,7 +17,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
   recurring chores and shopping items no longer appear a day early in the evening, a chore
   finished on its due date after 7 PM Central no longer counts as late, expense budgets no
   longer roll into next month early on the last evening of a month, and the School overdue /
-  due-this-week list shows due times in local time (it could previously show the wrong day).
+  due-this-week list shows due times in local time (it could previously show the wrong day). In
+  the browser, the dashboard's "today" (which showed tomorrow's calendar events after 7 PM
+  Central), chore overdue flags, the default expense date, and report date ranges use your local
+  date instead of UTC.
 - Event times on the dashboard Calendar tile, Today's schedule, and the calendar Agenda view
   now read "6:00 PM" instead of raw values like `18:00:00` (WHO-327).
 - Bulleted and numbered lists in notes, notices, and event descriptions render their bullets
