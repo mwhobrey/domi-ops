@@ -8,6 +8,8 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-23
+
 ### Added
 
 - **Goals & Rewards module** (WHO-322): new optional household module — creator-defined ordered
