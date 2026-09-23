@@ -1,6 +1,7 @@
 "use client";
 
 import { LazyCategoryBarChart as CategoryBarChart, LazyTrendLineChart as TrendLineChart } from "../charts/lazy";
+import { buildVitalsCharts } from "../../lib/vitals-trend-charts";
 import { SectionHeader } from "../ui";
 import { formatReportDate, ReportTable } from "../reports/HealthOverviewReportBody";
 import type {
@@ -22,28 +23,34 @@ import type { HealthPainBodyRegion } from "./health-types";
 
 export function VitalsTrendSection({ vitalsTrend }: { vitalsTrend: VitalsTrendEntry[] }) {
   if (vitalsTrend.length === 0) return null;
+  const charts = buildVitalsCharts(vitalsTrend);
   return (
     <section className="space-y-4">
       <SectionHeader title="Vitals trend" />
-      {vitalsTrend.map((trend) => (
-        <div key={`${trend.metric}::${trend.points[0]?.unit ?? ""}`} className="space-y-2">
+      {charts.map((chart) => (
+        <div key={chart.key} className="space-y-2">
           <h3 className="text-sm font-medium text-[var(--color-text)]">
-            {trend.metricLabel}
+            {chart.title}
             <span className="ml-2 font-normal text-[var(--color-text-muted)]">
-              ({trend.points.length} reading{trend.points.length === 1 ? "" : "s"})
+              ({chart.readingCount} reading{chart.readingCount === 1 ? "" : "s"})
             </span>
           </h3>
           <div className="print:hidden">
             <TrendLineChart
-              data={trend.points.map((p) => ({ date: formatReportDate(p.date), value: p.value }))}
-              series={[{ key: "value", label: trend.metricLabel }]}
-              valueFormatter={(v) => `${v} ${trend.points[0]?.unit ?? ""}`.trim()}
+              data={chart.rows.map((row) => ({ ...row, date: formatReportDate(row.date) }))}
+              series={chart.series}
+              valueFormatter={(v) => `${v} ${chart.unit}`.trim()}
               height={180}
+              autoScaleY
+              dedupeXLabels
             />
           </div>
           <ReportTable
-            columns={["Date", "Value"]}
-            rows={trend.points.map((p) => [formatReportDate(p.date), `${p.value} ${p.unit}`])}
+            columns={["Date", ...chart.series.map((s) => (chart.series.length > 1 ? s.label : "Value"))]}
+            rows={chart.rows.map((row) => [
+              formatReportDate(row.date),
+              ...chart.series.map((s) => (row[s.key] != null ? `${row[s.key]} ${chart.unit}`.trim() : "—")),
+            ])}
           />
         </div>
       ))}

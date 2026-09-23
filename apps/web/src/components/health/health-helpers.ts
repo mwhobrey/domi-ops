@@ -9,6 +9,7 @@ import {
   VITALS_METRICS,
   emptyExerciseDetailDraft,
   PAIN_BODY_REGION_LABELS,
+  type DoseLogEntry,
   type ExerciseDetail,
   type ExerciseDetailDraft,
   type FoodLogEntry,
@@ -122,9 +123,47 @@ export function vitalsMetricLabel(metric: string): string {
   return VITALS_METRICS.find((m) => m.value === metric)?.label ?? metric;
 }
 
+const VITALS_SHORT_LABELS: Record<string, string> = {
+  heart_rate: "HR",
+  temperature: "Temp",
+  weight: "Wt",
+  height: "Ht",
+  blood_glucose: "Glucose",
+  respiratory_rate: "RR",
+};
+
+/** "BP 135/90 · HR 65 · SpO₂ 98% · Temp 98.6°F" */
 export function formatReadingsSummary(readings: VitalsReading[] | undefined): string | null {
   if (!readings || readings.length === 0) return null;
-  return readings.map((r) => `${vitalsMetricLabel(r.metric)}: ${r.value} ${r.unit}`).join(", ");
+  const byMetric = new Map(readings.map((r) => [r.metric, r]));
+  const parts: string[] = [];
+  const sys = byMetric.get("blood_pressure_systolic");
+  const dia = byMetric.get("blood_pressure_diastolic");
+  if (sys && dia) parts.push(`BP ${sys.value}/${dia.value}`);
+  for (const r of readings) {
+    if (sys && dia && (r === sys || r === dia)) continue;
+    if (r.metric === "blood_oxygen") {
+      parts.push(`SpO₂ ${r.value}%`);
+    } else if (r.metric === "heart_rate" || r.metric === "respiratory_rate") {
+      parts.push(`${VITALS_SHORT_LABELS[r.metric]} ${r.value}`);
+    } else {
+      const label = VITALS_SHORT_LABELS[r.metric] ?? vitalsMetricLabel(r.metric);
+      const unit = r.unit.trim();
+      parts.push(`${label} ${r.value}${unit.startsWith("°") ? unit : unit ? ` ${unit}` : ""}`);
+    }
+  }
+  return parts.join(" · ");
+}
+
+/**
+ * Vitals logs used to get a default title of their metric names ("BP systolic, BP diastolic,
+ * Heart rate"); show those as plain "Vitals". A title someone typed is left alone.
+ */
+export function displayHealthEventTitle(ev: { type: string; title: string }): string {
+  if (ev.type !== "vitals") return ev.title;
+  const labels = new Set(VITALS_METRICS.map((m) => m.label));
+  const parts = ev.title.split(",").map((p) => p.trim());
+  return parts.length > 0 && parts.every((p) => labels.has(p)) ? "Vitals" : ev.title;
 }
 
 export function formatExerciseSummary(details: ExerciseDetail[] | undefined): string | null {
@@ -150,12 +189,6 @@ export function formatFoodLogSummary(entries: FoodLogEntry[] | undefined): strin
 export function defaultMealTitle(drafts: FoodLogEntryDraft[]): string {
   const names = drafts.map((d) => d.foodName.trim()).filter(Boolean);
   return names.length > 0 ? names.join(", ") : "Meal";
-}
-
-/** Short, human title for a vitals event when the user hasn't typed one — "Weight, Heart rate". */
-export function defaultVitalsTitle(drafts: VitalsReadingDraft[]): string {
-  const labels = drafts.filter((d) => d.value.trim()).map((d) => vitalsMetricLabel(d.metric));
-  return labels.length > 0 ? labels.join(", ") : "Vitals";
 }
 
 export function draftsToReadings(drafts: VitalsReadingDraft[]): { metric: VitalsMetric; value: number; unit: string }[] {
@@ -322,6 +355,17 @@ export function resolveDefaultMemberId(currentMemberId: string, members: NoteSha
   return members[0]?.memberId ?? "";
 }
 
+/** A scheduled dose whose time has passed. Interval meds awaiting their first dose never are. */
+export function isDosePastDue(
+  scheduledAt: string,
+  awaitingFirst = false,
+  now: number = Date.now(),
+): boolean {
+  if (awaitingFirst) return false;
+  const at = Date.parse(scheduledAt);
+  return Number.isFinite(at) && at < now;
+}
+
 export function todayInTz(timeZone: string): string {
   try {
     return new Date().toLocaleDateString("en-CA", { timeZone });
@@ -365,4 +409,51 @@ export function formatEventWhen(ev: HealthEvent): string | null {
     }
   }
   return null;
+}
+
+/** When a health event happened, for ordering it among dose logs. */
+export function healthEventTimeMs(ev: HealthEvent): number {
+  const started = ev.startedAt ? Date.parse(ev.startedAt) : NaN;
+  if (Number.isFinite(started)) return started;
+  if (ev.startDate) {
+    const t = Date.parse(`${ev.startDate}T${ev.startTime ?? "12:00"}`);
+    if (Number.isFinite(t)) return t;
+  }
+  return 0;
+}
+
+export type HealthLogFeedItem =
+  | { kind: "event"; at: number; event: HealthEvent }
+  | { kind: "dose"; at: number; dose: DoseLogEntry };
+
+/** Events and dose logs, newest first. */
+export function buildHealthLogFeed(events: HealthEvent[], doses: DoseLogEntry[]): HealthLogFeedItem[] {
+  return [
+    ...events.map((event) => ({ kind: "event" as const, at: healthEventTimeMs(event), event })),
+    ...doses.map((dose) => ({ kind: "dose" as const, at: Date.parse(dose.loggedAt) || 0, dose })),
+  ].sort((a, b) => b.at - a.at);
+}
+
+const DOSE_STATUS_VERB: Record<DoseLogEntry["status"], string> = {
+  taken: "Took",
+  skipped: "Skipped",
+  missed: "Missed",
+};
+
+/** "Took Effexor" / "Skipped Mestinon". */
+export function doseLogTitle(dose: DoseLogEntry): string {
+  return `${DOSE_STATUS_VERB[dose.status] ?? "Logged"} ${dose.medicationName}`;
+}
+
+/** "Sep 23, 2026 · 8:46 AM · for 8:00 AM" */
+export function doseLogWhen(dose: DoseLogEntry): string {
+  const logged = new Date(dose.loggedAt);
+  const date = logged.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  const time = logged.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  const scheduled = dose.scheduledAt
+    ? new Date(dose.scheduledAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
+    : null;
+  return [date, time, scheduled && scheduled !== time ? `for ${scheduled}` : null]
+    .filter(Boolean)
+    .join(" · ");
 }

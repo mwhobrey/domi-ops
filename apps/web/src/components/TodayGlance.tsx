@@ -41,14 +41,24 @@ type HealthGlance = {
     scheduledAt: string;
     scheduledTimeLabel: string;
     awaitingFirst?: boolean;
+    memberLabel?: string | null;
+    isSelf?: boolean;
   }[];
   pendingGroupDoses?: {
     groupId: string;
     name: string;
     scheduledAt: string;
     scheduledTimeLabel: string;
+    memberLabel?: string | null;
+    isSelf?: boolean;
   }[];
 };
+
+/** "Lunch Meds · Ally" for someone else's dose; just the name for your own. */
+function doseLabel(d: { name: string; memberLabel?: string | null; isSelf?: boolean }): string {
+  if (d.isSelf !== false || !d.memberLabel) return d.name;
+  return `${d.name} · ${d.memberLabel.split(" ")[0]}`;
+}
 
 type DriveGlance = {
   summary: { headline: string; tone: GlanceTone };
@@ -118,14 +128,14 @@ function buildHealthTile(glance: HealthGlance | null): GlanceTileModel | null {
   const pending: HealthGlanceItem[] = [
     ...(glance.pendingGroupDoses ?? []).map((d) => ({
       key: `group:${d.groupId}-${d.scheduledAt}`,
-      label: d.name,
+      label: doseLabel(d),
       scheduledAt: d.scheduledAt,
       scheduledTimeLabel: d.scheduledTimeLabel,
       href: `/health?takeGroup=${encodeURIComponent(d.groupId)}&scheduledAt=${encodeURIComponent(d.scheduledAt)}`,
     })),
     ...(glance.pendingDoses ?? []).map((d) => ({
       key: `${d.medicationId}-${d.scheduledAt}`,
-      label: d.name,
+      label: doseLabel(d),
       scheduledAt: d.scheduledAt,
       scheduledTimeLabel: d.scheduledTimeLabel,
       metaExtra: d.dosage,

@@ -47,7 +47,18 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
   - Settings → Integrations flags Google Calendar sync as "Sync stalled" after two days
     without a successful sync, instead of silently showing a months-old "Last sync".
   - Profile: the delete-account section moved to the bottom of the page.
-
+- Health, from the dogfood walkthrough (WHO-331):
+  - The dashboard Health tile says whose dose it is ("Lunch Meds · Ally") when it isn't yours.
+  - Past-due doses on the Health Today tab are marked **Overdue** with a red border, matching
+    the dashboard.
+  - Trends shows blood pressure as one chart with systolic and diastolic lines. Vitals charts
+    scale the Y axis to the data, so SpO₂ at 97–99% isn't a flat line at the top of a 0–100
+    axis, and a date with several readings is labeled once.
+  - The Log tab now includes scheduled dose logs ("Took Effexor · Dose"), interleaved by time
+    with health events. Before, it only showed as-needed doses, which create their own "Took"
+    events. Nothing is migrated; the Log reads both.
+  - Vitals entries read "Vitals" with a compact summary ("BP 135/90 · HR 65 · SpO₂ 98%")
+    instead of "BP systolic, BP diastolic, Heart rate" and a long label list.
 ### Fixed
 
 - The "Set up your household calendar" banner no longer flashes on every Calendar page load

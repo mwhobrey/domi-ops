@@ -1,6 +1,8 @@
 "use client";
 
+import { cn } from "../../lib/cn";
 import { Badge, Button, ListItem } from "../ui";
+import { isDosePastDue } from "./health-helpers";
 import type { PendingGroupDose } from "./health-types";
 
 export function HealthRow({
@@ -10,6 +12,7 @@ export function HealthRow({
   onClick,
   highlighted,
   rowRef,
+  overdue = false,
 }: {
   title: string;
   subtitle?: string;
@@ -17,23 +20,31 @@ export function HealthRow({
   onClick?: () => void;
   highlighted?: boolean;
   rowRef?: React.Ref<HTMLDivElement>;
+  overdue?: boolean;
 }) {
   return (
     <div ref={rowRef}>
       <ListItem
         as={onClick ? "button" : "div"}
         onClick={onClick}
-        className={
-          highlighted
-            ? "ring-2 ring-[var(--color-accent)] ring-offset-2 ring-offset-[var(--color-surface)]"
-            : undefined
-        }
+        className={cn(
+          highlighted &&
+            "ring-2 ring-[var(--color-accent)] ring-offset-2 ring-offset-[var(--color-surface)]",
+          overdue && "border-[var(--color-danger)]/50",
+        )}
       >
         <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
           <div className="min-w-0 text-left">
             <p className="truncate font-medium text-[var(--color-text)]">{title}</p>
-            {subtitle ? (
-              <p className="truncate text-sm text-[var(--color-text-muted)]">{subtitle}</p>
+            {subtitle || overdue ? (
+              <p className="truncate text-sm text-[var(--color-text-muted)]">
+                {overdue ? (
+                  <span className="font-medium text-[var(--color-danger)]">
+                    Overdue{subtitle ? " · " : ""}
+                  </span>
+                ) : null}
+                {subtitle}
+              </p>
             ) : null}
           </div>
           {trailing}
@@ -65,12 +76,21 @@ export function MedGroupDoseCard({
   highlightTakeRef: React.Ref<HTMLDivElement>;
 }) {
   const pendingCount = group.medications.filter((m) => !m.alreadyLogged).length;
+  const overdue = pendingCount > 0 && isDosePastDue(group.scheduledAt);
   return (
-    <div className="space-y-2 rounded-lg border border-[var(--color-border)] p-3">
+    <div
+      className={cn(
+        "space-y-2 rounded-lg border p-3",
+        overdue ? "border-[var(--color-danger)]/50" : "border-[var(--color-border)]",
+      )}
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="text-sm font-semibold text-[var(--color-text)]">{group.name}</p>
           <p className="text-xs uppercase tracking-wide text-[var(--color-text-muted)]">
+            {overdue ? (
+              <span className="font-semibold text-[var(--color-danger)]">Overdue · </span>
+            ) : null}
             {group.scheduledTimeLabel} · {group.medications.length} meds
           </p>
         </div>

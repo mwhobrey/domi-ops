@@ -76,6 +76,7 @@ import {
 import { buildHealthReports, VITALS_METRICS } from "../lib/health-reports.js";
 import { decryptHealthFieldOrPassthrough, encryptHealthField } from "../lib/health-crypto.js";
 import { householdTimezone } from "../lib/household-time.js";
+import { listHouseholdMembersWithAuth, memberShownLabel } from "@domi-ops/auth";
 import {
   GLANCE_DOSE_LOG_LOOKBACK_DAYS,
   isInstantLogged,
@@ -752,14 +753,28 @@ export function householdHealthRoutes(db: Database, env: Env) {
     const events = await enrichHealthEvents(db, env, auth, eventRows.slice(0, 5));
     const prnList = await enrichHealthMedications(db, env, auth, prnMeds);
 
+    // Caregivers see other members' doses here; the dashboard needs to say whose they are.
+    const roster = await listHouseholdMembersWithAuth(db, auth.householdId);
+    const memberLabels = new Map(
+      roster.map((m) => [
+        m.memberId,
+        memberShownLabel({ name: m.name }) || m.username || m.email || "Member",
+      ]),
+    );
+    const withMember = <T extends { memberId: string }>(d: T) => ({
+      ...d,
+      memberLabel: memberLabels.get(d.memberId) ?? null,
+      isSelf: d.memberId === auth.memberId,
+    });
+
     return c.json({
       enabled: true,
       today,
       timezone: tz,
       householdTimezone: householdTz,
       activeEvents: events,
-      pendingDoses,
-      pendingGroupDoses,
+      pendingDoses: pendingDoses.map(withMember),
+      pendingGroupDoses: pendingGroupDoses.map(withMember),
       prnMedications: prnList,
       loggedToday,
     });
@@ -1443,6 +1458,62 @@ export function householdHealthRoutes(db: Database, env: Env) {
       if (resp) return resp;
       throw e;
     }
+  });
+
+  /**
+   * Dose logs for the Log tab's combined history. Logs that already produced a "Took <med>"
+   * health event (as-needed doses) are left out; that event is already in the feed.
+   */
+  app.get("/dose-logs", async (c) => {
+    const auth = c.get("auth")!;
+    const tz = await householdTimezone(db, auth.householdId);
+    const to = c.req.query("to")?.trim() || todayIsoDateInTz(tz);
+    const from = c.req.query("from")?.trim() || addDaysIso(to, -30);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+      return c.json({ error: "invalid_range" }, 400);
+    }
+    const meds = await db
+      .select({
+        id: healthMedications.id,
+        memberId: healthMedications.memberId,
+        name: healthMedications.name,
+        dosage: healthMedications.dosage,
+      })
+      .from(healthMedications)
+      .where(healthMedicationVisibleWhere(db, auth));
+    if (meds.length === 0) return c.json({ logs: [] });
+    const medById = new Map(meds.map((m) => [m.id, m]));
+    const rows = await db
+      .select()
+      .from(healthMedicationLogs)
+      .where(
+        and(
+          inArray(
+            healthMedicationLogs.medicationId,
+            meds.map((m) => m.id),
+          ),
+          isNull(healthMedicationLogs.healthEventId),
+          gte(healthMedicationLogs.loggedAt, zonedLocalToUtc(from, "00:00", tz)),
+          lt(healthMedicationLogs.loggedAt, zonedLocalToUtc(addDaysIso(to, 1), "00:00", tz)),
+        ),
+      )
+      .orderBy(desc(healthMedicationLogs.loggedAt))
+      .limit(500);
+    return c.json({
+      logs: rows.map((row) => {
+        const med = medById.get(row.medicationId)!;
+        return {
+          id: row.id,
+          medicationId: row.medicationId,
+          medicationName: decryptHealthFieldOrPassthrough(med.name, env) ?? "Medication",
+          dosage: decryptHealthFieldOrPassthrough(med.dosage, env),
+          memberId: med.memberId,
+          status: row.status,
+          scheduledAt: row.scheduledAt?.toISOString() ?? null,
+          loggedAt: row.loggedAt.toISOString(),
+        };
+      }),
+    });
   });
 
   app.get("/medications/:id/logs", async (c) => {
