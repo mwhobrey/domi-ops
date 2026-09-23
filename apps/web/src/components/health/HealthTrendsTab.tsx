@@ -32,7 +32,10 @@ export function HealthTrendsTab({
   const [from, setFrom] = useState(defaults.from);
   const [to, setTo] = useState(defaults.to);
   const [memberId, setMemberId] = useState(currentMemberId);
-  const [report, setReport] = useState<HealthReportExport | null>(null);
+  const [fetchedReport, setReport] = useState<HealthReportExport | null>(null);
+  const [reportMemberId, setReportMemberId] = useState<string | null>(null);
+  // Never show one member's charts under another member's name while a switch is loading.
+  const report = reportMemberId === memberId ? fetchedReport : null;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const fetchGen = useRef(0);
@@ -46,6 +49,7 @@ export function HealthTrendsTab({
       const data = await apiClient.get<HealthReportExport>(`/api/health/reports?${params}`);
       if (generation !== fetchGen.current) return;
       setReport(data);
+      setReportMemberId(memberId);
     } catch (err) {
       if (generation !== fetchGen.current) return;
       setError(err instanceof ApiError ? err.message : "Failed to load trends");

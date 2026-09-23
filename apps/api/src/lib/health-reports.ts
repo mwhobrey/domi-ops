@@ -695,19 +695,20 @@ export async function buildHealthReports(
       vitalsTrendBuckets.set(bucketKey, bucket);
     }
   }
-  const vitalsUnitsByMemberMetric = new Map<string, Set<string>>();
+  // Units are compared across every displayed series of a metric: one member in lb and another
+  // in kg still need their units spelled out, even though each member used only one.
+  const vitalsUnitsByMetric = new Map<string, Set<string>>();
   const vitalsMembers = new Set<string>();
   for (const bucket of vitalsTrendBuckets.values()) {
-    const key = `${bucket.memberId}::${bucket.metric}`;
-    const units = vitalsUnitsByMemberMetric.get(key) ?? new Set<string>();
+    const units = vitalsUnitsByMetric.get(bucket.metric) ?? new Set<string>();
     units.add(bucket.unit);
-    vitalsUnitsByMemberMetric.set(key, units);
+    vitalsUnitsByMetric.set(bucket.metric, units);
     vitalsMembers.add(bucket.memberId);
   }
   const vitalsTrend = [...vitalsTrendBuckets.values()]
     .map((bucket) => {
       const unitLabel =
-        (vitalsUnitsByMemberMetric.get(`${bucket.memberId}::${bucket.metric}`)?.size ?? 1) > 1
+        (vitalsUnitsByMetric.get(bucket.metric)?.size ?? 1) > 1
           ? `${bucket.metricLabel} (${bucket.unit})`
           : bucket.metricLabel;
       return {

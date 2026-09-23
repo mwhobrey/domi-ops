@@ -248,7 +248,8 @@ export function formatWallClock(time: string): string {
   const h = Number(hStr);
   if (!hStr || Number.isNaN(h)) return time;
   const hour12 = h % 12 === 0 ? 12 : h % 12;
-  return `${hour12}:${mStr.slice(0, 2).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
+  // Postgres allows 24:00:00 as end-of-day midnight.
+  return `${hour12}:${mStr.slice(0, 2).padStart(2, "0")} ${h >= 12 && h < 24 ? "PM" : "AM"}`;
 }
 
 export function startOfMonth(d: Date): Date {

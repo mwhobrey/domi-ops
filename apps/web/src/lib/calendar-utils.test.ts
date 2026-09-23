@@ -14,6 +14,10 @@ describe("formatWallClock", () => {
     expect(formatWallClock("09:15:00")).toBe("9:15 AM");
   });
 
+  it("treats Postgres 24:00:00 as end-of-day midnight", () => {
+    expect(formatWallClock("24:00:00")).toBe("12:00 AM");
+  });
+
   it("passes unparseable input through", () => {
     expect(formatWallClock("soon")).toBe("soon");
   });
