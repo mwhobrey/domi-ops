@@ -1,0 +1,1 @@
+ALTER TABLE "chores" ADD COLUMN IF NOT EXISTS "missed_count" integer DEFAULT 0 NOT NULL;

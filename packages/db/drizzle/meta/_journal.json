@@ -519,6 +519,13 @@
       "when": 1790084860780,
       "tag": "0073_goals_rewards",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1790201319109,
+      "tag": "0074_chore_missed_count",
+      "breakpoints": true
     }
   ]
 }

@@ -186,6 +186,8 @@ export const chores = pgTable("chores", {
     onDelete: "set null",
   }),
   recurringId: uuid("recurring_id").references(() => choresRecurring.id, { onDelete: "set null" }),
+  /** Recurring occurrences that passed while this instance stayed open (it rolls forward). */
+  missedCount: integer("missed_count").notNull().default(0),
   dueReminderSentAt: timestamp("due_reminder_sent_at", { withTimezone: true }),
   createdByDisplayName: varchar("created_by_display_name", { length: 64 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

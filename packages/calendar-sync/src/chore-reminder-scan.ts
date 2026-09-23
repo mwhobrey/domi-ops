@@ -19,8 +19,8 @@ function choreReminderCopy(description: string, kind: DueReminderKind): { title:
       };
     case "overdue":
       return {
-        title: "Redemption quest",
-        body: `"${description}" is ready for a redemption quest — you've got this!`,
+        title: "Chore overdue",
+        body: `"${description}" is overdue. Finishing it now still earns a catch-up bonus.`,
       };
   }
 }

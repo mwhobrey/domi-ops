@@ -5,7 +5,7 @@ import {
   type chores as choresTable,
   type choresRecurring as choresRecurringTable,
 } from "@domi-ops/db";
-import { and, eq, lte } from "drizzle-orm";
+import { and, eq, lt, lte } from "drizzle-orm";
 import { householdTodayIsoDate } from "./household-time.js";
 import {
   advanceRecurringDate,
@@ -70,9 +70,73 @@ export function serializeChore(row: typeof choresTable.$inferSelect) {
     priority: (row.priority ?? 0) as ChorePriority,
     assigneeMemberId: row.assigneeMemberId ?? null,
     recurringId: row.recurringId ?? null,
+    missedCount: row.missedCount ?? 0,
     createdByDisplayName: row.createdByDisplayName ?? null,
     createdAt: row.createdAt,
   };
+}
+
+const MAX_ROLL_FORWARD_STEPS = 5000;
+
+/**
+ * Step an open recurring instance's due date along its cadence to the latest occurrence on or
+ * before `today`. A daily chore missed yesterday becomes due today (missed 1); a weekly chore
+ * stays overdue until its next occurrence arrives, so late completion still means something.
+ */
+export function rollForwardDueDate(
+  interval: RecurringInterval,
+  dueDate: string,
+  today: string,
+): { dueDate: string; missed: number } {
+  let current = dueDate;
+  let missed = 0;
+  for (let i = 0; i < MAX_ROLL_FORWARD_STEPS; i++) {
+    const next = advanceRecurringDate(interval, current);
+    if (next > today) break;
+    current = next;
+    missed += 1;
+  }
+  return { dueDate: current, missed };
+}
+
+async function rollForwardOpenRecurringChores(
+  db: Database,
+  householdId: string,
+  today: string,
+): Promise<void> {
+  const open = await db
+    .select({
+      id: chores.id,
+      dueDate: chores.dueDate,
+      missedCount: chores.missedCount,
+      interval: choresRecurring.interval,
+    })
+    .from(chores)
+    .innerJoin(choresRecurring, eq(chores.recurringId, choresRecurring.id))
+    .where(
+      and(
+        eq(chores.householdId, householdId),
+        eq(chores.done, false),
+        eq(choresRecurring.enabled, true),
+        lt(chores.dueDate, today),
+      ),
+    );
+
+  for (const row of open) {
+    if (!row.dueDate) continue;
+    const interval = normalizeRecurringInterval(row.interval);
+    if (!interval) continue;
+    const rolled = rollForwardDueDate(interval, row.dueDate, today);
+    if (rolled.missed === 0) continue;
+    await db
+      .update(chores)
+      .set({
+        dueDate: rolled.dueDate,
+        missedCount: row.missedCount + rolled.missed,
+        dueReminderSentAt: null,
+      })
+      .where(eq(chores.id, row.id));
+  }
 }
 
 export function serializeChoreRecurring(row: typeof choresRecurringTable.$inferSelect) {
@@ -263,6 +327,7 @@ export async function materializeDueChoreRecurring(
   householdId: string,
 ): Promise<number> {
   const today = await householdTodayIsoDate(db, householdId);
+  await rollForwardOpenRecurringChores(db, householdId, today);
   const due = await db
     .select()
     .from(choresRecurring)

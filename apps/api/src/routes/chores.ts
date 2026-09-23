@@ -44,6 +44,7 @@ export function choresRoutes(db: Database, env: Env) {
 
   app.get("/chores/glance", async (c) => {
     const auth = c.get("auth")!;
+    await materializeDueChoreRecurring(db, auth.householdId);
     const today = await householdTodayIsoDate(db, auth.householdId);
     const rows = await db
       .select({
