@@ -195,6 +195,7 @@ This repo often uses hand-written numbered migrations (`0007_home_status_presenc
 16. **API Docker `node_modules`** — `apps/api/Dockerfile` must copy `apps/api/node_modules`; npm workspaces nest `better-auth` there (not hoisted to root).
 17. **Browser file uploads** — Presign returns same-origin `PUT /api/core/upload/:id?token=…`; API streams to MinIO. No public MinIO/Caddy `/s3` route required. `S3_PUBLIC_URL` optional for direct object URLs.
 18. **mise / Node PATH** — Root `mise.toml` pins Node 22. Cursor agent shells and some terminals do not activate mise shims (`npm` missing from PATH). Use `mise exec -- npm …` (or `mise activate` in an interactive shell). Do not hunt for `node.exe` on disk.
+19. **Server clocks are UTC — "today" is the household's** (WHO-327). In the API, never derive a calendar date from `new Date().toISOString().slice(0, 10)` or `getMonth()`: after 7 PM Central that's already tomorrow. Use `householdTodayIsoDate` / `householdMonthKey` / `householdTimezone` (`apps/api/src/lib/household-time.ts`) and `localDateOfInstant` / `zonedLocalToUtc` from `@domi-ops/calendar-sync`. In web Server Components, pass an explicit `timeZone` to `toLocale*` (fetch it from `/api/core/household/settings`).
 
 ## PR workflow
 

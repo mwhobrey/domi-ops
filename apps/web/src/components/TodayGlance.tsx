@@ -2,7 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiClient } from "../lib/client-api";
-import { filterGlanceCalendarTileEvents } from "../lib/calendar-utils";
+import {
+  filterGlanceCalendarTileEvents,
+  formatDateLocal,
+  formatWallClock,
+} from "../lib/calendar-utils";
 import { formatChoreDueMeta, formatSchoolDueMeta } from "../lib/glance-meta";
 import type { GlancePreviewItem } from "./ui";
 import { Card, CardBody, CardHeader, GlanceTile, SectionHeader, Skeleton } from "./ui";
@@ -271,7 +275,7 @@ function buildCalendarTile(glance: CalendarEventsResponse | null): GlanceTileMod
     items: events.slice(0, 3).map((e) => ({
       key: e.id,
       label: e.title,
-      meta: e.allDay ? "All day" : (e.startTime ?? undefined),
+      meta: e.allDay ? "All day" : e.startTime ? formatWallClock(e.startTime) : undefined,
     })),
     overflowCount: Math.max(0, events.length - 3),
     emptyHint: tone === "success" ? "Nothing on the calendar today." : undefined,
@@ -317,7 +321,7 @@ export function TodayGlance({
   const [expensesGlance, setExpensesGlance] = useState<ExpensesGlance | null>(null);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEventsResponse | null>(null);
   const [goalsGlance, setGoalsGlance] = useState<GoalsGlance | null>(null);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = formatDateLocal(new Date());
   const narrow = useNarrowViewport();
 
   useEffect(() => {

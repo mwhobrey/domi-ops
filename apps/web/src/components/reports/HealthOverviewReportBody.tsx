@@ -19,6 +19,7 @@ import {
   VitalsTrendSection,
 } from "../health/HealthTrendCharts";
 import { isAsNeededMedScheduleKind } from "../health/health-helpers";
+import { formatDateLocal } from "../../lib/calendar-utils";
 
 export function formatReportDate(iso: string): string {
   const [year, month, day] = iso.split("-").map(Number);
@@ -451,8 +452,8 @@ export function defaultHealthReportRange() {
   const from = new Date();
   from.setDate(from.getDate() - 30);
   return {
-    from: from.toISOString().slice(0, 10),
-    to: to.toISOString().slice(0, 10),
+    from: formatDateLocal(from),
+    to: formatDateLocal(to),
   };
 }
 

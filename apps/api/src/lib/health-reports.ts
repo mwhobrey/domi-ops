@@ -666,12 +666,12 @@ export async function buildHealthReports(
     env,
     vitalsEventsInRange.map((row) => row.id),
   );
-  // Keyed by metric + unit, not metric alone — a metric logged under two units (e.g. weight in
-  // lb and kg) must not land in one trend, since the chart plots raw values on one axis and
-  // labels every point with the first point's unit.
+  // Keyed by member + metric + unit. Two people's readings on one line are medically meaningless,
+  // and a metric logged under two units (lb vs kg) can't share an axis either.
   const vitalsTrendBuckets = new Map<
     string,
     {
+      memberId: string;
       metric: string;
       metricLabel: string;
       unit: string;
@@ -683,8 +683,9 @@ export async function buildHealthReports(
     const date = localDateOfInstant(anchor, timezone);
     for (const reading of vitalsReadingsByEvent.get(event.id) ?? []) {
       if (reading.value == null) continue;
-      const bucketKey = `${reading.metric}::${reading.unit}`;
+      const bucketKey = `${event.memberId}::${reading.metric}::${reading.unit}`;
       const bucket = vitalsTrendBuckets.get(bucketKey) ?? {
+        memberId: event.memberId,
         metric: reading.metric,
         metricLabel: VITALS_METRIC_LABELS[reading.metric] ?? reading.metric,
         unit: reading.unit,
@@ -694,23 +695,32 @@ export async function buildHealthReports(
       vitalsTrendBuckets.set(bucketKey, bucket);
     }
   }
+  // Units are compared across every displayed series of a metric: one member in lb and another
+  // in kg still need their units spelled out, even though each member used only one.
   const vitalsUnitsByMetric = new Map<string, Set<string>>();
+  const vitalsMembers = new Set<string>();
   for (const bucket of vitalsTrendBuckets.values()) {
     const units = vitalsUnitsByMetric.get(bucket.metric) ?? new Set<string>();
     units.add(bucket.unit);
     vitalsUnitsByMetric.set(bucket.metric, units);
+    vitalsMembers.add(bucket.memberId);
   }
   const vitalsTrend = [...vitalsTrendBuckets.values()]
-    .map((bucket) => ({
-      metric: bucket.metric,
-      // Disambiguate only when the same metric was actually logged under more than one unit —
-      // the common case (one unit per metric) keeps its plain label.
-      metricLabel:
+    .map((bucket) => {
+      const unitLabel =
         (vitalsUnitsByMetric.get(bucket.metric)?.size ?? 1) > 1
           ? `${bucket.metricLabel} (${bucket.unit})`
-          : bucket.metricLabel,
-      points: bucket.points.sort((a, b) => a.date.localeCompare(b.date)),
-    }))
+          : bucket.metricLabel;
+      return {
+        metric: bucket.metric,
+        memberId: bucket.memberId,
+        metricLabel:
+          vitalsMembers.size > 1
+            ? `${unitLabel} — ${memberLabel.get(bucket.memberId) ?? "Member"}`
+            : unitLabel,
+        points: bucket.points.sort((a, b) => a.date.localeCompare(b.date)),
+      };
+    })
     .sort((a, b) => a.metricLabel.localeCompare(b.metricLabel));
 
   const exerciseEventsInRange = eventsInRange.filter((row) => row.type === "exercise");

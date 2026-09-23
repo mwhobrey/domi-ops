@@ -2,6 +2,7 @@ import type { Database } from "@domi-ops/db";
 import { expenseBudgets, expenses, type expenses as expensesTable } from "@domi-ops/db";
 import { and, eq, sql } from "drizzle-orm";
 import type { ExpenseBudgetShareAccess } from "./expense-budget-access.js";
+import { householdMonthKey } from "./household-time.js";
 
 export const BUDGET_WARNING_RATIO = 0.8;
 
@@ -32,10 +33,6 @@ export function normalizeExpenseCategory(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed ? trimmed.slice(0, 64) : null;
-}
-
-export function currentMonthKey(date = new Date()): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
 export function serializeExpense(
@@ -157,7 +154,7 @@ export async function summarizeBudgetRow(
 export async function buildBudgetSummaries(
   db: Database,
   householdId: string,
-  monthKey = currentMonthKey(),
+  monthKey: string,
   opts?: {
     budgets?: Array<{
       id: string;
@@ -377,10 +374,11 @@ export function buildExpenseReportFromData(
 export async function buildExpenseReports(
   db: Database,
   householdId: string,
-  monthKey = currentMonthKey(),
+  monthKey?: string | null,
   opts?: { scope?: "household" | "personal"; memberId?: string },
 ): Promise<ExpenseReport> {
-  const normalized = normalizeMonthKey(monthKey) ?? currentMonthKey();
+  const normalized =
+    (monthKey ? normalizeMonthKey(monthKey) : null) ?? (await householdMonthKey(db, householdId));
   const trendMonths = monthKeysEndingAt(normalized, 6);
   const earliest = trendMonths[0]!;
   const scope = opts?.scope === "personal" ? "personal" : "household";

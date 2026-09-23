@@ -16,8 +16,8 @@ import {
   serializeShoppingTrip,
   shoppingReceiptObjectKey,
   isReceiptKeyForHousehold,
-  todayIsoDate,
 } from "../lib/shopping.js";
+import { householdTodayIsoDate } from "../lib/household-time.js";
 import { buildShoppingGlance } from "../lib/shopping-glance.js";
 import { notifyShoppingRecurringMaterialized } from "../lib/push-shopping.js";
 import { posterLabel } from "../lib/poster-label.js";
@@ -135,7 +135,7 @@ export function shoppingRoutes(db: Database, env: Env) {
     const item = body.item?.trim();
     if (!item) return c.json({ error: "item_required" }, 400);
     const interval = normalizeRecurringInterval(body.interval) ?? "weekly";
-    const nextAt = body.nextAt?.trim() || todayIsoDate();
+    const nextAt = body.nextAt?.trim() || (await householdTodayIsoDate(db, auth.householdId));
     const [row] = await db
       .insert(shoppingRecurring)
       .values({
@@ -213,7 +213,7 @@ export function shoppingRoutes(db: Database, env: Env) {
 
   app.get("/shopping/reports", async (c) => {
     const auth = c.get("auth")!;
-    const to = c.req.query("to")?.trim() || todayIsoDate();
+    const to = c.req.query("to")?.trim() || (await householdTodayIsoDate(db, auth.householdId));
     const fromDefault = new Date(`${to}T12:00:00.000Z`);
     fromDefault.setUTCDate(fromDefault.getUTCDate() - 30);
     const from = c.req.query("from")?.trim() || fromDefault.toISOString().slice(0, 10);
@@ -318,7 +318,7 @@ export function shoppingRoutes(db: Database, env: Env) {
           title: `Groceries (${checkedRows.length} items)`,
           amount: tripTotal,
           category: "Groceries",
-          expenseDate: todayIsoDate(),
+          expenseDate: (await householdTodayIsoDate(db, auth.householdId)),
           createdByDisplayName: posterLabel(auth),
         })
         .returning({ id: expenses.id });

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, apiClient } from "../../lib/client-api";
+import { formatDateLocal } from "../../lib/calendar-utils";
 import { ReportExportSheet } from "./ReportExportSheet";
 import { Alert, Button, Input, Spinner } from "../ui";
 import { LazyCategoryBarChart as CategoryBarChart } from "../charts/lazy";
@@ -52,8 +53,8 @@ export function defaultDateRange(days = 30) {
   const from = new Date();
   from.setDate(from.getDate() - days);
   return {
-    from: from.toISOString().slice(0, 10),
-    to: to.toISOString().slice(0, 10),
+    from: formatDateLocal(from),
+    to: formatDateLocal(to),
   };
 }
 

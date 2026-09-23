@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
 import type { CalendarEventView } from "../lib/calendar-utils";
-import { filterPastTimedEvents, isOverlayEvent } from "../lib/calendar-utils";
+import { filterPastTimedEvents, formatWallClock, isOverlayEvent } from "../lib/calendar-utils";
 import { Alert, Card, CardBody, CardHeader, SectionHeader, Skeleton } from "./ui";
 
 function todayIsoLocal(): string {
@@ -19,13 +19,7 @@ function todayIsoLocal(): string {
 function formatEventTime(ev: CalendarEventView): string {
   if (ev.allDay) return "All day";
   if (!ev.startTime) return "Timed";
-  const [hStr, mStr] = ev.startTime.split(":");
-  const h = Number(hStr);
-  const m = mStr ?? "00";
-  if (Number.isNaN(h)) return ev.startTime;
-  const suffix = h >= 12 ? "p" : "a";
-  const hour12 = h % 12 === 0 ? 12 : h % 12;
-  return `${hour12}:${m}${suffix}`;
+  return formatWallClock(ev.startTime);
 }
 
 const TIMED_PREVIEW = 4;

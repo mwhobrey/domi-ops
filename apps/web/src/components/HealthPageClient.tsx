@@ -802,7 +802,9 @@ export function HealthPageClient({
         />
       ) : null}
 
-      {tab === "trends" ? <HealthTrendsTab /> : null}
+      {tab === "trends" ? (
+        <HealthTrendsTab members={members} currentMemberId={currentMemberId} />
+      ) : null}
 
       <HealthEventSheet
         open={eventSheetOpen}

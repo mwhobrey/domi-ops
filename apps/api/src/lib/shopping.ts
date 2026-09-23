@@ -8,7 +8,9 @@ import {
   type shoppingRecurring as shoppingRecurringTable,
   type shoppingTrips as shoppingTripsTable,
 } from "@domi-ops/db";
+import { addDaysIso, localDateOfInstant, zonedLocalToUtc } from "@domi-ops/calendar-sync";
 import { and, eq, gte, inArray, lte } from "drizzle-orm";
+import { householdTimezone, householdTodayIsoDate } from "./household-time.js";
 
 const AISLE_PREFIX = "aisle:";
 
@@ -95,10 +97,6 @@ export function serializeShoppingTrip(row: typeof shoppingTripsTable.$inferSelec
   };
 }
 
-export function todayIsoDate(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 export function advanceRecurringDate(interval: RecurringInterval, fromIso: string): string {
   const d = new Date(`${fromIso}T12:00:00.000Z`);
   if (interval === "daily") {
@@ -173,7 +171,7 @@ export async function materializeDueRecurring(
   db: Database,
   householdId: string,
 ): Promise<{ created: number; itemNames: string[] }> {
-  const today = todayIsoDate();
+  const today = await householdTodayIsoDate(db, householdId);
   const due = await db
     .select()
     .from(shoppingRecurring)
@@ -240,8 +238,9 @@ export async function buildShoppingReports(
   from: string,
   to: string,
 ) {
-  const fromDate = new Date(`${from}T00:00:00.000Z`);
-  const toDate = new Date(`${to}T23:59:59.999Z`);
+  const tz = await householdTimezone(db, householdId);
+  const fromDate = zonedLocalToUtc(from, "00:00", tz);
+  const toDate = new Date(zonedLocalToUtc(addDaysIso(to, 1), "00:00", tz).getTime() - 1);
 
   const trips = await db
     .select()
@@ -281,7 +280,7 @@ export async function buildShoppingReports(
     const tripSpend = trip.tripTotal ?? (itemCostSum > 0 ? itemCostSum : 0);
     totalSpend += tripSpend;
 
-    const monthKey = trip.clearedAt.toISOString().slice(0, 7);
+    const monthKey = localDateOfInstant(trip.clearedAt, tz).slice(0, 7);
     monthlyTotals.set(monthKey, (monthlyTotals.get(monthKey) ?? 0) + tripSpend);
 
     for (const item of items) {

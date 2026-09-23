@@ -6,9 +6,10 @@ import {
   users,
   type chores as choresTable,
 } from "@domi-ops/db";
+import { addDaysIso, localDateOfInstant, zonedLocalToUtc } from "@domi-ops/calendar-sync";
 import { and, eq, gte, lte, sql } from "drizzle-orm";
 import type { ChorePriority } from "./chores.js";
-import { todayIsoDate } from "./shopping.js";
+import { householdTimezone } from "./household-time.js";
 
 export type ChoreCompletionTiming = "on_time" | "early" | "late" | "no_due" | "redemption";
 
@@ -30,8 +31,9 @@ export function computeChoreCompletion(
   priority: ChorePriority,
   dueDate: string | null | undefined,
   completedAt: Date = new Date(),
+  timeZone = "UTC",
 ): Pick<ChoreCompletionResult, "karmaEarned" | "timing" | "daysLate"> {
-  const completedDay = completedAt.toISOString().slice(0, 10);
+  const completedDay = localDateOfInstant(completedAt, timeZone);
   const baseKarma = 10 + priority * 5;
 
   if (!dueDate) {
@@ -68,13 +70,15 @@ export async function recordChoreCompletion(
   },
 ): Promise<ChoreCompletionResult> {
   const completedAt = new Date();
-  const completedDay = completedAt.toISOString().slice(0, 10);
+  const tz = await householdTimezone(db, input.householdId);
+  const completedDay = localDateOfInstant(completedAt, tz);
   const memberId = input.chore.assigneeMemberId ?? input.completedByMemberId;
   const priority = (input.chore.priority ?? 0) as ChorePriority;
   const { karmaEarned: baseKarma, timing, daysLate } = computeChoreCompletion(
     priority,
     input.chore.dueDate,
     completedAt,
+    tz,
   );
 
   const [existingKarma] = await db
@@ -226,8 +230,9 @@ export async function buildChoreReports(
   from: string,
   to: string,
 ): Promise<ChoreReportsData> {
-  const fromTs = new Date(`${from}T00:00:00.000Z`);
-  const toTs = new Date(`${to}T23:59:59.999Z`);
+  const tz = await householdTimezone(db, householdId);
+  const fromTs = zonedLocalToUtc(from, "00:00", tz);
+  const toTs = new Date(zonedLocalToUtc(addDaysIso(to, 1), "00:00", tz).getTime() - 1);
 
   const completions = await db
     .select({
@@ -330,5 +335,3 @@ export async function buildChoreReports(
 
   return { from, to, summary, byMember };
 }
-
-export { todayIsoDate };

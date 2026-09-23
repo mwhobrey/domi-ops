@@ -4,8 +4,9 @@ import { TrendingUp } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, apiClient } from "../../lib/client-api";
 import type { HealthReportExport } from "../../lib/health-report-export";
+import type { NoteShareMember } from "../NoteSharePicker";
 import { defaultHealthReportRange } from "../reports/HealthOverviewReportBody";
-import { Alert, EmptyState, Input, Spinner } from "../ui";
+import { Alert, EmptyState, Input, Select, Spinner } from "../ui";
 import {
   ExerciseByActivitySection,
   ExerciseWeeklyVolumeSection,
@@ -20,11 +21,21 @@ import {
  * Leaner than the full Reports page — charts only, no event history, no export chrome, no
  * medication adherence (WHO-303). Same `GET /api/health/reports` data as Reports; no new endpoint.
  */
-export function HealthTrendsTab() {
+export function HealthTrendsTab({
+  members,
+  currentMemberId,
+}: {
+  members: NoteShareMember[];
+  currentMemberId: string;
+}) {
   const defaults = defaultHealthReportRange();
   const [from, setFrom] = useState(defaults.from);
   const [to, setTo] = useState(defaults.to);
-  const [report, setReport] = useState<HealthReportExport | null>(null);
+  const [memberId, setMemberId] = useState(currentMemberId);
+  const [fetchedReport, setReport] = useState<HealthReportExport | null>(null);
+  const [reportMemberId, setReportMemberId] = useState<string | null>(null);
+  // Never show one member's charts under another member's name while a switch is loading.
+  const report = reportMemberId === memberId ? fetchedReport : null;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const fetchGen = useRef(0);
@@ -34,11 +45,11 @@ export function HealthTrendsTab() {
     setLoading(true);
     setError(null);
     try {
-      const data = await apiClient.get<HealthReportExport>(
-        `/api/health/reports?from=${from}&to=${to}&groupBy=date`,
-      );
+      const params = new URLSearchParams({ from, to, groupBy: "date", memberId });
+      const data = await apiClient.get<HealthReportExport>(`/api/health/reports?${params}`);
       if (generation !== fetchGen.current) return;
       setReport(data);
+      setReportMemberId(memberId);
     } catch (err) {
       if (generation !== fetchGen.current) return;
       setError(err instanceof ApiError ? err.message : "Failed to load trends");
@@ -46,7 +57,7 @@ export function HealthTrendsTab() {
     } finally {
       if (generation === fetchGen.current) setLoading(false);
     }
-  }, [from, to]);
+  }, [from, to, memberId]);
 
   useEffect(() => {
     void load();
@@ -61,6 +72,19 @@ export function HealthTrendsTab() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end gap-3">
+        {members.length > 1 ? (
+          <label className="space-y-1 text-sm">
+            <span className="text-[var(--color-text-muted)]">Member</span>
+            <Select value={memberId} onChange={(e) => setMemberId(e.target.value)}>
+              {members.map((m) => (
+                <option key={m.memberId} value={m.memberId}>
+                  {m.label}
+                  {m.memberId === currentMemberId ? " (me)" : ""}
+                </option>
+              ))}
+            </Select>
+          </label>
+        ) : null}
         <label className="space-y-1 text-sm">
           <span className="text-[var(--color-text-muted)]">From</span>
           <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />

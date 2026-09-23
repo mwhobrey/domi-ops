@@ -8,6 +8,7 @@ import { buildChoreReports } from "../chores-karma.js";
 import { buildExpenseReports } from "../expenses.js";
 import { buildHealthReports } from "../health-reports.js";
 import { isHouseholdModuleEnabled } from "../household-modules.js";
+import { householdTodayIsoDate } from "../household-time.js";
 import { buildShoppingReports } from "../shopping.js";
 import { buildSchoolReports, canViewSchoolReports } from "../school-reports.js";
 import { memberEnrollmentsForHousehold, schoolContextForAuth } from "../school-auth-context.js";
@@ -203,7 +204,7 @@ export async function buildCanonicalReport(
     ) {
       return null;
     }
-    const toDefault = params.to?.trim() || new Date().toISOString().slice(0, 10);
+    const toDefault = params.to?.trim() || (await householdTodayIsoDate(db, auth.householdId));
     const fromDefaultDate = new Date(`${toDefault}T12:00:00.000Z`);
     fromDefaultDate.setUTCDate(fromDefaultDate.getUTCDate() - 30);
     let from = params.from?.trim() || fromDefaultDate.toISOString().slice(0, 10);
@@ -249,7 +250,7 @@ export async function buildCanonicalReport(
   }
 
   if (module === "chores" && kind === "overview") {
-    const to = params.to?.trim() || new Date().toISOString().slice(0, 10);
+    const to = params.to?.trim() || (await householdTodayIsoDate(db, auth.householdId));
     const fromDefault = new Date(`${to}T12:00:00.000Z`);
     fromDefault.setUTCDate(fromDefault.getUTCDate() - 30);
     const from = params.from?.trim() || fromDefault.toISOString().slice(0, 10);
@@ -258,7 +259,7 @@ export async function buildCanonicalReport(
   }
 
   if (module === "shopping" && kind === "overview") {
-    const to = params.to?.trim() || new Date().toISOString().slice(0, 10);
+    const to = params.to?.trim() || (await householdTodayIsoDate(db, auth.householdId));
     const fromDefault = new Date(`${to}T12:00:00.000Z`);
     fromDefault.setUTCDate(fromDefault.getUTCDate() - 30);
     const from = params.from?.trim() || fromDefault.toISOString().slice(0, 10);

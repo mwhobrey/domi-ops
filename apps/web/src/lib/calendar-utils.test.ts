@@ -2,8 +2,26 @@ import { describe, expect, it } from "vitest";
 import {
   filterGlanceCalendarTileEvents,
   filterPastTimedEvents,
+  formatWallClock,
   isHealthMedOverlay,
 } from "./calendar-utils.js";
+
+describe("formatWallClock", () => {
+  it("formats Postgres time strings as 12-hour clock", () => {
+    expect(formatWallClock("18:00:00")).toBe("6:00 PM");
+    expect(formatWallClock("00:05")).toBe("12:05 AM");
+    expect(formatWallClock("12:30:00")).toBe("12:30 PM");
+    expect(formatWallClock("09:15:00")).toBe("9:15 AM");
+  });
+
+  it("treats Postgres 24:00:00 as end-of-day midnight", () => {
+    expect(formatWallClock("24:00:00")).toBe("12:00 AM");
+  });
+
+  it("passes unparseable input through", () => {
+    expect(formatWallClock("soon")).toBe("soon");
+  });
+});
 
 describe("isHealthMedOverlay", () => {
   it("detects med and med-group overlays", () => {

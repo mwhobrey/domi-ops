@@ -27,13 +27,15 @@ function filterLabel(filter: AssignmentFilter): string {
   return filter === "overdue" ? "Overdue assignments" : "Due this week";
 }
 
-function formatDue(value: string): string {
-  return new Date(value).toLocaleString(undefined, {
+/** Server-rendered, so the timezone must be explicit — the container clock is UTC. */
+function formatDue(value: string, timeZone: string): string {
+  return new Date(value).toLocaleString("en-US", {
     weekday: "short",
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    timeZone,
   });
 }
 
@@ -47,14 +49,21 @@ export default async function SchoolAssignmentsPage({
   let assignments: SchoolAssignmentSummary[] = [];
   let context: SchoolContext | null = null;
   let loadError: string | null = null;
+  let timeZone = "UTC";
 
   try {
-    const data = await apiFetch<{
-      assignments: SchoolAssignmentSummary[];
-      context: SchoolContext;
-    }>(`/api/school/assignments?filter=${filter}`);
+    const [data, settings] = await Promise.all([
+      apiFetch<{
+        assignments: SchoolAssignmentSummary[];
+        context: SchoolContext;
+      }>(`/api/school/assignments?filter=${filter}`),
+      apiFetch<{ timezone?: string }>("/api/core/household/settings").catch(() => ({
+        timezone: undefined,
+      })),
+    ]);
     assignments = data.assignments;
     context = data.context;
+    timeZone = settings.timezone?.trim() || "UTC";
   } catch (e) {
     loadError = loadErrorMessage(e, "Could not load assignments");
   }
@@ -143,7 +152,7 @@ export default async function SchoolAssignmentsPage({
                           </Badge>
                           <span className="flex items-center gap-1 text-xs text-[var(--color-text-muted)]">
                             <Calendar className="h-3 w-3" aria-hidden />
-                            {formatDue(assignment.dueAt)}
+                            {formatDue(assignment.dueAt, timeZone)}
                           </span>
                           {assignment.pointsPossible != null ? (
                             <span className="text-xs text-[var(--color-text-muted)]">
