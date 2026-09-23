@@ -1,6 +1,9 @@
 FROM node:24-alpine AS builder
 WORKDIR /app
 RUN corepack enable
+# better-sqlite3 (packages/import-homehub) has no prebuilt binary for this Node major on
+# musl yet — build tools let npm ci fall back to compiling it from source.
+RUN apk add --no-cache python3 make g++
 
 ARG API_URL=http://api:4000
 ENV API_URL=$API_URL

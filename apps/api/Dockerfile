@@ -1,6 +1,9 @@
 FROM node:24-alpine AS builder
 WORKDIR /app
 RUN corepack enable
+# better-sqlite3 (packages/import-homehub) has no prebuilt binary for this Node major on
+# musl yet — build tools let npm ci fall back to compiling it from source.
+RUN apk add --no-cache python3 make g++
 COPY package.json package-lock.json* ./
 COPY packages/config/package.json packages/config/
 COPY packages/crypto/package.json packages/crypto/
