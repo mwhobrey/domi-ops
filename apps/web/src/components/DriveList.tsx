@@ -11,6 +11,7 @@ import { DriveFolderBar } from "./DriveFolderBar";
 import type { NoteShareMember } from "./NoteSharePicker";
 import type { DriveFolder, DriveObject } from "../lib/drive-types";
 import {
+  childFoldersForParent,
   currentFolderLabel,
   DRIVE_OBJECT_DRAG_TYPE,
   isExternalFileDrag,
@@ -25,6 +26,7 @@ import {
   Input,
 } from "./ui";
 import { ListPage } from "./lists/ListPage";
+import { CollapsibleAddForm } from "./lists/CollapsibleAddForm";
 
 export type { DriveObject };
 
@@ -225,6 +227,29 @@ export function DriveList({
   }, [objects, tagSuggestions]);
 
   const hasActiveFilter = searchQuery.trim().length > 0 || activeTag !== null;
+  const hasChildFolders = useMemo(
+    () => childFoldersForParent(folders, currentFolderId).length > 0,
+    [folders, currentFolderId],
+  );
+  const [pinnedAcrossFolders, setPinnedAcrossFolders] = useState<DriveObject[]>([]);
+
+  // Pins live in whatever folder the file is in; surface them at the root so a pinned file in
+  // /Imports isn't invisible from the Drive landing page.
+  useEffect(() => {
+    if (currentFolderId) return;
+    let cancelled = false;
+    apiClient
+      .get<{ objects: DriveObject[] }>("/api/core/drive/objects?pinned=1&all=1")
+      .then((data) => {
+        if (!cancelled) setPinnedAcrossFolders(data.objects.filter((o) => o.folderId));
+      })
+      .catch(() => {
+        if (!cancelled) setPinnedAcrossFolders([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentFolderId, objects]);
 
   const uploadFolderLabel = useMemo(
     () => currentFolderLabel(folders, currentFolderId),
@@ -416,6 +441,8 @@ export function DriveList({
       addForm={
         canWrite ? (
         <div className="space-y-3">
+        <CollapsibleAddForm label="Upload or add link" collapseOnMobile>
+        <div className="space-y-3">
           <div className="flex flex-wrap gap-2" role="group" aria-label="Add Drive item type">
             <Button
               type="button"
@@ -517,31 +544,8 @@ export function DriveList({
               }
             }}
           >
-            <Input
-              list="drive-tag-suggestions"
-              placeholder="Tags (comma-separated)"
-              value={tagsInput}
-              onChange={(e) => {
-                setTagsInput(e.target.value);
-                void fetchTagSuggestions(e.target.value);
-              }}
-              aria-label="Tags"
-              disabled={loading}
-            />
-            <datalist id="drive-tag-suggestions">
-              {tagSuggestions.map((t) => (
-                <option key={t} value={t} />
-              ))}
-            </datalist>
             {addMode === "file" ? (
               <>
-                <Input
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  aria-label="File title"
-                  placeholder="Title (optional — defaults to filename)"
-                  disabled={loading}
-                />
                 <div
                   className={`rounded-lg border border-dashed p-3 transition ${
                     listDropActive
@@ -578,6 +582,13 @@ export function DriveList({
                     }}
                   />
                 </div>
+                <Input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  aria-label="File title"
+                  placeholder="Title (optional, defaults to the filename)"
+                  disabled={loading}
+                />
               </>
             ) : (
               <>
@@ -601,6 +612,22 @@ export function DriveList({
               </>
             )}
             <Input
+              list="drive-tag-suggestions"
+              placeholder="Tags (comma-separated)"
+              value={tagsInput}
+              onChange={(e) => {
+                setTagsInput(e.target.value);
+                void fetchTagSuggestions(e.target.value);
+              }}
+              aria-label="Tags"
+              disabled={loading}
+            />
+            <datalist id="drive-tag-suggestions">
+              {tagSuggestions.map((t) => (
+                <option key={t} value={t} />
+              ))}
+            </datalist>
+            <Input
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               aria-label="Description"
@@ -614,6 +641,9 @@ export function DriveList({
             >
               {addMode === "file" ? "Upload" : "Add link"}
             </Button>
+          </form>
+        </div>
+        </CollapsibleAddForm>
             {uploadQueue.length > 0 ? (
               <ul className="space-y-1 text-sm" aria-label="Upload progress" aria-live="polite">
                 {uploadQueue.map((entry) => (
@@ -637,7 +667,6 @@ export function DriveList({
                 ))}
               </ul>
             ) : null}
-          </form>
         </div>
         ) : (
           <p className="text-sm text-[var(--color-text-muted)]">
@@ -673,6 +702,33 @@ export function DriveList({
         }}
         onDrop={handleListFileDrop}
       >
+      {!currentFolderId && !hasActiveFilter && pinnedAcrossFolders.length > 0 ? (
+        <section aria-label="Pinned in folders" className="space-y-2">
+          <h2 className="text-label text-[var(--color-text-muted)]">Pinned in folders</h2>
+          <ul className="flex flex-wrap gap-2">
+            {pinnedAcrossFolders.map((obj) => (
+              <li key={obj.id}>
+                <button
+                  type="button"
+                  className="inline-flex max-w-[18rem] items-center gap-1.5 rounded-full border border-[var(--color-border)] px-3 py-1 text-sm hover:border-[var(--color-accent)]/60 hover:bg-[var(--color-surface-subtle)]"
+                  onClick={() => {
+                    const params = new URLSearchParams();
+                    params.set("folder", obj.folderId!);
+                    params.set("highlight", obj.id);
+                    router.push(`/drive?${params}`);
+                  }}
+                >
+                  <FileText className="h-3.5 w-3.5 shrink-0 text-[var(--color-text-muted)]" aria-hidden />
+                  <span className="truncate">{obj.title || obj.filename || "Drive item"}</span>
+                  <span className="shrink-0 text-xs text-[var(--color-text-muted)]">
+                    {currentFolderLabel(folders, obj.folderId ?? null)}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       <div className="mb-4 space-y-3">
         <Input
           type="search"
@@ -687,13 +743,23 @@ export function DriveList({
 
       {objects.length === 0 ? (
         <EmptyState
-          title={hasActiveFilter ? "No matching items" : "Drive is empty"}
+          title={
+            hasActiveFilter
+              ? "No matching items"
+              : hasChildFolders
+                ? "No files in this folder"
+                : currentFolderId
+                  ? "This folder is empty"
+                  : "Drive is empty"
+          }
           description={
             hasActiveFilter
               ? "Try another search or tag filter."
-              : canWrite
-                ? "Upload a file, drag files here, or add a link above."
-                : "Upload a file or add a link above."
+              : hasChildFolders
+                ? "Open a folder above, or add files here."
+                : canWrite
+                  ? "Upload a file, drag files here, or add a link."
+                  : "Nothing has been added here yet."
           }
           icon={<FolderOpen className="h-10 w-10" />}
         />
