@@ -59,6 +59,31 @@ const REPEAT_OPTIONS: { value: RepeatFreq; label: string }[] = [
   { value: "monthly", label: "Monthly" },
 ];
 
+let supportedTimeZones: string[] | null = null;
+
+/** IANA zones the browser knows, plus whatever the event already has saved. */
+function timeZoneOptions(current: string): string[] {
+  if (!supportedTimeZones) {
+    try {
+      supportedTimeZones = Intl.supportedValuesOf("timeZone");
+    } catch {
+      supportedTimeZones = [
+        "America/New_York",
+        "America/Chicago",
+        "America/Denver",
+        "America/Phoenix",
+        "America/Los_Angeles",
+        "America/Anchorage",
+        "Pacific/Honolulu",
+        "UTC",
+      ];
+    }
+  }
+  return current && !supportedTimeZones.includes(current)
+    ? [current, ...supportedTimeZones]
+    : supportedTimeZones;
+}
+
 function FormSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="space-y-3">
@@ -101,6 +126,9 @@ export function CalendarEventSheet({
   const [repeat, setRepeat] = useState<RepeatFreq>("none");
   const [reminderOffsets, setReminderOffsets] = useState<number[]>([]);
   const [categories, setCategories] = useState<EventCategory[]>([]);
+  /** Calendar the current `categories` belong to — gates applying its default category once. */
+  const [categoriesCalId, setCategoriesCalId] = useState<string | null>(null);
+  const [defaultCategoryAppliedFor, setDefaultCategoryAppliedFor] = useState<string | null>(null);
   const [categoriesLoading, setCategoriesLoading] = useState(false);
   const [calendars, setCalendars] = useState<HouseholdCalendar[]>([]);
   const [loading, setLoading] = useState(false);
@@ -136,6 +164,7 @@ export function CalendarEventSheet({
     } catch {
       setCategories([]);
     } finally {
+      setCategoriesCalId(calId);
       setCategoriesLoading(false);
     }
   }, []);
@@ -156,6 +185,30 @@ export function CalendarEventSheet({
       setCategoryKey("");
     }
   }, [categories, categoryKey, categoriesLoading]);
+
+  // New events start in the calendar's default category (the option labeled "(default)").
+  useEffect(() => {
+    if (!open) {
+      setDefaultCategoryAppliedFor(null);
+      return;
+    }
+    if (selected || categoriesLoading) return;
+    const calId = calendarId || defaultCalendarId || "";
+    if (!calId || categoriesCalId !== calId || defaultCategoryAppliedFor === calId) return;
+    setDefaultCategoryAppliedFor(calId);
+    const fallback = categories.find((c) => c.isDefault);
+    if (fallback && !categoryKey) setCategoryKey(fallback.key);
+  }, [
+    open,
+    selected,
+    categoriesLoading,
+    calendarId,
+    defaultCalendarId,
+    categoriesCalId,
+    defaultCategoryAppliedFor,
+    categories,
+    categoryKey,
+  ]);
 
   useEffect(() => {
     if (selected) {
@@ -480,16 +533,22 @@ export function CalendarEventSheet({
               )}
               <details className="rounded-[var(--radius-md)] border border-[var(--color-border)]/80 bg-[var(--color-surface-subtle)]/40 px-3 py-2">
                 <summary className="cursor-pointer text-sm font-medium text-[var(--color-text-muted)] marker:content-none hover:text-[var(--color-text)] [&::-webkit-details-marker]:hidden">
-                  Time zone
+                  Time zone{timeZone ? ` · ${timeZone.replace(/_/g, " ")}` : ""}
                 </summary>
                 <label className="mt-3 block space-y-1.5 text-sm">
-                  <Input
+                  <Select
                     value={timeZone}
                     onChange={(e) => setTimeZone(e.target.value)}
                     disabled={readOnly}
-                    placeholder="America/Chicago"
                     aria-label="Time zone"
-                  />
+                  >
+                    <option value="">Household default</option>
+                    {timeZoneOptions(timeZone).map((tz) => (
+                      <option key={tz} value={tz}>
+                        {tz.replace(/_/g, " ")}
+                      </option>
+                    ))}
+                  </Select>
                 </label>
               </details>
               {!selected && !readOnly && (
@@ -602,6 +661,7 @@ export function CalendarEventSheet({
                   <span className="font-medium">Color</span>
                   <ColorField
                     compact
+                    inlinePresets
                     ariaLabel="Event color"
                     value={color}
                     onChange={setColor}
@@ -621,6 +681,7 @@ export function CalendarEventSheet({
                   value={repeat}
                   onChange={(e) => setRepeat(e.target.value as RepeatFreq)}
                   disabled={readOnly}
+                  aria-label="Repeat"
                 >
                   {REPEAT_OPTIONS.map((o) => (
                     <option key={o.value} value={o.value}>

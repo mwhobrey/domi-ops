@@ -19,9 +19,20 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
   overdue push reads "Chore overdue". Due dates read "Due today", "Due Fri, Sep 25", or
   "Overdue · Tue, Jul 7" instead of `2026-07-07`; the assignee shows with a person icon and
   tags render as `#tag`, so tags, people, and status no longer look alike (WHO-328).
+- Calendar polish (WHO-329):
+  - The desktop month view shows up to three event titles per day, with times and colors,
+    plus "+N more". Smaller month views show a real count instead of a "•••" capped at three.
+  - Week and day views highlight today's column and draw a current-time line.
+  - Health entries on the calendar render as short markers instead of hour-long blocks, and
+    vitals read "Vitals · 135/90 · HR 65" instead of "BP systolic, BP diastolic, Heart rate".
+  - New event form: a real time-zone picker instead of a free-text box, color swatches, a
+    labeled Repeat control, and new events start in the calendar's default category.
 
 ### Fixed
 
+- The "Set up your household calendar" banner no longer flashes on every Calendar page load
+  while calendars are still loading, and the page no longer fetches events twice on open
+  (WHO-329).
 - Health Trends no longer plots different household members' vitals on one line (WHO-327). The
   Trends tab has a Member picker (defaults to you), and the health report's "All members" view
   now keeps each person's readings in their own labeled series.

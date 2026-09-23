@@ -3,31 +3,43 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { cn } from "../../lib/cn";
 import { eventOverlapsDate } from "../../lib/calendar-event-span";
+import { resolveEventColor } from "../../lib/calendar-event-colors";
 import type { CalendarEventView } from "../../lib/calendar-utils";
-import { monthGrid, parseLocalDate } from "../../lib/calendar-utils";
+import { formatWallClock, monthGrid, parseLocalDate } from "../../lib/calendar-utils";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const TITLES_PER_CELL = 3;
+
+function compareInDay(a: CalendarEventView, b: CalendarEventView): number {
+  if (a.allDay !== b.allDay) return a.allDay ? -1 : 1;
+  return (a.startTime ?? "").localeCompare(b.startTime ?? "") || a.title.localeCompare(b.title);
+}
 
 export function CalendarMonthView({
   monthStart,
   events,
   compact = false,
+  showTitles = false,
+  categoryColorByKey,
   onDaySelect,
 }: {
   monthStart: Date;
   events: CalendarEventView[];
   compact?: boolean;
+  /** Event titles in each cell (full calendar page on wide screens); otherwise a count. */
+  showTitles?: boolean;
+  categoryColorByKey?: Map<string, string | null>;
   onDaySelect: (date: string) => void;
 }) {
   const cells = useMemo(() => monthGrid(monthStart), [monthStart]);
-  const eventCountByDate = useMemo(() => {
-    const counts = new Map<string, number>();
+  const eventsByDate = useMemo(() => {
+    const byDate = new Map<string, CalendarEventView[]>();
     for (const cell of cells) {
       if (!cell.inMonth) continue;
-      const n = events.filter((e) => eventOverlapsDate(e, cell.date)).length;
-      if (n > 0) counts.set(cell.date, n);
+      const dayEvents = events.filter((e) => eventOverlapsDate(e, cell.date)).sort(compareInDay);
+      if (dayEvents.length > 0) byDate.set(cell.date, dayEvents);
     }
-    return counts;
+    return byDate;
   }, [cells, events]);
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
   const cellRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -76,7 +88,8 @@ export function CalendarMonthView({
       </div>
       <div className={cn("grid grid-cols-7", compact ? "gap-0.5" : "gap-1")}>
         {cells.map((cell, index) => {
-          const eventCount = eventCountByDate.get(cell.date) ?? 0;
+          const dayEvents = eventsByDate.get(cell.date) ?? [];
+          const eventCount = dayEvents.length;
           const hasEvents = eventCount > 0;
           const focused = focusedIndex === index;
           return (
@@ -91,7 +104,7 @@ export function CalendarMonthView({
               disabled={!cell.inMonth}
               aria-label={
                 cell.inMonth
-                  ? `${parseLocalDate(cell.date).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}${hasEvents ? ", has events" : ""}`
+                  ? `${parseLocalDate(cell.date).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}${hasEvents ? `, ${eventCount} event${eventCount === 1 ? "" : "s"}` : ""}`
                   : undefined
               }
               onFocus={() => cell.inMonth && setFocusedIndex(index)}
@@ -101,10 +114,13 @@ export function CalendarMonthView({
                 onDaySelect(cell.date);
               }}
               className={cn(
-                "relative flex flex-col items-center justify-start rounded-[var(--radius-md)] border transition",
+                "relative flex flex-col justify-start rounded-[var(--radius-md)] border transition",
+                showTitles ? "items-stretch" : "items-center",
                 compact
                   ? "min-h-[2rem] p-0.5 text-xs sm:min-h-[2.35rem]"
-                  : "min-h-[3.25rem] p-1 text-sm sm:min-h-[4rem]",
+                  : showTitles
+                    ? "min-h-[6.5rem] p-1 text-sm"
+                    : "min-h-[3.25rem] p-1 text-sm sm:min-h-[4rem]",
                 !cell.inMonth && "cursor-default border-transparent opacity-30",
                 cell.inMonth &&
                   "border-[var(--color-border)]/60 hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-surface-subtle)]",
@@ -115,17 +131,48 @@ export function CalendarMonthView({
               <span
                 className={cn(
                   "font-medium tabular-nums",
+                  showTitles && "self-start px-1",
                   cell.isToday && cell.inMonth && "text-[var(--color-accent)]",
                 )}
               >
                 {cell.day}
               </span>
-              {hasEvents && cell.inMonth && (
+              {hasEvents && cell.inMonth && showTitles ? (
+                <span className="mt-1 flex min-w-0 flex-col gap-0.5 text-left">
+                  {dayEvents.slice(0, TITLES_PER_CELL).map((ev) => (
+                    <span
+                      key={ev.id}
+                      className="flex min-w-0 items-center gap-1 rounded px-1 text-[11px] leading-tight text-[var(--color-text)]"
+                    >
+                      <span
+                        className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-accent)]"
+                        style={(() => {
+                          const color = resolveEventColor(ev, categoryColorByKey ?? new Map());
+                          return color ? { backgroundColor: color } : undefined;
+                        })()}
+                        aria-hidden
+                      />
+                      {!ev.allDay && ev.startTime ? (
+                        <span className="shrink-0 tabular-nums text-[var(--color-text-muted)]">
+                          {formatWallClock(ev.startTime).replace(":00 ", " ")}
+                        </span>
+                      ) : null}
+                      <span className="truncate">{ev.title}</span>
+                    </span>
+                  ))}
+                  {eventCount > TITLES_PER_CELL ? (
+                    <span className="px-1 text-[11px] font-medium text-[var(--color-accent)]">
+                      +{eventCount - TITLES_PER_CELL} more
+                    </span>
+                  ) : null}
+                </span>
+              ) : null}
+              {hasEvents && cell.inMonth && !showTitles && (
                 <span
                   className="mt-auto text-[10px] font-medium tabular-nums text-[var(--color-accent)]"
                   title={`${eventCount} event${eventCount === 1 ? "" : "s"}`}
                 >
-                  {eventCount > 3 ? "•••" : "•".repeat(Math.min(eventCount, 3))}
+                  {eventCount > 3 ? eventCount : "•".repeat(eventCount)}
                 </span>
               )}
             </button>

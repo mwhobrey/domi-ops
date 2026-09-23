@@ -20,7 +20,8 @@ import {
 } from "@domi-ops/calendar-sync";
 import { and, eq, gte, inArray, isNotNull, lte } from "drizzle-orm";
 import type { CalendarListEvent, CalendarOverlayKind } from "./calendar-event-policy.js";
-import { parseMedSchedule } from "./health-serialize.js";
+import { loadVitalsReadingsForEvents, parseMedSchedule } from "./health-serialize.js";
+import { summarizeVitals } from "./vitals-summary.js";
 import { decryptHealthFieldOrPassthrough } from "./health-crypto.js";
 import {
   healthEventVisibleWhere,
@@ -73,6 +74,15 @@ function localTimeString(instant: Date, timeZone: string): string {
   } catch {
     return instant.toISOString().slice(11, 19);
   }
+}
+
+/** Health overlays are points in time; a short span keeps them from rendering as hour blocks. */
+const HEALTH_OVERLAY_SPAN_MIN = 15;
+
+function addMinutesToTime(time: string, minutes: number): string {
+  const [h, m] = time.split(":").map(Number);
+  const total = Math.min((h ?? 0) * 60 + (m ?? 0) + minutes, 23 * 60 + 59);
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}:00`;
 }
 
 function isMidnightLocal(instant: Date, timeZone: string): boolean {
@@ -224,6 +234,11 @@ export async function buildHealthEventOverlays(
 
   const overlays: CalendarListEvent[] = [];
   const today = todayIsoDateInTz(timeZone);
+  const vitalsReadings = await loadVitalsReadingsForEvents(
+    db,
+    env,
+    rows.filter((r) => r.type === "vitals").map((r) => r.id),
+  );
   for (const row of rows) {
     const anchor = row.startedAt ?? row.endedAt ?? row.createdAt;
     if (!anchor) continue;
@@ -242,21 +257,26 @@ export async function buildHealthEventOverlays(
 
     if (spanEndDate < from || startDate > to) continue;
 
-    const title = decryptHealthFieldOrPassthrough(row.title, env) ?? "Health event";
+    const storedTitle = decryptHealthFieldOrPassthrough(row.title, env) ?? "Health event";
+    const title =
+      row.type === "vitals"
+        ? (summarizeVitals(vitalsReadings.get(row.id) ?? []) ?? storedTitle)
+        : storedTitle;
     const isOngoingOpen = durationKind === "ongoing" && !row.endedAt;
     const allDay =
       durationKind === "ongoing" ||
       !row.startedAt ||
       isMidnightLocal(row.startedAt, timeZone);
     const multiDay = spanEndDate !== startDate;
+    const startTime = allDay || !row.startedAt ? null : localTimeString(row.startedAt, timeZone);
     overlays.push(
       overlayEvent({
         id: `overlay:health:event:${row.id}`,
         title: isOngoingOpen ? `${title} (ongoing)` : title,
         startDate,
         endDate: multiDay ? spanEndDate : allDay ? startDate : null,
-        startTime: allDay || !row.startedAt ? null : localTimeString(row.startedAt, timeZone),
-        endTime: null,
+        startTime,
+        endTime: startTime ? addMinutesToTime(startTime, HEALTH_OVERLAY_SPAN_MIN) : null,
         allDay,
         color: OVERLAY_COLOR_HEALTH_EVENT,
         calendarId: OVERLAY_CALENDAR_HEALTH_EVENT,
@@ -307,7 +327,7 @@ function medOverlay(params: {
     title: params.title,
     startDate: params.date,
     startTime: `${params.hhmm}:00`,
-    endTime: null,
+    endTime: addMinutesToTime(params.hhmm, HEALTH_OVERLAY_SPAN_MIN),
     allDay: false,
     color: OVERLAY_COLOR_HEALTH_MED,
     calendarId: OVERLAY_CALENDAR_HEALTH_MED,

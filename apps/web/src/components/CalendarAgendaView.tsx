@@ -6,14 +6,21 @@ import { effectiveEndDate } from "../lib/calendar-event-span";
 import { eventDescriptionPlainText } from "../lib/event-html";
 import { eventColors, resolveEventColor } from "../lib/calendar-event-colors";
 import type { CalendarEventView } from "../lib/calendar-utils";
-import { addDays, formatDateLocal, formatWallClock, parseLocalDate } from "../lib/calendar-utils";
+import {
+  addDays,
+  formatDateLocal,
+  formatWallClock,
+  isOverlayEvent,
+  parseLocalDate,
+} from "../lib/calendar-utils";
 import { EmptyState, Skeleton } from "./ui";
 
 function formatEventTimeRange(ev: CalendarEventView): string {
   if (ev.allDay) return "All day";
   if (!ev.startTime) return "Timed";
   const start = formatWallClock(ev.startTime);
-  return ev.endTime && ev.endTime !== ev.startTime
+  // Health overlays carry a short synthetic span for the grid; they're points in time.
+  return ev.endTime && ev.endTime !== ev.startTime && !isOverlayEvent(ev)
     ? `${start} – ${formatWallClock(ev.endTime)}`
     : start;
 }
