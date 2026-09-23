@@ -17,6 +17,7 @@ import {
   users,
 } from "@domi-ops/db";
 import {
+  addDaysIso,
   CalendarCredentialsError,
   dedupeHouseholdGoogleEvents,
   ensureAccessToken,
@@ -57,6 +58,7 @@ import {
   setHouseholdDefaultCalendar,
 } from "../lib/calendar-lanes.js";
 import { enrichEventDto } from "../lib/calendar-event-enrich.js";
+import { householdTodayIsoDate } from "../lib/household-time.js";
 import { listNativeCalendarEvents } from "../lib/calendar-native-events.js";
 import {
   buildAllCalendarOverlays,
@@ -396,10 +398,8 @@ export function calendarRoutes(db: Database, env: Env) {
 
   app.get("/events", async (c) => {
     const auth = c.get("auth")!;
-    const from = c.req.query("from") ?? new Date().toISOString().slice(0, 10);
-    const to =
-      c.req.query("to") ??
-      new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10);
+    const from = c.req.query("from") ?? (await householdTodayIsoDate(db, auth.householdId));
+    const to = c.req.query("to") ?? addDaysIso(from, 90);
     const q = c.req.query("q")?.trim();
 
     const nativeList = await listNativeCalendarEvents(db, auth, from, to, { q });

@@ -93,6 +93,7 @@ export default async function ProfilePage() {
     ...(modulesEnabled.includes("health") ? [{ key: "health", label: "Health" }] : []),
     ...(modulesEnabled.includes("drive") ? [{ key: "drive", label: "Drive" }] : []),
     ...(modulesEnabled.includes("calendar_sync") ? [{ key: "calendar", label: "Calendar" }] : []),
+    ...(modulesEnabled.includes("goals") ? [{ key: "goals", label: "Goals" }] : []),
   ];
 
   return (

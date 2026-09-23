@@ -242,6 +242,15 @@ export function formatDateLocal(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+/** Postgres `time` ("18:00:00" / "18:00") → "6:00 PM". Unparseable input passes through. */
+export function formatWallClock(time: string): string {
+  const [hStr, mStr = "00"] = time.split(":");
+  const h = Number(hStr);
+  if (!hStr || Number.isNaN(h)) return time;
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  return `${hour12}:${mStr.slice(0, 2).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
+}
+
 export function startOfMonth(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), 1);
 }

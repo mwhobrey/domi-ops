@@ -6,14 +6,16 @@ import { effectiveEndDate } from "../lib/calendar-event-span";
 import { eventDescriptionPlainText } from "../lib/event-html";
 import { eventColors, resolveEventColor } from "../lib/calendar-event-colors";
 import type { CalendarEventView } from "../lib/calendar-utils";
-import { addDays, formatDateLocal, parseLocalDate } from "../lib/calendar-utils";
+import { addDays, formatDateLocal, formatWallClock, parseLocalDate } from "../lib/calendar-utils";
 import { EmptyState, Skeleton } from "./ui";
 
 function formatEventTimeRange(ev: CalendarEventView): string {
   if (ev.allDay) return "All day";
-  const start = ev.startTime ?? "";
-  const end = ev.endTime && ev.endTime !== ev.startTime ? ` – ${ev.endTime}` : "";
-  return `${start}${end}`.trim() || "Timed";
+  if (!ev.startTime) return "Timed";
+  const start = formatWallClock(ev.startTime);
+  return ev.endTime && ev.endTime !== ev.startTime
+    ? `${start} – ${formatWallClock(ev.endTime)}`
+    : start;
 }
 
 export function CalendarAgendaView({

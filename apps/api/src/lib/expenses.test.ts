@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   budgetStatus,
   buildExpenseReportFromData,
-  currentMonthKey,
   monthKeysEndingAt,
   normalizeExpenseCategory,
   normalizeMonthKey,
@@ -24,12 +23,6 @@ describe("budgetStatus", () => {
     expect(budgetStatus(80, 100)).toBe("warning");
     expect(budgetStatus(100, 100)).toBe("over");
     expect(budgetStatus(120, 100)).toBe("over");
-  });
-});
-
-describe("currentMonthKey", () => {
-  it("formats YYYY-MM", () => {
-    expect(currentMonthKey(new Date("2026-06-08"))).toBe("2026-06");
   });
 });
 

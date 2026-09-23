@@ -7,7 +7,6 @@ import { checkHouseholdBudgetAlerts } from "@domi-ops/calendar-sync";
 import {
   buildExpenseReports,
   collectExpenseCategorySuggestions,
-  currentMonthKey,
   normalizeExpenseCategory,
   normalizeMonthKey,
   serializeExpense,
@@ -23,6 +22,7 @@ import {
   type ExpenseBudgetShareAccess,
 } from "../lib/expense-budget-access.js";
 import { buildExpensesGlance } from "../lib/expenses-glance.js";
+import { householdMonthKey } from "../lib/household-time.js";
 import { posterLabel } from "../lib/poster-label.js";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -34,7 +34,7 @@ export function expensesRoutes(db: Database, env: Env) {
   app.get("/expenses/glance", async (c) => {
     const auth = c.get("auth")!;
     const visible = await listVisibleBudgets(db, auth);
-    const monthKey = currentMonthKey();
+    const monthKey = (await householdMonthKey(db, auth.householdId));
     const budgets = await Promise.all(
       visible.map((budget) => summarizeBudgetRow(db, budget, monthKey)),
     );
@@ -66,7 +66,7 @@ export function expensesRoutes(db: Database, env: Env) {
   app.get("/expenses/budgets", async (c) => {
     const auth = c.get("auth")!;
     const visible = await listVisibleBudgets(db, auth);
-    const monthKey = currentMonthKey();
+    const monthKey = (await householdMonthKey(db, auth.householdId));
     const budgets = [];
     for (const budget of visible) {
       const shares =
@@ -110,7 +110,7 @@ export function expensesRoutes(db: Database, env: Env) {
           memberId: personal ? auth.memberId : null,
         })
         .returning();
-      const budget = await summarizeBudgetRow(db, row, currentMonthKey(), {
+      const budget = await summarizeBudgetRow(db, row, (await householdMonthKey(db, auth.householdId)), {
         shareAccess: null,
         shares: [],
       });
@@ -148,7 +148,7 @@ export function expensesRoutes(db: Database, env: Env) {
       .returning();
     if (!row) return c.json({ error: "not_found" }, 404);
     const shares = await loadBudgetShareRows(db, row.id);
-    const budget = await summarizeBudgetRow(db, row, currentMonthKey(), {
+    const budget = await summarizeBudgetRow(db, row, (await householdMonthKey(db, auth.householdId)), {
       shareAccess: access.shareAccess,
       shares: isBudgetOwner(auth, row) ? shares : shares.filter((s) => s.memberId === auth.memberId),
     });

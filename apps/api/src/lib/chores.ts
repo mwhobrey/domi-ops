@@ -6,10 +6,10 @@ import {
   type choresRecurring as choresRecurringTable,
 } from "@domi-ops/db";
 import { and, eq, lte } from "drizzle-orm";
+import { householdTodayIsoDate } from "./household-time.js";
 import {
   advanceRecurringDate,
   normalizeRecurringInterval,
-  todayIsoDate,
   type RecurringInterval,
 } from "./shopping.js";
 
@@ -227,7 +227,7 @@ export async function promoteChoreToRecurring(
     input.dueDate !== undefined
       ? input.dueDate?.trim() || null
       : existing.dueDate ?? null;
-  const nextAt = resolveRecurringAnchorDate(dueDate, todayIsoDate());
+  const nextAt = resolveRecurringAnchorDate(dueDate, await householdTodayIsoDate(db, householdId));
 
   const [recurring] = await db
     .insert(choresRecurring)
@@ -262,7 +262,7 @@ export async function materializeDueChoreRecurring(
   db: Database,
   householdId: string,
 ): Promise<number> {
-  const today = todayIsoDate();
+  const today = await householdTodayIsoDate(db, householdId);
   const due = await db
     .select()
     .from(choresRecurring)

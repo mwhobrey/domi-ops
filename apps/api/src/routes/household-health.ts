@@ -75,6 +75,7 @@ import {
 } from "../lib/health-serialize.js";
 import { buildHealthReports, VITALS_METRICS } from "../lib/health-reports.js";
 import { decryptHealthFieldOrPassthrough, encryptHealthField } from "../lib/health-crypto.js";
+import { householdTimezone } from "../lib/household-time.js";
 import {
   GLANCE_DOSE_LOG_LOOKBACK_DAYS,
   isInstantLogged,
@@ -214,15 +215,6 @@ function normalizePushActionStatus(value: unknown): HealthMedPushActionStatus | 
   if (value === "taken") return "taken";
   if (value === "skipped" || value === "skip") return "skipped";
   return null;
-}
-
-async function householdTimezone(db: Database, householdId: string): Promise<string> {
-  const [household] = await db
-    .select({ timezone: households.timezone })
-    .from(households)
-    .where(eq(households.id, householdId))
-    .limit(1);
-  return household?.timezone ?? "UTC";
 }
 
 function requestTimeZone(
