@@ -20,6 +20,7 @@ import {
   Input,
   MarkdownContent,
   MarkdownEditor,
+  LocalDateTime,
 } from "./ui";
 import { ListPage } from "./lists/ListPage";
 import { CollapsibleAddForm } from "./lists/CollapsibleAddForm";
@@ -341,7 +342,7 @@ export function NotesList({
                         sharedWithMe={n.sharedWithMe}
                         sharedCount={n.sharedMemberIds?.length ?? 0}
                       />
-                      <time dateTime={n.createdAt}>{new Date(n.createdAt).toLocaleString()}</time>
+                      <LocalDateTime value={n.createdAt} />
                       {n.createdByDisplayName ? <span>{n.createdByDisplayName}</span> : null}
                     </footer>
                     <div className="mt-3 flex flex-wrap gap-2">

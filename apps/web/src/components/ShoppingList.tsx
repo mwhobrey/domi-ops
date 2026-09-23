@@ -20,7 +20,6 @@ import {
   Textarea,
 } from "./ui";
 import { ListPage } from "./lists/ListPage";
-import { CollapsibleAddForm } from "./lists/CollapsibleAddForm";
 
 export interface ShoppingItem {
   id: string;
@@ -345,7 +344,6 @@ export function ShoppingList({
       onDismissError={() => setError(null)}
       addForm={
         <div className="space-y-4">
-          <CollapsibleAddForm label="Add item">
             <form className="space-y-2" onSubmit={addItem}>
             <div className="flex flex-wrap gap-2">
               <Combobox
@@ -393,7 +391,6 @@ export function ShoppingList({
               </Button>
             </div>
           </form>
-          </CollapsibleAddForm>
 
           <div>
             <Button
@@ -558,7 +555,7 @@ export function ShoppingList({
                     size="sm"
                     onClick={() => setClearCheckedOpen(true)}
                   >
-                    Clear purchased ({checked.length})
+                    Done shopping ({checked.length})
                   </Button>
                 }
               />

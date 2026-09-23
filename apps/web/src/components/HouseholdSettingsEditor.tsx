@@ -47,7 +47,7 @@ const MODULE_META: Record<string, { label: string; description: string; locked?:
   },
   drive: {
     label: "Drive",
-    description: "Household file and link storage (MinIO-backed)",
+    description: "Household file and link storage",
   },
   health: {
     label: "Health",

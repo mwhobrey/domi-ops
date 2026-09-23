@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ApiError, apiClient } from "../../lib/client-api";
 import type { GoalDto, ProgressEventDto } from "../../lib/goals-types";
-import { Alert, Button, Input } from "../ui";
+import { Alert, Button, Input, LocalDateTime } from "../ui";
 
 /** Quick amount+note log form plus an expandable, undo-able history — mirrors health's
  *  dose-log/undo affordance (log now, fix mistakes later rather than editing in place). */
@@ -122,7 +122,7 @@ export function GoalProgressLog({
               >
                 <span>
                   {e.amount > 0 ? "+" : ""}
-                  {e.amount} · {new Date(e.loggedAt).toLocaleString()}
+                  {e.amount} · <LocalDateTime value={e.loggedAt} />
                   {e.note ? ` · ${e.note}` : ""}
                 </span>
                 <Button type="button" variant="ghost" size="sm" onClick={() => void undoEvent(e.id)}>

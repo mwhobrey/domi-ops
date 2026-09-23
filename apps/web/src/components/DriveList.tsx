@@ -24,6 +24,7 @@ import {
   ConfirmDialog,
   EmptyState,
   Input,
+  LocalDateTime,
 } from "./ui";
 import { ListPage } from "./lists/ListPage";
 import { CollapsibleAddForm } from "./lists/CollapsibleAddForm";
@@ -832,9 +833,7 @@ export function DriveList({
                             visibility={obj.visibility ?? "household"}
                             sharedWithMe={obj.sharedWithMe}
                           />
-                          <time dateTime={obj.createdAt}>
-                            {new Date(obj.createdAt).toLocaleString()}
-                          </time>
+                          <LocalDateTime value={obj.createdAt} />
                           {obj.createdByDisplayName ? <span>{obj.createdByDisplayName}</span> : null}
                         </footer>
                       </div>

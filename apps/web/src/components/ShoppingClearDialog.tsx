@@ -115,8 +115,8 @@ export function ShoppingClearDialog({
     <Modal
       open={open}
       onClose={onClose}
-      title="Clear purchased items"
-      description={`Archive ${items.length} item${items.length === 1 ? "" : "s"} to trip history.`}
+      title="Done shopping"
+      description={`Save ${items.length} item${items.length === 1 ? "" : "s"} from the cart to trip history and clear the cart.`}
       panelClassName="max-w-xl"
       footer={
         <div className="flex justify-end gap-2 px-6 py-4">
@@ -124,7 +124,7 @@ export function ShoppingClearDialog({
             Cancel
           </Button>
           <Button type="button" loading={loading} onClick={() => void confirmClear()}>
-            Clear purchased
+            Save trip
           </Button>
         </div>
       }

@@ -22,7 +22,13 @@ import {
   listHealthMedReminderRecipients,
   type HealthMedReminderRecipient,
 } from "./health-med-reminder-recipients.js";
-import { addDaysIso, formatTimeLabelInTz, todayIsoDateInTz, zonedLocalToUtc } from "./household-time.js";
+import {
+  addDaysIso,
+  formatTimeLabelInTz,
+  localDateOfInstant,
+  todayIsoDateInTz,
+  zonedLocalToUtc,
+} from "./household-time.js";
 import { nextIntervalPending, parseIntervalSchedule } from "./med-interval-schedule.js";
 import {
   deliverUserNotificationToSubscriptions,
@@ -121,6 +127,28 @@ function datesAround(tz: string): string[] {
   return [addDaysIso(today, -1), today, addDaysIso(today, 1)];
 }
 
+/** "2:49 PM" today, "Sep 24, 2:49 PM" another day, with the year only when it differs. */
+function doseWhenLabel(scheduledAt: Date, timeZone: string, now: Date = new Date()): string {
+  try {
+    const day = localDateOfInstant(scheduledAt, timeZone);
+    const today = localDateOfInstant(now, timeZone);
+    return scheduledAt.toLocaleString("en-US", {
+      timeZone,
+      ...(day === today
+        ? {}
+        : {
+            month: "short" as const,
+            day: "numeric" as const,
+            ...(day.slice(0, 4) === today.slice(0, 4) ? {} : { year: "numeric" as const }),
+          }),
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return `${scheduledAt.toISOString().slice(0, 10)} ${scheduledAt.toISOString().slice(11, 16)}`;
+  }
+}
+
 function medReminderBody(input: {
   medName: string;
   minutesUntil: number;
@@ -128,23 +156,9 @@ function medReminderBody(input: {
   timeZone: string;
   isSubject: boolean;
   subjectLabel: string;
+  now?: Date;
 }): string {
-  const whenLabel = (() => {
-    try {
-      return input.scheduledAt.toLocaleString("en-US", {
-        timeZone: input.timeZone,
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-      });
-    } catch {
-      return `${input.scheduledAt.toISOString().slice(0, 10)} ${input.scheduledAt
-        .toISOString()
-        .slice(11, 16)}`;
-    }
-  })();
+  const whenLabel = doseWhenLabel(input.scheduledAt, input.timeZone, input.now);
 
   const core =
     input.minutesUntil <= 0 ? `Time to take ${input.medName} at ${whenLabel}` : `${input.medName} at ${whenLabel}`;
@@ -162,6 +176,7 @@ export function buildMedReminderCopy(input: {
   timeZone: string;
   isSubject: boolean;
   subjectLabel: string;
+  now?: Date;
 }): { title: string; body: string } {
   const timeLabel = formatTimeLabelInTz(input.scheduledAt, input.timeZone);
   return {
@@ -173,6 +188,7 @@ export function buildMedReminderCopy(input: {
       timeZone: input.timeZone,
       isSubject: input.isSubject,
       subjectLabel: input.subjectLabel,
+      now: input.now,
     }),
   };
 }
@@ -227,27 +243,13 @@ function medGroupReminderBody(input: {
   timeZone: string;
   isSubject: boolean;
   subjectLabel: string;
+  now?: Date;
 }): string {
   const MAX_NAMED = 3;
   const shown = input.medNames.slice(0, MAX_NAMED);
   const extra = input.medNames.length - shown.length;
   const list = extra > 0 ? `${shown.join(", ")} + ${extra} more` : shown.join(", ");
-  const whenLabel = (() => {
-    try {
-      return input.scheduledAt.toLocaleString("en-US", {
-        timeZone: input.timeZone,
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-      });
-    } catch {
-      return `${input.scheduledAt.toISOString().slice(0, 10)} ${input.scheduledAt
-        .toISOString()
-        .slice(11, 16)}`;
-    }
-  })();
+  const whenLabel = doseWhenLabel(input.scheduledAt, input.timeZone, input.now);
 
   const core =
     input.minutesUntil <= 0 ? `Time to take ${list} at ${whenLabel}` : `${list} at ${whenLabel}`;
@@ -265,6 +267,7 @@ export function buildMedGroupReminderCopy(input: {
   timeZone: string;
   isSubject: boolean;
   subjectLabel: string;
+  now?: Date;
 }): { title: string; body: string } {
   const timeLabel = formatTimeLabelInTz(input.scheduledAt, input.timeZone);
   return {
@@ -276,6 +279,7 @@ export function buildMedGroupReminderCopy(input: {
       timeZone: input.timeZone,
       isSubject: input.isSubject,
       subjectLabel: input.subjectLabel,
+      now: input.now,
     }),
   };
 }

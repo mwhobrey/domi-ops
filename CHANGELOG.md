@@ -27,12 +27,37 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
     vitals read "Vitals · 135/90 · HR 65" instead of "BP systolic, BP diastolic, Heart rate".
   - New event form: a real time-zone picker instead of a free-text box, color swatches, a
     labeled Repeat control, and new events start in the calendar's default category.
+- Polish from the dogfood walkthrough (WHO-332):
+  - Drive:
+    - The upload / add-link form is tucked behind a button, so files are what you see first.
+      Drag-and-drop still works anywhere on the page.
+    - Files pinned inside folders show in a "Pinned in folders" strip at the Drive root.
+    - A folder with subfolders but no files no longer says "Drive is empty".
+  - Shopping:
+    - Adding an item is always visible instead of hidden behind "Add item".
+    - The cart's button reads "Done shopping", which saves the trip.
+  - Notices:
+    - The panel opens on whichever tab has the unread items.
+    - Reminder alerts for things more than 12 hours past no longer keep the badge lit.
+    - Calendar reminders read "starts in 3 hours" instead of "3 hour(s)".
+    - Same-day medication reminders show just the time instead of the full date and year.
+  - Timestamps across Notes, Drive, Goals, and calendar sync status read "Sep 22, 5:23 PM"
+    instead of including seconds. They're also formatted in the browser, which removes a
+    source of hydration errors.
+  - Settings → Integrations flags Google Calendar sync as "Sync stalled" after two days
+    without a successful sync, instead of silently showing a months-old "Last sync".
+  - Profile: the delete-account section moved to the bottom of the page.
 
 ### Fixed
 
 - The "Set up your household calendar" banner no longer flashes on every Calendar page load
   while calendars are still loading, and the page no longer fetches events twice on open
   (WHO-329).
+- Settings showed "0 B used" for Drive storage on installs that imported HomeHub files. The
+  importer stored every file as 0 bytes with a generic content type and never counted it
+  toward the quota. New imports record real sizes. *(Installs that already imported: run
+  `node packages/import-homehub/scripts/backfill-file-sizes.mjs` once. See
+  `.cursor/runbook/04_CURRENT_STATE.md`. No migration.)* (WHO-332)
 - Health Trends no longer plots different household members' vitals on one line (WHO-327). The
   Trends tab has a Member picker (defaults to you), and the health report's "All members" view
   now keeps each person's readings in their own labeled series.

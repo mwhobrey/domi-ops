@@ -17,6 +17,7 @@ import {
   EmptyState,
   Input,
   Textarea,
+  LocalDateTime,
 } from "./ui";
 
 function canManageGoalClient(role: string, ownerMemberId: string, memberId?: string): boolean {
@@ -285,7 +286,7 @@ function ApprovalsTab({
                     {r.rewardTitle} — {r.goalTitle}
                   </p>
                   <p className="text-xs text-[var(--color-text-muted)]">
-                    Claimed {new Date(r.claimedAt).toLocaleString()}
+                    Claimed <LocalDateTime value={r.claimedAt} />
                   </p>
                   <Input
                     placeholder="Note (optional)"

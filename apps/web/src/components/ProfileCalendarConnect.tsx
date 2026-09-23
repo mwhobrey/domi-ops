@@ -2,7 +2,7 @@
 
 import { Calendar } from "lucide-react";
 import { googleCalendarConnectUrl } from "../lib/auth-links";
-import { AnchorButton, LinkButton } from "./ui";
+import { AnchorButton, LinkButton, LocalDateTime } from "./ui";
 
 export function ProfileCalendarConnect({
   oauthConfigured,
@@ -31,7 +31,12 @@ export function ProfileCalendarConnect({
           </p>
           <p className="text-xs text-[var(--color-text-muted)]">
             Sync mode: {defaultSyncMode.replace(/_/g, " ")}
-            {lastSync ? ` · Last sync ${new Date(lastSync).toLocaleString()}` : null}
+            {lastSync ? (
+              <>
+                {" · Last sync "}
+                <LocalDateTime value={lastSync} />
+              </>
+            ) : null}
           </p>
         </div>
       </div>

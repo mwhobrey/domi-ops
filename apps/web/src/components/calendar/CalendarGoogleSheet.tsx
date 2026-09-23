@@ -9,6 +9,7 @@ import { useCalendarSyncStatus } from "../../lib/use-calendar-sync-status";
 import { CalendarCategoriesPanel } from "./CalendarCategoriesPanel";
 import { CalendarLanesPanel } from "./CalendarLanesPanel";
 import { CalendarSyncProgress } from "./CalendarSyncProgress";
+import { formatDateTime } from "../../lib/format-datetime";
 import { Alert, AnchorButton, Button, Select, Sheet } from "../ui";
 
 export type CalendarConnectionSummary = {
@@ -222,7 +223,7 @@ export function CalendarGoogleSheet({
               <p className="font-medium">{connected ? "Connected" : "Not connected"}</p>
               <p className="mt-1 text-sm text-[var(--color-text-muted)]">
                 {connected && lastSync
-                  ? `Last sync ${new Date(lastSync).toLocaleString()}`
+                  ? `Last sync ${formatDateTime(lastSync)}`
                   : connected
                     ? "No sync completed yet"
                     : "Connect to discover calendars and import events"}
