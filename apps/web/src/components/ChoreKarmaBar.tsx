@@ -54,7 +54,7 @@ export function ChoreKarmaBar({ members }: { members: MemberKarma[] }) {
               )}
               {m.redemptionQuestsCompleted > 0 && (
                 <Badge tone="warning">
-                  {m.redemptionQuestsCompleted} redemption{m.redemptionQuestsCompleted === 1 ? "" : "s"}
+                  {m.redemptionQuestsCompleted} catch-up{m.redemptionQuestsCompleted === 1 ? "" : "s"}
                 </Badge>
               )}
             </div>

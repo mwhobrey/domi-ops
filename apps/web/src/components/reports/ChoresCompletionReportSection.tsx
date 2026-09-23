@@ -146,7 +146,7 @@ export function ChoresCompletionReportSection({ driveEnabled = true }: { driveEn
               label="On time"
               value={report.summary.onTimeCount + report.summary.earlyCount}
             />
-            <StatCard label="Redemption quests" value={report.summary.redemptionCount} />
+            <StatCard label="Caught up late" value={report.summary.redemptionCount} />
             <StatCard label="Avg days late" value={report.summary.avgDaysLate ?? "—"} />
           </div>
 
@@ -180,7 +180,7 @@ export function ChoresCompletionReportSection({ driveEnabled = true }: { driveEn
                       Early
                     </th>
                     <th className="px-4 py-3 font-medium tabular-nums" scope="col">
-                      Redemption
+                      Caught up late
                     </th>
                     <th className="px-4 py-3 font-medium tabular-nums" scope="col">
                       Avg late (days)

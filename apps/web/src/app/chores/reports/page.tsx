@@ -6,7 +6,7 @@ export default function ChoresReportsPage() {
   return (
     <AppShell
       title="Chore reports"
-      description="Completions by person — on-time, early, and redemption quests"
+      description="Completions by person: on time, early, and caught up late"
       breadcrumb={[
         { label: "Chores", href: "/chores" },
         { label: "Reports" },

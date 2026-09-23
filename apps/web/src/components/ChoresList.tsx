@@ -1,6 +1,6 @@
 "use client";
 
-import { ClipboardList } from "lucide-react";
+import { ClipboardList, Repeat, UserRound } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { cn } from "../lib/cn";
@@ -24,6 +24,7 @@ import {
 import { ListPage } from "./lists/ListPage";
 import { CollapsibleAddForm } from "./lists/CollapsibleAddForm";
 import { formatDateLocal } from "../lib/calendar-utils";
+import { formatChoreDueLabel } from "../lib/glance-meta";
 
 export type ChorePriority = 0 | 1 | 2 | 3;
 
@@ -37,6 +38,7 @@ export interface Chore {
   priority: ChorePriority;
   assigneeMemberId: string | null;
   recurringId: string | null;
+  missedCount?: number;
 }
 
 export interface ChoreRecurring {
@@ -103,6 +105,7 @@ function isOverdue(dueDate: string | null, done: boolean): boolean {
   return dueDate < formatDateLocal(new Date());
 }
 
+
 function parseTagsInput(raw: string): string[] {
   return raw
     .split(",")
@@ -167,7 +170,7 @@ function ChoreRow({
               onClick={() => setEditingDueId(c.id)}
               aria-label={`Edit due date for ${c.description}`}
             >
-              Due {c.dueDate}
+              {formatChoreDueLabel(c.dueDate, formatDateLocal(new Date()))}
             </button>
           )}
           {editingDueId === c.id && (
@@ -200,15 +203,44 @@ function ChoreRow({
             </button>
           )}
           {plabel && <Badge tone={priorityTone(c.priority)}>{plabel}</Badge>}
-          {assignee && <Badge tone="default">{assignee}</Badge>}
-          {overdue && <Badge tone="warning">Redemption quest</Badge>}
-          {c.recurringId && <Badge tone="accent">Recurring</Badge>}
+          {assignee && (
+            <span
+              className="inline-flex items-center gap-1 text-xs text-[var(--color-text)]"
+              title="Assigned to"
+            >
+              <UserRound className="h-3.5 w-3.5 text-[var(--color-text-muted)]" aria-hidden />
+              {assignee}
+            </span>
+          )}
+          {overdue && (
+            <span title="It's late, but finishing it now still earns catch-up karma.">
+              <Badge tone="warning">Catch-up bonus</Badge>
+            </span>
+          )}
+          {c.recurringId && (
+            <Badge tone="accent" className="gap-1">
+              <Repeat className="h-3 w-3" aria-hidden />
+              Recurring
+            </Badge>
+          )}
+          {c.recurringId && (c.missedCount ?? 0) > 0 && (
+            <span
+              className="text-xs text-[var(--color-text-muted)]"
+              title="Times this came due while it was still open. The due date moves to the latest occurrence."
+            >
+              Missed {c.missedCount}×
+            </span>
+          )}
         </div>
         {c.tags.length > 0 && (
           <div className="flex flex-wrap gap-1" role="list" aria-label="Tags">
             {c.tags.map((tag) => (
-              <span key={tag} role="listitem">
-                <Badge tone="default">{tag}</Badge>
+              <span
+                key={tag}
+                role="listitem"
+                className="inline-flex items-center rounded-full border border-[var(--color-border)] px-2 py-0.5 text-xs text-[var(--color-text-muted)]"
+              >
+                #{tag}
               </span>
             ))}
           </div>
@@ -660,7 +692,7 @@ export function ChoresList({
           </p>
           <p className="mt-0.5 text-[var(--color-text-muted)]">
             {karmaFeedback.timing === "redemption"
-              ? "Redemption quest complete — nice save!"
+              ? "Caught up — catch-up bonus earned. Nice save!"
               : karmaFeedback.timing === "early"
                 ? "Finished early — bonus karma!"
                 : karmaFeedback.timing === "on_time"

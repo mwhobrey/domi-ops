@@ -8,6 +8,18 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+### Changed
+
+- Recurring chores no longer stay stuck on a date that passed months ago (WHO-328). When a
+  chore's next occurrence arrives while the current one is still open, it moves to the latest
+  occurrence and counts the ones that passed ("Missed 3×"). A daily chore is at most a day
+  overdue; a weekly one stays overdue until the next week's occurrence. *(requires
+  `npm run db:migrate` (`0074_chore_missed_count`); no other manual steps.)*
+- Chores: "Redemption quest" is now **Catch-up bonus** (same karma, with a tooltip), and the
+  overdue push reads "Chore overdue". Due dates read "Due today", "Due Fri, Sep 25", or
+  "Overdue · Tue, Jul 7" instead of `2026-07-07`; the assignee shows with a person icon and
+  tags render as `#tag`, so tags, people, and status no longer look alike (WHO-328).
+
 ### Fixed
 
 - Health Trends no longer plots different household members' vitals on one line (WHO-327). The
