@@ -7,7 +7,6 @@ import { NoteSharePicker } from "../NoteSharePicker";
 import { Alert, Button, Select, Sheet, Textarea } from "../ui";
 import { VitalsReadingsEditor } from "./VitalsReadingsEditor";
 import {
-  defaultVitalsTitle,
   draftsToReadings,
   readingsToDrafts,
   resolveDefaultMemberId,
@@ -71,7 +70,7 @@ export function LogVitalsSheet({
       await apiClient.post("/api/health/events", {
         memberId,
         type: "vitals",
-        title: defaultVitalsTitle(readingDrafts),
+        title: "Vitals",
         notes: notes.trim() || undefined,
         startedAt: new Date().toISOString(),
         durationKind: "single_day",

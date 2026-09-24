@@ -54,6 +54,8 @@ export interface HealthMedicationListItem {
 
 export interface VitalsTrendEntry {
   metric: string;
+  /** Present when the report covers more than one member (series are per member). */
+  memberId?: string;
   metricLabel: string;
   points: { eventId: string; date: string; value: number; unit: string }[];
 }

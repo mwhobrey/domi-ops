@@ -333,3 +333,15 @@ export interface PainLog {
   severity: number;
   qualityTags?: string[] | null;
 }
+
+/** A structured dose log, merged into the Log tab alongside health events. */
+export interface DoseLogEntry {
+  id: string;
+  medicationId: string;
+  medicationName: string;
+  dosage: string | null;
+  memberId: string;
+  status: "taken" | "skipped" | "missed";
+  scheduledAt: string | null;
+  loggedAt: string;
+}

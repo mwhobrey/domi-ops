@@ -1,13 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildHealthLogFeed,
   defaultMealTitle,
+  displayHealthEventTitle,
+  doseLogTitle,
   draftsToFoodLogEntries,
   foodLogEntriesToDrafts,
   formatEventWhen,
   formatFoodLogSummary,
+  formatReadingsSummary,
   groupMedsByMember,
   groupPendingDosesByMemberThenTime,
   isAsNeededMedScheduleKind,
+  isDosePastDue,
   memberLabel,
   mergeTodayEntriesForMember,
   resolveDefaultMemberId,
@@ -181,5 +186,85 @@ describe("food log entries", () => {
         { foodName: "Rice", quantity: 1, unit: "cup", calories: null, proteinG: null, carbsG: null, fatG: null },
       ]),
     ).toBe("Chicken, Rice");
+  });
+});
+
+describe("vitals display", () => {
+  const reading = (metric: string, value: number, unit: string) => ({
+    id: metric,
+    metric,
+    value,
+    unit,
+    createdAt: "2026-09-23T00:00:00.000Z",
+  });
+
+  it("summarizes readings compactly, pairing blood pressure", () => {
+    expect(
+      formatReadingsSummary([
+        reading("blood_pressure_systolic", 135, "mmHg"),
+        reading("blood_pressure_diastolic", 90, "mmHg"),
+        reading("heart_rate", 65, "bpm"),
+        reading("blood_oxygen", 98, "%"),
+        reading("temperature", 98.6, "°F"),
+      ] as never),
+    ).toBe("BP 135/90 · HR 65 · SpO₂ 98% · Temp 98.6°F");
+  });
+
+  it("shows auto-generated vitals titles as Vitals but keeps typed titles", () => {
+    expect(
+      displayHealthEventTitle({ type: "vitals", title: "BP systolic, BP diastolic, Heart rate" }),
+    ).toBe("Vitals");
+    expect(displayHealthEventTitle({ type: "vitals", title: "After PT session" })).toBe(
+      "After PT session",
+    );
+    expect(displayHealthEventTitle({ type: "sickness", title: "Heart rate" })).toBe("Heart rate");
+  });
+});
+
+describe("isDosePastDue", () => {
+  const now = Date.parse("2026-09-23T20:00:00.000Z");
+  it("flags scheduled doses whose time has passed", () => {
+    expect(isDosePastDue("2026-09-23T17:00:00.000Z", false, now)).toBe(true);
+    expect(isDosePastDue("2026-09-23T23:00:00.000Z", false, now)).toBe(false);
+  });
+  it("never flags an interval med awaiting its first dose", () => {
+    expect(isDosePastDue("2026-09-23T17:00:00.000Z", true, now)).toBe(false);
+  });
+});
+
+describe("buildHealthLogFeed", () => {
+  const event = (id: string, startedAt: string): HealthEvent => ({
+    id,
+    memberId: "m1",
+    medicationId: null,
+    type: "vitals",
+    title: "Vitals",
+    notes: null,
+    startedAt,
+    endedAt: null,
+    visibility: "household",
+  });
+  const dose = (id: string, loggedAt: string, status: "taken" | "skipped" = "taken") => ({
+    id,
+    medicationId: "med",
+    medicationName: "Effexor",
+    dosage: "150mg",
+    memberId: "m1",
+    status,
+    scheduledAt: null,
+    loggedAt,
+  });
+
+  it("interleaves events and dose logs newest first", () => {
+    const feed = buildHealthLogFeed(
+      [event("e1", "2026-09-23T21:00:00.000Z"), event("e2", "2026-09-22T12:00:00.000Z")],
+      [dose("d1", "2026-09-23T13:46:00.000Z")],
+    );
+    expect(feed.map((i) => (i.kind === "event" ? i.event.id : i.dose.id))).toEqual(["e1", "d1", "e2"]);
+  });
+
+  it("titles dose rows by what happened", () => {
+    expect(doseLogTitle(dose("d1", "2026-09-23T13:46:00.000Z"))).toBe("Took Effexor");
+    expect(doseLogTitle(dose("d2", "2026-09-23T13:46:00.000Z", "skipped"))).toBe("Skipped Effexor");
   });
 });

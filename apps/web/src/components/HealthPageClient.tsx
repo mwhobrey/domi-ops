@@ -29,9 +29,15 @@ import {
   formatFoodLogSummary,
   formatPainSummary,
   formatReadingsSummary,
+  buildHealthLogFeed,
+  displayHealthEventTitle,
+  doseLogTitle,
+  doseLogWhen,
+  isDosePastDue,
 } from "./health/health-helpers";
 import {
   EVENT_TYPES,
+  type DoseLogEntry,
   type HealthEvent,
   type HealthEventType,
   type HealthMedication,
@@ -83,6 +89,7 @@ export function HealthPageClient({
   const [tab, setTab] = useState<"today" | "log" | "medications" | "trends">("today");
   const [eventTypeFilter, setEventTypeFilter] = useState<HealthEventType | "all">("all");
   const [events, setEvents] = useState<HealthEvent[]>([]);
+  const [doseLogs, setDoseLogs] = useState<DoseLogEntry[]>([]);
   const [pendingDoses, setPendingDoses] = useState<PendingDose[]>([]);
   const [pendingGroupDoses, setPendingGroupDoses] = useState<PendingGroupDose[]>([]);
   const [loggedToday, setLoggedToday] = useState<LoggedDose[]>([]);
@@ -116,7 +123,7 @@ export function HealthPageClient({
     setLoading(true);
     setError(null);
     try {
-      const [eventsRes, glanceRes, capsRes] = await Promise.all([
+      const [eventsRes, glanceRes, capsRes, doseLogsRes] = await Promise.all([
         apiClient.get<{ events: HealthEvent[] }>("/api/health/events"),
         apiClient.get<{
           pendingDoses: PendingDose[];
@@ -125,8 +132,12 @@ export function HealthPageClient({
           loggedToday?: LoggedDose[];
         }>("/api/health/glance"),
         apiClient.get<{ bySubject: Record<string, HealthAclGrants> }>("/api/health/capabilities"),
+        apiClient
+          .get<{ logs: DoseLogEntry[] }>("/api/health/dose-logs")
+          .catch(() => ({ logs: [] as DoseLogEntry[] })),
       ]);
       setEvents(eventsRes.events);
+      setDoseLogs(doseLogsRes.logs);
       setPendingDoses(glanceRes.pendingDoses);
       setPendingGroupDoses(glanceRes.pendingGroupDoses ?? []);
       setPrnMeds(glanceRes.prnMedications);
@@ -331,8 +342,13 @@ export function HealthPageClient({
   // Only chip types with at least one logged event — a 9-way "All"-plus-every-type row is
   // clutter for the common case (most households only ever log a couple of types).
   const presentEventTypes = useMemo(
-    () => EVENT_TYPES.filter((t) => events.some((ev) => ev.type === t.value)),
-    [events],
+    () =>
+      EVENT_TYPES.filter(
+        (t) =>
+          events.some((ev) => ev.type === t.value) ||
+          (t.value === "medication" && doseLogs.length > 0),
+      ),
+    [events, doseLogs],
   );
 
   // If an edit removes the last event of the selected type (e.g. retyping it, or deleting it),
@@ -544,6 +560,7 @@ export function HealthPageClient({
                                       key={doseKey}
                                       rowRef={highlighted ? highlightTakeRef : undefined}
                                       highlighted={highlighted}
+                                      overdue={isDosePastDue(dose.scheduledAt, dose.awaitingFirst)}
                                       title={dose.name}
                                       subtitle={
                                         showHeader
@@ -749,7 +766,9 @@ export function HealthPageClient({
               eventTypeFilter === "all"
                 ? events
                 : events.filter((ev) => ev.type === eventTypeFilter);
-            if (filteredEvents.length === 0 && !loading) {
+            const includeDoses = eventTypeFilter === "all" || eventTypeFilter === "medication";
+            const feed = buildHealthLogFeed(filteredEvents, includeDoses ? doseLogs : []);
+            if (feed.length === 0 && !loading) {
               return (
                 <EmptyState
                   icon={<Heart className="h-8 w-8" aria-hidden />}
@@ -762,12 +781,35 @@ export function HealthPageClient({
                 />
               );
             }
-            return filteredEvents.map((ev) => {
+            return feed.map((item) => {
+              if (item.kind === "dose") {
+                const dose = item.dose;
+                return (
+                  <HealthRow
+                    key={`dose-${dose.id}`}
+                    title={doseLogTitle(dose)}
+                    subtitle={[
+                      "Dose",
+                      memberLabel(members, dose.memberId),
+                      doseLogWhen(dose),
+                      dose.dosage?.trim() || null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                    trailing={
+                      <Badge tone={dose.status === "taken" ? "success" : "default"}>
+                        {dose.status === "taken" ? "Taken" : dose.status === "skipped" ? "Skipped" : "Missed"}
+                      </Badge>
+                    }
+                  />
+                );
+              }
+              const ev = item.event;
               const when = formatEventWhen(ev);
               return (
               <HealthRow
                 key={ev.id}
-                title={ev.title}
+                title={displayHealthEventTitle(ev)}
                 subtitle={[
                   EVENT_TYPES.find((t) => t.value === ev.type)?.label ?? ev.type,
                   memberLabel(members, ev.memberId),
