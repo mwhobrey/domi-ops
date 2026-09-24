@@ -1,7 +1,8 @@
 import { requireDb } from "../lib/require-db.js";
-import { driveFolders, driveObjects, importRecords } from "@domi-ops/db";
-import { and, eq } from "drizzle-orm";
-import { existsSync } from "node:fs";
+import { driveFolders, driveObjects, households, importRecords } from "@domi-ops/db";
+import { and, eq, sql } from "drizzle-orm";
+import { existsSync, statSync } from "node:fs";
+import { contentTypeForFilename } from "../lib/content-type.js";
 import { randomUUID } from "node:crypto";
 import {
   createImportS3Client,
@@ -114,8 +115,10 @@ export async function importFiles(ctx: ImportContext): Promise<MapperResult> {
       continue;
     }
 
+    const byteSize = statSync(localPath).size;
+    const contentType = contentTypeForFilename(filename);
     try {
-      await uploadFileToS3(client, s3, localPath, s3Key);
+      await uploadFileToS3(client, s3, localPath, s3Key, contentType);
     } catch (e) {
       result.warnings.push(
         `file ${sourceId}: S3 upload failed: ${e instanceof Error ? e.message : String(e)}`,
@@ -132,11 +135,16 @@ export async function importFiles(ctx: ImportContext): Promise<MapperResult> {
       kind: "file",
       title: filename,
       s3Key,
-      contentType: "application/octet-stream",
-      byteSize: 0,
+      contentType,
+      byteSize,
       visibility: "household",
       createdByDisplayName: creator || null,
     });
+    // Same counter Drive uploads maintain — imported files count toward the storage quota.
+    await db
+      .update(households)
+      .set({ storageUsedBytes: sql`${households.storageUsedBytes} + ${byteSize}` })
+      .where(eq(households.id, ctx.householdId));
 
     await db.insert(importRecords).values({
       householdId: ctx.householdId,

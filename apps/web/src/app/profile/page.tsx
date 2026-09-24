@@ -9,7 +9,8 @@ import { ScrollToTopFab } from "../../components/ScrollToTopFab";
 import { apiFetch } from "../../lib/api";
 import { canManageHousehold, type HouseholdRole } from "../../lib/household-roles";
 import { loadErrorMessage } from "../../lib/load-error";
-import { Alert } from "../../components/ui";
+import { DeleteAccountCard } from "../../components/DeleteAccountCard";
+import { Alert, Card, CardBody, SectionHeader } from "../../components/ui";
 
 export default async function ProfilePage() {
   let profile = {
@@ -118,6 +119,17 @@ export default async function ProfilePage() {
               endpoint={process.env.TELEMETRY_ENDPOINT ?? "https://app.domi-ops.com/api/telemetry"}
               deploymentMode={process.env.DEPLOYMENT_MODE ?? "single"}
             />
+            <Card>
+              <CardBody className="space-y-4">
+                <div className="space-y-1">
+                  <SectionHeader title="Account" />
+                  <p className="text-sm leading-relaxed text-[var(--color-text-muted)]">
+                    Signing out keeps your data. Deleting removes this login permanently.
+                  </p>
+                </div>
+                <DeleteAccountCard />
+              </CardBody>
+            </Card>
           </div>
           <ScrollToTopFab className="bottom-[max(5rem,env(safe-area-inset-bottom))] lg:bottom-[max(1.5rem,env(safe-area-inset-bottom))]" />
         </>

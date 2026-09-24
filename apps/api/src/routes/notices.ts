@@ -8,7 +8,7 @@ import {
   notices,
   userNotifications,
 } from "@domi-ops/db";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, like, lt, or, sql } from "drizzle-orm";
 import type { AuthContext } from "@domi-ops/auth";
 import { driveVisibleWhere } from "../lib/drive.js";
 import { isHouseholdModuleEnabled } from "../lib/household-modules.js";
@@ -65,6 +65,31 @@ function countUnread(
   return mapped.filter((n) => !n.isOwn && !n.read).length;
 }
 
+/** Push tags for time-sensitive reminders (see the scans in packages/calendar-sync). */
+const REMINDER_TAG_PREFIXES = [
+  "calendar-",
+  "health-med-",
+  "health-medgroup-",
+  "chore-",
+  "school-assignment-",
+];
+const REMINDER_TTL_MS = 12 * 60 * 60 * 1000;
+
+/** A reminder for something that already happened shouldn't keep the alerts badge lit. */
+async function expireStaleReminders(db: Database, userId: string): Promise<void> {
+  await db
+    .update(userNotifications)
+    .set({ readAt: new Date() })
+    .where(
+      and(
+        eq(userNotifications.userId, userId),
+        isNull(userNotifications.readAt),
+        lt(userNotifications.createdAt, new Date(Date.now() - REMINDER_TTL_MS)),
+        or(...REMINDER_TAG_PREFIXES.map((p) => like(userNotifications.tag, `${p}%`))),
+      ),
+    );
+}
+
 export function noticesRoutes(db: Database, env: Env) {
   const app = new Hono<{ Variables: AppVariables }>();
   app.use("*", requireAuth(env));
@@ -98,6 +123,7 @@ export function noticesRoutes(db: Database, env: Env) {
 
   app.get("/notifications", async (c) => {
     const auth = c.get("auth")!;
+    await expireStaleReminders(db, auth.userId);
     const rows = await db
       .select()
       .from(userNotifications)
@@ -121,6 +147,7 @@ export function noticesRoutes(db: Database, env: Env) {
 
   app.get("/notifications/unread-count", async (c) => {
     const auth = c.get("auth")!;
+    await expireStaleReminders(db, auth.userId);
     const [row] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(userNotifications)

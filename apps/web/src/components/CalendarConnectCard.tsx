@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { apiClient } from "../lib/client-api";
 import { googleCalendarConnectUrl } from "../lib/auth-links";
-import { Alert, Button, Card, CardBody } from "./ui";
+import { Alert, Button, Card, CardBody, LocalDateTime } from "./ui";
 
 export function CalendarConnectCard({
   oauthConfigured,
@@ -38,8 +38,12 @@ export function CalendarConnectCard({
           <p className="font-medium">{connected ? "Google Calendar connected" : "Not connected"}</p>
           <p className="mt-1 text-sm text-[var(--color-text-muted)]">
             Mode: {defaultSyncMode}
-            {connections[0]?.lastSyncAt &&
-              ` · Last sync ${new Date(connections[0].lastSyncAt).toLocaleString()}`}
+            {connections[0]?.lastSyncAt ? (
+              <>
+                {" · Last sync "}
+                <LocalDateTime value={connections[0].lastSyncAt} />
+              </>
+            ) : null}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

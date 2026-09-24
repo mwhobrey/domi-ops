@@ -6,9 +6,12 @@ import { Button } from "../ui";
 
 export function CollapsibleAddForm({
   label,
+  collapseOnMobile = false,
   children,
 }: {
   label: string;
+  /** Collapse on small screens too — for pages where browsing, not adding, is the main job. */
+  collapseOnMobile?: boolean;
   children: React.ReactNode;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -24,7 +27,7 @@ export function CollapsibleAddForm({
 
   return (
     <div>
-      <div className="mb-2 hidden md:flex">
+      <div className={cn("mb-2", collapseOnMobile ? "flex" : "hidden md:flex")}>
         <Button
           type="button"
           variant="secondary"
@@ -35,7 +38,14 @@ export function CollapsibleAddForm({
           {expanded ? "Cancel" : label}
         </Button>
       </div>
-      <div ref={formRef} className={cn(expanded ? "md:block" : "md:hidden", "max-md:block")}>
+      <div
+        ref={formRef}
+        className={
+          collapseOnMobile
+            ? cn(!expanded && "hidden")
+            : cn(expanded ? "md:block" : "md:hidden", "max-md:block")
+        }
+      >
         {children}
       </div>
     </div>

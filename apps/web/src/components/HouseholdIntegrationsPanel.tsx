@@ -1,7 +1,11 @@
 "use client";
 
 import { Calendar, Cloud, KeyRound, Radio } from "lucide-react";
-import { Card, CardBody, LinkButton, SectionHeader } from "./ui";
+import { daysSince } from "../lib/format-datetime";
+import { Card, CardBody, LinkButton, LocalDateTime, SectionHeader } from "./ui";
+
+/** Calendar sync runs every few minutes; two quiet days means it's broken, not idle. */
+const STALE_SYNC_DAYS = 2;
 
 export type HouseholdIntegrationsStatus = {
   googleLogin: { configured: boolean };
@@ -17,13 +21,15 @@ export type HouseholdIntegrationsStatus = {
   storage: { configured: boolean; bucket: string | null };
 };
 
-function StatusBadge({ ok, label }: { ok: boolean; label: string }) {
+function StatusBadge({ ok, label, warn = false }: { ok: boolean; label: string; warn?: boolean }) {
   return (
     <span
       className={
-        ok
-          ? "rounded-full bg-[var(--color-success)]/15 px-2 py-0.5 text-xs font-medium text-[var(--color-success)]"
-          : "rounded-full bg-[var(--color-border)] px-2 py-0.5 text-xs font-medium text-[var(--color-text-muted)]"
+        warn
+          ? "rounded-full bg-[var(--color-warning-muted)]/40 px-2 py-0.5 text-xs font-medium text-[var(--color-warning)]"
+          : ok
+            ? "rounded-full bg-[var(--color-success)]/15 px-2 py-0.5 text-xs font-medium text-[var(--color-success)]"
+            : "rounded-full bg-[var(--color-border)] px-2 py-0.5 text-xs font-medium text-[var(--color-text-muted)]"
       }
     >
       {label}
@@ -41,7 +47,7 @@ function IntegrationRow({
   icon: React.ReactNode;
   title: string;
   status: React.ReactNode;
-  detail: string;
+  detail: React.ReactNode;
   action?: React.ReactNode;
 }) {
   return (
@@ -58,7 +64,7 @@ function IntegrationRow({
             <p className="text-sm font-medium">{title}</p>
             {status}
           </div>
-          <p className="text-xs text-[var(--color-text-muted)]">{detail}</p>
+          <div className="text-xs text-[var(--color-text-muted)]">{detail}</div>
         </div>
       </div>
       {action ? <div className="shrink-0 sm:pt-1">{action}</div> : null}
@@ -68,6 +74,13 @@ function IntegrationRow({
 
 export function HouseholdIntegrationsPanel({ status }: { status: HouseholdIntegrationsStatus }) {
   const calendarConnected = status.calendarSync.householdConnections > 0;
+  const lastSyncAt = status.calendarSync.lastSyncAt;
+  const daysSinceSync = lastSyncAt ? daysSince(lastSyncAt) : null;
+  const syncStalled =
+    calendarConnected &&
+    status.calendarSync.activeSyncRuns === 0 &&
+    daysSinceSync != null &&
+    daysSinceSync >= STALE_SYNC_DAYS;
 
   return (
     <Card>
@@ -99,29 +112,45 @@ export function HouseholdIntegrationsPanel({ status }: { status: HouseholdIntegr
             status={
               <StatusBadge
                 ok={calendarConnected && status.calendarSync.oauthConfigured}
+                warn={syncStalled}
                 label={
                   !status.calendarSync.moduleEnabled
                     ? "Module off"
                     : !status.calendarSync.oauthConfigured
                       ? "OAuth missing"
-                      : calendarConnected
-                        ? "Connected"
-                        : "Not connected"
+                      : syncStalled
+                        ? "Sync stalled"
+                        : calendarConnected
+                          ? "Connected"
+                          : "Not connected"
                 }
               />
             }
             detail={
-              !status.calendarSync.moduleEnabled
-                ? "Calendar sync module is disabled for this household or server."
-                : `Default mode: ${status.calendarSync.defaultSyncMode.replace(/_/g, " ")} · ${status.calendarSync.householdConnections} household connection${status.calendarSync.householdConnections === 1 ? "" : "s"}${
-                    status.calendarSync.activeSyncRuns > 0
+              !status.calendarSync.moduleEnabled ? (
+                "Calendar sync module is disabled for this household or server."
+              ) : (
+                <>
+                  <p>
+                    {`Default mode: ${status.calendarSync.defaultSyncMode.replace(/_/g, " ")} · ${status.calendarSync.householdConnections} household connection${status.calendarSync.householdConnections === 1 ? "" : "s"}`}
+                    {status.calendarSync.activeSyncRuns > 0
                       ? ` · ${status.calendarSync.activeSyncRuns} sync run${status.calendarSync.activeSyncRuns === 1 ? "" : "s"} active`
-                      : ""
-                  }${
-                    status.calendarSync.lastSyncAt
-                      ? ` · Last sync ${new Date(status.calendarSync.lastSyncAt).toLocaleString()}`
-                      : ""
-                  }`
+                      : ""}
+                    {lastSyncAt ? (
+                      <>
+                        {" · Last sync "}
+                        <LocalDateTime value={lastSyncAt} />
+                      </>
+                    ) : null}
+                  </p>
+                  {syncStalled ? (
+                    <p className="mt-1 text-[var(--color-warning)]">
+                      No successful sync in {daysSinceSync} days. Google access may have expired.
+                      Whoever connected Google can reconnect it from their Profile.
+                    </p>
+                  ) : null}
+                </>
+              )
             }
             action={
               status.calendarSync.moduleEnabled ? (

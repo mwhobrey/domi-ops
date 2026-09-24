@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildMedGroupReminderCopy, buildMedReminderCopy } from "./health-med-reminder-scan.js";
 
 describe("health med reminder copy", () => {
-  it("includes scheduled take time in recipient timezone (urgent)", () => {
+  it("includes scheduled take time in recipient timezone (urgent, same day: time only)", () => {
     const scheduledAt = new Date("2026-07-10T13:00:00.000Z"); // 8:00 AM America/Chicago
     const copy = buildMedReminderCopy({
       medName: "Amoxicillin",
@@ -11,27 +11,30 @@ describe("health med reminder copy", () => {
       timeZone: "America/Chicago",
       isSubject: true,
       subjectLabel: "Alex",
+      now: new Date("2026-07-10T13:00:00.000Z"),
     });
 
     expect(copy.title).toBe("Medication reminder • 8:00 AM");
-    expect(copy.body).toContain("Time to take Amoxicillin at");
-    expect(copy.body).toMatch(/Jul 10, 2026, 8:00 AM/);
+    expect(copy.body).toBe("Time to take Amoxicillin at 8:00 AM");
   });
 
-  it("includes scheduled take time in recipient timezone (future)", () => {
+  it("adds the date for another day, and the year only when it differs", () => {
     const scheduledAt = new Date("2026-07-10T13:00:00.000Z"); // 8:00 AM America/Chicago
-    const copy = buildMedReminderCopy({
+    const base = {
       medName: "Amoxicillin",
       minutesUntil: 15,
       scheduledAt,
       timeZone: "America/Chicago",
       isSubject: true,
       subjectLabel: "Alex",
-    });
+    };
 
-    expect(copy.title).toBe("Medication reminder • 8:00 AM");
-    expect(copy.body).toContain("Amoxicillin at");
-    expect(copy.body).toMatch(/Jul 10, 2026, 8:00 AM/);
+    const nextDay = buildMedReminderCopy({ ...base, now: new Date("2026-07-09T23:00:00.000Z") });
+    expect(nextDay.title).toBe("Medication reminder • 8:00 AM");
+    expect(nextDay.body).toBe("Amoxicillin at Jul 10, 8:00 AM");
+
+    const otherYear = buildMedReminderCopy({ ...base, now: new Date("2025-12-31T18:00:00.000Z") });
+    expect(otherYear.body).toBe("Amoxicillin at Jul 10, 2026, 8:00 AM");
   });
 
   it("prefixes non-subject copy with subject label", () => {

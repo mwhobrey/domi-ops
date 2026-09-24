@@ -271,7 +271,12 @@ export function NoticeBoardActions({
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          // Land on whichever tab holds the unread items the badge is counting.
+          if (noticeUnread === 0 && alertUnread > 0) setTab("alerts");
+          else if (noticeUnread > 0) setTab("notices");
+          setOpen(true);
+        }}
         aria-label="Notices and alerts"
         className={cn(
           "relative inline-flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-subtle)] px-3 py-1.5 text-sm font-medium transition hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-surface-elevated)] max-sm:px-2.5 max-sm:py-2",

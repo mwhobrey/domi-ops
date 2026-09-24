@@ -5,6 +5,21 @@ import { and, eq, inArray } from "drizzle-orm";
 import { calendarReminderRecipientUserIds } from "./calendar-recipients.js";
 import { deliverUserNotification } from "./user-notify.js";
 
+function plural(n: number, unit: string): string {
+  return `${n} ${unit}${n === 1 ? "" : "s"}`;
+}
+
+/** "Munch starts in 3 hours", "… in 1 hour 30 minutes", "… in 20 minutes", "… tomorrow". */
+export function calendarReminderBody(title: string, startsInMinutes: number): string {
+  if (startsInMinutes >= 1440) return `${title} starts tomorrow`;
+  if (startsInMinutes >= 60) {
+    const hours = Math.floor(startsInMinutes / 60);
+    const minutes = startsInMinutes % 60;
+    return `${title} starts in ${plural(hours, "hour")}${minutes ? ` ${plural(minutes, "minute")}` : ""}`;
+  }
+  return `${title} starts in ${plural(Math.max(0, startsInMinutes), "minute")}`;
+}
+
 export async function notifyHouseholdOfCalendarReminder(
   db: Database,
   env: Env,
@@ -35,12 +50,7 @@ export async function notifyHouseholdOfCalendarReminder(
   const enabledIds = enabled.map((u) => u.id);
   if (enabledIds.length === 0) return;
 
-  const body =
-    input.startsInMinutes >= 1440
-      ? `${input.title} starts tomorrow`
-      : input.startsInMinutes >= 60
-        ? `${input.title} starts in ${Math.round(input.startsInMinutes / 60)} hour(s)`
-        : `${input.title} starts in ${input.startsInMinutes} minutes`;
+  const body = calendarReminderBody(input.title, input.startsInMinutes);
 
   await deliverUserNotification(db, env, {
     userIds: enabledIds,
