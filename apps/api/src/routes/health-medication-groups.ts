@@ -22,9 +22,12 @@ import { isHouseholdModuleEnabled, requireHouseholdModule } from "../lib/househo
 import { decryptHealthFieldOrPassthrough, HealthEncryptionError } from "../lib/health-crypto.js";
 import {
   addMedicationToGroup,
+  canAccessHealthSegment,
   hasHealthSegmentAccess,
   healthMedicationGroupVisibleWhere,
   loadGroupMemberMedicationIdsMap,
+  loadHealthAclBySubjectForGrantee,
+  managementGrantsForSubject,
   loadHealthMedicationGroupMembershipMap,
   loadHealthMedicationGroupShareMap,
   normalizeHealthVisibility,
@@ -280,13 +283,16 @@ export function healthMedicationGroupRoutes(db: Database, env: Env) {
         medicationIds.map((id) => medsById.get(id)).filter((m) => m !== undefined),
       );
     }
+    const aclBySubject = await loadHealthAclBySubjectForGrantee(db, auth.householdId, auth.memberId);
     const result = groups.map((g) => {
       const isOwnedByMe = g.createdByUserId === auth.userId;
       const members = (membersByGroup.get(g.id) ?? []).map((m) => serializeHealthMedication(m, env));
+      const grants = managementGrantsForSubject(aclBySubject, g.memberId, auth.memberId, auth.role);
       return serializeGroup(g, env, members, {
         sharedMemberIds: isOwnedByMe ? shareMap.get(g.id) : undefined,
         isOwnedByMe,
-        canEdit: isOwnedByMe || g.visibility === "household",
+        // Matches PATCH: creator or medications write (WHO-339). Household visibility is read-only.
+        canEdit: isOwnedByMe || canAccessHealthSegment(grants, "medications", "write"),
       });
     });
     return c.json({ groups: result });
@@ -404,11 +410,11 @@ export function healthMedicationGroupRoutes(db: Database, env: Env) {
       .where(and(eq(healthMedicationGroups.id, id), eq(healthMedicationGroups.householdId, auth.householdId)))
       .limit(1);
     if (!existing) return c.json({ error: "not_found" }, 404);
+    // Household visibility grants read, not write (WHO-339); same rule as DELETE.
     const canWrite =
       existing.createdByUserId === auth.userId ||
-      existing.visibility === "household" ||
       (await hasHealthSegmentAccess(db, auth, existing.memberId, "medications", "write"));
-    if (existing.visibility === "private" && !canWrite) {
+    if (!canWrite) {
       return c.json({ error: "forbidden" }, 403);
     }
 

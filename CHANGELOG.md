@@ -122,6 +122,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
     instead of "BP systolic, BP diastolic, Heart rate" and a long label list.
 ### Fixed
 
+- Health permissions: a household-visible health event, medication, or medication group could
+  be edited by any household member through the API, even without write access to that
+  person's health. Editing now needs the same access as deleting: the creator, the person it's
+  about, an owner/admin, or someone granted write access on the Sharing page (WHO-339).
 - Medications in a group can be edited again from the Medications tab. Each group card lists
   its meds with dosage, schedule, and an Edit button; the WHO-302 merge had left them as
   plain labels, reachable only through a notification deep link (WHO-337).
