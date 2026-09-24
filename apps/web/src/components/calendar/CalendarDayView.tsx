@@ -5,6 +5,7 @@ import { formatDateLocal } from "../../lib/calendar-utils";
 import { eventsForDate } from "../../lib/calendar-event-span";
 import type { ReschedulePatch } from "../../lib/calendar-time-grid";
 import { CalendarTimeGrid } from "./CalendarTimeGrid";
+import { useHouseholdToday } from "../HouseholdTimeProvider";
 
 export function CalendarDayView({
   focusDate,
@@ -33,6 +34,7 @@ export function CalendarDayView({
 }) {
   const dateKey = formatDateLocal(focusDate);
   const dayEvents = eventsForDate(events, dateKey);
+  const today = useHouseholdToday();
 
   return (
     <CalendarTimeGrid
@@ -41,7 +43,7 @@ export function CalendarDayView({
       categoryColorByKey={categoryColorByKey}
       loading={loading}
       onEventClick={onEventClick}
-      scrollToNow={dateKey === formatDateLocal(new Date())}
+      scrollToNow={dateKey === today}
       interactionEnabled={interactionEnabled}
       fillViewport={fillViewport}
       className={className}

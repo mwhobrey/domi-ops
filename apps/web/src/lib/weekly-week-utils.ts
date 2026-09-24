@@ -25,8 +25,9 @@ export function defaultRangeEnd(fromMonday: string): string {
   return addDaysIso(fromMonday, 27);
 }
 
-export function currentWeekMonday(): string {
-  return mondayOfWeekIso(todayIsoLocal());
+/** Monday of the week containing `today` (pass the household's today; defaults to the device's). */
+export function currentWeekMonday(today: string = todayIsoLocal()): string {
+  return mondayOfWeekIso(today);
 }
 
 export type WeeklyScopeMode = "week" | "range";

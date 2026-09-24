@@ -6,7 +6,6 @@ import { ApiError, apiClient } from "../lib/client-api";
 import { ExpenseEditSheet, type Expense } from "./ExpenseEditSheet";
 import { RecurringBillsSection } from "./RecurringBillsSection";
 import type { NoteShareMember } from "./NoteSharePicker";
-import { formatDateLocal } from "../lib/calendar-utils";
 import {
   Alert,
   Badge,
@@ -22,6 +21,7 @@ import {
   StatTile,
 } from "./ui";
 import { ListPage } from "./lists/ListPage";
+import { useHouseholdToday } from "./HouseholdTimeProvider";
 
 type BudgetScope = "household" | "personal";
 type ShareAccess = "read" | "write";
@@ -102,7 +102,8 @@ export function ExpensesList({
   const [title, setTitle] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
-  const [expenseDate, setExpenseDate] = useState(() => formatDateLocal(new Date()));
+  const today = useHouseholdToday();
+  const [expenseDate, setExpenseDate] = useState(today);
   const [attributeMemberId, setAttributeMemberId] = useState(currentMemberId);
   const [budgetCategory, setBudgetCategory] = useState("");
   const [budgetTarget, setBudgetTarget] = useState("");
@@ -167,12 +168,11 @@ export function ExpensesList({
   );
 
   const monthTotal = useMemo(() => {
-    const now = new Date();
-    const prefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const prefix = today.slice(0, 7);
     return expenses
       .filter((e) => e.expenseDate.startsWith(prefix))
       .reduce((sum, e) => sum + e.amount, 0);
-  }, [expenses]);
+  }, [expenses, today]);
 
   const visibleBudgets = useMemo(
     () => budgets.filter((b) => b.scope === budgetTab),

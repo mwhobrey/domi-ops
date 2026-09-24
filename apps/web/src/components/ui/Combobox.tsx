@@ -38,9 +38,14 @@ export function Combobox({
   );
   const showList = open && filtered.length > 0;
 
+  // Callers pass inline arrows, so the callback is new on every render. Keying the effect on it
+  // re-fired the query after each suggestions update, looping (hundreds of requests on
+  // /expenses). Only a changed `value` should trigger a query.
+  const onQueryChangeRef = useRef(onQueryChange);
+  onQueryChangeRef.current = onQueryChange;
   useEffect(() => {
-    onQueryChange?.(value);
-  }, [value, onQueryChange]);
+    onQueryChangeRef.current?.(value);
+  }, [value]);
 
   useEffect(() => {
     function onDocClick(e: MouseEvent) {

@@ -72,24 +72,42 @@ export function hourSlots(): number[] {
   return Array.from({ length: GRID_END_HOUR - GRID_START_HOUR }, (_, i) => GRID_START_HOUR + i);
 }
 
-export function isViewingToday(dates: string[]): boolean {
-  const today = new Date();
-  const y = today.getFullYear();
-  const m = String(today.getMonth() + 1).padStart(2, "0");
-  const day = String(today.getDate()).padStart(2, "0");
+/** Whether `dates` includes `today` (pass the household's today; defaults to the device's). */
+export function isViewingToday(dates: string[], today?: string): boolean {
+  if (today) return dates.includes(today);
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
   const todayIso = `${y}-${m}-${day}`;
   return dates.includes(todayIso);
 }
 
 /** Minutes since midnight for scroll-into-view on current time. */
-export function nowMinutesSinceMidnight(): number {
+/** Minutes since midnight now, in `timeZone` (the household's) when given, else the device's. */
+export function nowMinutesSinceMidnight(timeZone?: string | null): number {
   const n = new Date();
+  if (timeZone) {
+    try {
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone,
+        hour: "numeric",
+        minute: "numeric",
+        hourCycle: "h23",
+      }).formatToParts(n);
+      const h = Number(parts.find((p) => p.type === "hour")?.value);
+      const m = Number(parts.find((p) => p.type === "minute")?.value);
+      if (Number.isFinite(h) && Number.isFinite(m)) return h * 60 + m;
+    } catch {
+      /* invalid zone: device time */
+    }
+  }
   return n.getHours() * 60 + n.getMinutes();
 }
 
-export function scrollTopForNow(): number {
+export function scrollTopForNow(timeZone?: string | null): number {
   const gridStartMin = GRID_START_HOUR * 60;
-  const now = nowMinutesSinceMidnight();
+  const now = nowMinutesSinceMidnight(timeZone);
   const offset = ((now - gridStartMin) / 60) * SLOT_HEIGHT_PX;
   return Math.max(0, offset - SLOT_HEIGHT_PX * 2);
 }

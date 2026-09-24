@@ -1,6 +1,7 @@
 import { apiFetch } from "../lib/api";
 import { memberShownLabel } from "../lib/member-label";
 import { AppChrome, type ShellUser } from "./AppChrome";
+import { HouseholdTimeProvider } from "./HouseholdTimeProvider";
 import { Breadcrumb, type BreadcrumbItem, PageHeader } from "./ui";
 
 export async function AppShell({
@@ -21,11 +22,13 @@ export async function AppShell({
   let user: ShellUser | null = null;
   let modulesEnabled: string[] | undefined;
   let telemetryOptIn = false;
+  let householdTimezone: string | null = null;
   try {
     const session = await apiFetch<{
       authenticated: boolean;
       modulesEnabled?: string[];
       telemetryOptIn?: boolean;
+      householdTimezone?: string;
       user?: {
         email: string | null;
         username?: string | null;
@@ -38,6 +41,7 @@ export async function AppShell({
     if (session.authenticated && session.user) {
       modulesEnabled = session.modulesEnabled;
       telemetryOptIn = session.telemetryOptIn ?? false;
+      householdTimezone = session.householdTimezone ?? null;
       const u = session.user;
       user = {
         email: u.email,
@@ -67,6 +71,7 @@ export async function AppShell({
   };
 
   return (
+    <HouseholdTimeProvider timeZone={householdTimezone}>
     <AppChrome user={user} modulesEnabled={modulesEnabled} telemetry={telemetry}>
       {breadcrumb && breadcrumb.length > 0 && <Breadcrumb items={breadcrumb} />}
       {title ? (
@@ -79,5 +84,6 @@ export async function AppShell({
       ) : null}
       {children}
     </AppChrome>
+    </HouseholdTimeProvider>
   );
 }

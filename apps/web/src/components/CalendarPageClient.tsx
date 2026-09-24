@@ -75,6 +75,7 @@ import { Calendar } from "lucide-react";
 import { cn } from "../lib/cn";
 import { parseCalendarCreateDraftFromSearchParams } from "../lib/schedule-conflict";
 import { Alert, Button, IconButton, Input, Select } from "./ui";
+import { useHouseholdToday } from "./HouseholdTimeProvider";
 
 function mapLoadedEvent(e: CalendarEventView): CalendarEventView {
   return {
@@ -90,6 +91,12 @@ function mapLoadedEvent(e: CalendarEventView): CalendarEventView {
     categoryKey: e.categoryKey ?? null,
     categoryLabel: e.categoryLabel ?? null,
     timeZone: e.timeZone ?? null,
+    // Every field the event sheet edits must survive this mapping: a dropped field reads as
+    // empty in the sheet and gets saved back as null (drive buffers were wiped this way).
+    location: e.location ?? null,
+    attendeeMemberIds: e.attendeeMemberIds ?? [],
+    driveBufferBeforeMinutes: e.driveBufferBeforeMinutes ?? null,
+    driveBufferAfterMinutes: e.driveBufferAfterMinutes ?? null,
     calendarId: e.calendarId,
     source: e.source,
     googleEventId: e.googleEventId ?? null,
@@ -124,7 +131,8 @@ export function CalendarPageClient({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const isDesktop = useIsDesktop();
-  const [focusDate, setFocusDate] = useState(() => new Date());
+  const householdToday = useHouseholdToday();
+  const [focusDate, setFocusDate] = useState(() => parseLocalDate(householdToday));
   const [viewMode, setViewMode] = useState<CalendarViewMode>("agenda");
   const [viewReady, setViewReady] = useState(false);
   const [events, setEvents] = useState<CalendarEventView[]>([]);
@@ -481,8 +489,8 @@ export function CalendarPageClient({
   }, [effectiveView]);
 
   const handleToday = useCallback(() => {
-    setFocusDate(new Date());
-  }, []);
+    setFocusDate(parseLocalDate(householdToday));
+  }, [householdToday]);
 
   const allLaneGroups = useMemo(
     () => sortLaneGroupsForDisplay(groupLanesByName(lanes)),

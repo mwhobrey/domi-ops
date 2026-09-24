@@ -16,6 +16,7 @@ import {
   parseLocalDate,
 } from "../lib/calendar-utils";
 import { EmptyState, Skeleton } from "./ui";
+import { useHouseholdToday } from "./HouseholdTimeProvider";
 
 function formatEventTimeRange(ev: CalendarEventView): string {
   if (ev.allDay) return "All day";
@@ -44,7 +45,7 @@ export function CalendarAgendaView({
   /** Sticky offset for day section headers (e.g. below calendar toolbar on /calendar). */
   dayHeaderStickyTop?: string;
 }) {
-  const today = formatDateLocal(new Date());
+  const today = useHouseholdToday();
 
   const grouped = useMemo(() => {
     const map = new Map<string, CalendarEventView[]>();

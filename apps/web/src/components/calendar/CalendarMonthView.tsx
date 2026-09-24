@@ -6,6 +6,7 @@ import { eventOverlapsDate } from "../../lib/calendar-event-span";
 import { resolveEventColor } from "../../lib/calendar-event-colors";
 import type { CalendarEventView } from "../../lib/calendar-utils";
 import { formatWallClock, monthGrid, parseLocalDate } from "../../lib/calendar-utils";
+import { useHouseholdToday } from "../HouseholdTimeProvider";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const TITLES_PER_CELL = 3;
@@ -31,7 +32,8 @@ export function CalendarMonthView({
   categoryColorByKey?: Map<string, string | null>;
   onDaySelect: (date: string) => void;
 }) {
-  const cells = useMemo(() => monthGrid(monthStart), [monthStart]);
+  const today = useHouseholdToday();
+  const cells = useMemo(() => monthGrid(monthStart, today), [monthStart, today]);
   const eventsByDate = useMemo(() => {
     const byDate = new Map<string, CalendarEventView[]>();
     for (const cell of cells) {

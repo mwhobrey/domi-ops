@@ -12,7 +12,6 @@ import {
   type BillInterval,
   type RecurringBill,
 } from "../lib/bills";
-import { formatDateLocal } from "../lib/calendar-utils";
 import type { NoteShareMember } from "./NoteSharePicker";
 import {
   Alert,
@@ -26,6 +25,7 @@ import {
   Select,
   Sheet,
 } from "./ui";
+import { useHouseholdToday } from "./HouseholdTimeProvider";
 
 function formatMoney(n: number): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
@@ -153,7 +153,7 @@ export function RecurringBillsSection({
   const [editing, setEditing] = useState<RecurringBill | null>(null);
   const [removeId, setRemoveId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const today = formatDateLocal(new Date());
+  const today = useHouseholdToday();
 
   const load = useCallback(async () => {
     try {

@@ -41,6 +41,11 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Changed
 
+- "Today" everywhere in the app is the household's day, not your device's (WHO-336): due
+  labels, overdue counts, default dates on new events, expenses, and bills, the calendar's today
+  highlight and current-time line, and weekly report ranges. Nothing changes when your device
+  and household share a timezone; a member traveling in another zone now sees the same day as
+  the chores, shopping, and bills the server posts.
 - School overdue triage (WHO-335): **School → Overdue** and the dashboard School tile count
   work per student, using the gradebook's rules. Anything turned in, graded, or closed is no
   longer "overdue", and each row says which students still owe it. Teachers and admins can
@@ -110,6 +115,12 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
     instead of "BP systolic, BP diastolic, Heart rate" and a long label list.
 ### Fixed
 
+- **Editing a calendar event wiped its drive buffers** (WHO-336). The calendar dropped the
+  buffer minutes when loading events, so the edit sheet showed them empty and saving cleared
+  them. The same drop hid event locations and "who it's for" and broke the member filter.
+- **Expenses flooded the server with requests** (WHO-336): the category field re-queried
+  suggestions after every response, about 120 requests in a few seconds on `/expenses`. The same
+  field on chores, shopping, and bills is fixed too.
 - School assignment page: the Due badge read "DueMon, Sep 21" (a missing space since the
   hydration fix), and an excused student showed as "turned in" and "Overdue" (WHO-335).
 - Phone layout: two- and three-column report tables no longer scroll sideways, and the goal
