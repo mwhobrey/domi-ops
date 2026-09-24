@@ -115,6 +115,9 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
     instead of "BP systolic, BP diastolic, Heart rate" and a long label list.
 ### Fixed
 
+- Medications in a group can be edited again from the Medications tab. Each group card lists
+  its meds with dosage, schedule, and an Edit button; the WHO-302 merge had left them as
+  plain labels, reachable only through a notification deep link (WHO-337).
 - A malformed id in an API request (e.g. `/api/calendar/events/not-a-uuid`, or a bad
   `calendarId` on create or move) returns 400 `invalid_input` instead of a 500 (WHO-336).
 - **Editing a calendar event wiped its drive buffers** (WHO-336). The calendar dropped the

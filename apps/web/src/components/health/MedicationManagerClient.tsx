@@ -485,6 +485,47 @@ export function MedicationManagerClient({
     }
   }
 
+  // Grouped rows skip Delete: deleting a med also drops it from every group it's in, so that
+  // stays on the standalone list where the consequence is obvious.
+  function renderMedRow(med: HealthMedication, key: string, { allowDelete = true } = {}) {
+    return (
+      <ListItem key={key} as="li">
+        <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="truncate font-medium text-[var(--color-text)]">{med.name}</p>
+            <p className="truncate text-sm text-[var(--color-text-muted)]">
+              {med.dosage ? `${med.dosage} · ` : ""}
+              {med.scheduleKind === "scheduled"
+                ? scheduleSummary("scheduled", med.schedule)
+                : med.scheduleKind === "interval"
+                  ? scheduleSummary("interval", med.schedule)
+                  : "As needed"}
+            </p>
+          </div>
+          {canWriteSelected ? (
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  setEditingMed(med);
+                  setMedSheetOpen(true);
+                }}
+              >
+                Edit
+              </Button>
+              {allowDelete ? (
+                <Button size="sm" variant="secondary" onClick={() => void deleteMedication(med)}>
+                  Delete
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      </ListItem>
+    );
+  }
+
   return (
     <div className="space-y-4">
       {error ? <Alert variant="error">{error}</Alert> : null}
@@ -587,13 +628,20 @@ export function MedicationManagerClient({
                           </div>
                         ) : null}
                       </div>
-                      <div className="flex flex-wrap gap-1">
-                        {group.medications.length === 0 ? (
-                          <span className="text-sm text-[var(--color-text-muted)]">No medications yet</span>
-                        ) : (
-                          group.medications.map((m) => <Badge key={m.id}>{m.name}</Badge>)
-                        )}
-                      </div>
+                      {group.medications.length === 0 ? (
+                        <p className="text-sm text-[var(--color-text-muted)]">No medications yet</p>
+                      ) : (
+                        // The group payload only carries a slim med shape; edit from the full
+                        // medication row so the sheet gets schedule, groupIds, and canEdit.
+                        <ul className="space-y-2">
+                          {group.medications.map((m) => {
+                            const med = medications.find((full) => full.id === m.id);
+                            return med
+                              ? renderMedRow(med, `${group.id}-${med.id}`, { allowDelete: false })
+                              : null;
+                          })}
+                        </ul>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -624,42 +672,7 @@ export function MedicationManagerClient({
                   either grouped above or none exist yet.
                 </p>
               ) : (
-                <ul className="space-y-2">
-                  {ungroupedMeds.map((med) => (
-                    <ListItem key={med.id}>
-                      <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="truncate font-medium text-[var(--color-text)]">{med.name}</p>
-                          <p className="truncate text-sm text-[var(--color-text-muted)]">
-                            {med.dosage ? `${med.dosage} · ` : ""}
-                            {med.scheduleKind === "scheduled"
-                              ? scheduleSummary("scheduled", med.schedule)
-                              : med.scheduleKind === "interval"
-                                ? scheduleSummary("interval", med.schedule)
-                                : "As needed"}
-                          </p>
-                        </div>
-                        {canWriteSelected ? (
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => {
-                                setEditingMed(med);
-                                setMedSheetOpen(true);
-                              }}
-                            >
-                              Edit
-                            </Button>
-                            <Button size="sm" variant="secondary" onClick={() => void deleteMedication(med)}>
-                              Delete
-                            </Button>
-                          </div>
-                        ) : null}
-                      </div>
-                    </ListItem>
-                  ))}
-                </ul>
+                <ul className="space-y-2">{ungroupedMeds.map((med) => renderMedRow(med, med.id))}</ul>
               )}
             </CardBody>
           </Card>
