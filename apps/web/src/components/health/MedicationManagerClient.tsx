@@ -489,7 +489,7 @@ export function MedicationManagerClient({
   // stays on the standalone list where the consequence is obvious.
   function renderMedRow(med: HealthMedication, key: string, { allowDelete = true } = {}) {
     return (
-      <ListItem key={key}>
+      <ListItem key={key} as="li">
         <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
           <div className="min-w-0">
             <p className="truncate font-medium text-[var(--color-text)]">{med.name}</p>
