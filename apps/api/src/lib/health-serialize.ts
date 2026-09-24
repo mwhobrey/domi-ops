@@ -551,10 +551,8 @@ export async function enrichHealthEvents(
       auth.memberId,
       auth.role,
     );
-    const canEdit =
-      isOwnedByMe ||
-      row.visibility === "household" ||
-      canAccessHealthSegment(grants, "events", "write");
+    // Mirrors the PATCH/DELETE guard (WHO-339): household visibility is read-only.
+    const canEdit = isOwnedByMe || canAccessHealthSegment(grants, "events", "write");
     return serializeHealthEvent(row, env, {
       sharedMemberIds: canEdit ? sharedMemberIds : undefined,
       isOwnedByMe,
@@ -589,10 +587,8 @@ export async function enrichHealthMedications(
       auth.memberId,
       auth.role,
     );
-    const canEdit =
-      isOwnedByMe ||
-      row.visibility === "household" ||
-      canAccessHealthSegment(grants, "medications", "write");
+    // Mirrors the PATCH/DELETE guard (WHO-339): household visibility is read-only.
+    const canEdit = isOwnedByMe || canAccessHealthSegment(grants, "medications", "write");
     const canLog = canAccessHealthSegment(grants, "doses", "write");
     return serializeHealthMedication(row, env, {
       sharedMemberIds: canEdit ? sharedMemberIds : undefined,

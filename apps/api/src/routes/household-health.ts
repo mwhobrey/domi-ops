@@ -986,11 +986,11 @@ export function householdHealthRoutes(db: Database, env: Env) {
       .where(and(eq(healthEvents.id, id), eq(healthEvents.householdId, auth.householdId)))
       .limit(1);
     if (!existing) return c.json({ error: "not_found" }, 404);
+    // Household visibility grants read, not write (WHO-339); same rule as DELETE.
     const canWriteEvent =
       existing.createdByUserId === auth.userId ||
-      existing.visibility === "household" ||
       (await hasHealthSegmentAccess(db, auth, existing.memberId, "events", "write"));
-    if (existing.visibility === "private" && !canWriteEvent) {
+    if (!canWriteEvent) {
       return c.json({ error: "forbidden" }, 403);
     }
 
@@ -1284,11 +1284,11 @@ export function householdHealthRoutes(db: Database, env: Env) {
       )
       .limit(1);
     if (!existing) return c.json({ error: "not_found" }, 404);
+    // Household visibility grants read, not write (WHO-339); same rule as DELETE.
     const canWriteMed =
       existing.createdByUserId === auth.userId ||
-      existing.visibility === "household" ||
       (await hasHealthSegmentAccess(db, auth, existing.memberId, "medications", "write"));
-    if (existing.visibility === "private" && !canWriteMed) {
+    if (!canWriteMed) {
       return c.json({ error: "forbidden" }, 403);
     }
 

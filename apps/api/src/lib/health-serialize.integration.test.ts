@@ -192,6 +192,48 @@ maybeDescribe("enrichHealthEvents / enrichHealthMedications sharing (integration
     expect(enriched.isOwnedByMe).toBe(false);
     expect(enriched.sharedMemberIds).toEqual([sharedWithMemberId]);
   });
+
+  // WHO-339: household visibility is read access, not write. A member with no ACL on the
+  // subject can see a household event/med but must not get canEdit (the PATCH guard agrees).
+  it("household visibility alone doesn't grant canEdit", async () => {
+    const noAclAuth = { userId: sharedWithUserId, memberId: sharedWithMemberId, householdId, role: "member" };
+    const [event] = await withHouseholdContext(db, householdId, (tx) =>
+      tx
+        .insert(healthEvents)
+        .values({
+          householdId,
+          memberId: subjectMemberId,
+          type: "symptom",
+          title: "Household symptom",
+          visibility: "household",
+          createdByUserId: subjectUserId,
+        })
+        .returning(),
+    );
+    const [medication] = await withHouseholdContext(db, householdId, (tx) =>
+      tx
+        .insert(healthMedications)
+        .values({
+          householdId,
+          memberId: subjectMemberId,
+          name: "Household med",
+          scheduleKind: "prn",
+          visibility: "household",
+          createdByUserId: subjectUserId,
+        })
+        .returning(),
+    );
+
+    const [enrichedEvent] = await withHouseholdContext(db, householdId, (tx) =>
+      enrichHealthEvents(tx, env, noAclAuth, [event], "UTC"),
+    );
+    const [enrichedMed] = await withHouseholdContext(db, householdId, (tx) =>
+      enrichHealthMedications(tx, env, noAclAuth, [medication]),
+    );
+
+    expect(enrichedEvent.canEdit).toBe(false);
+    expect(enrichedMed.canEdit).toBe(false);
+  });
 });
 
 /**
