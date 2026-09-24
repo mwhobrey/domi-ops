@@ -6,13 +6,15 @@ import { createS3Client, ensureS3ReadyOnce, publicObjectUrl } from "../lib/s3.js
 import { browserUploadPutUrl } from "../lib/upload-token.js";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requireHouseholdModule } from "../lib/household-modules.js";
 
 const PRESIGN_EXPIRY_SEC = 15 * 60;
 
 /** School artifact upload to S3/MinIO via presigned PutObject */
-export function schoolUploadRoutes(_db: Database, env: Env) {
+export function schoolUploadRoutes(db: Database, env: Env) {
   const app = new Hono<{ Variables: AppVariables }>();
   app.use("*", requireAuth(env));
+  app.use("/*", requireHouseholdModule(db, env, "school"));
 
   app.post("/presign", async (c) => {
     const auth = c.get("auth")!;

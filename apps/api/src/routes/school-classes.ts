@@ -11,10 +11,10 @@ import {
   schoolEnrollments,
   users,
 } from "@domi-ops/db";
-import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { resolveClassAccess, visibleClassIdsForMember } from "../lib/school-access.js";
-import { publishedAssignmentVisibilities } from "../lib/school-assignment-visibility.js";
 import { buildClassGradebook } from "../lib/school-gradebook.js";
+import { listOpenWork, loadOpenWorkLists } from "../lib/school-open-work.js";
 import { buildSchoolReports, canViewSchoolReports } from "../lib/school-reports.js";
 import {
   classForHousehold,
@@ -121,60 +121,17 @@ export function schoolClassesRoutes(db: Database, env: Env) {
       });
     }
 
-    const now = new Date();
-    const weekAhead = new Date(now);
-    weekAhead.setDate(weekAhead.getDate() + 7);
-
-    const assignmentWhere =
-      visibleIds.length > 0
-        ? and(
-            eq(schoolClasses.householdId, auth.householdId),
-            inArray(schoolClasses.id, visibleIds),
-            isNotNull(schoolAssignments.dueAt),
-            inArray(schoolAssignments.visibility, publishedAssignmentVisibilities()),
-          )
-        : and(eq(schoolClasses.householdId, auth.householdId), eq(schoolClasses.id, "00000000-0000-0000-0000-000000000000"));
-
-    const assignments = await db
-      .select({
-        id: schoolAssignments.id,
-        title: schoolAssignments.title,
-        dueAt: schoolAssignments.dueAt,
-        className: schoolClasses.name,
-      })
-      .from(schoolAssignments)
-      .innerJoin(schoolClasses, eq(schoolAssignments.classId, schoolClasses.id))
-      .where(assignmentWhere);
-
-    type Ranked = {
-      id: string;
-      title: string;
-      className: string;
-      dueAt: string;
-      overdue: boolean;
-      sortKey: number;
-    };
-
-    const ranked: Ranked[] = assignments.map((row) => {
-      const due = row.dueAt!;
-      const overdue = due < now;
-      return {
-        id: row.id,
-        title: row.title,
-        className: row.className,
-        dueAt: due.toISOString(),
-        overdue,
-        sortKey: due.getTime(),
-      };
+    // Same per-student rules as /assignments: turned-in, graded, and closed work isn't owed.
+    const onlyStudentId = context.viewMode === "student" ? context.memberId : null;
+    const { overdue: overdueWork, due: dueWork } = await loadOpenWorkLists(db, {
+      householdId: auth.householdId,
+      classIds: visibleIds,
+      onlyStudentId,
     });
+    const ranked = [...overdueWork, ...dueWork];
 
-    ranked.sort((a, b) => {
-      if (a.overdue !== b.overdue) return a.overdue ? -1 : 1;
-      return a.sortKey - b.sortKey;
-    });
-
-    const dueSoon = ranked.filter((r) => !r.overdue && new Date(r.dueAt) <= weekAhead).length;
-    const overdue = ranked.filter((r) => r.overdue).length;
+    const dueSoon = dueWork.length;
+    const overdue = overdueWork.length;
     const previewLimit = 4;
     const items = ranked.slice(0, previewLimit).map((r) => ({
       id: r.id,
@@ -246,49 +203,28 @@ export function schoolClassesRoutes(db: Database, env: Env) {
       return c.json({ assignments: [], filter, context });
     }
 
-    const now = new Date();
-    const weekAhead = new Date(now);
-    weekAhead.setDate(weekAhead.getDate() + 7);
+    const onlyStudentId = context.viewMode === "student" ? context.memberId : null;
+    const work = await listOpenWork(db, {
+      householdId: auth.householdId,
+      classIds: visibleIds,
+      filter,
+      onlyStudentId,
+    });
 
-    const rows = await db
-      .select({
-        id: schoolAssignments.id,
-        title: schoolAssignments.title,
-        dueAt: schoolAssignments.dueAt,
-        visibility: schoolAssignments.visibility,
-        pointsPossible: schoolAssignments.pointsPossible,
-        classId: schoolClasses.id,
-        className: schoolClasses.name,
-        classSubject: schoolClasses.subject,
-        classTerm: schoolClasses.term,
-      })
-      .from(schoolAssignments)
-      .innerJoin(schoolClasses, eq(schoolAssignments.classId, schoolClasses.id))
-      .where(
-        and(
-          eq(schoolClasses.householdId, auth.householdId),
-          inArray(schoolClasses.id, visibleIds),
-          isNotNull(schoolAssignments.dueAt),
-          inArray(schoolAssignments.visibility, publishedAssignmentVisibilities()),
-        ),
-      );
-
-    const assignments = rows
-      .map((row) => {
-        const due = row.dueAt!;
-        const overdue = due < now;
-        return {
-          ...row,
-          dueAt: due.toISOString(),
-          overdue,
-        };
-      })
-      .filter((row) =>
-        filter === "overdue"
-          ? row.overdue
-          : !row.overdue && new Date(row.dueAt).getTime() <= weekAhead.getTime(),
-      )
-      .sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime());
+    // Which classes this viewer may close work in (bulk "Close" on the list).
+    const manageable = new Set(
+      allClassRows
+        .filter((cls) =>
+          resolveClassAccess({
+            memberId: context.memberId,
+            householdRole: context.householdRole,
+            teacherMemberId: cls.teacherMemberId,
+            enrollment: enrollments.find((e) => e.classId === cls.id) ?? null,
+          }).canEditAssignments,
+        )
+        .map((cls) => cls.id),
+    );
+    const assignments = work.map((item) => ({ ...item, canClose: manageable.has(item.classId) }));
 
     return c.json({ assignments, filter, context });
   });

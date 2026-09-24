@@ -63,6 +63,7 @@ import {
 } from "../lib/school-route-context.js";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requireHouseholdModule } from "../lib/household-modules.js";
 
 // Assignment CRUD + the submission/grading workflow (submit, artifacts, Google Classroom-style
 // student-copy flow, grading, test review) — split out of the school.ts monolith (2026-08-30).
@@ -70,6 +71,7 @@ import { requireAuth } from "../middleware/auth.js";
 export function schoolAssignmentsRoutes(db: Database, env: Env) {
   const app = new Hono<{ Variables: AppVariables }>();
   app.use("*", requireAuth(env));
+  app.use("/*", requireHouseholdModule(db, env, "school"));
 
   app.post("/classes/:classId/assignments", async (c) => {
     const auth = c.get("auth")!;
@@ -189,6 +191,64 @@ export function schoolAssignmentsRoutes(db: Database, env: Env) {
       context,
       materials: await loadAssignmentMaterials(db, id, access),
     });
+  });
+
+  /** Close several assignments at once (overdue triage); skips any the caller can't manage. */
+  app.post("/assignments/close", async (c) => {
+    const auth = c.get("auth")!;
+    const body = await c.req.json<{ ids?: unknown } | null>().catch(() => null);
+    const ids = Array.isArray(body?.ids)
+      ? [...new Set(body.ids.filter((id): id is string => typeof id === "string"))]
+      : [];
+    if (ids.length === 0 || ids.length > 200) return c.json({ error: "invalid_ids" }, 400);
+    const context = await schoolContextForAuth(db, auth);
+    if (!context) return c.json({ error: "not_a_member" }, 403);
+
+    const rows = await db
+      .select({
+        id: schoolAssignments.id,
+        classId: schoolAssignments.classId,
+        teacherMemberId: schoolClasses.teacherMemberId,
+      })
+      .from(schoolAssignments)
+      .innerJoin(schoolClasses, eq(schoolAssignments.classId, schoolClasses.id))
+      .where(and(inArray(schoolAssignments.id, ids), eq(schoolClasses.householdId, auth.householdId)));
+    const classIds = [...new Set(rows.map((r) => r.classId))];
+    const myEnrollments =
+      classIds.length > 0
+        ? await db
+            .select()
+            .from(schoolEnrollments)
+            .where(
+              and(
+                inArray(schoolEnrollments.classId, classIds),
+                eq(schoolEnrollments.memberId, context.memberId),
+              ),
+            )
+        : [];
+    const allowed = rows
+      .filter(
+        (r) =>
+          resolveClassAccess({
+            memberId: context.memberId,
+            householdRole: context.householdRole,
+            teacherMemberId: r.teacherMemberId,
+            enrollment: myEnrollments.find((e) => e.classId === r.classId) ?? null,
+          }).canEditAssignments,
+      )
+      .map((r) => r.id);
+    // Only assigned work changes; drafts and already-closed rows count as skipped.
+    const closed =
+      allowed.length > 0
+        ? await db
+            .update(schoolAssignments)
+            .set({ visibility: "closed", updatedAt: new Date() })
+            .where(
+              and(inArray(schoolAssignments.id, allowed), eq(schoolAssignments.visibility, "assigned")),
+            )
+            .returning({ id: schoolAssignments.id })
+        : [];
+    return c.json({ closed: closed.length, skipped: ids.length - closed.length });
   });
 
   app.patch("/assignments/:id", async (c) => {

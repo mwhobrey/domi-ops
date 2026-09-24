@@ -27,7 +27,8 @@ import {
 } from "../lib/school-reports";
 import { ReportExportSheet } from "./reports/ReportExportSheet";
 import { ModuleReportsLink } from "./reports/ModuleReportsLink";
-import { Badge, Button, EmptyState, Select } from "./ui";
+import { Badge, Button, EmptyState, LocalDateTime, Select } from "./ui";
+import { formatShortDate } from "../lib/format-datetime";
 import { WeeklyReportPanel } from "./WeeklyReportPanel";
 
 function SummaryStat({
@@ -271,7 +272,12 @@ function MissingDigestView({ reports }: { reports: SchoolReportsData }) {
             <Link href={`/school/assignment/${item.assignmentId}`} className="font-medium text-[var(--color-accent)] hover:underline">{item.assignmentTitle}</Link>
             <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
               {item.studentLabel} · {item.className}
-              {item.dueAt ? ` · due ${new Date(item.dueAt).toLocaleDateString()}` : ""}
+              {item.dueAt ? (
+                <>
+                  {" · due "}
+                  <LocalDateTime value={item.dueAt} format={formatShortDate} />
+                </>
+              ) : null}
             </p>
           </div>
           <Badge tone={statusTone[item.status]}>{statusLabel[item.status]}</Badge>

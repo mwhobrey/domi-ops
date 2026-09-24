@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import * as Sentry from "@sentry/nextjs";
-import { ensureBrowserSentry } from "../components/SentryClientInit";
+import { captureBrowserException } from "../components/SentryClientInit";
 
 /**
  * Replaces the root layout when the layout itself throws, so it can't rely on globals.css
@@ -17,10 +16,7 @@ export default function GlobalError({
 }) {
   useEffect(() => {
     console.error("[domi-ops web] fatal error:", error);
-    void (async () => {
-      await ensureBrowserSentry();
-      Sentry.captureException(error);
-    })();
+    void captureBrowserException(error);
   }, [error]);
 
   return (

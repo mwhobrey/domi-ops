@@ -14,7 +14,7 @@ export { EmptyState } from "./EmptyState";
 export { IconButton } from "./IconButton";
 export { Input } from "./Input";
 export { ListItem } from "./ListItem";
-export { MarkdownContent } from "./MarkdownContent";
+export { MarkdownContent } from "./MarkdownContentLazy";
 export { MarkdownEditor } from "./MarkdownEditor";
 export { Modal } from "./Modal";
 export { PageHeader, type PageHeaderDescriptionVisibility } from "./PageHeader";
