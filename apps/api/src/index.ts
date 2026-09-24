@@ -50,6 +50,7 @@ import {
   SETUP_GRANT_COOKIE,
 } from "@domi-ops/auth";
 import { getCookie } from "hono/cookie";
+import { isInvalidInputError } from "./lib/db-errors.js";
 
 const env = loadEnv();
 initSentry(env);
@@ -66,6 +67,8 @@ const app = new Hono<{ Variables: AppVariables }>();
 // one Sentry issue per failure (CodeRabbit caught the same duplication in the worker's
 // equivalent handler). No-op when SENTRY_DSN is unset either way.
 app.onError((err, c) => {
+  // A malformed id from the client (e.g. /events/not-a-uuid) is a 400, not a server fault.
+  if (isInvalidInputError(err)) return c.json({ error: "invalid_input" }, 400);
   console.error(`[domi-ops api] unhandled error on ${c.req.method} ${c.req.path}:`, err);
   return c.json({ error: "internal_error" }, 500);
 });

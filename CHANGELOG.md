@@ -115,6 +115,8 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
     instead of "BP systolic, BP diastolic, Heart rate" and a long label list.
 ### Fixed
 
+- A malformed id in an API request (e.g. `/api/calendar/events/not-a-uuid`, or a bad
+  `calendarId` on create or move) returns 400 `invalid_input` instead of a 500 (WHO-336).
 - **Editing a calendar event wiped its drive buffers** (WHO-336). The calendar dropped the
   buffer minutes when loading events, so the edit sheet showed them empty and saving cleared
   them. The same drop hid event locations and "who it's for" and broke the member filter.
