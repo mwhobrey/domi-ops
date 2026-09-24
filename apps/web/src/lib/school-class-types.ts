@@ -62,7 +62,7 @@ export function formatDue(dueAt: string): string {
   const due = new Date(dueAt);
   const now = new Date();
   const overdue = due < now;
-  const label = due.toLocaleDateString(undefined, {
+  const label = due.toLocaleDateString("en-US", {
     weekday: "short",
     month: "short",
     day: "numeric",

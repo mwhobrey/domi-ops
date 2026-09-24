@@ -15,7 +15,19 @@ import { SchoolSubmissionArtifacts } from "./SchoolSubmissionArtifacts";
 import { SchoolAssignmentMaterialsCard } from "./SchoolAssignmentMaterialsCard";
 import { SchoolGoogleDocsConnectBanner } from "./SchoolGoogleDocsConnectBanner";
 import { SchoolNativeTestReview } from "./SchoolNativeTestReview";
-import { Alert, Badge, Button, Card, CardBody, CardHeader, Input, Select, Textarea } from "./ui";
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  Input,
+  LocalDateTime,
+  Select,
+  Textarea,
+} from "./ui";
+import { formatLongDate, formatWeekdayDateTime } from "../lib/format-datetime";
 interface Submission {
   id: string;
   status: string;
@@ -70,24 +82,6 @@ function stepDone(
   if (key === "upload") return submission.artifacts.length > 0;
   if (key === "grade") return submission.grade?.score != null || submission.status === "graded";
   return false;
-}
-
-function formatDueLabel(dueAt: string, forStudent: boolean): string {
-  const date = new Date(dueAt);
-  if (forStudent) {
-    return date.toLocaleDateString(undefined, {
-      weekday: "long",
-      month: "long",
-      day: "numeric",
-    });
-  }
-  return date.toLocaleString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
 }
 
 function mergeSubmissionResponse(existing: Submission | undefined, incoming: Submission): Submission {
@@ -186,7 +180,6 @@ export function SchoolAssignmentDetail({
     ? (STUDENT_STATUS[status] ?? { label: status.replace("_", " "), tone: "default" as const })
     : { label: status.replace("_", " "), tone: STATUS_TONE[status] ?? "default" };
   const turnedIn = status === "submitted" || status === "graded" || status === "returned";
-  const dueLabel = dueAt ? formatDueLabel(dueAt, isStudent) : null;
   const isPastDue = Boolean(dueAt && new Date(dueAt) < new Date() && !turnedIn);
   const turnedInLate = Boolean(submission?.isLate);
 
@@ -424,9 +417,13 @@ export function SchoolAssignmentDetail({
 
       <div className="flex flex-wrap items-center gap-2">
         {!isStudent && visibility && <Badge tone="default">{visibility}</Badge>}
-        {dueLabel && (
+        {dueAt && (
           <Badge tone={isPastDue ? "warning" : status === "not_started" ? "accent" : "default"}>
-            {isStudent ? `Due ${dueLabel}` : `Due ${dueLabel}`}
+            Due{" "}
+            <LocalDateTime
+              value={dueAt}
+              format={isStudent ? formatLongDate : formatWeekdayDateTime}
+            />
           </Badge>
         )}
         {isPastDue && <Badge tone="warning">Overdue</Badge>}
@@ -448,13 +445,12 @@ export function SchoolAssignmentDetail({
           <span className="inline-flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden />
             You turned this in
-            {submission?.submittedAt
-              ? ` on ${new Date(submission.submittedAt).toLocaleDateString(undefined, {
-                  weekday: "long",
-                  month: "long",
-                  day: "numeric",
-                })}`
-              : ""}
+            {submission?.submittedAt ? (
+              <>
+                {" on "}
+                <LocalDateTime value={submission.submittedAt} format={formatLongDate} />
+              </>
+            ) : null}
             {turnedInLate ? " (late)" : ""}
             . You can still add files or update your message below.
           </span>
@@ -672,13 +668,7 @@ export function SchoolAssignmentDetail({
                 {submission.submittedAt && (
                   <p className="text-sm text-[var(--color-text-muted)]">
                     Turned in{" "}
-                    {new Date(submission.submittedAt).toLocaleString(undefined, {
-                      weekday: "short",
-                      month: "short",
-                      day: "numeric",
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })}
+                    <LocalDateTime value={submission.submittedAt} format={formatWeekdayDateTime} />
                     {submission.isLate ? (
                       <>
                         {" "}

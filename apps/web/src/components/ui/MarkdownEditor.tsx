@@ -12,8 +12,10 @@ import {
 } from "../../lib/drive-embed-drag";
 import type { DriveEmbedObject } from "../../lib/drive-types";
 import { Button } from "./Button";
-import { MarkdownContent } from "./MarkdownContent";
-import { MarkdownRichEditor } from "./MarkdownRichEditor";
+import { MarkdownContent } from "./MarkdownContentLazy";
+import dynamic from "next/dynamic";
+// Rich mode is TipTap; load it only when someone switches to that tab.
+const MarkdownRichEditor = dynamic(() => import("./MarkdownRichEditor").then((m) => m.MarkdownRichEditor), { ssr: false });
 import { Textarea } from "./Textarea";
 
 type EditorMode = "write" | "rich" | "preview";

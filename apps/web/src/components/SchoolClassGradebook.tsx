@@ -9,7 +9,8 @@ import {
   gradebookCellTone,
   type GradebookData,
 } from "../lib/school-gradebook";
-import { Badge, EmptyState, LinkButton } from "./ui";
+import { Badge, EmptyState, LinkButton, LocalDateTime } from "./ui";
+import { formatShortDate } from "../lib/format-datetime";
 
 interface Member {
   id: string;
@@ -211,7 +212,7 @@ export function SchoolClassGradebook({
                       </Link>
                       {assignment.dueAt && (
                         <span className="mt-1 block text-xs font-normal text-[var(--color-text-muted)]">
-                          Due {new Date(assignment.dueAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                          Due <LocalDateTime value={assignment.dueAt} format={formatShortDate} />
                         </span>
                       )}
                     </th>

@@ -47,6 +47,7 @@ import {
 } from "../lib/school-route-context.js";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
+import { requireHouseholdModule } from "../lib/household-modules.js";
 
 // Assignment materials: CRUD, Google Doc export/import conversion, native-test authoring
 // (question bank), student test-taking + auto-grading, and the frozen-snapshot download used
@@ -55,6 +56,7 @@ import { requireAuth } from "../middleware/auth.js";
 export function schoolMaterialsRoutes(db: Database, env: Env) {
   const app = new Hono<{ Variables: AppVariables }>();
   app.use("*", requireAuth(env));
+  app.use("/*", requireHouseholdModule(db, env, "school"));
 
   app.get("/assignments/:id/materials", async (c) => {
     const auth = c.get("auth")!;

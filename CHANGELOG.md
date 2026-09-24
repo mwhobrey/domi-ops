@@ -36,6 +36,14 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Changed
 
+- School overdue triage (WHO-335): **School → Overdue** and the dashboard School tile count
+  work per student, using the gradebook's rules. Anything turned in, graded, or closed is no
+  longer "overdue", and each row says which students still owe it. Teachers and admins can
+  select overdue assignments and **Close** them in bulk to clear stale work.
+- Faster page loads (WHO-335): the rich-text editor, the markdown renderer, and the Sentry SDK
+  now load only when a page needs them, instead of on every page. JavaScript per page drops
+  about 70%: the dashboard from ~394 KB to ~122 KB gzipped, and the sign-in page from ~341 KB
+  to ~71 KB.
 - Calendar recurring events (WHO-330): "every 2 weeks" no longer drifts off its week when the
   calendar catches up, "repeat 5 times" stops at 5, and a monthly event on the 31st skips
   shorter months instead of sliding to the 3rd. Overnight and multi-day repeating events keep
@@ -97,6 +105,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
     instead of "BP systolic, BP diastolic, Heart rate" and a long label list.
 ### Fixed
 
+- School dates on the class, gradebook, assignment, and reports pages no longer render in UTC
+  on the server and then flip to local time, which caused React hydration errors (WHO-335).
+- The School API's assignment, material, and upload routes now return 403 when the School
+  module is off for the household, like the class routes already did (WHO-335).
 - Expenses reject a malformed date instead of storing it (WHO-334).
 - **Calendar event permissions (WHO-330):** editing, deleting, or duplicating an event now
   requires write access to its calendar. Before, a household member with an event's id could
@@ -190,12 +202,6 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Changed
 
-- Calendar recurring events (WHO-330): "every 2 weeks" no longer drifts off its week when the
-  calendar catches up, "repeat 5 times" stops at 5, and a monthly event on the 31st skips
-  shorter months instead of sliding to the 3rd. Overnight and multi-day repeating events keep
-  their length on every occurrence instead of all ending on the first one's end date.
-- Editing a Google-synced event's title or location now pushes to Google, not just time
-  changes (WHO-330).
 - Calendar event create/edit: changing the start time on a timed event now moves the end time
   to one hour later when the end was still the default (or invalid); custom durations are
   preserved when the end was set manually.
@@ -230,7 +236,6 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Fixed
 
-- Expenses reject a malformed date instead of storing it (WHO-334).
 - Health log sheets' "Share with" picker now tracks who you're actually logging for (WHO-326):
   switching the Member dropdown (vitals/exercise/pain/meal/event/medication) no longer leaves the
   previous subject offered — or, if already checked, silently retained — as a share target once

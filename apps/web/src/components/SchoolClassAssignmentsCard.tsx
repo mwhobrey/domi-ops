@@ -25,6 +25,7 @@ import {
   ListItem,
   SectionHeader,
   Select,
+  LocalDateTime,
 } from "./ui";
 
 /** The "Assignments" card on a class detail page — list with filter/sort, create/edit/duplicate/
@@ -234,7 +235,7 @@ export function SchoolClassAssignmentsCard({
                         {a.dueAt && (
                           <span className="flex items-center gap-1 text-xs text-[var(--color-text-muted)]">
                             <Calendar className="h-3 w-3" aria-hidden />
-                            {formatDue(a.dueAt)}
+                            <LocalDateTime value={a.dueAt} format={formatDue} refreshMs={60_000} />
                           </span>
                         )}
                         {a.pointsPossible != null && (
