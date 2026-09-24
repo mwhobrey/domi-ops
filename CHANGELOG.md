@@ -10,6 +10,13 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Added
 
+- **Pause and resume medications** (WHO-338): each medication on the Medications tab has a
+  **Pause** button. A paused med keeps its settings and groups but sends no reminders and
+  drops out of Today, the calendar, and a group's "Take all"; **Resume** brings it back.
+  Adherence reports skip the days a med was paused instead of counting them as missed.
+  Deleting a medication now keeps its dose history. *(requires `npm run db:migrate`
+  (`0079_health_medication_pauses`); meds that were already disabled count as paused from
+  their last edit.)*
 - **Excuse a student from an assignment** (WHO-335): on School → Overdue, each student who
   still owes the work has an **Excuse** button, and the assignment page's Student work panel
   has **Excuse / Un-excuse**. Excused work isn't missing or overdue, stays out of averages, and

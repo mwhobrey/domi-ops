@@ -83,6 +83,7 @@ import {
   loadDoseLogMap,
   recordDose,
 } from "../lib/health-med-logging.js";
+import { recordMedicationEnabledChange } from "../lib/health-med-pauses.js";
 
 function encryptionErrorResponse(c: { json: (body: unknown, status?: number) => Response }, e: unknown) {
   if (e instanceof HealthEncryptionError) {
@@ -300,6 +301,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
         and(
           eq(healthMedications.id, claims.medicationId),
           eq(healthMedications.householdId, claims.householdId),
+          isNull(healthMedications.deletedAt),
         ),
       )
       .limit(1);
@@ -1167,7 +1169,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
     const rows = await db
       .select()
       .from(healthMedications)
-      .where(healthMedicationVisibleWhere(db, auth))
+      .where(and(healthMedicationVisibleWhere(db, auth), isNull(healthMedications.deletedAt)))
       .orderBy(desc(healthMedications.createdAt));
     const medications = await enrichHealthMedications(db, env, auth, rows);
     return c.json({ medications });
@@ -1235,6 +1237,8 @@ export function householdHealthRoutes(db: Database, env: Env) {
           createdByUserId: auth.userId,
         })
         .returning();
+      // Created paused: open a pause now so adherence doesn't count doses before it's resumed.
+      await recordMedicationEnabledChange(db, row.id, true, row.enabled);
 
       let sharedMemberIds: string[] = [];
       if (visibility === "private" && Array.isArray(body.sharedMemberIds)) {
@@ -1271,7 +1275,13 @@ export function householdHealthRoutes(db: Database, env: Env) {
     const [existing] = await db
       .select()
       .from(healthMedications)
-      .where(and(eq(healthMedications.id, id), eq(healthMedications.householdId, auth.householdId)))
+      .where(
+        and(
+          eq(healthMedications.id, id),
+          eq(healthMedications.householdId, auth.householdId),
+          isNull(healthMedications.deletedAt),
+        ),
+      )
       .limit(1);
     if (!existing) return c.json({ error: "not_found" }, 404);
     const canWriteMed =
@@ -1344,6 +1354,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
         .set(patch)
         .where(eq(healthMedications.id, id))
         .returning();
+      await recordMedicationEnabledChange(db, row.id, existing.enabled, row.enabled);
 
       if (body.sharedMemberIds !== undefined && row.visibility === "private") {
         const sharedMemberIds = await validateHealthShareMemberIds(
@@ -1387,7 +1398,13 @@ export function householdHealthRoutes(db: Database, env: Env) {
     const [existing] = await db
       .select()
       .from(healthMedications)
-      .where(and(eq(healthMedications.id, id), eq(healthMedications.householdId, auth.householdId)))
+      .where(
+        and(
+          eq(healthMedications.id, id),
+          eq(healthMedications.householdId, auth.householdId),
+          isNull(healthMedications.deletedAt),
+        ),
+      )
       .limit(1);
     if (!existing) return c.json({ error: "not_found" }, 404);
     const canDelete =
@@ -1396,7 +1413,14 @@ export function householdHealthRoutes(db: Database, env: Env) {
     if (!canDelete) {
       return c.json({ error: "forbidden" }, 403);
     }
-    await db.delete(healthMedications).where(eq(healthMedications.id, id));
+    // Soft delete (WHO-338): a hard delete cascaded away every dose log. Disabling it too keeps
+    // every enabled-only path (glance, overlays, reminder scan) from needing its own filter.
+    const now = new Date();
+    await db
+      .update(healthMedications)
+      .set({ deletedAt: now, enabled: false, updatedAt: now })
+      .where(eq(healthMedications.id, id));
+    await removeMedicationFromAllGroups(db, id);
     return c.json({ ok: true });
   });
 
@@ -1406,7 +1430,13 @@ export function householdHealthRoutes(db: Database, env: Env) {
     const [med] = await db
       .select()
       .from(healthMedications)
-      .where(and(eq(healthMedications.id, medId), eq(healthMedications.householdId, auth.householdId)))
+      .where(
+        and(
+          eq(healthMedications.id, medId),
+          eq(healthMedications.householdId, auth.householdId),
+          isNull(healthMedications.deletedAt),
+        ),
+      )
       .limit(1);
     if (!med) return c.json({ error: "not_found" }, 404);
     const visible = await db
@@ -1596,7 +1626,13 @@ export function householdHealthRoutes(db: Database, env: Env) {
       ? await db
           .select()
           .from(healthMedications)
-          .where(and(inArray(healthMedications.id, ids), healthMedicationVisibleWhere(db, auth)!))
+          .where(
+            and(
+              inArray(healthMedications.id, ids),
+              healthMedicationVisibleWhere(db, auth)!,
+              isNull(healthMedications.deletedAt),
+            ),
+          )
       : [];
     const medById = new Map(meds.map((m) => [m.id, m]));
 

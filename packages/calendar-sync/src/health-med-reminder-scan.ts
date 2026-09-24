@@ -811,6 +811,8 @@ export async function scanHealthMedReminders(db: Database, env: Env): Promise<nu
                 and(
                   inArray(healthMedications.id, memberIds),
                   eq(healthMedications.householdId, household.id),
+                  // Paused members stay in the group but drop out of its reminder.
+                  eq(healthMedications.enabled, true),
                 ),
               )
           : [];
