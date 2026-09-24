@@ -1,6 +1,6 @@
 import type { WeeklyReportGroup } from "../weekly-reports/types.js";
 
-export type ReportModule = "school" | "chores" | "shopping" | "expenses" | "health";
+export type ReportModule = "school" | "chores" | "shopping" | "expenses" | "health" | "goals";
 
 export type ReportKind =
   | "weekly"
@@ -70,6 +70,7 @@ export const REPORT_MODULE_LABELS: Record<ReportModule, string> = {
   shopping: "Shopping",
   expenses: "Expenses",
   health: "Health",
+  goals: "Goals",
 };
 
 export const REPORT_KIND_LABELS: Record<ReportKind, string> = {

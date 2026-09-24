@@ -31,6 +31,10 @@ const SchoolReportsSection = dynamic(
   () => import("./SchoolReportsSection").then((m) => m.SchoolReportsSection),
   { loading },
 );
+const GoalsReportSection = dynamic(
+  () => import("./GoalsReportSection").then((m) => m.GoalsReportSection),
+  { loading },
+);
 const ShoppingTripReportSection = dynamic(
   () => import("./ShoppingTripReportSection").then((m) => m.ShoppingTripReportSection),
   { loading },
@@ -42,7 +46,8 @@ function parseModule(value: string | null): ReportModule | null {
     value === "chores" ||
     value === "shopping" ||
     value === "expenses" ||
-    value === "health"
+    value === "health" ||
+    value === "goals"
   ) {
     return value;
   }
@@ -165,6 +170,9 @@ export function ReportsHubClient() {
         return <WeeklyReportPanel module="expenses" driveEnabled={driveEnabled} />;
       }
       return <ExpenseMonthlyReportSection driveEnabled={driveEnabled} initialMonth={month ?? undefined} />;
+    }
+    if (activeModule === "goals") {
+      return <GoalsReportSection driveEnabled={driveEnabled} />;
     }
     if (activeModule === "health") {
       return (

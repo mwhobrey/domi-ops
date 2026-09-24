@@ -1,4 +1,5 @@
 import {
+  date,
   index,
   integer,
   pgEnum,
@@ -59,6 +60,9 @@ export const goals = pgTable("goals", {
     .references(() => householdMembers.id, { onDelete: "cascade" }),
   title: varchar("title", { length: 256 }).notNull(),
   description: text("description"),
+  /** What progress counts ("books", "miles"); display only. */
+  unit: varchar("unit", { length: 32 }),
+  targetDate: date("target_date"),
   visibility: noteVisibilityEnum("visibility").notNull().default("household"),
   /** Ratchet — set once when the final milestone is achieved, never unset by a later correction. */
   completedAt: timestamp("completed_at", { withTimezone: true }),

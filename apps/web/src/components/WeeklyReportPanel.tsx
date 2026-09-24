@@ -64,7 +64,7 @@ function ReportGroupTable({
 function ReportWeekContent({ report }: { report: WeeklyReportData }) {
   if (report.totalItems === 0) {
     return (
-      <p className="text-sm text-[var(--color-text-muted)]">Nothing scheduled this week (Mon–Fri).</p>
+      <p className="text-sm text-[var(--color-text-muted)]">Nothing scheduled this week.</p>
     );
   }
   const dayGrouped = report.variant === "by-day";
@@ -257,7 +257,7 @@ export function WeeklyReportPanel({
           ) : null}
           {weekReport ? (
             <span className="text-sm text-[var(--color-text-muted)]">
-              {weekReport.weekLabel} (Mon–Fri)
+              {weekReport.weekLabel}
             </span>
           ) : null}
         </div>
@@ -323,10 +323,10 @@ export function WeeklyReportPanel({
       ) : scopeMode === "week" && weekReport ? (
         <div className="report-print space-y-4">
           <p className="text-sm text-[var(--color-text-muted)]">
-            {weekReport.totalItems} item{weekReport.totalItems === 1 ? "" : "s"} due Mon–Fri
+            {weekReport.totalItems} item{weekReport.totalItems === 1 ? "" : "s"} due this week
           </p>
           {weekReport.totalItems === 0 ? (
-            <EmptyState title="Nothing scheduled this week" description="Mon–Fri looks clear." />
+            <EmptyState title="Nothing scheduled this week" description="The whole week looks clear." />
           ) : (
             <ReportWeekContent report={weekReport} />
           )}
@@ -336,7 +336,7 @@ export function WeeklyReportPanel({
           {rangeReports.length === 0 ? (
             <EmptyState
               title="No weeks in range"
-              description="Adjust the date range to include at least one Mon–Fri week."
+              description="Adjust the date range to include at least one week."
             />
           ) : (
             rangeReports.map((report) => (

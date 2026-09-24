@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  goalsOverviewToCanonical,
   healthExerciseToCanonical,
   healthNutritionToCanonical,
   healthMedicationListToCanonical,
@@ -222,5 +223,42 @@ describe("health canonical adapters", () => {
     const daily = report.sections.find((s) => s.key === "daily-totals")?.tables?.[0];
     expect(daily?.columns).toEqual(["Date", "Calories", "Protein (g)", "Carbs (g)", "Fat (g)"]);
     expect(daily?.rows[0]).toEqual(["Jul 12, 2026", 650, 44, 45, 8.5]);
+  });
+});
+
+describe("goalsOverviewToCanonical", () => {
+  it("summarizes goals and reward claims", () => {
+    const report = goalsOverviewToCanonical({
+      goals: [
+        {
+          title: "Read 20 books",
+          owner: "Riley",
+          progress: 12,
+          finalThreshold: 20,
+          unit: "books",
+          targetDate: "2026-12-31",
+          milestonesAchieved: 1,
+          milestonesTotal: 2,
+          completedAt: null,
+        },
+      ],
+      redemptions: [
+        { goalTitle: "Read 20 books", rewardTitle: "Movie night", member: "Riley", status: "pending", claimedAt: "2026-09-20T12:00:00.000Z" },
+      ],
+    });
+    expect(report.module).toBe("goals");
+    expect(report.sections[0]!.stats).toEqual([
+      { label: "Goals in progress", value: "1" },
+      { label: "Completed", value: "0" },
+      { label: "Rewards approved", value: "0" },
+      { label: "Awaiting approval", value: "1" },
+    ]);
+    expect(report.sections[1]!.tables![0]!.rows[0]!.slice(0, 4)).toEqual([
+      "Read 20 books",
+      "Riley",
+      "12 / 20 books",
+      "1 of 2",
+    ]);
+    expect(report.sections[2]!.tables![0]!.rows[0]![3]).toBe("Pending");
   });
 });

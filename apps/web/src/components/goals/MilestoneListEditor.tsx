@@ -1,7 +1,9 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { Button, Input, Select } from "../ui";
+
+const NEW_REWARD = "__new__";
 
 export type MilestoneDraft = {
   /** Set only for a milestone that already exists server-side (locked ones always have one). */
@@ -25,12 +27,33 @@ export function MilestoneListEditor({
   milestones,
   rewards,
   onChange,
+  onCreateReward,
 }: {
   milestones: MilestoneDraft[];
   rewards: RewardOption[];
   onChange: (next: MilestoneDraft[]) => void;
+  /** When set (owner/admin), the reward picker offers "+ New reward…" inline. */
+  onCreateReward?: (title: string) => Promise<RewardOption | null>;
 }) {
   const rowIdsRef = useRef<string[]>([]);
+  const [newRewardFor, setNewRewardFor] = useState<number | null>(null);
+  const [newRewardTitle, setNewRewardTitle] = useState("");
+  const [creatingReward, setCreatingReward] = useState(false);
+
+  async function createRewardFor(index: number) {
+    if (!onCreateReward || !newRewardTitle.trim()) return;
+    setCreatingReward(true);
+    try {
+      const created = await onCreateReward(newRewardTitle.trim());
+      if (created) {
+        update(index, { rewardId: created.id });
+        setNewRewardFor(null);
+        setNewRewardTitle("");
+      }
+    } finally {
+      setCreatingReward(false);
+    }
+  }
   if (rowIdsRef.current.length < milestones.length) {
     for (let i = rowIdsRef.current.length; i < milestones.length; i++) {
       rowIdsRef.current.push(`milestone-${i}-${Math.random().toString(36).slice(2, 9)}`);
@@ -101,7 +124,14 @@ export function MilestoneListEditor({
                 </div>
                 <Select
                   value={m.rewardId}
-                  onChange={(e) => update(index, { rewardId: e.target.value })}
+                  onChange={(e) => {
+                    if (e.target.value === NEW_REWARD) {
+                      setNewRewardFor(index);
+                      setNewRewardTitle("");
+                      return;
+                    }
+                    update(index, { rewardId: e.target.value });
+                  }}
                   aria-label={`Milestone ${index + 1} reward`}
                 >
                   <option value="">No reward</option>
@@ -110,7 +140,39 @@ export function MilestoneListEditor({
                       {r.title}
                     </option>
                   ))}
+                  {onCreateReward ? <option value={NEW_REWARD}>+ New reward…</option> : null}
                 </Select>
+                {newRewardFor === index ? (
+                  <div className="flex gap-2">
+                    <Input
+                      className="flex-1"
+                      autoFocus
+                      placeholder="Reward (e.g. Movie night)"
+                      value={newRewardTitle}
+                      onChange={(e) => setNewRewardTitle(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          void createRewardFor(index);
+                        }
+                        if (e.key === "Escape") setNewRewardFor(null);
+                      }}
+                      aria-label={`New reward for milestone ${index + 1}`}
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      loading={creatingReward}
+                      disabled={!newRewardTitle.trim()}
+                      onClick={() => void createRewardFor(index)}
+                    >
+                      Add reward
+                    </Button>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => setNewRewardFor(null)}>
+                      Cancel
+                    </Button>
+                  </div>
+                ) : null}
                 <div className="flex flex-wrap gap-2">
                   <Button type="button" size="sm" variant="secondary" onClick={() => move(index, -1)}>
                     Move up

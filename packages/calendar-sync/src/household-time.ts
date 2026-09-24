@@ -25,7 +25,7 @@ export function mondayOfWeekIso(iso: string): string {
   return addDaysIso(iso, offset);
 }
 
-export interface MonFriWeekRange {
+export interface ReportWeekRange {
   weekStart: string;
   weekEnd: string;
   weekLabel: string;
@@ -37,17 +37,20 @@ function formatShortDate(iso: string): string {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }
 
-/** Current (or requested) Mon–Fri school week in household local calendar dates. */
-export function monFriWeekRange(params: {
+/**
+ * Current (or requested) Mon–Sun report week in household local calendar dates. Reports used to
+ * stop at Friday, which silently dropped anything due on a weekend.
+ */
+export function reportWeekRange(params: {
   timeZone: string;
   referenceDate?: string;
   weekStart?: string | null;
-}): MonFriWeekRange {
+}): ReportWeekRange {
   const today = params.referenceDate ?? todayIsoDateInTz(params.timeZone);
   const weekStart = params.weekStart?.trim()
     ? mondayOfWeekIso(params.weekStart.trim())
     : mondayOfWeekIso(today);
-  const weekEnd = addDaysIso(weekStart, 4);
+  const weekEnd = addDaysIso(weekStart, 6);
   const startLabel = formatShortDate(weekStart);
   const endLabel = formatShortDate(weekEnd);
   const year = weekStart.slice(0, 4);
@@ -64,17 +67,17 @@ export function isoDateInRange(iso: string, start: string, end: string): boolean
 
 const MAX_WEEKS_IN_RANGE = 26;
 
-/** Mon–Fri weeks whose calendar span overlaps `[fromIso, toIso]` (inclusive). */
+/** Mon–Sun weeks whose calendar span overlaps `[fromIso, toIso]` (inclusive). */
 export function weeksOverlappingRange(
   fromIso: string,
   toIso: string,
   timeZone: string,
-): MonFriWeekRange[] {
+): ReportWeekRange[] {
   if (fromIso > toIso) return [];
-  const weeks: MonFriWeekRange[] = [];
+  const weeks: ReportWeekRange[] = [];
   let monday = mondayOfWeekIso(fromIso);
   while (weeks.length < MAX_WEEKS_IN_RANGE) {
-    const range = monFriWeekRange({ timeZone, weekStart: monday });
+    const range = reportWeekRange({ timeZone, weekStart: monday });
     if (range.weekStart > toIso) break;
     if (range.weekEnd >= fromIso) weeks.push(range);
     monday = addDaysIso(monday, 7);

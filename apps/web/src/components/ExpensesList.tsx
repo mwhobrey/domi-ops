@@ -220,7 +220,7 @@ export function ExpensesList({
             aria-label="Expense title"
           />
           <Input
-            placeholder="Amount"
+            placeholder="$ Amount"
             inputMode="decimal"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
@@ -247,7 +247,7 @@ export function ExpensesList({
           >
             {members.map((m) => (
               <option key={m.memberId} value={m.memberId}>
-                {m.label}
+                Spent by {m.label}
               </option>
             ))}
           </Select>

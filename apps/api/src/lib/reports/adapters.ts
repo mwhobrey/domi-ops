@@ -1,5 +1,6 @@
 import type { ChoreReportsData } from "../chores-karma.js";
 import type { ExpenseReport } from "../expenses.js";
+import type { GoalsReportData } from "../goals-report.js";
 import type { WeeklyReportData } from "../weekly-reports/types.js";
 import type { SchoolReportsData } from "../school-reports.js";
 import type { CanonicalReport, CanonicalReportSection, ReportKind, ReportModule } from "./types.js";
@@ -38,7 +39,7 @@ export function weeklyToCanonical(report: WeeklyReportData): CanonicalReport {
         label: report.weekLabel,
         groups: report.groups,
         emptyMessage:
-          report.totalItems === 0 ? "Nothing scheduled this week (Mon–Fri)." : undefined,
+          report.totalItems === 0 ? "Nothing scheduled this week." : undefined,
       },
     ],
   };
@@ -629,6 +630,76 @@ export function shoppingOverviewToCanonical(data: ShoppingReportData): Canonical
   return {
     title: `Shopping report — ${data.from} to ${data.to}`,
     module: "shopping",
+    kind: "overview",
+    generatedAt: new Date().toISOString(),
+    sections,
+  };
+}
+
+export function goalsOverviewToCanonical(data: GoalsReportData): CanonicalReport {
+  const completed = data.goals.filter((g) => g.completedAt !== null).length;
+  const byStatus = (status: "pending" | "approved" | "denied") =>
+    data.redemptions.filter((r) => r.status === status).length;
+  const sections: CanonicalReportSection[] = [
+    {
+      key: "summary",
+      label: "Summary",
+      stats: [
+        { label: "Goals in progress", value: String(data.goals.length - completed) },
+        { label: "Completed", value: String(completed) },
+        { label: "Rewards approved", value: String(byStatus("approved")) },
+        { label: "Awaiting approval", value: String(byStatus("pending")) },
+      ],
+    },
+  ];
+  if (data.goals.length > 0) {
+    sections.push({
+      key: "goals",
+      label: "Goals",
+      tables: [
+        {
+          key: "goals",
+          label: "Goals",
+          columns: ["Goal", "For", "Progress", "Milestones", "Target", "Completed"],
+          rows: data.goals.map((g) => [
+            g.title,
+            g.owner,
+            g.finalThreshold != null
+              ? `${g.progress} / ${g.finalThreshold}${g.unit ? ` ${g.unit}` : ""}`
+              : String(g.progress),
+            `${g.milestonesAchieved} of ${g.milestonesTotal}`,
+            g.targetDate ? formatDateOnlyLabel(g.targetDate) : "—",
+            g.completedAt ? formatDateOnlyLabel(g.completedAt.slice(0, 10)) : "—",
+          ]),
+        },
+      ],
+    });
+  } else {
+    sections.push({ key: "goals", label: "Goals", emptyMessage: "No goals yet." });
+  }
+  if (data.redemptions.length > 0) {
+    sections.push({
+      key: "rewards",
+      label: "Reward claims",
+      tables: [
+        {
+          key: "rewards",
+          label: "Reward claims",
+          columns: ["Reward", "Goal", "Claimed by", "Status", "Claimed"],
+          rows: data.redemptions.map((r) => [
+            r.rewardTitle,
+            r.goalTitle,
+            r.member,
+            r.status[0]!.toUpperCase() + r.status.slice(1),
+            formatDateOnlyLabel(r.claimedAt.slice(0, 10)),
+          ]),
+        },
+      ],
+    });
+  }
+  return {
+    title: "Goals report",
+    module: "goals",
     kind: "overview",
     generatedAt: new Date().toISOString(),
     sections,

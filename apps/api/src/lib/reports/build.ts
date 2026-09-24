@@ -6,6 +6,7 @@ import { eq, and } from "drizzle-orm";
 import { memberShownLabel } from "@domi-ops/auth";
 import { buildChoreReports } from "../chores-karma.js";
 import { buildExpenseReports } from "../expenses.js";
+import { buildGoalsReport } from "../goals-report.js";
 import { buildHealthReports } from "../health-reports.js";
 import { isHouseholdModuleEnabled } from "../household-modules.js";
 import { householdTodayIsoDate } from "../household-time.js";
@@ -22,6 +23,7 @@ import type { WeeklyReportModule } from "../weekly-reports/types.js";
 import {
   choresOverviewToCanonical,
   expensesOverviewToCanonical,
+  goalsOverviewToCanonical,
   healthOverviewToCanonical,
   healthMedicationsToCanonical,
   healthTodayToCanonical,
@@ -83,6 +85,7 @@ export async function moduleEnabledForReports(
 ): Promise<boolean> {
   if (module === "school") return isHouseholdModuleEnabled(db, env, householdId, "school");
   if (module === "health") return isHouseholdModuleEnabled(db, env, householdId, "health");
+  if (module === "goals") return isHouseholdModuleEnabled(db, env, householdId, "goals");
   return isHouseholdModuleEnabled(db, env, householdId, "core");
 }
 
@@ -273,6 +276,15 @@ export async function buildCanonicalReport(
     return expensesOverviewToCanonical(data);
   }
 
+  if (module === "goals" && kind === "overview") {
+    const data = await buildGoalsReport(db, {
+      householdId: auth.householdId,
+      memberId: auth.memberId ?? "",
+      role: auth.role ?? "member",
+    });
+    return goalsOverviewToCanonical(data);
+  }
+
   if (module === "school") {
     const schoolData = await loadSchoolReportsData(db, auth, params.term);
     if (!schoolData) return null;
@@ -291,6 +303,7 @@ const MODULE_KINDS: Record<ReportModule, ReportKind[]> = {
   chores: ["weekly", "overview"],
   shopping: ["weekly", "overview"],
   expenses: ["weekly", "overview"],
+  goals: ["overview"],
   health: [
     "overview",
     "medications-today",
