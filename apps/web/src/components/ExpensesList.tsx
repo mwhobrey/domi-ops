@@ -4,6 +4,7 @@ import { Receipt } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
 import { ExpenseEditSheet, type Expense } from "./ExpenseEditSheet";
+import { RecurringBillsSection } from "./RecurringBillsSection";
 import type { NoteShareMember } from "./NoteSharePicker";
 import { formatDateLocal } from "../lib/calendar-utils";
 import {
@@ -146,6 +147,15 @@ export function ExpensesList({
     }
   }, []);
 
+  const fetchExpenses = useCallback(async () => {
+    try {
+      const data = await apiClient.get<{ expenses: Expense[] }>("/api/core/expenses");
+      setExpenses(data.expenses);
+    } catch {
+      /* non-fatal */
+    }
+  }, []);
+
   useEffect(() => {
     void fetchCategorySuggestions("");
     void fetchBudgets();
@@ -262,6 +272,17 @@ export function ExpensesList({
           <StatTile label="This month" value={formatMoney(monthTotal)} href="/expenses/reports" />
         </div>
       )}
+
+      <RecurringBillsSection
+        members={members}
+        currentMemberId={currentMemberId}
+        categorySuggestions={categorySuggestions}
+        onCategoryQuery={(q) => void fetchCategorySuggestions(q)}
+        onBillsPosted={() => {
+          void fetchExpenses();
+          void fetchBudgets();
+        }}
+      />
 
       <section className="mb-6 space-y-3">
         <SectionHeader title="Monthly budgets" />
@@ -443,6 +464,11 @@ export function ExpensesList({
                 {ex.memberId ? (
                   <Badge tone="accent" className="ml-2">
                     {memberLabel(ex.memberId)}
+                  </Badge>
+                ) : null}
+                {ex.recurringId ? (
+                  <Badge tone="default" className="ml-2">
+                    Bill
                   </Badge>
                 ) : null}
               </div>

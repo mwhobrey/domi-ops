@@ -31,19 +31,47 @@ export const shoppingRecurring = pgTable("shopping_recurring", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const expenses = pgTable("expenses", {
+/** Recurring bill template; materializes into `expenses` on each due date. */
+export const expenseRecurring = pgTable("expense_recurring", {
   id: uuid("id").primaryKey().defaultRandom(),
   householdId: uuid("household_id")
     .notNull()
     .references(() => households.id, { onDelete: "cascade" }),
   title: varchar("title", { length: 256 }).notNull(),
-  amount: real("amount").notNull().default(0),
+  amount: real("amount").notNull(),
   category: varchar("category", { length: 64 }),
-  expenseDate: date("expense_date").notNull(),
   memberId: uuid("member_id").references(() => householdMembers.id, { onDelete: "set null" }),
+  /** weekly | biweekly | monthly | quarterly | yearly */
+  interval: varchar("interval", { length: 16 }).notNull().default("monthly"),
+  /** First due date; every later date steps from here so a bill on the 31st survives February. */
+  anchorDate: date("anchor_date").notNull(),
+  nextAt: date("next_at").notNull(),
+  enabled: boolean("enabled").notNull().default(true),
   createdByDisplayName: varchar("created_by_display_name", { length: 64 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const expenses = pgTable(
+  "expenses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    householdId: uuid("household_id")
+      .notNull()
+      .references(() => households.id, { onDelete: "cascade" }),
+    title: varchar("title", { length: 256 }).notNull(),
+    amount: real("amount").notNull().default(0),
+    category: varchar("category", { length: 64 }),
+    expenseDate: date("expense_date").notNull(),
+    memberId: uuid("member_id").references(() => householdMembers.id, { onDelete: "set null" }),
+    createdByDisplayName: varchar("created_by_display_name", { length: 64 }),
+    recurringId: uuid("recurring_id").references(() => expenseRecurring.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  // One materialized expense per bill per date, even if two page loads race.
+  (t) => [uniqueIndex("expenses_recurring_date").on(t.recurringId, t.expenseDate)],
+);
 
 export const expenseBudgets = pgTable(
   "expense_budgets",

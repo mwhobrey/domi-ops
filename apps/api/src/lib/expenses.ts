@@ -14,6 +14,8 @@ export interface SerializedExpense {
   expenseDate: string;
   memberId: string | null;
   createdByDisplayName: string | null;
+  /** Set when a recurring bill posted this expense. */
+  recurringId: string | null;
 }
 
 export interface BudgetSummary {
@@ -39,7 +41,8 @@ export function serializeExpense(
   row: Pick<
     typeof expensesTable.$inferSelect,
     "id" | "title" | "amount" | "category" | "expenseDate" | "createdByDisplayName" | "memberId"
-  >,
+  > &
+    Partial<Pick<typeof expensesTable.$inferSelect, "recurringId">>,
 ): SerializedExpense {
   return {
     id: row.id,
@@ -49,6 +52,7 @@ export function serializeExpense(
     expenseDate: row.expenseDate,
     memberId: row.memberId ?? null,
     createdByDisplayName: row.createdByDisplayName,
+    recurringId: row.recurringId ?? null,
   };
 }
 
