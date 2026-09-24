@@ -240,6 +240,24 @@ export function overlayKindsFromEvents(
   return OVERLAY_FILTER_META.filter((m) => kinds.has(m.id));
 }
 
+/** Events for one household member; null means everyone (no filter). */
+export function filterEventsByAttendee<T extends { attendeeMemberIds?: string[] | null }>(
+  events: T[],
+  memberId: string | null,
+): T[] {
+  if (!memberId) return events;
+  return events.filter((e) => e.attendeeMemberIds?.includes(memberId));
+}
+
+/** Display names for an event's attendees, skipping members no longer in the household. */
+export function attendeeNames(
+  ids: string[] | null | undefined,
+  labels: Map<string, string>,
+): string[] {
+  if (!ids?.length) return [];
+  return ids.map((id) => labels.get(id)).filter((l): l is string => Boolean(l));
+}
+
 export function filterEventsByOverlays<T extends { overlayKind?: string | null }>(
   events: T[],
   hiddenKinds: Set<string>,

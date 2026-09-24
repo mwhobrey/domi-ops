@@ -18,6 +18,9 @@ export interface CalendarEventView {
   categoryKey?: string | null;
   categoryLabel?: string | null;
   timeZone?: string | null;
+  location?: string | null;
+  /** Household members the event is for. */
+  attendeeMemberIds?: string[];
   driveBufferBeforeMinutes?: number | null;
   driveBufferAfterMinutes?: number | null;
   calendarId: string;
@@ -34,14 +37,58 @@ export interface CalendarEventView {
   deepLink?: string;
 }
 
-export type RepeatFreq = "none" | "daily" | "weekly" | "monthly";
+export type RepeatFreq = "none" | "daily" | "weekly" | "monthly" | "yearly";
+
+export type RepeatEnds = "never" | "on" | "after";
 
 export type RepeatRuleInput = {
-  freq: RepeatFreq;
+  freq: Exclude<RepeatFreq, "none">;
   interval?: number;
   until?: string;
   count?: number;
 };
+
+const REPEAT_UNIT: Record<Exclude<RepeatFreq, "none">, [string, string]> = {
+  daily: ["day", "days"],
+  weekly: ["week", "weeks"],
+  monthly: ["month", "months"],
+  yearly: ["year", "years"],
+};
+
+/** "week" / "weeks" for the "Every N …" label. */
+export function repeatUnitLabel(freq: Exclude<RepeatFreq, "none">, interval: number): string {
+  const [one, many] = REPEAT_UNIT[freq];
+  return interval === 1 ? one : many;
+}
+
+/** Turns the event form's repeat controls into the API's repeatRule, or an error message. */
+export function buildRepeatRule(input: {
+  freq: RepeatFreq;
+  interval: string;
+  ends: RepeatEnds;
+  until: string;
+  count: string;
+  startDate: string;
+}): { rule: RepeatRuleInput | null } | { error: string } {
+  if (input.freq === "none") return { rule: null };
+  const interval = Number(input.interval || "1");
+  if (!Number.isInteger(interval) || interval < 1 || interval > 99) {
+    return { error: "Repeat every must be a whole number from 1 to 99." };
+  }
+  const rule: RepeatRuleInput = { freq: input.freq, interval };
+  if (input.ends === "on") {
+    if (!input.until) return { error: "Pick the date the repeat ends." };
+    if (input.until < input.startDate) return { error: "The repeat can't end before the event starts." };
+    rule.until = input.until;
+  } else if (input.ends === "after") {
+    const count = Number(input.count);
+    if (!Number.isInteger(count) || count < 1 || count > 999) {
+      return { error: "Number of occurrences must be from 1 to 999." };
+    }
+    rule.count = count;
+  }
+  return { rule };
+}
 
 export function isOverlayEvent(ev: CalendarEventView): boolean {
   return Boolean(ev.overlayKind || ev.deepLink || ev.id.startsWith("overlay:"));

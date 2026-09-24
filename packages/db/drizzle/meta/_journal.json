@@ -533,6 +533,13 @@
       "when": 1790203523396,
       "tag": "0075_goal_unit_target_date",
       "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1790219566640,
+      "tag": "0076_calendar_event_location_attendees",
+      "breakpoints": true
     }
   ]
 }

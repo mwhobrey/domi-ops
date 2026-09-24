@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { eventToGoogleBody } from "./mapper.js";
+import { eventToFields, eventToGoogleBody } from "./mapper.js";
 
 describe("eventToGoogleBody", () => {
   it("builds timed event with dateTime", () => {
@@ -37,5 +37,20 @@ describe("eventToGoogleBody", () => {
     );
     expect((body.start as { date: string }).date).toBe("2026-07-04");
     expect((body.end as { date: string }).date).toBeDefined();
+  });
+});
+
+describe("event location", () => {
+  it("round-trips location between Google and Domi Ops", () => {
+    const fields = eventToFields(
+      { id: "g1", summary: "PT", location: "Riverside Clinic", start: { date: "2026-10-02" }, end: { date: "2026-10-03" } },
+      "America/Chicago",
+    );
+    expect(fields.location).toBe("Riverside Clinic");
+    const body = eventToGoogleBody(
+      { title: "PT", description: null, startDate: "2026-10-02", endDate: null, startTime: null, endTime: null, allDay: true, timeZone: null, location: null },
+      "America/Chicago",
+    );
+    expect(body.location).toBe("");
   });
 });

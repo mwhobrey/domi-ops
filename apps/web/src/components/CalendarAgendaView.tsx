@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo } from "react";
+import { MapPin, Users } from "lucide-react";
 import { cn } from "../lib/cn";
+import { attendeeNames } from "../lib/calendar-filters";
 import { effectiveEndDate } from "../lib/calendar-event-span";
 import { eventDescriptionPlainText } from "../lib/event-html";
 import { eventColors, resolveEventColor } from "../lib/calendar-event-colors";
@@ -29,12 +31,15 @@ export function CalendarAgendaView({
   events,
   loading,
   categoryColorByKey,
+  memberLabels,
   onEventClick,
   dayHeaderStickyTop,
 }: {
   events: CalendarEventView[];
   loading?: boolean;
   categoryColorByKey?: Map<string, string | null>;
+  /** memberId → display name, for "who it's for". */
+  memberLabels?: Map<string, string>;
   onEventClick: (ev: CalendarEventView) => void;
   /** Sticky offset for day section headers (e.g. below calendar toolbar on /calendar). */
   dayHeaderStickyTop?: string;
@@ -100,6 +105,7 @@ export function CalendarAgendaView({
               {dayEvents.map((ev) => {
                 const dotColor = resolveEventColor(ev, categoryColorByKey ?? new Map());
                 const colors = eventColors(dotColor);
+                const forNames = attendeeNames(ev.attendeeMemberIds, memberLabels ?? new Map());
                 return (
                 <li key={`${date}-${ev.id}`}>
                   <button
@@ -119,9 +125,23 @@ export function CalendarAgendaView({
                       />
                       <span className="min-w-0 flex-1">
                         <span className="block font-medium">{ev.title}</span>
-                        {ev.categoryLabel && (
-                          <span className="text-xs text-[var(--color-text-muted)]">
-                            {ev.categoryLabel}
+                        {(ev.categoryLabel || ev.location || forNames.length > 0) && (
+                          <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-[var(--color-text-muted)]">
+                            {ev.categoryLabel && <span>{ev.categoryLabel}</span>}
+                            {forNames.length > 0 && (
+                              <span className="inline-flex items-center gap-1">
+                                <Users className="h-3 w-3" aria-hidden />
+                                <span className="sr-only">For </span>
+                                {forNames.join(", ")}
+                              </span>
+                            )}
+                            {ev.location && (
+                              <span className="inline-flex min-w-0 items-center gap-1">
+                                <MapPin className="h-3 w-3 shrink-0" aria-hidden />
+                                <span className="sr-only">At </span>
+                                <span className="truncate">{ev.location}</span>
+                              </span>
+                            )}
                           </span>
                         )}
                         {ev.description?.trim() && (

@@ -12,6 +12,7 @@ export interface MappedEventFields {
   endTime: string | null;
   allDay: boolean;
   timeZone: string | null;
+  location: string | null;
   googleEventId: string | null;
   googleRecurringEventId: string | null;
   googleEtag: string | null;
@@ -97,6 +98,7 @@ export function eventToFields(
     endTime,
     allDay,
     timeZone: eventTz,
+    location: event.location ? String(event.location).slice(0, 512) : null,
     googleEventId: event.id ? String(event.id) : null,
     googleRecurringEventId: event.recurringEventId
       ? String(event.recurringEventId)
@@ -116,6 +118,7 @@ export type WhomeEventForGoogle = {
   endTime: string | null;
   allDay: boolean;
   timeZone: string | null;
+  location?: string | null;
   reminderOffsets?: number[];
 };
 
@@ -129,6 +132,7 @@ export function eventToGoogleBody(
     summary: event.title,
     description: event.description ?? "",
   };
+  if (event.location !== undefined) body.location = event.location ?? "";
   const reminders = googleRemindersBody(event.reminderOffsets ?? []);
   if (reminders) body.reminders = reminders;
   if (event.allDay || !event.startTime) {

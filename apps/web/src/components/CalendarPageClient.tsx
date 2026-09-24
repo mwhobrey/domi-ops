@@ -26,7 +26,7 @@ import {
 import { useIsDesktop } from "../lib/use-media-query";
 import { useMeasuredCssVar } from "../lib/use-measured-css-var";
 import { CalendarAgendaView } from "./CalendarAgendaView";
-import { CalendarEventSheet } from "./CalendarEventSheet";
+import { CalendarEventSheet, type EventMemberOption } from "./CalendarEventSheet";
 import { CalendarFilterBar } from "./calendar/CalendarFilterBar";
 import {
   CalendarGoogleSheet,
@@ -38,6 +38,7 @@ import { eventOverlapsDate } from "../lib/calendar-event-span";
 import { categoryCompositeKey } from "../lib/calendar-event-colors";
 import {
   categoriesFromEvents,
+  filterEventsByAttendee,
   filterEventsByCategories,
   filterEventsByLanes,
   filterEventsByOverlays,
@@ -73,7 +74,7 @@ import { CalendarWeek } from "./CalendarWeek";
 import { Calendar } from "lucide-react";
 import { cn } from "../lib/cn";
 import { parseCalendarCreateDraftFromSearchParams } from "../lib/schedule-conflict";
-import { Alert, Button, IconButton, Input } from "./ui";
+import { Alert, Button, IconButton, Input, Select } from "./ui";
 
 function mapLoadedEvent(e: CalendarEventView): CalendarEventView {
   return {
@@ -147,6 +148,9 @@ export function CalendarPageClient({
     readHiddenOverlayKinds(),
   );
   const [presetCategories, setPresetCategories] = useState<EventCategoryMeta[]>([]);
+  const [members, setMembers] = useState<EventMemberOption[]>([]);
+  /** Show only events for this household member; null = everyone. */
+  const [attendeeFilter, setAttendeeFilter] = useState<string | null>(null);
   const [defaultCalendarId, setDefaultCalendarId] = useState<string | null>(() =>
     readDefaultCalendarId(),
   );
@@ -401,6 +405,18 @@ export function CalendarPageClient({
   }, [loadCategories]);
 
   useEffect(() => {
+    apiClient
+      .get<{ members: EventMemberOption[] }>("/api/core/household/roster")
+      .then((res) => setMembers(res.members))
+      .catch(() => setMembers([]));
+  }, []);
+
+  const memberLabels = useMemo(
+    () => new Map(members.map((m) => [m.memberId, m.label])),
+    [members],
+  );
+
+  useEffect(() => {
     // The stored view (month/week/day) is applied one effect after mount; loading before that
     // fetches the default agenda range and then the real one.
     if (!viewReady) return;
@@ -504,8 +520,12 @@ export function CalendarPageClient({
   );
 
   const visibleEvents = useMemo(
-    () => filterEventsByOverlays(categoryFilteredEvents, hiddenOverlayKinds),
-    [categoryFilteredEvents, hiddenOverlayKinds],
+    () =>
+      filterEventsByAttendee(
+        filterEventsByOverlays(categoryFilteredEvents, hiddenOverlayKinds),
+        attendeeFilter,
+      ),
+    [categoryFilteredEvents, hiddenOverlayKinds, attendeeFilter],
   );
 
   const overlayFilterGroups = useMemo(
@@ -701,6 +721,21 @@ export function CalendarPageClient({
               }}
             />
           ) : null}
+          {members.length > 1 ? (
+            <Select
+              className="w-auto min-w-[8rem] shrink-0"
+              value={attendeeFilter ?? ""}
+              onChange={(e) => setAttendeeFilter(e.target.value || null)}
+              aria-label="Show events for"
+            >
+              <option value="">Everyone</option>
+              {members.map((m) => (
+                <option key={m.memberId} value={m.memberId}>
+                  For {m.label}
+                </option>
+              ))}
+            </Select>
+          ) : null}
           <Input
             className="min-w-[10rem] flex-1 sm:max-w-xs"
             placeholder="Search events…"
@@ -813,6 +848,7 @@ export function CalendarPageClient({
           events={dayAgendaEvents}
           loading={loading}
           categoryColorByKey={categoryColorByKey}
+          memberLabels={memberLabels}
           dayHeaderStickyTop={agendaDayHeaderStickyTop}
           onEventClick={openEventFromGrid}
         />
@@ -823,6 +859,7 @@ export function CalendarPageClient({
           events={visibleEvents}
           loading={loading}
           categoryColorByKey={categoryColorByKey}
+          memberLabels={memberLabels}
           dayHeaderStickyTop={agendaDayHeaderStickyTop}
           onEventClick={openEventFromGrid}
         />
@@ -898,6 +935,7 @@ export function CalendarPageClient({
         selected={selected}
         createDraft={createDraft}
         defaultCalendarId={defaultCalendarId}
+        members={members}
         onClose={() => {
           setSheetOpen(false);
           setSelected(null);
@@ -905,6 +943,8 @@ export function CalendarPageClient({
         }}
         onSaved={(ev, isNew) => {
           setEvents((prev) => (isNew ? [...prev, ev] : prev.map((x) => (x.id === ev.id ? ev : x))));
+          // A new series only returns its first occurrence; reload to show the rest.
+          if (isNew && ev.recurringRuleId) void loadEvents();
         }}
         onDeleted={(id) => setEvents((prev) => prev.filter((e) => e.id !== id))}
       />

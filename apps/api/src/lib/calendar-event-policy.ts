@@ -104,6 +104,8 @@ export type CalendarEventDto = {
   endTime: string | null;
   timeZone: string | null;
   allDay: boolean;
+  location: string | null;
+  attendeeMemberIds: string[];
   driveBufferBeforeMinutes: number | null;
   driveBufferAfterMinutes: number | null;
   source: "local" | "google";
@@ -133,6 +135,8 @@ export type CalendarListEvent = {
   endTime: string | null;
   timeZone?: string | null;
   allDay: boolean;
+  location?: string | null;
+  attendeeMemberIds?: string[];
   driveBufferBeforeMinutes?: number | null;
   driveBufferAfterMinutes?: number | null;
   source?: "local" | "google" | "school" | "health_event" | "health_med";
@@ -161,6 +165,8 @@ export function toEventDto(row: CalendarEventRow, policy: EventPolicy): Calendar
     endTime: row.endTime,
     timeZone: row.timeZone,
     allDay: row.allDay,
+    location: row.location,
+    attendeeMemberIds: row.attendeeMemberIds ?? [],
     driveBufferBeforeMinutes: row.driveBufferBeforeMinutes,
     driveBufferAfterMinutes: row.driveBufferAfterMinutes,
     source: row.source,
@@ -193,6 +199,21 @@ export function isSchedulePatch(
     const next = body[key];
     const cur = row[key as keyof CalendarEventRow];
     if (String(next ?? "") !== String(cur ?? "")) return true;
+  }
+  return false;
+}
+
+const GOOGLE_CONTENT_KEYS = ["title", "description", "location"] as const;
+
+/** Schedule or content changes that Google holds a copy of (attendees are Domi Ops-only). */
+export function isGooglePushPatch(
+  body: Record<string, unknown>,
+  row: CalendarEventRow,
+): boolean {
+  if (isSchedulePatch(body, row)) return true;
+  for (const key of GOOGLE_CONTENT_KEYS) {
+    if (body[key] === undefined) continue;
+    if (String(body[key] ?? "") !== String(row[key] ?? "")) return true;
   }
   return false;
 }

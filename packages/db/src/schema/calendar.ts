@@ -84,6 +84,9 @@ export const calendarEvents = pgTable("calendar_events", {
   endTime: time("end_time"),
   timeZone: varchar("time_zone", { length: 64 }),
   allDay: boolean("all_day").notNull().default(false),
+  location: varchar("location", { length: 512 }),
+  /** Household members the event is for (`household_members.id`). */
+  attendeeMemberIds: uuid("attendee_member_ids").array(),
   driveBufferBeforeMinutes: integer("drive_buffer_before_minutes"),
   driveBufferAfterMinutes: integer("drive_buffer_after_minutes"),
   source: eventSourceEnum("source").notNull().default("local"),
@@ -148,10 +151,16 @@ export const recurringRules = pgTable("recurring_rules", {
   description: text("description"),
   rrule: text("rrule").notNull(),
   startDate: date("start_date").notNull(),
+  /** Last date the series may produce an occurrence (HomeHub imports + UNTIL). */
   endDate: date("end_date"),
+  /** Days each occurrence spans past its start date (overnight / multi-day events). */
+  durationDays: integer("duration_days").notNull().default(0),
   startTime: time("start_time"),
   endTime: time("end_time"),
   allDay: boolean("all_day").notNull().default(false),
+  timeZone: varchar("time_zone", { length: 64 }),
+  location: varchar("location", { length: 512 }),
+  attendeeMemberIds: uuid("attendee_member_ids").array(),
   categoryKey: varchar("category_key", { length: 64 }),
   color: varchar("color", { length: 16 }),
   lastGeneratedDate: date("last_generated_date"),

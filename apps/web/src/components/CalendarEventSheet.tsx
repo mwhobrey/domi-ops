@@ -5,9 +5,16 @@ import { ApiError, apiClient } from "../lib/client-api";
 import type {
   CalendarCreateDraft,
   CalendarEventView,
+  RepeatEnds,
   RepeatFreq,
 } from "../lib/calendar-utils";
-import { eventInteractionTitle, formatDateLocal } from "../lib/calendar-utils";
+import {
+  buildRepeatRule,
+  eventInteractionTitle,
+  formatDateLocal,
+  repeatUnitLabel,
+} from "../lib/calendar-utils";
+import { cn } from "../lib/cn";
 import {
   RecurringScopeSheet,
   type RecurringScope,
@@ -57,7 +64,10 @@ const REPEAT_OPTIONS: { value: RepeatFreq; label: string }[] = [
   { value: "daily", label: "Daily" },
   { value: "weekly", label: "Weekly" },
   { value: "monthly", label: "Monthly" },
+  { value: "yearly", label: "Yearly" },
 ];
+
+export type EventMemberOption = { memberId: string; label: string };
 
 let supportedTimeZones: string[] | null = null;
 
@@ -98,6 +108,7 @@ export function CalendarEventSheet({
   selected,
   createDraft,
   defaultCalendarId,
+  members = [],
   onClose,
   onSaved,
   onDeleted,
@@ -106,6 +117,8 @@ export function CalendarEventSheet({
   selected: CalendarEventView | null;
   createDraft?: CalendarCreateDraft | null;
   defaultCalendarId?: string | null;
+  /** Household roster for "Who's it for". */
+  members?: EventMemberOption[];
   onClose: () => void;
   onSaved: (ev: CalendarEventView, isNew: boolean) => void;
   onDeleted: (id: string) => void;
@@ -124,6 +137,12 @@ export function CalendarEventSheet({
   const [driveBufferBefore, setDriveBufferBefore] = useState("");
   const [driveBufferAfter, setDriveBufferAfter] = useState("");
   const [repeat, setRepeat] = useState<RepeatFreq>("none");
+  const [repeatInterval, setRepeatInterval] = useState("1");
+  const [repeatEnds, setRepeatEnds] = useState<RepeatEnds>("never");
+  const [repeatUntil, setRepeatUntil] = useState("");
+  const [repeatCount, setRepeatCount] = useState("10");
+  const [location, setLocation] = useState("");
+  const [attendeeIds, setAttendeeIds] = useState<string[]>([]);
   const [reminderOffsets, setReminderOffsets] = useState<number[]>([]);
   const [categories, setCategories] = useState<EventCategory[]>([]);
   /** Calendar the current `categories` belong to — gates applying its default category once. */
@@ -231,6 +250,8 @@ export function CalendarEventSheet({
       );
       setRepeat(selected.recurringRuleId ? "weekly" : "none");
       setReminderOffsets(selected.reminderOffsets ?? []);
+      setLocation(selected.location ?? "");
+      setAttendeeIds(selected.attendeeMemberIds ?? []);
     } else if (open) {
       setTitle("");
       setDescription("");
@@ -264,7 +285,13 @@ export function CalendarEventSheet({
       setDriveBufferBefore("");
       setDriveBufferAfter("");
       setRepeat("none");
+      setRepeatInterval("1");
+      setRepeatEnds("never");
+      setRepeatUntil("");
+      setRepeatCount("10");
       setReminderOffsets([]);
+      setLocation("");
+      setAttendeeIds([]);
     }
     setError(null);
     setConflictCheckOpen(false);
@@ -321,7 +348,7 @@ export function CalendarEventSheet({
       title,
       description: normalizeEventDescriptionForSave(description),
       startDate,
-      endDate: endDate || undefined,
+      endDate: endDate || null,
       startTime: allDay ? null : startTime,
       endTime: allDay ? null : endTime,
       allDay,
@@ -332,11 +359,16 @@ export function CalendarEventSheet({
       driveBufferBeforeMinutes: bufferHidden || !driveBufferBefore ? null : Number(driveBufferBefore),
       driveBufferAfterMinutes: bufferHidden || !driveBufferAfter ? null : Number(driveBufferAfter),
       reminderOffsets,
+      location: location.trim() || null,
+      attendeeMemberIds: attendeeIds,
     };
-    if (!selected && repeat !== "none") {
-      payload.repeatRule = { freq: repeat };
-    }
     return payload;
+  }
+
+  function toggleAttendee(memberId: string) {
+    setAttendeeIds((prev) =>
+      prev.includes(memberId) ? prev.filter((id) => id !== memberId) : [...prev, memberId],
+    );
   }
 
   async function save(e: React.FormEvent) {
@@ -345,19 +377,35 @@ export function CalendarEventSheet({
       setError("End date must be on or after start date.");
       return;
     }
+    const payload = buildPayload();
+    if (!selected) {
+      const repeatResult = buildRepeatRule({
+        freq: repeat,
+        interval: repeatInterval,
+        ends: repeatEnds,
+        until: repeatUntil,
+        count: repeatCount,
+        startDate,
+      });
+      if ("error" in repeatResult) {
+        setError(repeatResult.error);
+        return;
+      }
+      if (repeatResult.rule) payload.repeatRule = repeatResult.rule;
+    }
     setLoading(true);
     setError(null);
     try {
       if (selected) {
         const data = await apiClient.patch<{ event: CalendarEventView }>(
           `/api/calendar/events/${selected.id}`,
-          buildPayload(),
+          payload,
         );
         onSaved({ ...selected, ...data.event }, false);
       } else {
         const data = await apiClient.post<{ event: CalendarEventView }>(
           "/api/calendar/events",
-          buildPayload(),
+          payload,
         );
         onSaved(data.event, true);
       }
@@ -455,6 +503,42 @@ export function CalendarEventSheet({
                   autoFocus={!selected}
                 />
               </label>
+              <label className="block space-y-1.5 text-sm">
+                <span className="font-medium">Location</span>
+                <Input
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  maxLength={512}
+                  placeholder="Optional"
+                  disabled={readOnly}
+                />
+              </label>
+              {members.length > 0 && (
+                <fieldset className="space-y-1.5 text-sm" disabled={readOnly}>
+                  <legend className="font-medium">Who&apos;s it for</legend>
+                  <div className="flex flex-wrap gap-2">
+                    {members.map((m) => {
+                      const on = attendeeIds.includes(m.memberId);
+                      return (
+                        <button
+                          key={m.memberId}
+                          type="button"
+                          aria-pressed={on}
+                          onClick={() => toggleAttendee(m.memberId)}
+                          className={cn(
+                            "rounded-full border px-3 py-1 text-sm transition",
+                            on
+                              ? "border-[var(--color-accent)] bg-[var(--color-accent-subtle)] text-[var(--color-accent)]"
+                              : "border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[var(--color-border)]/20",
+                          )}
+                        >
+                          {m.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </fieldset>
+              )}
               <div className="space-y-1.5 text-sm">
                 <span className="font-medium">Description</span>
                 {readOnly ? (
@@ -689,6 +773,64 @@ export function CalendarEventSheet({
                     </option>
                   ))}
                 </Select>
+                {repeat !== "none" && (
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <label className="block space-y-1.5 text-sm">
+                      <span className="font-medium">Every</span>
+                      <span className="flex items-center gap-2">
+                        <Input
+                          type="number"
+                          min={1}
+                          max={99}
+                          step={1}
+                          className="w-20"
+                          value={repeatInterval}
+                          onChange={(e) => setRepeatInterval(e.target.value)}
+                          aria-label="Repeat every"
+                        />
+                        <span className="text-[var(--color-text-muted)]">
+                          {repeatUnitLabel(repeat, Number(repeatInterval) || 1)}
+                        </span>
+                      </span>
+                    </label>
+                    <label className="block space-y-1.5 text-sm">
+                      <span className="font-medium">Ends</span>
+                      <Select
+                        value={repeatEnds}
+                        onChange={(e) => setRepeatEnds(e.target.value as RepeatEnds)}
+                        aria-label="Repeat ends"
+                      >
+                        <option value="never">Never</option>
+                        <option value="on">On a date</option>
+                        <option value="after">After a number of times</option>
+                      </Select>
+                    </label>
+                    {repeatEnds === "on" && (
+                      <label className="block space-y-1.5 text-sm sm:col-start-2">
+                        <span className="font-medium">Last date</span>
+                        <Input
+                          type="date"
+                          min={startDate}
+                          value={repeatUntil}
+                          onChange={(e) => setRepeatUntil(e.target.value)}
+                        />
+                      </label>
+                    )}
+                    {repeatEnds === "after" && (
+                      <label className="block space-y-1.5 text-sm sm:col-start-2">
+                        <span className="font-medium">Occurrences</span>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={999}
+                          step={1}
+                          value={repeatCount}
+                          onChange={(e) => setRepeatCount(e.target.value)}
+                        />
+                      </label>
+                    )}
+                  </div>
+                )}
               </FormSection>
             )}
 
