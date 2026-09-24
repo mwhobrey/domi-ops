@@ -52,6 +52,23 @@ export function SchoolOpenWorkList({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [closing, setClosing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [excusingKey, setExcusingKey] = useState<string | null>(null);
+
+  async function excuse(assignmentId: string, studentMemberId: string) {
+    setExcusingKey(`${assignmentId}:${studentMemberId}`);
+    setError(null);
+    try {
+      await apiClient.post(`/api/school/assignments/${assignmentId}/excuse`, {
+        studentMemberId,
+        excused: true,
+      });
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not excuse that student");
+    } finally {
+      setExcusingKey(null);
+    }
+  }
 
   const closable = useMemo(
     () => assignments.filter((a) => a.overdue && a.canClose).map((a) => a.id),
@@ -122,9 +139,10 @@ export function SchoolOpenWorkList({
                   />
                 </span>
               ) : null}
+              <div className="min-w-0 flex-1 rounded-[var(--radius-lg)] border border-[var(--color-border)]/60 transition hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-surface-subtle)]">
               <Link
                 href={`/school/assignment/${assignment.id}`}
-                className="block min-w-0 flex-1 rounded-[var(--radius-lg)] border border-[var(--color-border)]/60 px-4 py-3 transition hover:border-[var(--color-accent)]/40 hover:bg-[var(--color-surface-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]"
+                className="block rounded-[var(--radius-lg)] px-4 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-focus)]"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
@@ -136,7 +154,7 @@ export function SchoolOpenWorkList({
                       {assignment.classSubject ? ` · ${assignment.classSubject}` : ""}
                       {assignment.classTerm ? ` · ${assignment.classTerm}` : ""}
                     </p>
-                    {showStudents && students.length > 0 ? (
+                    {showStudents && students.length > 0 && !assignment.canClose ? (
                       <p className="mt-1 flex items-center gap-1 text-sm">
                         <Users className="h-3.5 w-3.5 text-[var(--color-text-muted)]" aria-hidden />
                         <span className="sr-only">Still owed by </span>
@@ -160,6 +178,33 @@ export function SchoolOpenWorkList({
                   </div>
                 </div>
               </Link>
+              {showStudents && students.length > 0 && assignment.canClose ? (
+                // Outside the link: each chip excuses one student, it doesn't navigate.
+                <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
+                  <Users className="h-3.5 w-3.5 text-[var(--color-text-muted)]" aria-hidden />
+                  <span className="sr-only">Still owed by</span>
+                  {students.map((s) => (
+                    <span
+                      key={s.memberId}
+                      className="inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] py-0.5 pl-2.5 pr-1 text-sm"
+                    >
+                      {s.label}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 px-2 text-xs"
+                        loading={excusingKey === `${assignment.id}:${s.memberId}`}
+                        aria-label={`Excuse ${s.label} from ${assignment.title}`}
+                        onClick={() => void excuse(assignment.id, s.memberId)}
+                      >
+                        Excuse
+                      </Button>
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+              </div>
             </li>
           );
         })}

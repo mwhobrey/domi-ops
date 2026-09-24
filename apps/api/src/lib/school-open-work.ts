@@ -69,7 +69,7 @@ export function mergeStudentWork(
 ): StudentWorkState {
   if (!current) return next;
   const rank = (s: string | null) =>
-    s === "graded" ? 3 : s === "returned" ? 2 : s === "submitted" ? 1 : 0;
+    s === "excused" ? 4 : s === "graded" ? 3 : s === "returned" ? 2 : s === "submitted" ? 1 : 0;
   return {
     submissionStatus:
       rank(next.submissionStatus) > rank(current.submissionStatus)

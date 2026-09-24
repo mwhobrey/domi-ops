@@ -26,6 +26,8 @@ export const submissionStatusEnum = pgEnum("submission_status", [
   "submitted",
   "graded",
   "returned",
+  /** Staff excused this student: not owed, not missing, not in the average. */
+  "excused",
 ]);
 
 export const attendanceStatusEnum = pgEnum("attendance_status", [

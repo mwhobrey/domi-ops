@@ -17,6 +17,7 @@ export default async function SchoolAssignmentPage({
   let assignmentTitle = "Assignment";
   let className = "";
   let classId = "";
+  let studentsWithoutWork: { memberId: string; label: string }[] = [];
   let submissions: {
     id: string;
     status: string;
@@ -65,10 +66,15 @@ export default async function SchoolAssignmentPage({
     };
     materials = detail.materials ?? [];
     access = detail.access;
-    const subRes = await apiFetch<{ submissions: typeof submissions; access: SchoolClassAccess }>(
+    const subRes = await apiFetch<{
+      submissions: typeof submissions;
+      studentsWithoutWork?: { memberId: string; label: string }[];
+      access: SchoolClassAccess;
+    }>(
       `/api/school/assignments/${id}/submissions`,
     );
     submissions = subRes.submissions;
+    studentsWithoutWork = subRes.studentsWithoutWork ?? [];
     if (!access) access = subRes.access;
   } catch (e) {
     loadError = loadErrorMessage(e, "Could not load assignment");
@@ -98,6 +104,7 @@ export default async function SchoolAssignmentPage({
           dueAt={assignmentMeta.dueAt}
           visibility={assignmentMeta.visibility}
           initialSubmissions={submissions}
+          initialStudentsWithoutWork={studentsWithoutWork}
           access={access}
           driveEnabled={driveEnabled}
           materials={materials}

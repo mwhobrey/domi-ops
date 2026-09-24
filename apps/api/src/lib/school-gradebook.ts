@@ -13,6 +13,7 @@ export type GradebookCellStatus =
   | "overdue"
   | "submitted"
   | "graded"
+  | "excused"
   | "not_assigned";
 
 export interface GradebookAssignmentColumn {
@@ -84,6 +85,10 @@ export function gradebookCell(params: {
       missing: false,
       overdue: false,
     };
+  }
+
+  if (submissionStatus === "excused") {
+    return { status: "excused", score: null, percent: null, missing: false, overdue: false };
   }
 
   const submitted =

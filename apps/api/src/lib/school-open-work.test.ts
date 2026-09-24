@@ -38,6 +38,13 @@ describe("openWorkForAssignment", () => {
     expect(run({ workByStudent }).include).toBe(false);
   });
 
+  it("doesn't count an excused student as owing the work", () => {
+    const workByStudent = new Map<string, StudentWorkState>([
+      ["ally", { submissionStatus: "excused", score: null }],
+    ]);
+    expect(run({ workByStudent })).toEqual({ include: true, owedBy: ["sam"] });
+  });
+
   it("drops closed assignments from both lists", () => {
     expect(run({ visibility: "closed" }).include).toBe(false);
     expect(run({ visibility: "closed", filter: "due", dueAt: "2026-09-25T12:00:00Z" }).include).toBe(
