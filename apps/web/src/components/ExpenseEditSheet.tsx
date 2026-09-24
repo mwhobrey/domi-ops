@@ -12,6 +12,8 @@ export interface Expense {
   category: string | null;
   expenseDate: string;
   memberId?: string | null;
+  /** Set when a recurring bill posted this expense. */
+  recurringId?: string | null;
 }
 
 export function ExpenseEditSheet({

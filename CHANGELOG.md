@@ -10,6 +10,12 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Added
 
+- **Recurring bills** on the Expenses page (WHO-334): add rent, subscriptions, or insurance
+  once (weekly, every 2 weeks, monthly, every 3 months, or yearly) and each one posts to
+  expenses on its due date, in the household's time zone, counting toward budgets. Bills can
+  be edited, paused, or removed; posted expenses carry a "Bill" tag and stay when a bill is
+  removed. The section shows what's due in the next 30 days. *(requires `npm run db:migrate`
+  (`0077_expense_recurring`); no other manual steps.)*
 - Calendar events (WHO-330):
   - Repeat **yearly** (birthdays, anniversaries), **every N** days/weeks/months/years, and end
     the repeat on a date or after a number of times.
@@ -91,6 +97,7 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
     instead of "BP systolic, BP diastolic, Heart rate" and a long label list.
 ### Fixed
 
+- Expenses reject a malformed date instead of storing it (WHO-334).
 - **Calendar event permissions (WHO-330):** editing, deleting, or duplicating an event now
   requires write access to its calendar. Before, a household member with an event's id could
   change or delete events on someone else's private calendar, and an edit could overwrite
@@ -223,6 +230,7 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Fixed
 
+- Expenses reject a malformed date instead of storing it (WHO-334).
 - Health log sheets' "Share with" picker now tracks who you're actually logging for (WHO-326):
   switching the Member dropdown (vitals/exercise/pain/meal/event/medication) no longer leaves the
   previous subject offered — or, if already checked, silently retained — as a share target once

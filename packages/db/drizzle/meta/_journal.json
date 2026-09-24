@@ -540,6 +540,13 @@
       "when": 1790219566640,
       "tag": "0076_calendar_event_location_attendees",
       "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1790219947319,
+      "tag": "0077_expense_recurring",
+      "breakpoints": true
     }
   ]
 }
