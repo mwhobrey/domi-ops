@@ -77,6 +77,7 @@ import {
   type ReschedulePatch,
 
 } from "../../lib/calendar-time-grid";
+import { useHouseholdTimeZone, useHouseholdToday } from "../HouseholdTimeProvider";
 
 
 
@@ -300,14 +301,19 @@ export function CalendarTimeGrid({
 
   const colCount = dates.length;
 
-  const showNow = scrollToNow && isViewingToday(dateKeys);
-  const [nowMin, setNowMin] = useState(() => nowMinutesSinceMidnight());
+  const householdTimeZone = useHouseholdTimeZone();
+  const [nowMin, setNowMin] = useState(() => nowMinutesSinceMidnight(householdTimeZone));
   useEffect(() => {
-    const id = window.setInterval(() => setNowMin(nowMinutesSinceMidnight()), 60_000);
+    setNowMin(nowMinutesSinceMidnight(householdTimeZone));
+    const id = window.setInterval(
+      () => setNowMin(nowMinutesSinceMidnight(householdTimeZone)),
+      60_000,
+    );
     return () => window.clearInterval(id);
-  }, []);
-  // Recomputed on every minute tick, so the highlight follows midnight.
-  const todayKey = formatDateLocal(new Date());
+  }, [householdTimeZone]);
+  // Household day, re-read on every minute tick so the highlight follows midnight.
+  const todayKey = useHouseholdToday();
+  const showNow = scrollToNow && isViewingToday(dateKeys, todayKey);
 
 
 
@@ -317,7 +323,10 @@ export function CalendarTimeGrid({
 
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-    scrollRef.current.scrollTo({ top: scrollTopForNow(), behavior: reduced ? "auto" : "smooth" });
+    scrollRef.current.scrollTo({
+      top: scrollTopForNow(householdTimeZone),
+      behavior: reduced ? "auto" : "smooth",
+    });
 
   }, [showNow, dateKeys.join(",")]);
 

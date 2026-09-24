@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, apiClient } from "../../lib/client-api";
 import { ReportExportSheet } from "./ReportExportSheet";
 import { Alert, Badge, Button, EmptyState, Input, Spinner } from "../ui";
+import { useHouseholdToday } from "../HouseholdTimeProvider";
 import { LazyCategoryBarChart as CategoryBarChart, LazyTrendLineChart as TrendLineChart } from "../charts/lazy";
 
 interface ExpenseReportCategoryRow {
@@ -55,11 +56,6 @@ function formatMonthShort(monthKey: string): string {
   return date.toLocaleDateString(undefined, { month: "short", year: "2-digit" });
 }
 
-function currentMonthValue(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-}
-
 function StatCard({
   label,
   value,
@@ -85,7 +81,8 @@ export function ExpenseMonthlyReportSection({
   driveEnabled?: boolean;
   initialMonth?: string;
 }) {
-  const [month, setMonth] = useState(initialMonth ?? currentMonthValue());
+  const today = useHouseholdToday();
+  const [month, setMonth] = useState(initialMonth ?? today.slice(0, 7));
   const [scope, setScope] = useState<"household" | "personal">("household");
   const [report, setReport] = useState<ExpenseReport | null>(null);
   const [loading, setLoading] = useState(true);

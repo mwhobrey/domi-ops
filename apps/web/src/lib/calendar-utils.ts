@@ -319,8 +319,7 @@ export type MonthCell = {
 };
 
 /** Sunday-start month grid with leading/trailing padding days. */
-export function monthGrid(monthStart: Date): MonthCell[] {
-  const today = formatDateLocal(new Date());
+export function monthGrid(monthStart: Date, today: string = formatDateLocal(new Date())): MonthCell[] {
   const first = startOfMonth(monthStart);
   const last = endOfMonth(first);
   const cells: MonthCell[] = [];

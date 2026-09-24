@@ -23,8 +23,8 @@ import {
 } from "./ui";
 import { ListPage } from "./lists/ListPage";
 import { CollapsibleAddForm } from "./lists/CollapsibleAddForm";
-import { formatDateLocal } from "../lib/calendar-utils";
 import { formatChoreDueLabel } from "../lib/glance-meta";
+import { useHouseholdToday } from "./HouseholdTimeProvider";
 
 export type ChorePriority = 0 | 1 | 2 | 3;
 
@@ -100,9 +100,9 @@ function priorityTone(priority: ChorePriority): "default" | "accent" | "warning"
   return "default";
 }
 
-function isOverdue(dueDate: string | null, done: boolean): boolean {
+function isOverdue(dueDate: string | null, done: boolean, today: string): boolean {
   if (done || !dueDate) return false;
-  return dueDate < formatDateLocal(new Date());
+  return dueDate < today;
 }
 
 
@@ -123,7 +123,10 @@ function ChoreRow({
   setDeleteId,
   memberLabel,
   highlighted,
+  today,
 }: {
+  /** Household "today" (YYYY-MM-DD). */
+  today: string;
   chore: Chore;
   showList: boolean;
   editingDueId: string | null;
@@ -134,7 +137,7 @@ function ChoreRow({
   memberLabel: (id: string | null) => string | null;
   highlighted?: boolean;
 }) {
-  const overdue = isOverdue(c.dueDate, c.done);
+  const overdue = isOverdue(c.dueDate, c.done, today);
   const plabel = priorityLabel(c.priority);
   const assignee = memberLabel(c.assigneeMemberId);
 
@@ -170,7 +173,7 @@ function ChoreRow({
               onClick={() => setEditingDueId(c.id)}
               aria-label={`Edit due date for ${c.description}`}
             >
-              {formatChoreDueLabel(c.dueDate, formatDateLocal(new Date()))}
+              {formatChoreDueLabel(c.dueDate, today)}
             </button>
           )}
           {editingDueId === c.id && (
@@ -367,6 +370,7 @@ export function ChoresList({
   initialKarma?: MemberKarma[];
 }) {
   const searchParams = useSearchParams();
+  const today = useHouseholdToday();
   const highlightId = searchParams.get("highlight");
   const [chores, setChores] = useState(initialChores);
   const [recurring, setRecurring] = useState(initialRecurring);
@@ -450,12 +454,12 @@ export function ChoresList({
   }, [chores]);
 
   const openCount = chores.filter((c) => !c.done).length;
-  const overdueCount = chores.filter((c) => isOverdue(c.dueDate, c.done)).length;
+  const overdueCount = chores.filter((c) => isOverdue(c.dueDate, c.done, today)).length;
 
   const visibleChores = useMemo(() => {
     let list = [...chores];
     if (filter === "open") list = list.filter((c) => !c.done);
-    else if (filter === "overdue") list = list.filter((c) => isOverdue(c.dueDate, c.done));
+    else if (filter === "overdue") list = list.filter((c) => isOverdue(c.dueDate, c.done, today));
     if (listFilter) {
       list = list.filter((c) => (c.list?.trim() || NO_LIST_LABEL) === listFilter);
     }
@@ -463,8 +467,8 @@ export function ChoresList({
       if (a.done !== b.done) return a.done ? 1 : -1;
       const pr = b.priority - a.priority;
       if (pr !== 0) return pr;
-      if (isOverdue(a.dueDate, a.done) !== isOverdue(b.dueDate, b.done)) {
-        return isOverdue(a.dueDate, a.done) ? -1 : 1;
+      if (isOverdue(a.dueDate, a.done, today) !== isOverdue(b.dueDate, b.done, today)) {
+        return isOverdue(a.dueDate, a.done, today) ? -1 : 1;
       }
       if (!a.dueDate && !b.dueDate) return 0;
       if (!a.dueDate) return 1;
@@ -727,6 +731,7 @@ export function ChoresList({
                 {groupItems.map((c) => (
                   <ChoreRow
                     key={c.id}
+                    today={today}
                     chore={c}
                     showList={false}
                     editingDueId={editingDueId}
@@ -747,6 +752,7 @@ export function ChoresList({
           {visibleChores.map((c) => (
             <ChoreRow
               key={c.id}
+              today={today}
               chore={c}
               showList
               editingDueId={editingDueId}

@@ -4,6 +4,7 @@ import type { CalendarEventView } from "../lib/calendar-utils";
 import { addDays, formatDateLocal, startOfWeek } from "../lib/calendar-utils";
 import type { ReschedulePatch } from "../lib/calendar-time-grid";
 import { CalendarTimeGrid, weekDates } from "./calendar/CalendarTimeGrid";
+import { useHouseholdToday } from "./HouseholdTimeProvider";
 
 function formatWeekPeriod(weekStart: Date): string {
   const end = addDays(weekStart, 6);
@@ -42,7 +43,7 @@ export function CalendarWeek({
 }) {
   const dates = weekDates(weekStart);
   const weekKeys = dates.map((d) => formatDateLocal(d));
-  const todayKey = formatDateLocal(new Date());
+  const todayKey = useHouseholdToday();
 
   return (
     <CalendarTimeGrid

@@ -7,14 +7,7 @@ import { ApiError, apiClient } from "../lib/client-api";
 import type { CalendarEventView } from "../lib/calendar-utils";
 import { filterPastTimedEvents, formatWallClock, isOverlayEvent } from "../lib/calendar-utils";
 import { Alert, Card, CardBody, CardHeader, SectionHeader, Skeleton } from "./ui";
-
-function todayIsoLocal(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
+import { useHouseholdToday } from "./HouseholdTimeProvider";
 
 function formatEventTime(ev: CalendarEventView): string {
   if (ev.allDay) return "All day";
@@ -27,7 +20,7 @@ const ALL_DAY_PREVIEW = 2;
 
 export function TodayAgenda() {
   const router = useRouter();
-  const today = useMemo(() => todayIsoLocal(), []);
+  const today = useHouseholdToday();
   const [events, setEvents] = useState<CalendarEventView[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

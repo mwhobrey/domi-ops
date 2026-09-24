@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
 import type {
   CalendarCreateDraft,
@@ -11,7 +11,6 @@ import type {
 import {
   buildRepeatRule,
   eventInteractionTitle,
-  formatDateLocal,
   repeatUnitLabel,
 } from "../lib/calendar-utils";
 import { cn } from "../lib/cn";
@@ -35,6 +34,7 @@ import {
 import { ScheduleConflictChecker } from "./ScheduleConflictChecker";
 import { eventFormToConflictFormState } from "../lib/schedule-conflict";
 import { adjustTimedEventEndOnStartChange } from "../lib/event-form-times";
+import { useHouseholdToday } from "./HouseholdTimeProvider";
 
 type EventCategory = {
   id: string;
@@ -156,6 +156,11 @@ export function CalendarEventSheet({
   const [recurringDeleteOpen, setRecurringDeleteOpen] = useState(false);
   const [conflictCheckOpen, setConflictCheckOpen] = useState(false);
   const [conflictCheckKey, setConflictCheckKey] = useState(0);
+  // New events default to the household's today; a ref so the reset effect doesn't re-run
+  // (and clear the form) when the date rolls over.
+  const today = useHouseholdToday();
+  const todayRef = useRef(today);
+  todayRef.current = today;
 
   const loadMeta = useCallback(async () => {
     try {
@@ -272,7 +277,7 @@ export function CalendarEventSheet({
             : "",
         );
       } else {
-        setStartDate(formatDateLocal(new Date()));
+        setStartDate(todayRef.current);
         setStartTime("09:00");
         setAllDay(false);
       }

@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ApiError, apiClient } from "../lib/client-api";
-import { formatDateLocal } from "../lib/calendar-utils";
 import type { CalendarCreateDraft } from "../lib/calendar-utils";
 import {
   buildConflictCheckParams,
@@ -24,6 +23,7 @@ import {
   Select,
   Skeleton,
 } from "./ui";
+import { useHouseholdToday } from "./HouseholdTimeProvider";
 
 type ScheduleConflictEvent = {
   id: string;
@@ -77,8 +77,7 @@ function formatDoseTime(iso: string, timeZone: string): string {
   return new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", timeZone });
 }
 
-function defaultFormState(): ScheduleConflictFormState {
-  const today = formatDateLocal(new Date());
+function defaultFormState(today: string): ScheduleConflictFormState {
   return {
     mode: "at",
     date: today,
@@ -125,7 +124,11 @@ export function ScheduleConflictChecker({
   onCreateEvent?: (draft: CalendarCreateDraft) => void;
   showCreateEventAction?: boolean;
 }) {
-  const [form, setForm] = useState<ScheduleConflictFormState>(() => defaultFormState());
+  const today = useHouseholdToday();
+  // Read inside the prefill effect without re-running it when the date rolls over.
+  const todayRef = useRef(today);
+  todayRef.current = today;
+  const [form, setForm] = useState<ScheduleConflictFormState>(() => defaultFormState(today));
 
   const [result, setResult] = useState<ScheduleConflictResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -158,7 +161,7 @@ export function ScheduleConflictChecker({
     const key = JSON.stringify(initialForm);
     if (autoCheck && lastAutoKeyRef.current === key) return;
     lastAutoKeyRef.current = key;
-    const next = { ...defaultFormState() };
+    const next = { ...defaultFormState(todayRef.current) };
     applyFormState(next, initialForm);
     setForm(next);
     if (autoCheck) void runCheck(next);

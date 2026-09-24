@@ -39,7 +39,7 @@ export function whomeSessionRoutes(db: Database, env: Env, auth: WhomeBetterAuth
       .limit(1);
 
     const [householdRow] = await db
-      .select({ telemetryOptIn: households.telemetryOptIn })
+      .select({ telemetryOptIn: households.telemetryOptIn, timezone: households.timezone })
       .from(households)
       .where(eq(households.id, authCtx.householdId))
       .limit(1);
@@ -51,6 +51,8 @@ export function whomeSessionRoutes(db: Database, env: Env, auth: WhomeBetterAuth
       modulesEnabled: filterActiveHouseholdModules(env, modules, modulesEntitled),
       modulesEntitled,
       telemetryOptIn: householdRow?.telemetryOptIn ?? false,
+      /** "Today" in the UI is the household's day, same as the server's recurring jobs. */
+      householdTimezone: householdRow?.timezone ?? "UTC",
       user: {
         id: authCtx.userId,
         email: authCtx.email,

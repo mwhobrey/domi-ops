@@ -17,6 +17,7 @@ import {
 } from "../lib/weekly-week-utils";
 import { ReportExportSheet } from "./reports/ReportExportSheet";
 import { Alert, Button, EmptyState, IconButton, Input, Select, Spinner } from "./ui";
+import { useHouseholdToday } from "./HouseholdTimeProvider";
 
 function ReportGroupTable({
   group,
@@ -86,9 +87,10 @@ export function WeeklyReportPanel({
 }) {
   const [variant, setVariant] = useState(() => weeklyVariantOptions(module, "week")[0]?.id ?? "");
   const [scopeMode, setScopeMode] = useState<WeeklyScopeMode>("week");
-  const [weekStart, setWeekStart] = useState(currentWeekMonday);
-  const [rangeFrom, setRangeFrom] = useState(currentWeekMonday);
-  const [rangeTo, setRangeTo] = useState(() => defaultRangeEnd(currentWeekMonday()));
+  const today = useHouseholdToday();
+  const [weekStart, setWeekStart] = useState(() => currentWeekMonday(today));
+  const [rangeFrom, setRangeFrom] = useState(() => currentWeekMonday(today));
+  const [rangeTo, setRangeTo] = useState(() => defaultRangeEnd(currentWeekMonday(today)));
 
   const [weekReport, setWeekReport] = useState<WeeklyReportData | null>(null);
   const [rangeReports, setRangeReports] = useState<WeeklyReportData[]>([]);
@@ -111,7 +113,7 @@ export function WeeklyReportPanel({
   );
 
   const weekAnchor = weekStart;
-  const isCurrentWeek = weekStart === currentWeekMonday();
+  const isCurrentWeek = weekStart === currentWeekMonday(today);
 
   const exportTitle =
     scopeMode === "week"
@@ -195,7 +197,7 @@ export function WeeklyReportPanel({
   }
 
   function goToCurrentWeek() {
-    const monday = currentWeekMonday();
+    const monday = currentWeekMonday(today);
     setWeekStart(monday);
   }
 

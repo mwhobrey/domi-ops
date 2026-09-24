@@ -12,6 +12,22 @@ Use this file to **track progress across sessions**. Check boxes as you go. When
 
 ## Before you start
 
+### Isolated test stack (demo data, production-like clock)
+
+For clicking through changes without touching your dev DB (WHO-336):
+
+1. Create and seed a separate database in the running Postgres container:
+   `docker exec domi-ops-postgres-1 psql -U <user> -d postgres -c "create database domi_ops_test"`,
+   then `DATABASE_URL=…/domi_ops_test npm run db:migrate` and `… npm run db:seed-demo` (Rivera
+   household; the seed prints the demo login).
+2. Run api + web + worker with `DATABASE_URL` pointed at `domi_ops_test`, `TZ=UTC` (production
+   containers are UTC; SSR/hydration timezone bugs only reproduce with it), and
+   `npx turbo run dev --parallel --env-mode=loose --filter=@domi-ops/api --filter=@domi-ops/web --filter=@domi-ops/worker`.
+   **`--env-mode=loose` is required:** turbo's default strict mode strips undeclared env vars, so
+   the override silently falls back to `.env` and the stack runs against your dev DB. Unset
+   `PORT` so the API keeps 4000 instead of inheriting the web's 3000.
+3. Confirm with `select datname from pg_stat_activity` that only `domi_ops_test` has connections.
+
 ### Fresh dev reset (already done?)
 
 ```powershell
