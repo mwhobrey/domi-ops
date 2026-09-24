@@ -2,7 +2,7 @@ import type { Database } from "@domi-ops/db";
 import { weeksOverlappingRange } from "@domi-ops/calendar-sync";
 import { buildChoresWeeklyReport, buildShoppingWeeklyReport } from "./chores-shopping.js";
 import { buildExpensesWeeklyReport } from "./expenses.js";
-import { resolveMonFriWeek } from "./helpers.js";
+import { resolveReportWeek } from "./helpers.js";
 import { buildSchoolWeeklyReport } from "./school.js";
 import type { WeeklyReportData, WeeklyReportModule } from "./types.js";
 import { WEEKLY_REPORT_VARIANTS } from "./types.js";
@@ -16,7 +16,7 @@ export async function buildWeeklyReportsInRange(params: {
   from: string;
   to: string;
 }): Promise<{ reports: WeeklyReportData[]; weekCount: number; rangeLabel: string }> {
-  const { timezone } = await resolveMonFriWeek(params.db, params.householdId);
+  const { timezone } = await resolveReportWeek(params.db, params.householdId);
   const weeks = weeksOverlappingRange(params.from, params.to, timezone);
   const reports: WeeklyReportData[] = [];
   for (const w of weeks) {

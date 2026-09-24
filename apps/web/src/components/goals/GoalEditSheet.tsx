@@ -28,6 +28,7 @@ export function GoalEditSheet({
   canAssignOthers,
   onClose,
   onSaved,
+  onRewardCreated,
 }: {
   open: boolean;
   /** Null = create mode. */
@@ -35,12 +36,16 @@ export function GoalEditSheet({
   members: NoteShareMember[];
   rewards: RewardDto[];
   currentMemberId?: string;
+  /** Owner/admin — may also create rewards (the API allows only them). */
   canAssignOthers: boolean;
   onClose: () => void;
   onSaved: (goal: GoalDto) => void;
+  onRewardCreated?: (reward: RewardDto) => void;
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [unit, setUnit] = useState("");
+  const [targetDate, setTargetDate] = useState("");
   const [visibility, setVisibility] = useState<GoalVisibility>("household");
   const [ownerMemberId, setOwnerMemberId] = useState("");
   const [milestones, setMilestones] = useState<MilestoneDraft[]>([{ threshold: "", title: "", rewardId: "" }]);
@@ -51,6 +56,8 @@ export function GoalEditSheet({
     if (!open) return;
     setTitle(goal?.title ?? "");
     setDescription(goal?.description ?? "");
+    setUnit(goal?.unit ?? "");
+    setTargetDate(goal?.targetDate ?? "");
     setVisibility(goal?.visibility ?? "household");
     setOwnerMemberId(goal?.ownerMemberId ?? currentMemberId ?? "");
     setMilestones(goalToDrafts(goal));
@@ -88,6 +95,8 @@ export function GoalEditSheet({
         const patch = await apiClient.patch<{ goal: GoalDto }>(`/api/goals/${goal.id}`, {
           title: title.trim(),
           description: description.trim() || null,
+          unit: unit.trim() || null,
+          targetDate: targetDate || null,
           visibility,
         });
         metadataCommitted = true;
@@ -100,6 +109,8 @@ export function GoalEditSheet({
         const created = await apiClient.post<{ goal: GoalDto }>("/api/goals", {
           title: title.trim(),
           description: description.trim() || null,
+          unit: unit.trim() || null,
+          targetDate: targetDate || null,
           visibility,
           ownerMemberId: canAssignOthers ? ownerMemberId || undefined : undefined,
           milestones: parsedMilestones,
@@ -140,6 +151,27 @@ export function GoalEditSheet({
           aria-label="Goal description"
           disabled={loading}
         />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className="space-y-1 text-sm">
+            <span className="font-medium text-[var(--color-text)]">Counting</span>
+            <Input
+              value={unit}
+              onChange={(e) => setUnit(e.target.value)}
+              placeholder="e.g. books, miles, chores"
+              maxLength={32}
+              disabled={loading}
+            />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="font-medium text-[var(--color-text)]">Target date (optional)</span>
+            <Input
+              type="date"
+              value={targetDate}
+              onChange={(e) => setTargetDate(e.target.value)}
+              disabled={loading}
+            />
+          </label>
+        </div>
         {canAssignOthers ? (
           <div className="space-y-1">
             <span className="text-sm font-medium text-[var(--color-text)]">For</span>
@@ -169,7 +201,27 @@ export function GoalEditSheet({
             <option value="private">Private — only you (and owner/admin)</option>
           </Select>
         </div>
-        <MilestoneListEditor milestones={milestones} rewards={activeRewards} onChange={setMilestones} />
+        <MilestoneListEditor
+          milestones={milestones}
+          rewards={activeRewards}
+          onChange={setMilestones}
+          onCreateReward={
+            canAssignOthers
+              ? async (rewardTitle) => {
+                  try {
+                    const res = await apiClient.post<{ reward: RewardDto }>("/api/goals/rewards", {
+                      title: rewardTitle,
+                    });
+                    onRewardCreated?.(res.reward);
+                    return res.reward;
+                  } catch (err) {
+                    setError(err instanceof ApiError ? err.message : "Could not create reward");
+                    return null;
+                  }
+                }
+              : undefined
+          }
+        />
         <Button type="button" loading={loading} onClick={() => void save()}>
           {goal ? "Save changes" : "Create goal"}
         </Button>

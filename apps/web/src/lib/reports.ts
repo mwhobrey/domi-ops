@@ -1,4 +1,4 @@
-export type ReportModule = "school" | "chores" | "shopping" | "expenses" | "health";
+export type ReportModule = "school" | "chores" | "shopping" | "expenses" | "health" | "goals";
 
 export type ReportKind =
   | "weekly"
@@ -66,6 +66,7 @@ export const REPORT_MODULE_LABELS: Record<ReportModule, string> = {
   shopping: "Shopping",
   expenses: "Expenses",
   health: "Health",
+  goals: "Goals",
 };
 
 export function reportExportBody(params: ReportExportParams): Record<string, unknown> {

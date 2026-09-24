@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Target } from "lucide-react";
 import { ApiError, apiClient } from "../lib/client-api";
-import type { GoalDto, RedemptionDto, RewardDto } from "../lib/goals-types";
+import { goalProgressLabel, type GoalDto, type RedemptionDto, type RewardDto } from "../lib/goals-types";
 import type { NoteShareMember } from "./NoteSharePicker";
 import { GoalEditSheet } from "./goals/GoalEditSheet";
 import { GoalProgressLog } from "./goals/GoalProgressLog";
@@ -86,7 +86,7 @@ function GoalCard({
               />
             </div>
             <p className="text-xs text-[var(--color-text-muted)]">
-              {goal.totalProgress} / {lastMilestone.threshold}
+              {goalProgressLabel(goal, lastMilestone.threshold)}
             </p>
           </div>
         ) : null}
@@ -96,7 +96,8 @@ function GoalCard({
             <li key={m.id} className="flex items-center justify-between gap-2 text-sm">
               <span className={m.achievedAt ? "text-[var(--color-text)]" : "text-[var(--color-text-muted)]"}>
                 {m.achievedAt ? "✓ " : "○ "}
-                {m.title} ({m.threshold})
+                {m.title} ({m.threshold}
+                {goal.unit ? ` ${goal.unit}` : ""})
               </span>
               {m.claimable ? (
                 <Button type="button" size="sm" onClick={() => onClaim(m.id)}>
@@ -447,6 +448,7 @@ export function GoalsPageClient({
         rewards={rewards}
         currentMemberId={currentMemberId}
         canAssignOthers={isApprover}
+        onRewardCreated={(reward) => setRewards((prev) => [...prev, reward])}
         onClose={() => setEditGoal(null)}
         onSaved={(saved) =>
           setGoals((prev) =>

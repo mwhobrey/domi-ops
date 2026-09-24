@@ -8,8 +8,23 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+### Added
+
+- Goals & Rewards (WHO-333):
+  - Goals can say what they count ("books", "miles") and carry an optional target date;
+    progress reads "12 / 20 books · Target Dec 31". *(requires `npm run db:migrate`
+    (`0075_goal_unit_target_date`); no other manual steps.)*
+  - Owners and admins can create a reward right from a milestone's reward picker instead of
+    leaving the goal form for the Rewards tab.
+  - A **Goals** report in Reports: goals in progress and completed, progress per goal, and
+    reward claims with their status. Exportable like the other reports.
+
 ### Changed
 
+- Weekly reports cover the whole week (Mon–Sun) instead of stopping at Friday, which
+  silently dropped anything due on a weekend (WHO-333).
+- Expenses: the add-expense row says "Spent by …" for the member picker and shows `$` on the
+  amount (WHO-333).
 - Recurring chores no longer stay stuck on a date that passed months ago (WHO-328). When a
   chore's next occurrence arrives while the current one is still open, it moves to the latest
   occurrence and counts the ones that passed ("Missed 3×"). A daily chore is at most a day
@@ -152,7 +167,7 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 - Calendar event create/edit: changing the start time on a timed event now moves the end time
   to one hour later when the end was still the default (or invalid); custom durations are
   preserved when the end was set manually.
- the front chest is now split into left and right so a side can be
+- Pain body map (WHO-312): the front chest is now split into left and right so a side can be
   selected, and the back view has a spine region down the middle. The old single `chest` region
   is no longer selectable; existing entries keep their "Chest" label in lists and reports but
   aren't drawn on the map. *(requires `npm run db:migrate`; no other manual steps for

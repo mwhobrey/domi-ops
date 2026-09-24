@@ -1,17 +1,17 @@
-import { monFriWeekRange, type MonFriWeekRange } from "@domi-ops/calendar-sync";
+import { reportWeekRange, type ReportWeekRange } from "@domi-ops/calendar-sync";
 import type { Database } from "@domi-ops/db";
 import { householdTimezone } from "../household-time.js";
 import type { WeeklyReportGroup, WeeklyReportItem } from "./types.js";
 
 export { householdTimezone };
 
-export async function resolveMonFriWeek(
+export async function resolveReportWeek(
   db: Database,
   householdId: string,
   weekStart?: string | null,
-): Promise<MonFriWeekRange & { timezone: string }> {
+): Promise<ReportWeekRange & { timezone: string }> {
   const timeZone = await householdTimezone(db, householdId);
-  const range = monFriWeekRange({ timeZone, weekStart });
+  const range = reportWeekRange({ timeZone, weekStart });
   return { ...range, timezone: timeZone };
 }
 

@@ -115,10 +115,26 @@ export function milestonesCrossedByTotal(
   return milestones.filter((m) => m.achievedAt === null && total >= m.threshold).map((m) => m.id);
 }
 
+/** Trimmed unit, max 32 chars; blank → null. */
+export function normalizeGoalUnit(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed.slice(0, 32) : null;
+}
+
+/** `YYYY-MM-DD` or null; anything else is invalid (undefined). */
+export function normalizeGoalTargetDate(value: unknown): string | null | undefined {
+  if (value === null || value === "") return null;
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  return undefined;
+}
+
 export type GoalDto = {
   id: string;
   title: string;
   description: string | null;
+  unit: string | null;
+  targetDate: string | null;
   visibility: "household" | "private";
   ownerMemberId: string;
   totalProgress: number;
@@ -214,6 +230,8 @@ function serializeGoal(row: GoalRow, milestoneDtos: MilestoneDto[]): GoalDto {
     id: row.id,
     title: row.title,
     description: row.description,
+    unit: row.unit ?? null,
+    targetDate: row.targetDate ?? null,
     visibility: row.visibility,
     ownerMemberId: row.ownerMemberId,
     totalProgress: 0, // overwritten by recomputeGoalProgress's caller once the sum is known

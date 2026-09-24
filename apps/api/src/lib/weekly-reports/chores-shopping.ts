@@ -13,7 +13,7 @@ import {
   countReportItems,
   dueDateLabel,
   groupItemsByDay,
-  resolveMonFriWeek,
+  resolveReportWeek,
   sortGroups,
 } from "./helpers.js";
 import type { WeeklyReportData, WeeklyReportGroup, WeeklyReportItem } from "./types.js";
@@ -49,7 +49,7 @@ export async function buildChoresWeeklyReport(params: {
   weekStart?: string | null;
   scope?: "week" | "range";
 }): Promise<WeeklyReportData> {
-  const week = await resolveMonFriWeek(params.db, params.householdId, params.weekStart);
+  const week = await resolveReportWeek(params.db, params.householdId, params.weekStart);
   const scope = params.scope ?? "week";
   const variantLabel = weeklyVariantLabel(params.variant, scope, "chores");
   const labels = await memberLabels(params.db, params.householdId);
@@ -209,7 +209,7 @@ export async function buildShoppingWeeklyReport(params: {
   weekStart?: string | null;
   scope?: "week" | "range";
 }): Promise<WeeklyReportData> {
-  const week = await resolveMonFriWeek(params.db, params.householdId, params.weekStart);
+  const week = await resolveReportWeek(params.db, params.householdId, params.weekStart);
   const scope = params.scope ?? "week";
   const variantLabel = weeklyVariantLabel(params.variant, scope, "shopping");
 

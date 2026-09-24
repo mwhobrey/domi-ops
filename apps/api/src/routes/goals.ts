@@ -17,6 +17,8 @@ import { canManageGoal, goalVisibleWhere } from "../lib/goals-access.js";
 import {
   GoalValidationError,
   loadAchievedMilestones,
+  normalizeGoalTargetDate,
+  normalizeGoalUnit,
   recomputeGoalProgress,
   recomputeGoalsProgressBatch,
   serializeRedemption,
@@ -270,6 +272,8 @@ export function goalsRoutes(db: Database, env: Env) {
     const body = await c.req.json<{
       title?: string;
       description?: string;
+      unit?: string | null;
+      targetDate?: string | null;
       visibility?: "household" | "private";
       ownerMemberId?: string;
       milestones?: MilestoneInput[];
@@ -277,6 +281,8 @@ export function goalsRoutes(db: Database, env: Env) {
 
     const title = body.title?.trim();
     if (!title) return c.json({ error: "title_required" }, 400);
+    const targetDate = body.targetDate === undefined ? null : normalizeGoalTargetDate(body.targetDate);
+    if (targetDate === undefined) return c.json({ error: "invalid_target_date" }, 400);
 
     const ownerMemberId = body.ownerMemberId || auth.memberId;
     if (ownerMemberId !== auth.memberId && !canProvisionMembers(auth.role)) {
@@ -304,6 +310,8 @@ export function goalsRoutes(db: Database, env: Env) {
         ownerMemberId,
         title,
         description: body.description?.trim() || null,
+        unit: normalizeGoalUnit(body.unit),
+        targetDate,
         visibility,
         createdByUserId: auth.userId,
       })
@@ -342,9 +350,17 @@ export function goalsRoutes(db: Database, env: Env) {
     const body = await c.req.json<{
       title?: string;
       description?: string;
+      unit?: string | null;
+      targetDate?: string | null;
       visibility?: "household" | "private";
     }>();
     const patch: Partial<typeof goals.$inferInsert> = { updatedAt: new Date() };
+    if (body.unit !== undefined) patch.unit = normalizeGoalUnit(body.unit);
+    if (body.targetDate !== undefined) {
+      const targetDate = normalizeGoalTargetDate(body.targetDate);
+      if (targetDate === undefined) return c.json({ error: "invalid_target_date" }, 400);
+      patch.targetDate = targetDate;
+    }
     if (body.title !== undefined) {
       const title = body.title.trim();
       if (!title) return c.json({ error: "title_required" }, 400);

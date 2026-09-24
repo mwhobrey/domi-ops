@@ -101,7 +101,7 @@ export {
   isMidnightInTz,
   formatTimeLabelInTz,
   OVERDUE_REMINDER_COOLDOWN_MS,
-  monFriWeekRange,
+  reportWeekRange,
   mondayOfWeekIso,
   isoDateInRange,
   isoWeekday,
@@ -110,7 +110,7 @@ export {
   weeksOverlappingRange,
   MAX_WEEKS_IN_RANGE,
   type DueReminderKind,
-  type MonFriWeekRange,
+  type ReportWeekRange,
 } from "./household-time.js";
 export { listGoogleCalendars, ensureAccessToken, CalendarCredentialsError } from "./client.js";
 

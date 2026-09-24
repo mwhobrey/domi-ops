@@ -17,6 +17,8 @@ export type GoalDto = {
   id: string;
   title: string;
   description: string | null;
+  unit?: string | null;
+  targetDate?: string | null;
   visibility: GoalVisibility;
   ownerMemberId: string;
   totalProgress: number;
@@ -27,6 +29,25 @@ export type GoalDto = {
   updatedAt: string;
   milestones: MilestoneDto[];
 };
+
+/** "12 / 20 books", with a target date when set: "12 / 20 books · Target Oct 31". */
+export function goalProgressLabel(
+  goal: Pick<GoalDto, "totalProgress" | "unit" | "targetDate">,
+  finalThreshold: number,
+  now: Date = new Date(),
+): string {
+  const unit = goal.unit?.trim();
+  const base = `${goal.totalProgress} / ${finalThreshold}${unit ? ` ${unit}` : ""}`;
+  if (!goal.targetDate) return base;
+  const [y, m, d] = goal.targetDate.split("-").map(Number);
+  const target = new Date(y!, m! - 1, d!);
+  const label = target.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    ...(target.getFullYear() !== now.getFullYear() ? { year: "numeric" as const } : {}),
+  });
+  return `${base} · Target ${label}`;
+}
 
 export type RewardDto = {
   id: string;

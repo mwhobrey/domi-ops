@@ -20,13 +20,9 @@ export function mondayOfWeekIso(iso: string): string {
   return addDaysIso(iso, offset);
 }
 
-export function fridayOfWeekIso(mondayIso: string): string {
-  return addDaysIso(mondayIso, 4);
-}
-
-/** Default range end: Friday of the 4th week starting at `fromMonday`. */
+/** Default range end: Sunday of the 4th week starting at `fromMonday`. */
 export function defaultRangeEnd(fromMonday: string): string {
-  return addDaysIso(fromMonday, 25);
+  return addDaysIso(fromMonday, 27);
 }
 
 export function currentWeekMonday(): string {

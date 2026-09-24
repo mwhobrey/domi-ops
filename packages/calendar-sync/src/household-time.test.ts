@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   classifyDueReminder,
   addDaysIso,
-  monFriWeekRange,
+  reportWeekRange,
   mondayOfWeekIso,
   weeksOverlappingRange,
   OVERDUE_REMINDER_COOLDOWN_MS,
@@ -66,18 +66,18 @@ describe("classifyDueReminder", () => {
   });
 });
 
-describe("monFriWeekRange", () => {
-  it("returns Mon–Fri for a Wednesday reference date", () => {
-    const range = monFriWeekRange({ timeZone: "UTC", referenceDate: "2026-06-18" });
+describe("reportWeekRange", () => {
+  it("returns Mon–Sun for a Wednesday reference date, so weekend items are included", () => {
+    const range = reportWeekRange({ timeZone: "UTC", referenceDate: "2026-06-18" });
     expect(mondayOfWeekIso("2026-06-18")).toBe("2026-06-15");
     expect(range.weekStart).toBe("2026-06-15");
-    expect(range.weekEnd).toBe("2026-06-19");
+    expect(range.weekEnd).toBe("2026-06-21");
     expect(range.weekLabel).toContain("Jun");
   });
 });
 
 describe("weeksOverlappingRange", () => {
-  it("lists each Mon–Fri week overlapping a span", () => {
+  it("lists each Mon–Sun week overlapping a span", () => {
     const weeks = weeksOverlappingRange("2026-06-10", "2026-06-25", "UTC");
     expect(weeks.map((w) => w.weekStart)).toEqual(["2026-06-08", "2026-06-15", "2026-06-22"]);
   });
