@@ -446,7 +446,7 @@ export function MedicationManagerClient({
       }
     }
     for (const med of ungroupedMeds) {
-      if (med.scheduleKind !== "scheduled") continue;
+      if (med.scheduleKind !== "scheduled" || !med.enabled) continue;
       const times = med.schedule.times ?? [];
       for (const t of times) {
         chips.push({
@@ -462,7 +462,7 @@ export function MedicationManagerClient({
     return chips.sort((a, b) => a.minutesOfDay - b.minutesOfDay);
   }, [memberGroups, ungroupedMeds]);
 
-  const intervalOrPrnMeds = ungroupedMeds.filter((m) => m.scheduleKind !== "scheduled");
+  const intervalOrPrnMeds = ungroupedMeds.filter((m) => m.scheduleKind !== "scheduled" && m.enabled);
   const intervalGroups = memberGroups.filter((g) => g.scheduleKind === "interval");
 
   async function deleteGroup(group: MedicationGroup) {
@@ -476,7 +476,13 @@ export function MedicationManagerClient({
   }
 
   async function deleteMedication(med: HealthMedication) {
-    if (!confirm(`Delete "${med.name}"?`)) return;
+    if (
+      !confirm(
+        `Delete "${med.name}"? Its dose history is kept. To stop it for a while instead, use Pause.`,
+      )
+    ) {
+      return;
+    }
     try {
       await apiClient.delete(`/api/health/medications/${med.id}`);
       await load();
@@ -485,14 +491,32 @@ export function MedicationManagerClient({
     }
   }
 
+  // Pausing keeps the med (and its group memberships) but stops reminders and doses; the API
+  // records the pause period so adherence doesn't count those days as missed.
+  async function toggleMedicationActive(med: HealthMedication) {
+    try {
+      await apiClient.patch(`/api/health/medications/${med.id}`, { enabled: !med.enabled });
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not update medication");
+    }
+  }
+
   // Grouped rows skip Delete: deleting a med also drops it from every group it's in, so that
   // stays on the standalone list where the consequence is obvious.
   function renderMedRow(med: HealthMedication, key: string, { allowDelete = true } = {}) {
     return (
       <ListItem key={key} as="li">
-        <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="truncate font-medium text-[var(--color-text)]">{med.name}</p>
+            <p className="truncate font-medium text-[var(--color-text)]">
+              {med.name}
+              {!med.enabled ? (
+                <span className="ml-2">
+                  <Badge>Paused</Badge>
+                </span>
+              ) : null}
+            </p>
             <p className="truncate text-sm text-[var(--color-text-muted)]">
               {med.dosage ? `${med.dosage} · ` : ""}
               {med.scheduleKind === "scheduled"
@@ -503,7 +527,10 @@ export function MedicationManagerClient({
             </p>
           </div>
           {canWriteSelected ? (
-            <div className="flex gap-2">
+            <div className="flex shrink-0 gap-2">
+              <Button size="sm" variant="secondary" onClick={() => void toggleMedicationActive(med)}>
+                {med.enabled ? "Pause" : "Resume"}
+              </Button>
               <Button
                 size="sm"
                 variant="secondary"

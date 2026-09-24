@@ -15,7 +15,7 @@ import {
   isAsNeededMedScheduleKind,
   narrowGroupScheduleMeta,
 } from "@domi-ops/db";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 import { isHouseholdModuleEnabled, requireHouseholdModule } from "../lib/household-modules.js";
@@ -118,6 +118,9 @@ async function logAllGroupMembers(
             and(
               inArray(healthMedications.id, memberIds),
               eq(healthMedications.householdId, input.group.householdId),
+              // A paused member stays in the group for when it's resumed, but "take all"
+              // mustn't log a dose for it.
+              eq(healthMedications.enabled, true),
             ),
           )
       : [];
@@ -371,6 +374,7 @@ export function healthMedicationGroupRoutes(db: Database, env: Env) {
             and(
               eq(healthMedications.householdId, auth.householdId),
               eq(healthMedications.memberId, body.memberId),
+              isNull(healthMedications.deletedAt),
             ),
           );
         const allowed = new Set(body.medicationIds);
@@ -539,6 +543,7 @@ export function healthMedicationGroupRoutes(db: Database, env: Env) {
         and(
           eq(healthMedications.id, body.medicationId),
           eq(healthMedications.householdId, auth.householdId),
+          isNull(healthMedications.deletedAt),
         ),
       )
       .limit(1);

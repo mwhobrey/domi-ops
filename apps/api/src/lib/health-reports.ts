@@ -26,6 +26,7 @@ import {
   healthMedicationReportsVisibleWhere,
 } from "./health-access.js";
 import { decryptHealthFieldOrPassthrough } from "./health-crypto.js";
+import { excludeInactiveInstants, loadMedicationPausesMap } from "./health-med-pauses.js";
 import {
   loadExerciseDetailsForEvents,
   loadFoodLogEntriesForEvents,
@@ -868,8 +869,12 @@ export async function buildHealthReports(
   if (scheduleKindFilter) {
     medRows = medRows.filter((row) => row.scheduleKind === scheduleKindFilter);
   }
+  // Soft-deleted meds (WHO-338) stay in reports for the period they were in use.
+  const rangeStart = new Date(`${from}T00:00:00.000Z`);
+  medRows = medRows.filter((row) => !row.deletedAt || row.deletedAt >= rangeStart);
 
   const medIds = medRows.map((m) => m.id);
+  const pausesByMed = await loadMedicationPausesMap(db, medIds);
   const logFrom = new Date(`${from}T00:00:00.000Z`);
   logFrom.setUTCDate(logFrom.getUTCDate() - 1);
   const logTo = new Date(`${to}T23:59:59.999Z`);
@@ -907,14 +912,18 @@ export async function buildHealthReports(
     const prn = logs.filter((l) => l.scheduledAt == null).length;
 
     if (med.scheduleKind === "scheduled") {
-      const expected = enumerateScheduledDoseInstants({
-        scheduleJson: med.scheduleJson,
-        startDate: med.startDate,
-        endDate: med.endDate,
-        from,
-        to: adherenceTo,
-        timeZone: timezone,
-      });
+      const expected = excludeInactiveInstants(
+        enumerateScheduledDoseInstants({
+          scheduleJson: med.scheduleJson,
+          startDate: med.startDate,
+          endDate: med.endDate,
+          from,
+          to: adherenceTo,
+          timeZone: timezone,
+        }),
+        pausesByMed.get(med.id) ?? [],
+        med.deletedAt,
+      );
       const computed = computeExpectedScheduledAdherence({
         expected,
         logs: logs.map((l) => ({ scheduledAt: l.scheduledAt, status: l.status })),

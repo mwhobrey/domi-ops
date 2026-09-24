@@ -1,6 +1,7 @@
 import {
   boolean,
   date,
+  index,
   integer,
   pgEnum,
   pgTable,
@@ -243,7 +244,27 @@ export const healthMedications = pgTable("health_medications", {
   }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  /** Soft delete (WHO-338): the med leaves every list and reminder, its dose history stays. */
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
 });
+
+/**
+ * When a medication was paused (enabled → false) and resumed (WHO-338). Adherence skips doses
+ * that fall inside a pause, so an on-again/off-again med doesn't read as months of missed doses.
+ * `resumedAt` null = still paused.
+ */
+export const healthMedicationPauses = pgTable(
+  "health_medication_pauses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    medicationId: uuid("medication_id")
+      .notNull()
+      .references(() => healthMedications.id, { onDelete: "cascade" }),
+    pausedAt: timestamp("paused_at", { withTimezone: true }).notNull().defaultNow(),
+    resumedAt: timestamp("resumed_at", { withTimezone: true }),
+  },
+  (t) => [index("health_medication_pauses_medication_id_idx").on(t.medicationId)],
+);
 
 export const healthMedicationShares = pgTable(
   "health_medication_shares",
