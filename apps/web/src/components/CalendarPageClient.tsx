@@ -138,6 +138,7 @@ export function CalendarPageClient({
   const [createDraft, setCreateDraft] = useState<CalendarCreateDraft | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [lanes, setLanes] = useState<CalendarLaneMeta[]>([]);
+  const [lanesLoaded, setLanesLoaded] = useState(false);
   const [hiddenLaneIds, setHiddenLaneIds] = useState<Set<string>>(() => readHiddenLaneIds());
   const [hiddenCategoryKeys, setHiddenCategoryKeys] = useState<Set<string>>(() =>
     readHiddenCategoryKeys(),
@@ -366,6 +367,8 @@ export function CalendarPageClient({
       }
     } catch {
       /* ignore */
+    } finally {
+      setLanesLoaded(true);
     }
   }, []);
 
@@ -398,8 +401,11 @@ export function CalendarPageClient({
   }, [loadCategories]);
 
   useEffect(() => {
-    loadEvents();
-  }, [loadEvents]);
+    // The stored view (month/week/day) is applied one effect after mount; loading before that
+    // fetches the default agenda range and then the real one.
+    if (!viewReady) return;
+    void loadEvents();
+  }, [loadEvents, viewReady]);
 
   useEffect(() => {
     if (syncActive) syncWasActive.current = true;
@@ -644,13 +650,15 @@ export function CalendarPageClient({
         </Alert>
       )}
 
-      <CalendarSetupBanner
-        oauthConfigured={oauthConfigured}
-        connected={connected}
-        needsImport={needsImportSetup}
-        hasCalendars={lanes.length > 0}
-        onImport={() => setImportWizardOpen(true)}
-      />
+      {lanesLoaded ? (
+        <CalendarSetupBanner
+          oauthConfigured={oauthConfigured}
+          connected={connected}
+          needsImport={needsImportSetup}
+          hasCalendars={lanes.length > 0}
+          onImport={() => setImportWizardOpen(true)}
+        />
+      ) : null}
 
       {(syncActive || syncStatus?.run?.status === "failed") && (
         <div className="mb-4 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-muted)]/30 p-4">
@@ -759,6 +767,8 @@ export function CalendarPageClient({
           monthStart={monthStart}
           events={visibleEvents}
           compact={!isDesktop}
+          showTitles={isDesktop}
+          categoryColorByKey={categoryColorByKey}
           onDaySelect={(date) => {
             setDaySheetDate(date);
             setDaySheetOpen(true);

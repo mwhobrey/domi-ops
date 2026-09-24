@@ -56,6 +56,8 @@ import {
 
   isViewingToday,
 
+  nowMinutesSinceMidnight,
+
   layoutTimedEvent,
 
   layoutTimedEvents,
@@ -299,6 +301,13 @@ export function CalendarTimeGrid({
   const colCount = dates.length;
 
   const showNow = scrollToNow && isViewingToday(dateKeys);
+  const [nowMin, setNowMin] = useState(() => nowMinutesSinceMidnight());
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMin(nowMinutesSinceMidnight()), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+  // Recomputed on every minute tick, so the highlight follows midnight.
+  const todayKey = formatDateLocal(new Date());
 
 
 
@@ -909,7 +918,11 @@ export function CalendarTimeGrid({
 
             key={`hdr-${col.key}`}
 
-            className="sticky z-20 border-b border-l border-[var(--color-border)] bg-[var(--color-surface-elevated)] p-2 text-center text-sm font-medium"
+            aria-current={col.key === todayKey ? "date" : undefined}
+            className={cn(
+              "sticky z-20 border-b border-l border-[var(--color-border)] bg-[var(--color-surface-elevated)] p-2 text-center text-sm font-medium",
+              col.key === todayKey && "border-b-2 border-b-[var(--color-accent)] text-[var(--color-accent)]",
+            )}
 
             style={{ top: allDayBandHeight }}
 
@@ -1009,6 +1022,16 @@ export function CalendarTimeGrid({
 
             ))}
 
+            {col.key === todayKey && nowMin >= hours[0]! * 60 ? (
+              <div
+                className="pointer-events-none absolute left-0 right-0 z-30 flex -translate-y-1/2 items-center"
+                style={{ top: ((nowMin - hours[0]! * 60) / 60) * SLOT_HEIGHT_PX }}
+                aria-hidden
+              >
+                <span className="-ml-1 h-2 w-2 rounded-full bg-[var(--color-danger)]" />
+                <span className="h-px flex-1 bg-[var(--color-danger)]" />
+              </div>
+            ) : null}
             {col.layouts.map(({ event, topPx, heightPx, zIndex }) => {
 
               const colors = eventColors(
