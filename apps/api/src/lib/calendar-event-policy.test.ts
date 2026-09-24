@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { computeEventPolicy, type EventPolicyContext } from "./calendar-event-policy.js";
+import {
+  computeEventPolicy,
+  isGooglePushPatch,
+  type EventPolicyContext,
+} from "./calendar-event-policy.js";
 import type { CalendarEventRow } from "./calendar-event-policy.js";
 
 function row(
@@ -18,6 +22,8 @@ function row(
     endTime: "10:00",
     timeZone: null,
     allDay: false,
+    location: null,
+    attendeeMemberIds: null,
     driveBufferBeforeMinutes: null,
     driveBufferAfterMinutes: null,
     source: "google",
@@ -104,5 +110,20 @@ describe("computeEventPolicy", () => {
       ctx("u1", "bidirectional"),
     );
     expect(p).toEqual({ editable: false, pushable: false });
+  });
+});
+
+describe("isGooglePushPatch", () => {
+  const base = row({ calendarId: "cal-target", location: "Clinic" });
+
+  it("pushes title and location edits, not just schedule changes", () => {
+    expect(isGooglePushPatch({ title: "Renamed" }, base)).toBe(true);
+    expect(isGooglePushPatch({ location: null }, base)).toBe(true);
+    expect(isGooglePushPatch({ startTime: "11:00" }, base)).toBe(true);
+  });
+
+  it("ignores unchanged values and Domi Ops-only fields", () => {
+    expect(isGooglePushPatch({ title: "Test", location: "Clinic" }, base)).toBe(false);
+    expect(isGooglePushPatch({ attendeeMemberIds: ["m1"] }, base)).toBe(false);
   });
 });

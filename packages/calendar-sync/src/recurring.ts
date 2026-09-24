@@ -5,9 +5,10 @@ import {
   parseRuleReminderOffsets,
   replaceEventReminders,
 } from "./event-reminders.js";
+import { addDaysIso } from "./household-time.js";
 
 export type ParsedRrule = {
-  freq: "DAILY" | "WEEKLY" | "MONTHLY";
+  freq: "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
   interval: number;
   byDay?: number;
   until?: string;
@@ -16,7 +17,7 @@ export type ParsedRrule = {
 
 export function parseRrule(rrule: string): ParsedRrule | null {
   const upper = rrule.toUpperCase();
-  const freqMatch = upper.match(/FREQ=(DAILY|WEEKLY|MONTHLY)/);
+  const freqMatch = upper.match(/FREQ=(DAILY|WEEKLY|MONTHLY|YEARLY)/);
   if (!freqMatch) return null;
   const freq = freqMatch[1] as ParsedRrule["freq"];
   const intervalMatch = upper.match(/INTERVAL=(\d+)/);
@@ -33,72 +34,76 @@ export function parseRrule(rrule: string): ParsedRrule | null {
   return { freq, interval, byDay, until, count };
 }
 
-function addDaysIso(iso: string, n: number): string {
-  const d = new Date(`${iso}T12:00:00`);
-  d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
+const DAY_MS = 86_400_000;
+/** Guards against a runaway loop on a malformed rule; ~137 years of a daily series. */
+const MAX_STEPS = 50_000;
+
+function utcMs(iso: string): number {
+  return Date.parse(`${iso}T00:00:00Z`);
 }
 
-function addMonthsIso(iso: string, n: number): string {
-  const d = new Date(`${iso}T12:00:00`);
-  d.setMonth(d.getMonth() + n);
-  return d.toISOString().slice(0, 10);
+function isoOf(ms: number): string {
+  return new Date(ms).toISOString().slice(0, 10);
 }
 
-function datesForRule(
-  rule: typeof recurringRules.$inferSelect,
+function daysInMonth(year: number, monthIndex: number): number {
+  return new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
+}
+
+/**
+ * The k-th candidate of a series, or null when that step doesn't exist (the 31st in a 30-day
+ * month, Feb 29 in a common year, a BYDAY earlier in the first week than the series start).
+ * Every step is anchored on the series start, so "every 2 weeks" keeps its phase no matter
+ * where materialization resumes.
+ */
+function nthCandidate(rule: ParsedRrule, seriesStart: string, k: number): string | null {
+  const base = utcMs(seriesStart);
+  const step = k * rule.interval;
+  if (rule.freq === "DAILY") return isoOf(base + step * DAY_MS);
+  if (rule.freq === "WEEKLY") {
+    const startDow = new Date(base).getUTCDay();
+    const target = rule.byDay ?? startDow;
+    const ms = base + (step * 7 + target - startDow) * DAY_MS;
+    return ms < base ? null : isoOf(ms);
+  }
+  const [y, m, d] = seriesStart.split("-").map(Number) as [number, number, number];
+  if (rule.freq === "MONTHLY") {
+    const total = m - 1 + step;
+    const year = y + Math.floor(total / 12);
+    const month = total % 12;
+    if (d > daysInMonth(year, month)) return null;
+    return isoOf(Date.UTC(year, month, d));
+  }
+  const year = y + step;
+  if (d > daysInMonth(year, m - 1)) return null;
+  return isoOf(Date.UTC(year, m - 1, d));
+}
+
+/**
+ * Occurrence start dates of a series that fall inside [from, to]. COUNT is counted from the
+ * series start, not from `from`, so resuming materialization never over-generates.
+ */
+export function occurrenceDates(
+  rule: ParsedRrule,
+  seriesStart: string,
   from: string,
   to: string,
+  seriesEnd?: string | null,
 ): string[] {
-  const parsed = parseRrule(rule.rrule);
-  if (!parsed) return [];
-  const hardEnd = parsed.until && parsed.until < to ? parsed.until : to;
-  const ruleEnd = rule.endDate && rule.endDate < hardEnd ? rule.endDate : hardEnd;
-  const start = rule.startDate > from ? rule.startDate : from;
-  if (start > ruleEnd) return [];
+  let end = to;
+  if (rule.until && rule.until < end) end = rule.until;
+  if (seriesEnd && seriesEnd < end) end = seriesEnd;
+  if (seriesStart > end || from > end) return [];
 
   const out: string[] = [];
-  const maxCount = parsed.count ?? 366;
-  let generated = 0;
-
-  if (parsed.freq === "DAILY") {
-    let cur = start;
-    while (cur <= ruleEnd && generated < maxCount) {
-      out.push(cur);
-      generated += 1;
-      cur = addDaysIso(cur, parsed.interval);
-    }
-    return out;
-  }
-
-  if (parsed.freq === "WEEKLY") {
-    const targetDow = parsed.byDay ?? new Date(`${rule.startDate}T12:00:00`).getDay();
-    let probe = start;
-    while (probe <= ruleEnd && new Date(`${probe}T12:00:00`).getDay() !== targetDow) {
-      probe = addDaysIso(probe, 1);
-    }
-    let cur = probe;
-    while (cur <= ruleEnd && generated < maxCount) {
-      out.push(cur);
-      generated += 1;
-      cur = addDaysIso(cur, 7 * parsed.interval);
-    }
-    return out;
-  }
-
-  const dom = new Date(`${rule.startDate}T12:00:00`).getDate();
-  let cur = rule.startDate < start ? start : rule.startDate;
-  const anchor = new Date(`${cur}T12:00:00`);
-  if (anchor.getDate() !== dom) {
-    cur = addDaysIso(cur, 1);
-    while (cur <= ruleEnd && new Date(`${cur}T12:00:00`).getDate() !== dom) {
-      cur = addDaysIso(cur, 1);
-    }
-  }
-  while (cur <= ruleEnd && generated < maxCount) {
-    out.push(cur);
-    generated += 1;
-    cur = addMonthsIso(cur, parsed.interval);
+  let counted = 0;
+  for (let k = 0; k < MAX_STEPS; k++) {
+    const date = nthCandidate(rule, seriesStart, k);
+    if (date === null) continue;
+    if (date > end) break;
+    counted += 1;
+    if (rule.count != null && counted > rule.count) break;
+    if (date >= from) out.push(date);
   }
   return out;
 }
@@ -117,12 +122,14 @@ export async function materializeRecurringForHousehold(
 
   let created = 0;
   for (const rule of rules) {
+    const parsed = parseRrule(rule.rrule);
+    if (!parsed) continue;
     const offsets = parseRuleReminderOffsets(rule.reminderOffsetsJson);
     const from =
       rule.lastGeneratedDate && rule.lastGeneratedDate > rule.startDate
         ? addDaysIso(rule.lastGeneratedDate, 1)
         : rule.startDate;
-    const dates = datesForRule(rule, from, horizon);
+    const dates = occurrenceDates(parsed, rule.startDate, from, horizon, rule.endDate);
     if (dates.length === 0) continue;
 
     const existing = await db
@@ -148,10 +155,14 @@ export async function materializeRecurringForHousehold(
           description: rule.description,
           categoryKey: rule.categoryKey,
           startDate: date,
-          endDate: rule.endDate,
+          // rule.endDate ends the series; each occurrence keeps the first one's span.
+          endDate: rule.durationDays > 0 ? addDaysIso(date, rule.durationDays) : null,
           startTime: rule.allDay ? null : rule.startTime,
           endTime: rule.allDay ? null : rule.endTime,
           allDay: rule.allDay,
+          timeZone: rule.timeZone,
+          location: rule.location,
+          attendeeMemberIds: rule.attendeeMemberIds,
           color: rule.color,
           source: "local",
           recurringRuleId: rule.id,

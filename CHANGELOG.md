@@ -10,6 +10,15 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Added
 
+- Calendar events (WHO-330):
+  - Repeat **yearly** (birthdays, anniversaries), **every N** days/weeks/months/years, and end
+    the repeat on a date or after a number of times.
+  - A **Location** field, synced with Google Calendar both ways.
+  - **Who's it for**: tag household members on an event. The agenda shows them, and the
+    calendar toolbar can filter to one person's events.
+  *(requires `npm run db:migrate` (`0076_calendar_event_location_attendees`); no other manual
+  steps.)*
+
 - Goals & Rewards (WHO-333):
   - Goals can say what they count ("books", "miles") and carry an optional target date;
     progress reads "12 / 20 books · Target Dec 31". *(requires `npm run db:migrate`
@@ -21,6 +30,12 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Changed
 
+- Calendar recurring events (WHO-330): "every 2 weeks" no longer drifts off its week when the
+  calendar catches up, "repeat 5 times" stops at 5, and a monthly event on the 31st skips
+  shorter months instead of sliding to the 3rd. Overnight and multi-day repeating events keep
+  their length on every occurrence instead of all ending on the first one's end date.
+- Editing a Google-synced event's title or location now pushes to Google, not just time
+  changes (WHO-330).
 - Weekly reports cover the whole week (Mon–Sun) instead of stopping at Friday, which
   silently dropped anything due on a weekend (WHO-333).
 - Expenses: the add-expense row says "Spent by …" for the member picker and shows `$` on the
@@ -76,6 +91,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
     instead of "BP systolic, BP diastolic, Heart rate" and a long label list.
 ### Fixed
 
+- **Calendar event permissions (WHO-330):** editing, deleting, or duplicating an event now
+  requires write access to its calendar. Before, a household member with an event's id could
+  change or delete events on someone else's private calendar, and an edit could overwrite
+  internal fields (including the event's household) or move it to a calendar they can't write.
 - The "Set up your household calendar" banner no longer flashes on every Calendar page load
   while calendars are still loading, and the page no longer fetches events twice on open
   (WHO-329).
@@ -164,6 +183,12 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Changed
 
+- Calendar recurring events (WHO-330): "every 2 weeks" no longer drifts off its week when the
+  calendar catches up, "repeat 5 times" stops at 5, and a monthly event on the 31st skips
+  shorter months instead of sliding to the 3rd. Overnight and multi-day repeating events keep
+  their length on every occurrence instead of all ending on the first one's end date.
+- Editing a Google-synced event's title or location now pushes to Google, not just time
+  changes (WHO-330).
 - Calendar event create/edit: changing the start time on a timed event now moves the end time
   to one hour later when the end was still the default (or invalid); custom durations are
   preserved when the end was set manually.

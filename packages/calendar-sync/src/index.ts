@@ -41,7 +41,12 @@ export {
 export { runCalendarSyncJob, syncConnection, pullLinkedCalendar } from "./sync.js";
 export { eventToFields, eventToGoogleBody, inferSourceCategory } from "./mapper.js";
 export { processOutboxForConnection, pushEventUpdate, pushEventCreate } from "./push.js";
-export { materializeRecurringForHousehold, parseRrule } from "./recurring.js";
+export {
+  materializeRecurringForHousehold,
+  occurrenceDates,
+  parseRrule,
+  type ParsedRrule,
+} from "./recurring.js";
 export { scanCalendarReminders } from "./reminder-scan.js";
 export { scanChoreReminders } from "./chore-reminder-scan.js";
 export { scanChoreDigest, CHORE_DIGEST_HOUR } from "./chore-digest-scan.js";

@@ -48,6 +48,7 @@ import {
 } from "../lib/calendar-sync-status.js";
 import {
   computeEventPolicy,
+  isGooglePushPatch,
   isSchedulePatch,
   loadEventPolicyContext,
   toEventDto,
@@ -70,7 +71,16 @@ import {
   normalizeReminderOffsets,
   replaceEventReminders,
 } from "../lib/calendar-event-reminders.js";
-import { buildRrule } from "../lib/calendar-repeat.js";
+import { buildRrule, type RepeatRuleInput } from "../lib/calendar-repeat.js";
+import {
+  attendeesBelongToHousehold,
+  normalizeAttendeeIds,
+  normalizeEventLocation,
+  parseRepeatRuleBody,
+  pickEventPatch,
+  spanDays,
+  type RepeatRuleBody,
+} from "../lib/calendar-event-fields.js";
 import {
   MAX_DRIVE_BUFFER_MINUTES,
   parseDriveBufferMinutes,
@@ -831,8 +841,10 @@ export function calendarRoutes(db: Database, env: Env) {
       driveBufferBeforeMinutes?: number | null;
       driveBufferAfterMinutes?: number | null;
       calendarId?: string;
+      location?: string | null;
+      attendeeMemberIds?: string[] | null;
       repeatWeekly?: boolean;
-      repeatRule?: { freq: "daily" | "weekly" | "monthly"; interval?: number; until?: string; count?: number };
+      repeatRule?: RepeatRuleBody;
       reminderOffsets?: number[];
     }>();
     const calendarId = body.calendarId ?? (await defaultCalendarId(auth.householdId));
@@ -853,20 +865,33 @@ export function calendarRoutes(db: Database, env: Env) {
 
     const allDay = body.allDay ?? false;
     const eventColor = body.categoryKey ? null : body.color ? normalizeHexColor(body.color) : null;
-    const repeatRule =
-      body.repeatRule ?? (body.repeatWeekly && allDay ? { freq: "weekly" as const } : null);
+    const location = normalizeEventLocation(body.location) ?? null;
+    const attendeeMemberIds = normalizeAttendeeIds(body.attendeeMemberIds) ?? null;
+    if (
+      attendeeMemberIds === "invalid" ||
+      !(await attendeesBelongToHousehold(db, auth.householdId, attendeeMemberIds))
+    ) {
+      return c.json({ error: "invalid_attendees" }, 400);
+    }
+    const repeatBody =
+      body.repeatRule ?? (body.repeatWeekly && allDay ? { freq: "weekly" } : null);
+    let repeatRule: RepeatRuleInput | null = null;
+    if (repeatBody?.freq) {
+      const parsed = parseRepeatRuleBody(repeatBody, body.startDate);
+      if ("error" in parsed) return c.json({ error: parsed.error }, 400);
+      repeatRule = parsed.rule;
+    }
 
     const bufferError = driveBufferError(body);
     if (bufferError) return c.json({ error: "invalid_drive_buffer", message: bufferError }, 400);
-    if (repeatRule?.freq && (body.driveBufferBeforeMinutes != null || body.driveBufferAfterMinutes != null)) {
+    if (repeatRule && (body.driveBufferBeforeMinutes != null || body.driveBufferAfterMinutes != null)) {
       return c.json(
         { error: "invalid_drive_buffer", message: "Drive buffers aren't supported on recurring events yet." },
         400,
       );
     }
 
-    if (repeatRule?.freq) {
-      const freq = repeatRule.freq;
+    if (repeatRule) {
       const offsets = normalizeReminderOffsets(body.reminderOffsets);
       const [rule] = await db
         .insert(recurringRules)
@@ -875,18 +900,17 @@ export function calendarRoutes(db: Database, env: Env) {
           calendarId,
           title: body.title,
           description: body.description,
-          rrule: buildRrule({
-            freq,
-            interval: repeatRule.interval,
-            until: repeatRule.until,
-            count: repeatRule.count,
-            startDate: body.startDate,
-          }),
+          rrule: buildRrule(repeatRule),
           startDate: body.startDate,
-          endDate: body.endDate,
+          // end_date ends the series; the event's own end becomes a span on each occurrence.
+          endDate: repeatRule.until ?? null,
+          durationDays: spanDays(body.startDate, body.endDate),
           startTime: allDay ? null : body.startTime ?? null,
           endTime: allDay ? null : body.endTime ?? null,
           allDay,
+          timeZone: body.timeZone ?? null,
+          location,
+          attendeeMemberIds,
           categoryKey: body.categoryKey,
           color: eventColor,
           reminderOffsetsJson: offsets.length > 0 ? offsets : null,
@@ -907,6 +931,8 @@ export function calendarRoutes(db: Database, env: Env) {
           allDay,
           color: eventColor,
           timeZone: body.timeZone,
+          location,
+          attendeeMemberIds,
           source: "local",
           recurringRuleId: rule!.id,
           createdByUserId: auth.userId,
@@ -941,6 +967,8 @@ export function calendarRoutes(db: Database, env: Env) {
         allDay,
         color: eventColor,
         timeZone: body.timeZone,
+        location,
+        attendeeMemberIds,
         driveBufferBeforeMinutes: body.driveBufferBeforeMinutes ?? null,
         driveBufferAfterMinutes: body.driveBufferAfterMinutes ?? null,
         source: "local",
@@ -1008,6 +1036,8 @@ export function calendarRoutes(db: Database, env: Env) {
       timeZone?: string | null;
       driveBufferBeforeMinutes?: number | null;
       driveBufferAfterMinutes?: number | null;
+      location?: string | null;
+      attendeeMemberIds?: string[] | null;
       reminderOffsets?: number[];
     }>();
     const [existing] = await db
@@ -1016,6 +1046,25 @@ export function calendarRoutes(db: Database, env: Env) {
       .where(and(eq(calendarEvents.id, id), eq(calendarEvents.householdId, auth.householdId)))
       .limit(1);
     if (!existing) return c.json({ error: "not_found" }, 404);
+    if (!(await canWriteCalendar(db, existing.calendarId, auth.householdId, auth.userId))) {
+      return c.json({ error: "forbidden", message: "You cannot edit events on this calendar." }, 403);
+    }
+    if (
+      body.calendarId &&
+      body.calendarId !== existing.calendarId &&
+      !(await canWriteCalendar(db, body.calendarId, auth.householdId, auth.userId))
+    ) {
+      return c.json({ error: "forbidden", message: "You cannot move events to that calendar." }, 403);
+    }
+
+    const location = normalizeEventLocation(body.location);
+    const attendeeMemberIds = normalizeAttendeeIds(body.attendeeMemberIds);
+    if (
+      attendeeMemberIds === "invalid" ||
+      !(await attendeesBelongToHousehold(db, auth.householdId, attendeeMemberIds ?? null))
+    ) {
+      return c.json({ error: "invalid_attendees" }, 400);
+    }
 
     const policyCtx = await loadEventPolicyContext(db, auth.householdId, auth.userId);
     const policy = computeEventPolicy(existing, policyCtx);
@@ -1033,7 +1082,10 @@ export function calendarRoutes(db: Database, env: Env) {
 
     const scheduleChange = isSchedulePatch(body, existing);
     const pushAfter =
-      scheduleChange && policy.pushable && policy.linkedCalendarId && policy.connectionId;
+      isGooglePushPatch({ ...body, location }, existing) &&
+      policy.pushable &&
+      policy.linkedCalendarId &&
+      policy.connectionId;
 
     const targetCalendarId = body.calendarId ?? existing.calendarId;
     if (body.categoryKey !== undefined) {
@@ -1046,7 +1098,9 @@ export function calendarRoutes(db: Database, env: Env) {
       if (!ok) return c.json({ error: "invalid_category" }, 400);
     }
 
-    const patch: Record<string, unknown> = { ...body, updatedAt: new Date() };
+    const patch: Record<string, unknown> = { ...pickEventPatch(body), updatedAt: new Date() };
+    if (location !== undefined) patch.location = location;
+    if (attendeeMemberIds !== undefined) patch.attendeeMemberIds = attendeeMemberIds;
     if (body.categoryKey) patch.color = null;
     else if (body.color !== undefined) {
       patch.color = body.color ? normalizeHexColor(body.color) : null;
@@ -1117,6 +1171,9 @@ export function calendarRoutes(db: Database, env: Env) {
       .where(and(eq(calendarEvents.id, id), eq(calendarEvents.householdId, auth.householdId)))
       .limit(1);
     if (!existing) return c.json({ error: "not_found" }, 404);
+    if (!(await canWriteCalendar(db, existing.calendarId, auth.householdId, auth.userId))) {
+      return c.json({ error: "forbidden", message: "You cannot add events to this calendar." }, 403);
+    }
 
     const [ev] = await db
       .insert(calendarEvents)
@@ -1133,6 +1190,8 @@ export function calendarRoutes(db: Database, env: Env) {
         endTime: existing.endTime,
         timeZone: existing.timeZone,
         allDay: existing.allDay,
+        location: existing.location,
+        attendeeMemberIds: existing.attendeeMemberIds,
         driveBufferBeforeMinutes: existing.driveBufferBeforeMinutes,
         driveBufferAfterMinutes: existing.driveBufferAfterMinutes,
         source: "local",
@@ -1161,6 +1220,9 @@ export function calendarRoutes(db: Database, env: Env) {
       .where(and(eq(calendarEvents.id, id), eq(calendarEvents.householdId, auth.householdId)))
       .limit(1);
     if (!existing) return c.json({ error: "not_found" }, 404);
+    if (!(await canWriteCalendar(db, existing.calendarId, auth.householdId, auth.userId))) {
+      return c.json({ error: "forbidden", message: "You cannot delete events on this calendar." }, 403);
+    }
 
     if (existing.recurringRuleId && recurringScope === "series") {
       await db

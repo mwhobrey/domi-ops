@@ -57,6 +57,8 @@ export async function listNativeCalendarEvents(
     endTime: e.endTime,
     timeZone: e.timeZone,
     allDay: e.allDay,
+    location: e.location,
+    attendeeMemberIds: e.attendeeMemberIds,
     driveBufferBeforeMinutes: e.driveBufferBeforeMinutes,
     driveBufferAfterMinutes: e.driveBufferAfterMinutes,
     source: e.source,

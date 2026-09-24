@@ -1,7 +1,7 @@
 const WEEKDAY_RRULE = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"] as const;
 
 export type RepeatRuleInput = {
-  freq: "daily" | "weekly" | "monthly";
+  freq: "daily" | "weekly" | "monthly" | "yearly";
   interval?: number;
   until?: string;
   count?: number;
