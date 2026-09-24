@@ -3,6 +3,7 @@ export type GradebookCellStatus =
   | "overdue"
   | "submitted"
   | "graded"
+  | "excused"
   | "not_assigned";
 
 export interface GradebookAssignmentColumn {
@@ -56,6 +57,7 @@ const STATUS_LABEL: Record<GradebookCellStatus, string> = {
   overdue: "Overdue",
   submitted: "Submitted",
   graded: "Graded",
+  excused: "Excused",
   not_assigned: "Not assigned",
 };
 
@@ -67,6 +69,7 @@ const STATUS_TONE: Record<
   overdue: "warning",
   submitted: "accent",
   graded: "success",
+  excused: "default",
   not_assigned: "default",
 };
 

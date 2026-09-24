@@ -16,8 +16,12 @@ import {
   schoolTestQuestions,
   users,
 } from "@domi-ops/db";
-import { and, asc, eq, inArray, ne, sql } from "drizzle-orm";
-import { resolveClassAccess, visibleClassIdsForMember } from "../lib/school-access.js";
+import { and, asc, eq, inArray, ne, notInArray, sql } from "drizzle-orm";
+import {
+  isEnrollmentActiveNow,
+  resolveClassAccess,
+  visibleClassIdsForMember,
+} from "../lib/school-access.js";
 import { canSubmitPastDue, isSubmissionLate } from "../lib/school-submission.js";
 import { freezeAssignmentTestMaterials } from "../lib/school-material-freeze.js";
 import { SchoolMaterialFreezeError } from "../lib/school-material-freeze-errors.js";
@@ -249,6 +253,108 @@ export function schoolAssignmentsRoutes(db: Database, env: Env) {
             .returning({ id: schoolAssignments.id })
         : [];
     return c.json({ closed: closed.length, skipped: ids.length - closed.length });
+  });
+
+  /**
+   * Excuse (or un-excuse) one student from one assignment. Excused work is never missing or
+   * overdue and stays out of averages. Work already turned in can't be excused.
+   */
+  app.post("/assignments/:id/excuse", async (c) => {
+    const auth = c.get("auth")!;
+    const assignmentId = c.req.param("id");
+    const body = await c.req
+      .json<{ studentMemberId?: unknown; excused?: unknown } | null>()
+      .catch(() => null);
+    const studentMemberId = typeof body?.studentMemberId === "string" ? body.studentMemberId : null;
+    if (!studentMemberId || typeof body?.excused !== "boolean") {
+      return c.json({ error: "invalid_body" }, 400);
+    }
+    const excused = body.excused;
+    const context = await schoolContextForAuth(db, auth);
+    if (!context) return c.json({ error: "not_a_member" }, 403);
+
+    const [row] = await db
+      .select({ classId: schoolAssignments.classId, teacherMemberId: schoolClasses.teacherMemberId })
+      .from(schoolAssignments)
+      .innerJoin(schoolClasses, eq(schoolAssignments.classId, schoolClasses.id))
+      .where(and(eq(schoolAssignments.id, assignmentId), eq(schoolClasses.householdId, auth.householdId)))
+      .limit(1);
+    if (!row) return c.json({ error: "not_found" }, 404);
+    const enrollments = await db
+      .select()
+      .from(schoolEnrollments)
+      .where(
+        and(
+          eq(schoolEnrollments.classId, row.classId),
+          inArray(schoolEnrollments.memberId, [context.memberId, studentMemberId]),
+        ),
+      );
+    const access = resolveClassAccess({
+      memberId: context.memberId,
+      householdRole: context.householdRole,
+      teacherMemberId: row.teacherMemberId,
+      enrollment: enrollments.find((e) => e.memberId === context.memberId) ?? null,
+    });
+    if (!access.canGrade) return c.json({ error: "forbidden" }, 403);
+    const target = enrollments.find((e) => e.memberId === studentMemberId && e.role === "student");
+    if (!target || !isEnrollmentActiveNow(target.activeFrom, target.activeTo)) {
+      return c.json({ error: "not_a_student" }, 400);
+    }
+
+    const forStudent = and(
+      eq(schoolSubmissions.assignmentId, assignmentId),
+      eq(schoolSubmissions.studentMemberId, studentMemberId),
+    );
+    const turnedIn = new Error("already_turned_in");
+    try {
+      const submission = await db.transaction(async (tx) => {
+        if (!excused) {
+          // Only rows still excused flip back; a turn-in since then is left alone.
+          const reverted = await tx
+            .update(schoolSubmissions)
+            .set({ status: "not_started", updatedAt: new Date() })
+            .where(and(forStudent, eq(schoolSubmissions.status, "excused")))
+            .returning({ id: schoolSubmissions.id, status: schoolSubmissions.status });
+          if (reverted.length > 0) {
+            // The reminder scan stamped this while everyone was excused; let it remind again.
+            await tx
+              .update(schoolAssignments)
+              .set({ dueReminderSentAt: null })
+              .where(eq(schoolAssignments.id, assignmentId));
+          }
+          return reverted[0] ?? null;
+        }
+        // The status predicate makes this atomic with a concurrent turn-in: a row the student
+        // just submitted no longer matches, and the check below then rolls everything back.
+        const updated = await tx
+          .update(schoolSubmissions)
+          .set({ status: "excused", updatedAt: new Date() })
+          .where(and(forStudent, inArray(schoolSubmissions.status, ["not_started", "excused"])))
+          .returning({ id: schoolSubmissions.id, status: schoolSubmissions.status });
+        const [blocking] = await tx
+          .select({ id: schoolSubmissions.id })
+          .from(schoolSubmissions)
+          .where(and(forStudent, notInArray(schoolSubmissions.status, ["not_started", "excused"])))
+          .limit(1);
+        if (blocking) throw turnedIn;
+        if (updated.length > 0) return updated[0]!;
+        const [inserted] = await tx
+          .insert(schoolSubmissions)
+          .values({ assignmentId, studentMemberId, status: "excused" })
+          .returning({ id: schoolSubmissions.id, status: schoolSubmissions.status });
+        return inserted ?? null;
+      });
+      return c.json({
+        ok: true,
+        excused,
+        submission: submission ? { ...submission, studentMemberId } : null,
+      });
+    } catch (e) {
+      if (e === turnedIn) {
+        return c.json({ error: "already_turned_in", message: "This student already turned it in." }, 409);
+      }
+      throw e;
+    }
   });
 
   app.patch("/assignments/:id", async (c) => {
@@ -536,7 +642,34 @@ export function schoolAssignmentsRoutes(db: Database, env: Env) {
         };
       }),
     );
-    return c.json({ submissions: withGrades, access });
+    // Graders also get enrolled students with no submission row yet, so they can be excused
+    // before anything exists for them.
+    let studentsWithoutWork: { memberId: string; label: string }[] = [];
+    if (access.canGrade) {
+      const have = new Set(subs.map((s) => s.studentMemberId));
+      const pending = (
+        await db
+          .select({
+            memberId: schoolEnrollments.memberId,
+            activeFrom: schoolEnrollments.activeFrom,
+            activeTo: schoolEnrollments.activeTo,
+          })
+          .from(schoolEnrollments)
+          .where(and(eq(schoolEnrollments.classId, cls.id), eq(schoolEnrollments.role, "student")))
+      ).filter((e) => !have.has(e.memberId) && isEnrollmentActiveNow(e.activeFrom, e.activeTo));
+      if (pending.length > 0) {
+        const rows = await db
+          .select({ id: householdMembers.id, name: householdMembers.name })
+          .from(householdMembers)
+          .where(inArray(householdMembers.id, pending.map((e) => e.memberId)));
+        const labels = new Map(rows.map((m) => [m.id, memberShownLabel(m)]));
+        studentsWithoutWork = pending.map((e) => ({
+          memberId: e.memberId,
+          label: labels.get(e.memberId) ?? "Student",
+        }));
+      }
+    }
+    return c.json({ submissions: withGrades, studentsWithoutWork, access });
   });
 
   app.post("/assignments/:id/submit", async (c) => {
@@ -651,7 +784,7 @@ export function schoolAssignmentsRoutes(db: Database, env: Env) {
       .where(
         and(
           eq(schoolSubmissions.assignmentId, assignmentId),
-          ne(schoolSubmissions.status, "not_started"),
+          notInArray(schoolSubmissions.status, ["not_started", "excused"]),
         ),
       );
     if (submissionCount === 1) {

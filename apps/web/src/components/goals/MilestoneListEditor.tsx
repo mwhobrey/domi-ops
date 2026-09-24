@@ -162,6 +162,7 @@ export function MilestoneListEditor({
                     <Button
                       type="button"
                       size="sm"
+                      className="shrink-0 whitespace-nowrap"
                       loading={creatingReward}
                       disabled={!newRewardTitle.trim()}
                       onClick={() => void createRewardFor(index)}

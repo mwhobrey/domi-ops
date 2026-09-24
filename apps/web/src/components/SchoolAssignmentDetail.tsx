@@ -58,6 +58,7 @@ const STATUS_TONE: Record<string, "default" | "accent" | "success" | "warning"> 
   submitted: "accent",
   graded: "success",
   returned: "warning",
+  excused: "default",
 };
 
 const STUDENT_STATUS: Record<string, { label: string; tone: "default" | "accent" | "success" | "warning" }> = {
@@ -78,7 +79,7 @@ function stepDone(
   submission: Submission | undefined,
 ): boolean {
   if (!submission) return false;
-  if (key === "submit") return submission.status !== "not_started";
+  if (key === "submit") return submission.status !== "not_started" && submission.status !== "excused";
   if (key === "upload") return submission.artifacts.length > 0;
   if (key === "grade") return submission.grade?.score != null || submission.status === "graded";
   return false;
@@ -102,6 +103,7 @@ export function SchoolAssignmentDetail({
   dueAt,
   visibility,
   initialSubmissions,
+  initialStudentsWithoutWork = [],
   access,
   driveEnabled = false,
   materials = [],
@@ -115,6 +117,8 @@ export function SchoolAssignmentDetail({
   dueAt?: string | null;
   visibility?: string;
   initialSubmissions: Submission[];
+  /** Graders only: enrolled students with no submission row yet (excusable). */
+  initialStudentsWithoutWork?: { memberId: string; label: string }[];
   access: SchoolClassAccess;
   driveEnabled?: boolean;
   materials?: SchoolMaterialDto[];
@@ -142,6 +146,59 @@ export function SchoolAssignmentDetail({
   const [submitting, setSubmitting] = useState(false);
   const [grading, setGrading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [excusing, setExcusing] = useState(false);
+  const [studentsWithoutWork, setStudentsWithoutWork] = useState(initialStudentsWithoutWork);
+
+  async function setExcused(target: Submission, excused: boolean) {
+    if (!target.studentMemberId) return;
+    setExcusing(true);
+    setError(null);
+    try {
+      await apiClient.post(`/api/school/assignments/${assignmentId}/excuse`, {
+        studentMemberId: target.studentMemberId,
+        excused,
+      });
+      setSubmissions((prev) =>
+        prev.map((s) =>
+          s.id === target.id ? { ...s, status: excused ? "excused" : "not_started" } : s,
+        ),
+      );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not update the excuse");
+    } finally {
+      setExcusing(false);
+    }
+  }
+
+  /** Excuse a student who has no submission row yet; the API creates an excused one. */
+  async function excuseWithoutWork(student: { memberId: string; label: string }) {
+    setExcusing(true);
+    setError(null);
+    try {
+      const res = await apiClient.post<{ submission: { id: string; status: string } | null }>(
+        `/api/school/assignments/${assignmentId}/excuse`,
+        { studentMemberId: student.memberId, excused: true },
+      );
+      if (res.submission) {
+        const created: Submission = {
+          id: res.submission.id,
+          status: res.submission.status,
+          studentMemberId: student.memberId,
+          studentLabel: student.label,
+          studentNote: "",
+          artifacts: [],
+          grade: null,
+        };
+        setSubmissions((prev) => [...prev, created]);
+        setSelectedSubmissionId(created.id);
+      }
+      setStudentsWithoutWork((prev) => prev.filter((s) => s.memberId !== student.memberId));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not update the excuse");
+    } finally {
+      setExcusing(false);
+    }
+  }
   const [driveReferences, setDriveReferences] = useState<DriveReference[]>([]);
   const [drivePickerOpen, setDrivePickerOpen] = useState(false);
   const [driveUploading, setDriveUploading] = useState(false);
@@ -180,7 +237,9 @@ export function SchoolAssignmentDetail({
     ? (STUDENT_STATUS[status] ?? { label: status.replace("_", " "), tone: "default" as const })
     : { label: status.replace("_", " "), tone: STATUS_TONE[status] ?? "default" };
   const turnedIn = status === "submitted" || status === "graded" || status === "returned";
-  const isPastDue = Boolean(dueAt && new Date(dueAt) < new Date() && !turnedIn);
+  const isPastDue = Boolean(
+    dueAt && new Date(dueAt) < new Date() && !turnedIn && status !== "excused",
+  );
   const turnedInLate = Boolean(submission?.isLate);
 
   async function ensureSubmissionRecord(): Promise<Submission> {
@@ -419,11 +478,14 @@ export function SchoolAssignmentDetail({
         {!isStudent && visibility && <Badge tone="default">{visibility}</Badge>}
         {dueAt && (
           <Badge tone={isPastDue ? "warning" : status === "not_started" ? "accent" : "default"}>
-            Due{" "}
-            <LocalDateTime
-              value={dueAt}
-              format={isStudent ? formatLongDate : formatWeekdayDateTime}
-            />
+            {/* One span: in the badge's flex layout a bare " " between items is dropped. */}
+            <span>
+              Due{" "}
+              <LocalDateTime
+                value={dueAt}
+                format={isStudent ? formatLongDate : formatWeekdayDateTime}
+              />
+            </span>
           </Badge>
         )}
         {isPastDue && <Badge tone="warning">Overdue</Badge>}
@@ -444,15 +506,17 @@ export function SchoolAssignmentDetail({
         <Alert variant="success">
           <span className="inline-flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden />
-            You turned this in
-            {submission?.submittedAt ? (
-              <>
-                {" on "}
-                <LocalDateTime value={submission.submittedAt} format={formatLongDate} />
-              </>
-            ) : null}
-            {turnedInLate ? " (late)" : ""}
-            . You can still add files or update your message below.
+            <span>
+              You turned this in
+              {submission?.submittedAt ? (
+                <>
+                  {" on "}
+                  <LocalDateTime value={submission.submittedAt} format={formatLongDate} />
+                </>
+              ) : null}
+              {turnedInLate ? " (late)" : ""}
+              . You can still add files or update your message below.
+            </span>
           </span>
         </Alert>
       )}
@@ -659,10 +723,57 @@ export function SchoolAssignmentDetail({
                     </option>
                   ))}
                 </Select>
+                {submission?.studentMemberId &&
+                (submission.status === "not_started" || submission.status === "excused") ? (
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      loading={excusing}
+                      onClick={() =>
+                        void setExcused(submission, submission.status !== "excused")
+                      }
+                    >
+                      {submission.status === "excused" ? "Un-excuse" : "Excuse from this assignment"}
+                    </Button>
+                    <span className="text-xs text-[var(--color-text-muted)]">
+                      {submission.status === "excused"
+                        ? "Excused work isn't missing and doesn't count toward the average."
+                        : "Stops it counting as missing or overdue for this student."}
+                    </span>
+                  </div>
+                ) : null}
               </div>
             ) : (
               <p className="text-sm text-[var(--color-text-muted)]">No student submissions yet.</p>
             )}
+            {studentsWithoutWork.length > 0 ? (
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Not started</p>
+                <ul className="flex flex-wrap gap-2">
+                  {studentsWithoutWork.map((s) => (
+                    <li
+                      key={s.memberId}
+                      className="inline-flex items-center gap-1 rounded-full border border-[var(--color-border)] py-0.5 pl-2.5 pr-1 text-sm"
+                    >
+                      {s.label}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 px-2 text-xs"
+                        loading={excusing}
+                        aria-label={`Excuse ${s.label} from this assignment`}
+                        onClick={() => void excuseWithoutWork(s)}
+                      >
+                        Excuse
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
             {submission ? (
               <>
                 {submission.submittedAt && (

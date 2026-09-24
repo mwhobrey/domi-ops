@@ -52,7 +52,9 @@ function isEnrollmentActiveNow(
 }
 
 function submissionBlocksReminder(status: string | null | undefined): boolean {
-  return status === "submitted" || status === "graded" || status === "returned";
+  return (
+    status === "submitted" || status === "graded" || status === "returned" || status === "excused"
+  );
 }
 
 function schoolReminderCopy(

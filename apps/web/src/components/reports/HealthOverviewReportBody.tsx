@@ -71,7 +71,10 @@ export function ReportTable({
   }
   return (
     <div className="overflow-x-auto rounded-[var(--radius-lg)] border border-[var(--color-border)] print:overflow-visible print:border-black/20">
-      <table className="w-full min-w-[28rem] text-left text-sm">
+      {/* A min width only helps wide tables; 2–3 columns fit a phone and shouldn't scroll. */}
+      <table
+        className={`w-full text-left text-sm${columns.length > 3 ? " min-w-[28rem]" : ""}`}
+      >
         <thead className="border-b border-[var(--color-border)] bg-[var(--color-surface-subtle)] print:bg-[#eee]">
           <tr>
             {columns.map((col) => (

@@ -10,6 +10,11 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Added
 
+- **Excuse a student from an assignment** (WHO-335): on School → Overdue, each student who
+  still owes the work has an **Excuse** button, and the assignment page's Student work panel
+  has **Excuse / Un-excuse**. Excused work isn't missing or overdue, stays out of averages, and
+  sends no reminders. Work a student already turned in can't be excused. *(requires
+  `npm run db:migrate` (`0078_submission_excused`); no other manual steps.)*
 - **Recurring bills** on the Expenses page (WHO-334): add rent, subscriptions, or insurance
   once (weekly, every 2 weeks, monthly, every 3 months, or yearly) and each one posts to
   expenses on its due date, in the household's time zone, counting toward budgets. Bills can
@@ -105,6 +110,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
     instead of "BP systolic, BP diastolic, Heart rate" and a long label list.
 ### Fixed
 
+- School assignment page: the Due badge read "DueMon, Sep 21" (a missing space since the
+  hydration fix), and an excused student showed as "turned in" and "Overdue" (WHO-335).
+- Phone layout: two- and three-column report tables no longer scroll sideways, and the goal
+  sheet's "Add reward" button no longer wraps onto two lines (WHO-335).
 - School dates on the class, gradebook, assignment, and reports pages no longer render in UTC
   on the server and then flip to local time, which caused React hydration errors (WHO-335).
 - The School API's assignment, material, and upload routes now return 403 when the School
