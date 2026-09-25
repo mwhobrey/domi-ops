@@ -250,6 +250,7 @@ export function driveRoutes(db: Database, env: Env) {
       read: access.read,
       write: access.write,
       permissions: access.permissions,
+      publicSharesEnabled: env.DRIVE_PUBLIC_SHARES_ENABLED,
     });
   });
 

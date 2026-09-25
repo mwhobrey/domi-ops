@@ -17,23 +17,22 @@ async function DrivePageContent() {
   let loadError: string | null = null;
 
   try {
-    const [objectsRes, foldersRes, rosterRes, sessionRes, accessRes, settingsRes] =
+    const [objectsRes, foldersRes, rosterRes, sessionRes, accessRes] =
       await Promise.all([
         apiFetch<{ objects: DriveObject[] }>("/api/core/drive/objects"),
         apiFetch<{ folders: DriveFolder[] }>("/api/core/drive/folders"),
         apiFetch<{ members: NoteShareMember[] }>("/api/core/household/roster"),
         apiFetch<AuthSessionResponse>("/auth/session"),
-        apiFetch<{ write?: boolean }>("/api/core/drive/access").catch(() => ({ write: true })),
-        apiFetch<{ drivePublicSharesEnabled?: boolean }>("/api/core/household/settings").catch(
-          () => ({ drivePublicSharesEnabled: true }),
-        ),
+        apiFetch<{ write?: boolean; publicSharesEnabled?: boolean }>(
+          "/api/core/drive/access",
+        ).catch(() => ({ write: true, publicSharesEnabled: true })),
       ]);
     objects = objectsRes.objects;
     folders = foldersRes.folders;
     members = rosterRes.members;
     currentMemberId = sessionMemberId(sessionRes);
     canWrite = accessRes.write !== false;
-    publicSharesEnabled = settingsRes.drivePublicSharesEnabled !== false;
+    publicSharesEnabled = accessRes.publicSharesEnabled !== false;
   } catch (e) {
     loadError = e instanceof Error ? e.message : "Could not load Drive";
   }
