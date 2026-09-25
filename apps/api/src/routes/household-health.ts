@@ -1645,7 +1645,11 @@ export function householdHealthRoutes(db: Database, env: Env) {
 
     let loggedAt = logRow.loggedAt;
     if (body.date !== undefined || body.time !== undefined) {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(body.date ?? "") || !/^\d{2}:\d{2}$/.test(body.time ?? "")) {
+      // Strict ranges first: an hour like 25 makes zonedLocalToUtc throw inside Intl.
+      if (
+        !/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(body.date ?? "") ||
+        !/^([01]\d|2[0-3]):[0-5]\d$/.test(body.time ?? "")
+      ) {
         return c.json({ error: "invalid_logged_at" }, 400);
       }
       // Re-saving the time as shown keeps the stored seconds instead of counting as a move.
@@ -1654,7 +1658,15 @@ export function householdHealthRoutes(db: Database, env: Env) {
         localTimeHhmm(logRow.loggedAt, tz) === body.time;
       if (!unchanged) {
         loggedAt = zonedLocalToUtc(body.date!, body.time!, tz);
-        if (Number.isNaN(loggedAt.getTime())) return c.json({ error: "invalid_logged_at" }, 400);
+        // Round-trip: Feb 30 rolls into March and a DST-gap time lands an hour off; both would
+        // save a time the user didn't enter.
+        if (
+          Number.isNaN(loggedAt.getTime()) ||
+          localDateOfInstant(loggedAt, tz) !== body.date ||
+          localTimeHhmm(loggedAt, tz) !== body.time
+        ) {
+          return c.json({ error: "invalid_logged_at" }, 400);
+        }
         if (loggedAt.getTime() > Date.now() + 60_000) {
           return c.json({ error: "logged_at_in_future" }, 400);
         }
