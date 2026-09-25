@@ -176,6 +176,7 @@ export interface LoggedDose {
   status: "taken" | "skipped" | "missed";
   scheduledAt: string | null;
   scheduledTimeLabel: string | null;
+  loggedAt: string;
   loggedAtLabel: string;
 }
 
@@ -235,8 +236,10 @@ export const DEFAULT_VITALS_METRICS: VitalsMetric[] = [
   "blood_pressure_systolic",
   "blood_pressure_diastolic",
   "heart_rate",
-  "temperature",
 ];
+
+/** One-tap adds under the readings list — situational metrics that don't earn a default row. */
+export const QUICK_ADD_VITALS_METRICS: VitalsMetric[] = ["temperature", "blood_oxygen", "weight"];
 
 /**
  * Front/back body-map regions for pain logging (WHO-297/298) — mirrors the

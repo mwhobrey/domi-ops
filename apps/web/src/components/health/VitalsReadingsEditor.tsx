@@ -1,8 +1,13 @@
 "use client";
 
 import { Button, Input, Select } from "../ui";
-import { defaultUnitFor, nextVitalsDraftKey } from "./health-helpers";
-import { VITALS_METRICS, type VitalsMetric, type VitalsReadingDraft } from "./health-types";
+import { defaultUnitFor, nextVitalsDraftKey, vitalsMetricLabel } from "./health-helpers";
+import {
+  QUICK_ADD_VITALS_METRICS,
+  VITALS_METRICS,
+  type VitalsMetric,
+  type VitalsReadingDraft,
+} from "./health-types";
 
 export function VitalsReadingsEditor({
   drafts,
@@ -11,6 +16,12 @@ export function VitalsReadingsEditor({
   drafts: VitalsReadingDraft[];
   onChange: (drafts: VitalsReadingDraft[]) => void;
 }) {
+  function addReading(metric: VitalsMetric) {
+    onChange([...drafts, { key: nextVitalsDraftKey(), metric, value: "", unit: defaultUnitFor(metric) }]);
+  }
+
+  const quickAdd = QUICK_ADD_VITALS_METRICS.filter((metric) => !drafts.some((d) => d.metric === metric));
+
   return (
     <div className="space-y-2">
       <span className="text-sm">Readings</span>
@@ -75,19 +86,28 @@ export function VitalsReadingsEditor({
           </div>
         ))}
       </div>
-      <Button
-        type="button"
-        variant="secondary"
-        size="sm"
-        onClick={() =>
-          onChange([
-            ...drafts,
-            { key: nextVitalsDraftKey(), metric: "weight", value: "", unit: defaultUnitFor("weight") },
-          ])
-        }
-      >
-        Add reading
-      </Button>
+      <div className="flex flex-wrap items-center gap-2">
+        {quickAdd.map((metric) => (
+          <button
+            key={metric}
+            type="button"
+            className="inline-flex min-h-8 items-center rounded-full border border-[var(--color-border)] bg-transparent px-3 py-1 text-xs font-medium text-[var(--color-text-muted)] transition-colors hover:border-[var(--color-accent)] hover:text-[var(--color-text)] max-md:min-h-11 max-md:px-4"
+            onClick={() => addReading(metric)}
+          >
+            + {vitalsMetricLabel(metric)}
+          </button>
+        ))}
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={() =>
+            addReading(VITALS_METRICS.find((m) => !drafts.some((d) => d.metric === m.value))?.value ?? "other")
+          }
+        >
+          Add reading
+        </Button>
+      </div>
     </div>
   );
 }

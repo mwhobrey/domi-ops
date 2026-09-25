@@ -8,6 +8,7 @@ import type { NoteShareMember } from "./NoteSharePicker";
 import type { HealthAclGrants } from "./HealthPeopleAccessPanel";
 import { ModuleReportsLink } from "./reports/ModuleReportsLink";
 import { HealthEventSheet } from "./health/HealthEventSheet";
+import { EditDoseSheet, type EditableDose } from "./health/EditDoseSheet";
 import { MedicationManagerClient } from "./health/MedicationManagerClient";
 import { HealthTrendsTab } from "./health/HealthTrendsTab";
 import { LogVitalsSheet } from "./health/LogVitalsSheet";
@@ -17,6 +18,7 @@ import { LogMealSheet } from "./health/LogMealSheet";
 import { HealthRow, MedGroupDoseCard } from "./health/TodayTabRows";
 import { PrnQuickLog } from "./health/PrnQuickLog";
 import { avatarStyle } from "../lib/member-color";
+import { useHouseholdTimeZone } from "./HouseholdTimeProvider";
 import {
   groupLoggedDosesByMember,
   groupPendingDosesByMemberThenTime,
@@ -59,7 +61,7 @@ import {
 export function HealthPageClient({
   members,
   currentMemberId,
-  householdTimezone,
+  householdTimezone: householdTimezoneProp,
   initialEventId,
   initialMedicationId,
   initialTakeMedicationId,
@@ -86,6 +88,9 @@ export function HealthPageClient({
   };
 }) {
   const router = useRouter();
+  // The page's zone comes from household settings, which 403s for non-admins and falls back to
+  // UTC; the session's zone (via AppShell) is right for every member.
+  const householdTimezone = useHouseholdTimeZone() ?? householdTimezoneProp;
   const [tab, setTab] = useState<"today" | "log" | "medications" | "trends">("today");
   const [eventTypeFilter, setEventTypeFilter] = useState<HealthEventType | "all">("all");
   const [events, setEvents] = useState<HealthEvent[]>([]);
@@ -94,6 +99,7 @@ export function HealthPageClient({
   const [pendingGroupDoses, setPendingGroupDoses] = useState<PendingGroupDose[]>([]);
   const [loggedToday, setLoggedToday] = useState<LoggedDose[]>([]);
   const [undoingLogId, setUndoingLogId] = useState<string | null>(null);
+  const [editingDose, setEditingDose] = useState<EditableDose | null>(null);
   const [prnMeds, setPrnMeds] = useState<HealthMedication[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -679,14 +685,32 @@ export function HealthPageClient({
                                         : "Missed"}
                                   </Badge>
                                   {canLogDoseForToday(dose.memberId) ? (
-                                    <Button
-                                      size="sm"
-                                      variant="secondary"
-                                      disabled={undoingLogId === dose.logId}
-                                      onClick={() => void undoDose(dose)}
-                                    >
-                                      {undoingLogId === dose.logId ? "…" : "Undo"}
-                                    </Button>
+                                    <>
+                                      <Button
+                                        size="sm"
+                                        variant="secondary"
+                                        onClick={() =>
+                                          setEditingDose({
+                                            logId: dose.logId,
+                                            medicationId: dose.medicationId,
+                                            name: dose.name,
+                                            status: dose.status,
+                                            scheduledAt: dose.scheduledAt,
+                                            loggedAt: dose.loggedAt,
+                                          })
+                                        }
+                                      >
+                                        Edit
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="secondary"
+                                        disabled={undoingLogId === dose.logId}
+                                        onClick={() => void undoDose(dose)}
+                                      >
+                                        {undoingLogId === dose.logId ? "…" : "Undo"}
+                                      </Button>
+                                    </>
                                   ) : null}
                                 </div>
                               }
@@ -801,6 +825,19 @@ export function HealthPageClient({
                         {dose.status === "taken" ? "Taken" : dose.status === "skipped" ? "Skipped" : "Missed"}
                       </Badge>
                     }
+                    onClick={
+                      canLogForMember(dose.memberId)
+                        ? () =>
+                            setEditingDose({
+                              logId: dose.id,
+                              medicationId: dose.medicationId,
+                              name: dose.medicationName,
+                              status: dose.status,
+                              scheduledAt: dose.scheduledAt,
+                              loggedAt: dose.loggedAt,
+                            })
+                        : undefined
+                    }
                   />
                 );
               }
@@ -866,6 +903,16 @@ export function HealthPageClient({
         onSaved={() => {
           setEventSheetOpen(false);
           setEditingEvent(null);
+          void load();
+        }}
+      />
+
+      <EditDoseSheet
+        dose={editingDose}
+        householdTimezone={householdTimezone}
+        onClose={() => setEditingDose(null)}
+        onSaved={() => {
+          setEditingDose(null);
           void load();
         }}
       />

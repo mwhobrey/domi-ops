@@ -46,7 +46,7 @@ import {
   validateHealthShareMemberIds,
   type HealthAclGrants,
 } from "../lib/health-access.js";
-import { addDaysIso, todayIsoDateInTz, zonedLocalToUtc, formatTimeLabelInTz, resolveAlertTimeZone, nextIntervalPending, parseIntervalSchedule } from "@domi-ops/calendar-sync";
+import { addDaysIso, todayIsoDateInTz, zonedLocalToUtc, formatTimeLabelInTz, resolveAlertTimeZone, nextIntervalPending, parseIntervalSchedule, intervalSlotShiftsForEdit, localDateOfInstant, localTimeHhmm } from "@domi-ops/calendar-sync";
 import {
   encryptHealthTextFields,
   enrichHealthEvents,
@@ -84,6 +84,7 @@ import {
   recordDose,
 } from "../lib/health-med-logging.js";
 import { recordMedicationEnabledChange } from "../lib/health-med-pauses.js";
+import { isUniqueViolationError } from "../lib/db-errors.js";
 
 function encryptionErrorResponse(c: { json: (body: unknown, status?: number) => Response }, e: unknown) {
   if (e instanceof HealthEncryptionError) {
@@ -749,6 +750,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
         scheduledAt: l.scheduledAt?.toISOString() ?? null,
         scheduledTimeLabel: l.scheduledAt ? formatTimeLabelInTz(l.scheduledAt, tz) : null,
         loggedAtLabel: formatTimeLabelInTz(l.loggedAt, tz),
+        loggedAt: l.loggedAt.toISOString(),
       };
     });
 
@@ -1604,6 +1606,184 @@ export function householdHealthRoutes(db: Database, env: Env) {
       await db.delete(healthEvents).where(eq(healthEvents.id, logRow.healthEventId));
     }
     return c.json({ ok: true });
+  });
+
+  /**
+   * Edit a logged dose (WHO-340): when it was actually taken (household-local `date` + `time`,
+   * like health events), and taken/skipped for scheduled doses. On an interval med the edit
+   * also moves the dose's slot, and for a first-taken grid every slot already logged on it, so
+   * the next dose recomputes from the edited time.
+   */
+  app.patch("/medications/:id/logs/:logId", async (c) => {
+    const auth = c.get("auth")!;
+    const medId = c.req.param("id");
+    const logId = c.req.param("logId");
+    const [med] = await db
+      .select()
+      .from(healthMedications)
+      .where(
+        and(
+          eq(healthMedications.id, medId),
+          eq(healthMedications.householdId, auth.householdId),
+          isNull(healthMedications.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (!med) return c.json({ error: "not_found" }, 404);
+    if (!(await hasHealthSegmentAccess(db, auth, med.memberId, "doses", "write"))) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+    const [logRow] = await db
+      .select()
+      .from(healthMedicationLogs)
+      .where(and(eq(healthMedicationLogs.id, logId), eq(healthMedicationLogs.medicationId, medId)))
+      .limit(1);
+    if (!logRow) return c.json({ error: "not_found" }, 404);
+
+    const body = await c.req.json<{ date?: string; time?: string; status?: string }>();
+    const tz = await householdTimezone(db, auth.householdId);
+
+    let loggedAt = logRow.loggedAt;
+    if (body.date !== undefined || body.time !== undefined) {
+      // Strict ranges first: an hour like 25 makes zonedLocalToUtc throw inside Intl.
+      if (
+        !/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(body.date ?? "") ||
+        !/^([01]\d|2[0-3]):[0-5]\d$/.test(body.time ?? "")
+      ) {
+        return c.json({ error: "invalid_logged_at" }, 400);
+      }
+      // Re-saving the time as shown keeps the stored seconds instead of counting as a move.
+      const unchanged =
+        localDateOfInstant(logRow.loggedAt, tz) === body.date &&
+        localTimeHhmm(logRow.loggedAt, tz) === body.time;
+      if (!unchanged) {
+        loggedAt = zonedLocalToUtc(body.date!, body.time!, tz);
+        // Round-trip: Feb 30 rolls into March and a DST-gap time lands an hour off; both would
+        // save a time the user didn't enter.
+        if (
+          Number.isNaN(loggedAt.getTime()) ||
+          localDateOfInstant(loggedAt, tz) !== body.date ||
+          localTimeHhmm(loggedAt, tz) !== body.time
+        ) {
+          return c.json({ error: "invalid_logged_at" }, 400);
+        }
+        if (loggedAt.getTime() > Date.now() + 60_000) {
+          return c.json({ error: "logged_at_in_future" }, 400);
+        }
+      }
+    }
+
+    let status = logRow.status;
+    if (body.status !== undefined) {
+      // An as-needed dose (no slot) only exists because it was taken; "skipped" means nothing.
+      if (body.status !== "taken" && body.status !== "skipped") {
+        return c.json({ error: "invalid_status" }, 400);
+      }
+      if (logRow.scheduledAt == null && body.status !== "taken") {
+        return c.json({ error: "invalid_status" }, 400);
+      }
+      status = body.status;
+    }
+
+    let slotUpdates: { id: string; scheduledAt: Date }[] = [];
+    if (
+      med.scheduleKind === "interval" &&
+      status === "taken" &&
+      logRow.scheduledAt &&
+      loggedAt.getTime() !== logRow.loggedAt.getTime()
+    ) {
+      // An interval med inside an interval group runs on the group's schedule and the union of
+      // every member's logs, same as the glance.
+      let scheduleJson = med.scheduleJson;
+      let clockMedIds = [med.id];
+      const groupIds = (await loadHealthMedicationGroupMembershipMap(db, [med.id])).get(med.id) ?? [];
+      if (groupIds.length > 0) {
+        const [group] = await db
+          .select()
+          .from(healthMedicationGroups)
+          .where(
+            and(
+              inArray(healthMedicationGroups.id, groupIds),
+              eq(healthMedicationGroups.enabled, true),
+              eq(healthMedicationGroups.scheduleKind, "interval"),
+            ),
+          )
+          .limit(1);
+        if (group) {
+          scheduleJson = group.scheduleJson;
+          clockMedIds = (await loadGroupMemberMedicationIdsMap(db, [group.id])).get(group.id) ?? [med.id];
+        }
+      }
+      const schedule = parseIntervalSchedule(scheduleJson);
+      if (schedule) {
+        const since = new Date(Date.now() - GLANCE_DOSE_LOG_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+        const clockLogs = await db
+          .select({
+            id: healthMedicationLogs.id,
+            scheduledAt: healthMedicationLogs.scheduledAt,
+            loggedAt: healthMedicationLogs.loggedAt,
+            status: healthMedicationLogs.status,
+          })
+          .from(healthMedicationLogs)
+          .where(
+            and(
+              inArray(healthMedicationLogs.medicationId, clockMedIds),
+              or(gte(healthMedicationLogs.loggedAt, since), eq(healthMedicationLogs.id, logId)),
+            ),
+          );
+        slotUpdates = intervalSlotShiftsForEdit({
+          schedule,
+          tz,
+          // The shift is computed from the dose as it stands once its status is saved.
+          logs: clockLogs.map((l) => (l.id === logId ? { ...l, status } : l)),
+          logId,
+          newLoggedAt: loggedAt,
+        });
+      }
+    }
+
+    try {
+      await db.transaction(async (tx) => {
+        // Park moved slots at NULL first: shifting a grid in place can pass through another
+        // row's current slot and trip the one-log-per-instant index mid-update.
+        if (slotUpdates.length > 0) {
+          await tx
+            .update(healthMedicationLogs)
+            .set({ scheduledAt: null })
+            .where(inArray(healthMedicationLogs.id, slotUpdates.map((u) => u.id)));
+          for (const u of slotUpdates) {
+            await tx
+              .update(healthMedicationLogs)
+              .set({ scheduledAt: u.scheduledAt })
+              .where(eq(healthMedicationLogs.id, u.id));
+          }
+        }
+        await tx
+          .update(healthMedicationLogs)
+          .set({ loggedAt, status })
+          .where(eq(healthMedicationLogs.id, logId));
+        if (logRow.healthEventId) {
+          if (status === "taken") {
+            await tx
+              .update(healthEvents)
+              .set({ startedAt: loggedAt, updatedAt: new Date() })
+              .where(eq(healthEvents.id, logRow.healthEventId));
+          } else {
+            await tx.delete(healthEvents).where(eq(healthEvents.id, logRow.healthEventId));
+          }
+        }
+      });
+    } catch (e) {
+      if (isUniqueViolationError(e)) return c.json({ error: "dose_time_conflict" }, 409);
+      throw e;
+    }
+
+    const [updated] = await db
+      .select()
+      .from(healthMedicationLogs)
+      .where(eq(healthMedicationLogs.id, logId))
+      .limit(1);
+    return c.json({ log: serializeHealthLog(updated!, env) });
   });
 
   /**

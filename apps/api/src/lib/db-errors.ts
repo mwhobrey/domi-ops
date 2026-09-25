@@ -10,3 +10,12 @@ export function isInvalidInputError(err: unknown): boolean {
   }
   return false;
 }
+
+/** Postgres `unique_violation` (23505), through Drizzle's `cause` chain. */
+export function isUniqueViolationError(err: unknown): boolean {
+  for (let e: unknown = err, depth = 0; e && depth < 5; depth++) {
+    if (typeof e === "object" && (e as { code?: unknown }).code === "23505") return true;
+    e = (e as { cause?: unknown }).cause;
+  }
+  return false;
+}

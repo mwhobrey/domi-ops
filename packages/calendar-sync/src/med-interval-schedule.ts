@@ -357,3 +357,65 @@ export function intervalDoseInWindow(params: {
   if (pending.scheduledAt < params.lookbackStart) return null;
   return pending;
 }
+
+export type IntervalEditLog = IntervalLog & { id: string };
+
+function floorToMinute(instant: Date): Date {
+  return new Date(Math.floor(instant.getTime() / 60_000) * 60_000);
+}
+
+/**
+ * The `scheduled_at` changes an edit to a taken dose's time needs, so the interval clock reads
+ * as if the dose had been logged at `newLoggedAt` in the first place (WHO-340).
+ *
+ * - `last_taken`: the next dose is last take + interval, and the edited log's own slot follows
+ *   its time.
+ * - `schedule_grid` with a `first_taken` anchor: the first take of the day (of the lookback, for
+ *   multi-day intervals) sets the grid. Moving it moves the grid, so every log already on that
+ *   grid shifts by the same amount; otherwise the old slots come back as pending.
+ * - A fixed-start grid doesn't depend on when doses were taken: nothing moves.
+ *
+ * `logs` is every log on the same clock before the edit: the med's own, or all member meds'
+ * logs when an interval group owns the schedule.
+ */
+export function intervalSlotShiftsForEdit(params: {
+  schedule: IntervalSchedule;
+  tz: string;
+  logs: IntervalEditLog[];
+  logId: string;
+  newLoggedAt: Date;
+}): { id: string; scheduledAt: Date }[] {
+  const { schedule, tz, logs, logId } = params;
+  const edited = logs.find((l) => l.id === logId);
+  if (!edited) return [];
+  const newStart = floorToMinute(params.newLoggedAt);
+  const moveEdited =
+    edited.scheduledAt?.getTime() === newStart.getTime() ? [] : [{ id: logId, scheduledAt: newStart }];
+
+  if (schedule.intervalFrom === "last_taken") return moveEdited;
+  if (schedule.anchor === "fixed_start") return [];
+
+  const multiDay = isMultiDayInterval(schedule);
+  const originDate = localDateOfInstant(edited.loggedAt, tz);
+  const taken = multiDay ? allTaken(logs) : takenOnDate(logs, originDate, tz);
+  if (taken[0] !== edited) return [];
+
+  const oldStart = zonedLocalToUtc(
+    localDateOfInstant(edited.loggedAt, tz),
+    localTimeHhmm(edited.loggedAt, tz),
+    tz,
+  );
+  const delta = newStart.getTime() - oldStart.getTime();
+  const everyMs = schedule.everyMinutes * 60_000;
+  const onGrid = (at: Date) => {
+    const offset = at.getTime() - oldStart.getTime();
+    if (offset <= 0) return false;
+    const rem = offset % everyMs;
+    return rem < 60_000 || everyMs - rem < 60_000;
+  };
+  const shifted = logs
+    .filter((l) => l.id !== logId && l.scheduledAt != null && onGrid(l.scheduledAt))
+    .filter((l) => multiDay || localDateOfInstant(l.scheduledAt!, tz) === originDate)
+    .map((l) => ({ id: l.id, scheduledAt: new Date(l.scheduledAt!.getTime() + delta) }));
+  return delta === 0 ? moveEdited : [...moveEdited, ...shifted];
+}

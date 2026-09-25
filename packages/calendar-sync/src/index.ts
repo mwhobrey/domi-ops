@@ -58,9 +58,11 @@ export {
   normalizeIntervalSchedule,
   nextIntervalPending,
   intervalDoseInWindow,
+  intervalSlotShiftsForEdit,
   type IntervalSchedule,
   type IntervalLog,
   type IntervalPendingDose,
+  type IntervalEditLog,
 } from "./med-interval-schedule.js";
 export { scanSchoolReminders } from "./school-reminder-scan.js";
 export { scanHealthMedReminders } from "./health-med-reminder-scan.js";
