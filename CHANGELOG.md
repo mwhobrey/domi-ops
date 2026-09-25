@@ -55,6 +55,9 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 - Health times for members who aren't household admins now use the household's time zone
   instead of UTC (WHO-340): the default date on a new health event, and the new dose editor.
+- **Log vitals** starts with blood pressure and heart rate only (WHO-341). Temperature, Blood
+  oxygen, and Weight are one-tap chips under the readings, so a sick-day temperature doesn't
+  need the metric dropdown. The same chips appear when editing a Vitals event.
 - "Today" everywhere in the app is the household's day, not your device's (WHO-336): due
   labels, overdue counts, default dates on new events, expenses, and bills, the calendar's today
   highlight and current-time line, and weekly report ranges. Nothing changes when your device
