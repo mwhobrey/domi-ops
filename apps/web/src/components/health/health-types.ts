@@ -176,6 +176,7 @@ export interface LoggedDose {
   status: "taken" | "skipped" | "missed";
   scheduledAt: string | null;
   scheduledTimeLabel: string | null;
+  loggedAt: string;
   loggedAtLabel: string;
 }
 

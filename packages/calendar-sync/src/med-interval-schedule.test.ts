@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  intervalSlotShiftsForEdit,
   normalizeIntervalSchedule,
   nextIntervalPending,
   parseIntervalSchedule,
+  type IntervalEditLog,
 } from "./med-interval-schedule.js";
 import { zonedLocalToUtc } from "./household-time.js";
 
@@ -171,5 +173,111 @@ describe("nextIntervalPending", () => {
         logs: [{ scheduledAt: zonedLocalToUtc(takenDay, "08:00", tz), loggedAt: takenAt, status: "taken" }],
       }),
     ).toBeNull();
+  });
+});
+
+describe("intervalSlotShiftsForEdit", () => {
+  const at = (hhmm: string, day = date) => zonedLocalToUtc(day, hhmm, tz);
+  const taken = (id: string, scheduled: Date, logged = scheduled): IntervalEditLog => ({
+    id,
+    scheduledAt: scheduled,
+    loggedAt: logged,
+    status: "taken",
+  });
+  /** Apply the edit (new loggedAt + shifts) the way the API route does. */
+  function applyEdit(logs: IntervalEditLog[], logId: string, newLoggedAt: Date, shifts: { id: string; scheduledAt: Date }[]) {
+    const byId = new Map(shifts.map((s) => [s.id, s.scheduledAt]));
+    return logs.map((l) => ({
+      ...l,
+      loggedAt: l.id === logId ? newLoggedAt : l.loggedAt,
+      scheduledAt: byId.get(l.id) ?? l.scheduledAt,
+    }));
+  }
+
+  it("last_taken: a late-logged first dose moves the next dose to edited time + interval", () => {
+    const schedule = normalizeIntervalSchedule({
+      everyMinutes: 180,
+      anchor: "first_taken",
+      intervalFrom: "last_taken",
+      stop: { mode: "max_doses", maxDoses: 5 },
+    });
+    // Tapped Start at 11:04 but actually took it at 07:00.
+    const logs = [taken("a", new Date(at("11:04").getTime() + 17_000), at("11:04"))];
+    const shifts = intervalSlotShiftsForEdit({ schedule, tz, logs, logId: "a", newLoggedAt: at("07:00") });
+    expect(shifts).toEqual([{ id: "a", scheduledAt: at("07:00") }]);
+    const pending = nextIntervalPending({
+      schedule,
+      tz,
+      date,
+      now: at("11:10"),
+      logs: applyEdit(logs, "a", at("07:00"), shifts),
+    });
+    expect(pending?.scheduledAt.toISOString()).toBe(at("10:00").toISOString());
+  });
+
+  it("schedule_grid + first_taken: moving the first dose shifts the logged slots with it", () => {
+    const schedule = normalizeIntervalSchedule({
+      everyMinutes: 240,
+      anchor: "first_taken",
+      intervalFrom: "schedule_grid",
+      stop: { mode: "max_doses", maxDoses: 4 },
+    });
+    const logs = [taken("first", at("10:00")), taken("second", at("14:00"), at("14:20"))];
+    const shifts = intervalSlotShiftsForEdit({ schedule, tz, logs, logId: "first", newLoggedAt: at("09:00") });
+    expect(shifts).toEqual([
+      { id: "first", scheduledAt: at("09:00") },
+      { id: "second", scheduledAt: at("13:00") },
+    ]);
+    const pending = nextIntervalPending({
+      schedule,
+      tz,
+      date,
+      now: at("15:00"),
+      logs: applyEdit(logs, "first", at("09:00"), shifts),
+    });
+    // 13:00 is covered by the shifted second dose; without the shift it would come back overdue.
+    expect(pending?.scheduledAt.toISOString()).toBe(at("17:00").toISOString());
+  });
+
+  it("schedule_grid: editing a later dose leaves the grid alone", () => {
+    const schedule = normalizeIntervalSchedule({
+      everyMinutes: 240,
+      anchor: "first_taken",
+      intervalFrom: "schedule_grid",
+      stop: { mode: "max_doses", maxDoses: 4 },
+    });
+    const logs = [taken("first", at("10:00")), taken("second", at("14:00"), at("14:20"))];
+    expect(
+      intervalSlotShiftsForEdit({ schedule, tz, logs, logId: "second", newLoggedAt: at("14:05") }),
+    ).toEqual([]);
+  });
+
+  it("fixed_start grid: nothing moves", () => {
+    const schedule = normalizeIntervalSchedule({
+      everyMinutes: 180,
+      anchor: "fixed_start",
+      fixedStartTime: "07:00",
+      intervalFrom: "schedule_grid",
+      stop: { mode: "max_doses", maxDoses: 4 },
+    });
+    const logs = [taken("first", at("07:00"), at("07:40"))];
+    expect(
+      intervalSlotShiftsForEdit({ schedule, tz, logs, logId: "first", newLoggedAt: at("07:10") }),
+    ).toEqual([]);
+  });
+
+  it("multi-day grid: moving the origin shifts later days' slots", () => {
+    const schedule = normalizeIntervalSchedule({
+      everyMinutes: 48 * 60,
+      anchor: "first_taken",
+      intervalFrom: "schedule_grid",
+      stop: { mode: "midnight" },
+    });
+    const logs = [taken("first", at("09:00")), taken("second", at("09:00", "2026-08-07"))];
+    const shifts = intervalSlotShiftsForEdit({ schedule, tz, logs, logId: "first", newLoggedAt: at("08:00") });
+    expect(shifts).toEqual([
+      { id: "first", scheduledAt: at("08:00") },
+      { id: "second", scheduledAt: at("08:00", "2026-08-07") },
+    ]);
   });
 });

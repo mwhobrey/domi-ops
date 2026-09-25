@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isInvalidInputError } from "./db-errors.js";
+import { isInvalidInputError, isUniqueViolationError } from "./db-errors.js";
 
 describe("isInvalidInputError", () => {
   it("recognizes 22P02 directly and through a wrapped cause", () => {
@@ -12,5 +12,13 @@ describe("isInvalidInputError", () => {
     expect(isInvalidInputError(new Error("boom"))).toBe(false);
     expect(isInvalidInputError({ code: "23505" })).toBe(false);
     expect(isInvalidInputError(null)).toBe(false);
+  });
+});
+
+describe("isUniqueViolationError", () => {
+  it("recognizes 23505 through a wrapped cause and nothing else", () => {
+    expect(isUniqueViolationError(new Error("Failed query", { cause: { code: "23505" } }))).toBe(true);
+    expect(isUniqueViolationError({ code: "22P02" })).toBe(false);
+    expect(isUniqueViolationError(undefined)).toBe(false);
   });
 });
