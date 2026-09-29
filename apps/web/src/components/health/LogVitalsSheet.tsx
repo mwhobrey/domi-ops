@@ -22,6 +22,7 @@ export function LogVitalsSheet({
   open,
   members,
   currentMemberId,
+  initialMemberId,
   writableMemberIds,
   onClose,
   onSaved,
@@ -29,13 +30,15 @@ export function LogVitalsSheet({
   open: boolean;
   members: NoteShareMember[];
   currentMemberId: string;
+  /** Preselects this member (e.g. whoever the Today tab is showing) instead of the viewer. */
+  initialMemberId?: string;
   writableMemberIds: string[];
   onClose: () => void;
   onSaved: () => void;
 }) {
   const memberChoices = members.filter((m) => writableMemberIds.includes(m.memberId));
   const defaultMemberId = resolveDefaultMemberId(
-    currentMemberId,
+    initialMemberId ?? currentMemberId,
     memberChoices.length > 0 ? memberChoices : members,
   );
   const [memberId, setMemberId] = useState(defaultMemberId);

@@ -21,6 +21,7 @@ import { avatarStyle } from "../lib/member-color";
 import { useHouseholdTimeZone } from "./HouseholdTimeProvider";
 import {
   groupLoggedDosesByMember,
+  groupLoggedDosesBySlot,
   groupPendingDosesByMemberThenTime,
   groupPendingGroupDosesByMember,
   memberLabel,
@@ -36,6 +37,9 @@ import {
   doseLogTitle,
   doseLogWhen,
   isDosePastDue,
+  eventsOnDayForMember,
+  formatEventTime,
+  todayInTz,
 } from "./health/health-helpers";
 import {
   EVENT_TYPES,
@@ -388,6 +392,14 @@ export function HealthPageClient({
 
   const todayMemberStyle = avatarStyle(todayMemberId);
   const todayMemberName = memberLabel(members, todayMemberId);
+  const todayEvents = eventsOnDayForMember(
+    events,
+    todayMemberId,
+    todayInTz(householdTimezone),
+    householdTimezone,
+  );
+  const canLogEventsForToday =
+    capabilities[todayMemberId]?.events === "write" && canActOnTodayMember(todayMemberId);
   const viewingOtherMember =
     todayMemberId !== currentMemberId && todayMemberId.length > 0;
 
@@ -460,6 +472,27 @@ export function HealthPageClient({
                 Managing {todayMemberName}
               </Button>
             </Alert>
+          ) : null}
+          {canLogEventsForToday ? (
+            <div className="space-y-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]">
+                Log for {todayMemberId === currentMemberId ? "me" : todayMemberName}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="secondary" onClick={() => setVitalsSheetOpen(true)}>
+                  Vitals
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => setExerciseSheetOpen(true)}>
+                  Exercise
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => setPainSheetOpen(true)}>
+                  Pain
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => setMealSheetOpen(true)}>
+                  Meal
+                </Button>
+              </div>
+            </div>
           ) : null}
           <PrnQuickLog
             meds={prnMeds.filter((m) => m.memberId === todayMemberId)}
@@ -619,7 +652,7 @@ export function HealthPageClient({
             </CardBody>
           </Card>
 
-          {loggedToday.some((d) => d.memberId === todayMemberId) ? (
+          {loggedToday.some((d) => d.memberId === todayMemberId) || todayEvents.length > 0 ? (
             <Card
               className="overflow-hidden border-l-4"
               style={{ borderLeftColor: todayMemberStyle.background }}
@@ -628,7 +661,7 @@ export function HealthPageClient({
                 <SectionHeader
                   title={
                     todayMemberId === currentMemberId
-                      ? "My logged doses today"
+                      ? "My logged today"
                       : `${todayMemberName} logged today`
                   }
                 />
@@ -655,72 +688,120 @@ export function HealthPageClient({
                         </span>
                       </button>
                       {collapsed ? null : (
-                        <ul className="space-y-2">
-                          {memberGroup.doses.map((dose) => (
-                            <HealthRow
-                              key={dose.logId}
-                              title={dose.name}
-                              subtitle={[
-                                dose.dosage?.trim(),
-                                dose.scheduledTimeLabel ? `for ${dose.scheduledTimeLabel}` : null,
-                                `logged ${dose.loggedAtLabel}`,
-                              ]
-                                .filter(Boolean)
-                                .join(" · ")}
-                              trailing={
-                                <div className="flex items-center gap-2">
-                                  <Badge
-                                    tone={
-                                      dose.status === "taken"
-                                        ? "success"
-                                        : dose.status === "missed"
-                                          ? "warning"
-                                          : "default"
+                        <div className="space-y-3">
+                          {groupLoggedDosesBySlot(memberGroup.doses).map((slot) => (
+                            <div key={slot.scheduledAt ?? "as-needed"} className="space-y-2">
+                              {/* A lone dose keeps its "for 8:00 AM" subtitle instead of a header. */}
+                              {slot.doses.length > 1 || slot.scheduledAt === null ? (
+                                <p className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]">
+                                  {slot.scheduledAt === null ? "As needed" : slot.label ?? "Scheduled"} ·{" "}
+                                  {slot.doses.length} {slot.doses.length === 1 ? "med" : "meds"}
+                                </p>
+                              ) : null}
+                              <ul className="space-y-2">
+                                {slot.doses.map((dose) => (
+                                  <HealthRow
+                                    key={dose.logId}
+                                    title={dose.name}
+                                    subtitle={[
+                                      dose.dosage?.trim(),
+                                      dose.scheduledTimeLabel && slot.doses.length === 1
+                                        ? `for ${dose.scheduledTimeLabel}`
+                                        : null,
+                                      `logged ${dose.loggedAtLabel}`,
+                                    ]
+                                      .filter(Boolean)
+                                      .join(" · ")}
+                                    trailing={
+                                      <div className="flex items-center gap-2">
+                                        <Badge
+                                          tone={
+                                            dose.status === "taken"
+                                              ? "success"
+                                              : dose.status === "missed"
+                                                ? "warning"
+                                                : "default"
+                                          }
+                                        >
+                                          {dose.status === "taken"
+                                            ? "Taken"
+                                            : dose.status === "skipped"
+                                              ? "Skipped"
+                                              : "Missed"}
+                                        </Badge>
+                                        {canLogDoseForToday(dose.memberId) ? (
+                                          <>
+                                            <Button
+                                              size="sm"
+                                              variant="secondary"
+                                              onClick={() =>
+                                                setEditingDose({
+                                                  logId: dose.logId,
+                                                  medicationId: dose.medicationId,
+                                                  name: dose.name,
+                                                  status: dose.status,
+                                                  scheduledAt: dose.scheduledAt,
+                                                  loggedAt: dose.loggedAt,
+                                                })
+                                              }
+                                            >
+                                              Edit
+                                            </Button>
+                                            <Button
+                                              size="sm"
+                                              variant="secondary"
+                                              disabled={undoingLogId === dose.logId}
+                                              onClick={() => void undoDose(dose)}
+                                            >
+                                              {undoingLogId === dose.logId ? "…" : "Undo"}
+                                            </Button>
+                                          </>
+                                        ) : null}
+                                      </div>
                                     }
-                                  >
-                                    {dose.status === "taken"
-                                      ? "Taken"
-                                      : dose.status === "skipped"
-                                        ? "Skipped"
-                                        : "Missed"}
-                                  </Badge>
-                                  {canLogDoseForToday(dose.memberId) ? (
-                                    <>
-                                      <Button
-                                        size="sm"
-                                        variant="secondary"
-                                        onClick={() =>
-                                          setEditingDose({
-                                            logId: dose.logId,
-                                            medicationId: dose.medicationId,
-                                            name: dose.name,
-                                            status: dose.status,
-                                            scheduledAt: dose.scheduledAt,
-                                            loggedAt: dose.loggedAt,
-                                          })
-                                        }
-                                      >
-                                        Edit
-                                      </Button>
-                                      <Button
-                                        size="sm"
-                                        variant="secondary"
-                                        disabled={undoingLogId === dose.logId}
-                                        onClick={() => void undoDose(dose)}
-                                      >
-                                        {undoingLogId === dose.logId ? "…" : "Undo"}
-                                      </Button>
-                                    </>
-                                  ) : null}
-                                </div>
-                              }
-                            />
+                                  />
+                                ))}
+                              </ul>
+                            </div>
                           ))}
-                        </ul>
+                        </div>
                       )}
                     </div>
                   );
                 })}
+                {todayEvents.length > 0 ? (
+                  <div className="space-y-2">
+                    <p className="text-sm font-semibold text-[var(--color-text)]">
+                      Events
+                      <span className="font-normal text-[var(--color-text-muted)]"> · {todayEvents.length}</span>
+                    </p>
+                    <ul className="space-y-2">
+                      {todayEvents.map((ev) => (
+                        <HealthRow
+                          key={ev.id}
+                          title={displayHealthEventTitle(ev)}
+                          subtitle={[
+                            EVENT_TYPES.find((t) => t.value === ev.type)?.label ?? ev.type,
+                            formatEventTime(ev, householdTimezone),
+                            ev.type === "vitals" ? formatReadingsSummary(ev.readings) : null,
+                            ev.type === "exercise" ? formatExerciseSummary(ev.exerciseDetails) : null,
+                            ev.type === "pain" ? formatPainSummary(ev.painLogs) : null,
+                            ev.type === "food_intake" ? formatFoodLogSummary(ev.foodLogEntries) : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                          trailing={
+                            ev.visibility === "private" ? <Badge tone="default">Private</Badge> : null
+                          }
+                          onClick={() => {
+                            setEditingEvent(ev);
+                            setEventSheetOpen(true);
+                          }}
+                        />
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
               </CardBody>
             </Card>
           ) : null}
@@ -761,18 +842,6 @@ export function HealthPageClient({
             </div>
             {canAddEvent ? (
             <div className="flex flex-wrap justify-end gap-2">
-              <Button size="sm" variant="secondary" onClick={() => setVitalsSheetOpen(true)}>
-                Log vitals
-              </Button>
-              <Button size="sm" variant="secondary" onClick={() => setExerciseSheetOpen(true)}>
-                Log exercise
-              </Button>
-              <Button size="sm" variant="secondary" onClick={() => setPainSheetOpen(true)}>
-                Log pain
-              </Button>
-              <Button size="sm" variant="secondary" onClick={() => setMealSheetOpen(true)}>
-                Log meal
-              </Button>
               <Button
                 size="sm"
                 onClick={() => {
@@ -918,6 +987,7 @@ export function HealthPageClient({
       />
 
       <LogVitalsSheet
+        initialMemberId={todayMemberId}
         open={vitalsSheetOpen}
         members={members}
         currentMemberId={currentMemberId}
@@ -932,6 +1002,7 @@ export function HealthPageClient({
       />
 
       <LogExerciseSheet
+        initialMemberId={todayMemberId}
         open={exerciseSheetOpen}
         members={members}
         currentMemberId={currentMemberId}
@@ -946,6 +1017,7 @@ export function HealthPageClient({
       />
 
       <LogPainSheet
+        initialMemberId={todayMemberId}
         open={painSheetOpen}
         members={members}
         currentMemberId={currentMemberId}
@@ -960,6 +1032,7 @@ export function HealthPageClient({
       />
 
       <LogMealSheet
+        initialMemberId={todayMemberId}
         open={mealSheetOpen}
         members={members}
         currentMemberId={currentMemberId}

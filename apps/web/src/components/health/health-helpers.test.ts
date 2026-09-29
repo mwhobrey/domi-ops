@@ -4,11 +4,13 @@ import {
   defaultMealTitle,
   displayHealthEventTitle,
   doseLogTitle,
+  eventsOnDayForMember,
   draftsToFoodLogEntries,
   foodLogEntriesToDrafts,
   formatEventWhen,
   formatFoodLogSummary,
   formatReadingsSummary,
+  groupLoggedDosesBySlot,
   groupMedsByMember,
   groupPendingDosesByMemberThenTime,
   isAsNeededMedScheduleKind,
@@ -22,6 +24,7 @@ import type {
   FoodLogEntry,
   HealthEvent,
   HealthMedication,
+  LoggedDose,
   PendingDose,
   PendingGroupDose,
 } from "./health-types";
@@ -266,5 +269,90 @@ describe("buildHealthLogFeed", () => {
   it("titles dose rows by what happened", () => {
     expect(doseLogTitle(dose("d1", "2026-09-23T13:46:00.000Z"))).toBe("Took Effexor");
     expect(doseLogTitle(dose("d2", "2026-09-23T13:46:00.000Z", "skipped"))).toBe("Skipped Effexor");
+  });
+});
+
+describe("groupLoggedDosesBySlot", () => {
+  const logged = (logId: string, scheduledAt: string | null, loggedAt: string): LoggedDose => ({
+    logId,
+    medicationId: `m-${logId}`,
+    name: logId,
+    memberId: "me",
+    status: "taken",
+    scheduledAt,
+    scheduledTimeLabel: scheduledAt ? "label" : null,
+    loggedAt,
+    loggedAtLabel: "",
+  });
+
+  it("buckets doses by slot, earliest first, with as-needed last", () => {
+    const out = groupLoggedDosesBySlot([
+      logged("prn", null, "2026-09-29T15:00:00.000Z"),
+      logged("b1", "2026-09-29T20:00:00.000Z", "2026-09-29T20:05:00.000Z"),
+      logged("a1", "2026-09-29T13:00:00.000Z", "2026-09-29T13:02:00.000Z"),
+      logged("a2", "2026-09-29T13:00:00.000Z", "2026-09-29T13:02:00.000Z"),
+    ]);
+    expect(out.map((s) => s.scheduledAt)).toEqual([
+      "2026-09-29T13:00:00.000Z",
+      "2026-09-29T20:00:00.000Z",
+      null,
+    ]);
+    expect(out[0]!.doses.map((d) => d.logId)).toEqual(["a1", "a2"]);
+  });
+
+  it("orders as-needed doses by when they were logged", () => {
+    const out = groupLoggedDosesBySlot([
+      logged("late", null, "2026-09-29T18:00:00.000Z"),
+      logged("early", null, "2026-09-29T09:00:00.000Z"),
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.doses.map((d) => d.logId)).toEqual(["early", "late"]);
+  });
+});
+
+describe("eventsOnDayForMember", () => {
+  const ev = (id: string, over: Partial<HealthEvent>): HealthEvent =>
+    ({
+      id,
+      memberId: "me",
+      medicationId: null,
+      type: "pain",
+      title: id,
+      notes: null,
+      startedAt: null,
+      endedAt: null,
+      visibility: "household",
+      ...over,
+    }) as HealthEvent;
+
+  it("keeps only that member's events on the day, oldest first", () => {
+    const out = eventsOnDayForMember(
+      [
+        ev("late", { startedAt: "2026-09-29T20:00:00.000Z" }),
+        ev("early", { startedAt: "2026-09-29T09:00:00.000Z" }),
+        ev("other-member", { memberId: "ally", startedAt: "2026-09-29T10:00:00.000Z" }),
+        ev("yesterday", { startedAt: "2026-09-28T10:00:00.000Z" }),
+      ],
+      "me",
+      "2026-09-29",
+      "UTC",
+    );
+    expect(out.map((e) => e.id)).toEqual(["early", "late"]);
+  });
+
+  it("buckets a timestamp by the household zone, not UTC", () => {
+    const e = ev("night", { startedAt: "2026-09-30T02:30:00.000Z" }); // 10:30 PM on the 29th, New York
+    expect(eventsOnDayForMember([e], "me", "2026-09-29", "America/New_York")).toHaveLength(1);
+    expect(eventsOnDayForMember([e], "me", "2026-09-29", "UTC")).toHaveLength(0);
+  });
+
+  it("uses startDate for date-only events and drops medication events", () => {
+    const out = eventsOnDayForMember(
+      [ev("appt", { type: "appointment", startDate: "2026-09-29" }), ev("dose", { type: "medication", startDate: "2026-09-29" })],
+      "me",
+      "2026-09-29",
+      "UTC",
+    );
+    expect(out.map((e) => e.id)).toEqual(["appt"]);
   });
 });
