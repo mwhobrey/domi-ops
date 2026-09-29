@@ -17,6 +17,8 @@ export function LogPainSheet({
   open,
   members,
   currentMemberId,
+  initialMemberId,
+  lockMember,
   writableMemberIds,
   onClose,
   onSaved,
@@ -24,13 +26,17 @@ export function LogPainSheet({
   open: boolean;
   members: NoteShareMember[];
   currentMemberId: string;
+  /** Preselects this member (e.g. whoever the Today tab is showing) instead of the viewer. */
+  initialMemberId?: string;
+  /** Fixes the member to `initialMemberId` (Today has already confirmed who is being managed). */
+  lockMember?: boolean;
   writableMemberIds: string[];
   onClose: () => void;
   onSaved: () => void;
 }) {
   const memberChoices = members.filter((m) => writableMemberIds.includes(m.memberId));
   const defaultMemberId = resolveDefaultMemberId(
-    currentMemberId,
+    initialMemberId ?? currentMemberId,
     memberChoices.length > 0 ? memberChoices : members,
   );
   const [memberId, setMemberId] = useState(defaultMemberId);
@@ -90,7 +96,7 @@ export function LogPainSheet({
         {err ? <Alert variant="error">{err}</Alert> : null}
         <label className="block space-y-1 text-sm">
           <span>Member</span>
-          <Select value={memberId} onChange={(e) => setMemberId(e.target.value)}>
+          <Select value={memberId} onChange={(e) => setMemberId(e.target.value)} disabled={lockMember}>
             {(memberChoices.length > 0 ? memberChoices : members).map((m) => (
               <option key={m.memberId} value={m.memberId}>
                 {m.label}

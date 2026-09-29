@@ -94,6 +94,33 @@ export function groupLoggedDosesByMember(doses: LoggedDose[]): Array<{
   return [...byMember.entries()].map(([memberId, list]) => ({ memberId, doses: list }));
 }
 
+/** One person's logged doses bucketed by the slot they were for, earliest first. Doses logged
+ *  with no scheduled slot (PRN / as-needed) land in a trailing bucket with `scheduledAt: null`,
+ *  ordered by when they were logged. */
+export function groupLoggedDosesBySlot(doses: LoggedDose[]): Array<{
+  scheduledAt: string | null;
+  label: string | null;
+  doses: LoggedDose[];
+}> {
+  const bySlot = new Map<string | null, LoggedDose[]>();
+  for (const dose of doses) {
+    const list = bySlot.get(dose.scheduledAt) ?? [];
+    list.push(dose);
+    bySlot.set(dose.scheduledAt, list);
+  }
+  return [...bySlot.entries()]
+    .map(([scheduledAt, list]) => ({
+      scheduledAt,
+      label: list[0]?.scheduledTimeLabel ?? null,
+      doses: scheduledAt === null ? [...list].sort((a, b) => a.loggedAt.localeCompare(b.loggedAt)) : list,
+    }))
+    .sort((a, b) => {
+      if (a.scheduledAt === null) return 1;
+      if (b.scheduledAt === null) return -1;
+      return a.scheduledAt.localeCompare(b.scheduledAt);
+    });
+}
+
 export function groupPendingGroupDosesByMember(doses: PendingGroupDose[]): Map<string, PendingGroupDose[]> {
   const map = new Map<string, PendingGroupDose[]>();
   for (const dose of doses) {
@@ -420,6 +447,48 @@ export function healthEventTimeMs(ev: HealthEvent): number {
     if (Number.isFinite(t)) return t;
   }
   return 0;
+}
+
+/** The calendar day (YYYY-MM-DD, in `timeZone`) a health event happened on. */
+export function healthEventDay(ev: HealthEvent, timeZone: string): string | null {
+  if (ev.startDate) return ev.startDate;
+  const started = ev.startedAt ? Date.parse(ev.startedAt) : NaN;
+  if (!Number.isFinite(started)) return null;
+  try {
+    return new Date(started).toLocaleDateString("en-CA", { timeZone });
+  } catch {
+    return new Date(started).toISOString().slice(0, 10);
+  }
+}
+
+/** One member's events that happened on `day`, oldest first. Medication events mirror dose logs
+ *  (which the Today tab already lists), so they're left out to avoid showing a dose twice. */
+export function eventsOnDayForMember(
+  events: HealthEvent[],
+  memberId: string,
+  day: string,
+  timeZone: string,
+): HealthEvent[] {
+  return events
+    .filter((ev) => ev.memberId === memberId && ev.type !== "medication" && healthEventDay(ev, timeZone) === day)
+    .sort((a, b) => healthEventTimeMs(a) - healthEventTimeMs(b));
+}
+
+/** "2:15 PM" for an event, or null when it only has a date. */
+export function formatEventTime(ev: HealthEvent, timeZone: string): string | null {
+  if (ev.startTime) {
+    const [hh, mm] = ev.startTime.split(":").map(Number);
+    if (Number.isFinite(hh) && Number.isFinite(mm)) {
+      return new Date(2000, 0, 1, hh, mm).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+    }
+  }
+  const started = ev.startedAt ? Date.parse(ev.startedAt) : NaN;
+  if (!Number.isFinite(started)) return null;
+  try {
+    return new Date(started).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", timeZone });
+  } catch {
+    return null;
+  }
 }
 
 export type HealthLogFeedItem =
