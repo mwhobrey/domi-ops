@@ -8,6 +8,8 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-29
+
 ### Added
 
 - **Edit a logged dose** (WHO-340): forgot to tap Taken until later? On Health → Today, a
