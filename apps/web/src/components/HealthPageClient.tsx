@@ -988,6 +988,7 @@ export function HealthPageClient({
 
       <LogVitalsSheet
         initialMemberId={todayMemberId}
+        lockMember
         open={vitalsSheetOpen}
         members={members}
         currentMemberId={currentMemberId}
@@ -1003,6 +1004,7 @@ export function HealthPageClient({
 
       <LogExerciseSheet
         initialMemberId={todayMemberId}
+        lockMember
         open={exerciseSheetOpen}
         members={members}
         currentMemberId={currentMemberId}
@@ -1018,6 +1020,7 @@ export function HealthPageClient({
 
       <LogPainSheet
         initialMemberId={todayMemberId}
+        lockMember
         open={painSheetOpen}
         members={members}
         currentMemberId={currentMemberId}
@@ -1033,6 +1036,7 @@ export function HealthPageClient({
 
       <LogMealSheet
         initialMemberId={todayMemberId}
+        lockMember
         open={mealSheetOpen}
         members={members}
         currentMemberId={currentMemberId}
