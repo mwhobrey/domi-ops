@@ -8,6 +8,13 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+### Changed
+
+- **Marketing site now leads with homeschool and health** (WHO-346): new hero ("The household hub
+  for homeschool families"), demo-first calls to action with trial and price up front, dedicated
+  School and Health sections, a homeschool-parent day timeline, and audience keywords in the page
+  title and social preview.
+
 ## [0.4.0] - 2026-09-29
 
 ### Added

@@ -10,14 +10,20 @@ import {
 import { ALSO_STRIP_ITEMS, MODULE_TILES } from "@/lib/module-tiles";
 
 const DAY_TIMELINE = [
-  { time: "6:45 AM", text: "Chore chart buzzes before the bus does. Nobody's asking twice." },
-  { time: "8:15 AM", text: "Morning meds get checked off as one group card, not chased down pill by pill." },
+  { time: "7:45 AM", text: "Morning meds get checked off as one group card, not chased down pill by pill." },
   {
-    time: "12:30 PM",
-    text: "A gradebook entry lands the second the essay's graded. No end-of-term scramble.",
+    time: "9:00 AM",
+    text: "Today's assignments are waiting in each kid's own view. You see the same class as the teacher.",
+  },
+  {
+    time: "11:30 AM",
+    text: "The in-app quiz scores itself the second it's submitted. You review the misses, not the whole stack.",
+  },
+  {
+    time: "1:15 PM",
+    text: "Essay graded, gradebook updated, category weights already applied. No end-of-term scramble.",
   },
   { time: "4:50 PM", text: "Milk gets added to the list from the car, grouped by aisle by the time you're inside." },
-  { time: "9:10 PM", text: "Tomorrow's budget alert fires before the card gets swiped, not after." },
 ];
 
 export function LandingPage() {
@@ -31,39 +37,29 @@ export function LandingPage() {
           <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-14">
             <div className="space-y-6">
               <h1 className="font-display text-4xl font-semibold leading-[1.05] tracking-tight sm:text-5xl lg:text-6xl">
-                Run your household like it&apos;s <span className="text-gradient">one system</span>,
-                not five apps
+                The household hub for <span className="text-gradient">homeschool families</span>
               </h1>
               <p className="max-w-xl text-lg leading-relaxed text-[var(--color-text-muted)]">
-                Calendar, chores, shopping, notes, and expenses, with homeschool tracking built in
-                when you need it. Self-host free or run on Domi Ops cloud.
+                Classes, assignments, and a real gradebook next to the family calendar, chores, and
+                medications. One login, one household. Self-host free or run on Domi Ops cloud.
               </p>
               <div className="flex flex-wrap items-center gap-4">
-                <LinkButton
-                  href="/pricing"
-                  size="lg"
-                  className="shadow-[0_0_0_1px_var(--color-accent),0_8px_24px_-4px_var(--color-accent)]"
-                >
-                  Get hosted
-                </LinkButton>
-                {urls.ossRepoPublic ? (
+                {urls.demo ? (
                   <AnchorButton
-                    href={urls.setupDocs}
-                    variant="secondary"
+                    href={urls.demo}
                     size="lg"
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    className="shadow-[0_0_0_1px_var(--color-accent),0_8px_24px_-4px_var(--color-accent)]"
                   >
-                    Self-host free
+                    Try the demo
                   </AnchorButton>
-                ) : (
-                  <LinkButton href="/pricing" variant="secondary" size="lg">
-                    Self-host (coming soon)
-                  </LinkButton>
-                )}
+                ) : null}
+                <LinkButton href="/pricing" variant="secondary" size="lg">
+                  See pricing
+                </LinkButton>
               </div>
               <p className="text-xs text-[var(--color-text-muted)]">
-                Open source · Every module included
+                No setup needed to look around · 14-day trial, then $12/mo · Open source, self-host
+                free
               </p>
             </div>
 
@@ -80,17 +76,17 @@ export function LandingPage() {
                 style={{ animationDelay: "1.4s" }}
                 aria-hidden
               >
-                6 modules, 1 login
+                School + health, 1 login
               </div>
               <ThemeAwareScreenshot
-                {...MARKETING_SCREENSHOTS.heroCalendarWeek}
-                alt="Domi Ops calendar week view with family events and school assignment overlays"
+                {...MARKETING_SCREENSHOTS.schoolGradebook}
+                alt="Domi Ops gradebook showing a homeschool student's grades by class and category"
                 preload
                 className="hidden max-w-full rounded-[var(--radius-xl)] shadow-[var(--shadow-elevated)] sm:block lg:max-w-[42rem]"
               />
               <ThemeAwareScreenshot
-                {...MARKETING_SCREENSHOTS.heroCalendarWeekMobile}
-                alt="Domi Ops calendar agenda on mobile"
+                {...MARKETING_SCREENSHOTS.schoolMobile}
+                alt="Domi Ops school module on mobile"
                 preload
                 className="max-w-full rounded-[var(--radius-xl)] shadow-[var(--shadow-elevated)] sm:hidden"
               />
@@ -103,76 +99,108 @@ export function LandingPage() {
         <div className="mx-auto max-w-3xl px-4 py-10 text-center sm:px-6 sm:py-14">
           <p className="text-label text-[var(--color-accent)]">Why switch</p>
           <p className="mt-3 text-lg leading-relaxed text-[var(--color-text-muted)]">
-            Cozi for the calendar. A whiteboard for chores. A spreadsheet nobody opens for the
-            budget. That's not a system, it's duct tape. Domi Ops replaces it, homeschool
-            curriculum included, not required.
-          </p>
-        </div>
-      </section>
-
-      <section className="border-t border-[var(--color-border)] bg-[var(--color-surface-elevated)]/40">
-        <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
-          <p className="font-display text-center text-lg font-medium tracking-tight sm:text-xl">
-            6 modules.{" "}
-            <span className="text-[var(--color-text-muted)]">1 login.</span>{" "}
-            <span className="text-gradient">Zero spreadsheets.</span>
+            A planner for the schedule. A spreadsheet for grades. A pill box and a sticky note for
+            medications. A chore whiteboard nobody updates. That's not a system, it's duct tape.
+            Domi Ops puts school, health, and the rest of the house in one place, so what you
+            teach, what you track, and what you do today all live together.
           </p>
         </div>
       </section>
 
       <section className="border-t border-[var(--color-border)]">
         <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
-          <div className="max-w-2xl">
-            <p className="text-label text-[var(--color-accent)]">Why Domi Ops</p>
-            <h2 className="mt-2 font-display text-2xl font-semibold tracking-tight sm:text-3xl">
-              Built for the tracking a calendar app can&apos;t do
-            </h2>
-            <p className="mt-3 text-[var(--color-text-muted)]">
-              Most family organizers stop at reminders. Two things in a household outgrow that fast:
-              your kids&apos; education and your family&apos;s health. Neither is a box you check
-              once. They're ongoing records, so that's what we built.
-            </p>
-          </div>
-
-          <div className="mt-10 grid gap-8 lg:grid-cols-2">
-            <div className="group space-y-4">
-              <div className="overflow-hidden rounded-[var(--radius-xl)] shadow-[var(--shadow-card)] transition group-hover:shadow-[var(--shadow-elevated)]">
-                <ThemeAwareScreenshot
-                  {...MARKETING_SCREENSHOTS.school}
-                  alt="Domi Ops school module showing classes, assignments, and gradebook"
-                  className="w-full rounded-none border-0 shadow-none transition duration-300 group-hover:scale-[1.02]"
-                />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold">A full homeschool LMS</h3>
-                <p className="mt-1 text-sm leading-relaxed text-[var(--color-text-muted)]">
-                  Classes, assignments, submissions, a real gradebook. Progress tracked across the
-                  whole year, not a to-do list that resets every Monday.
-                </p>
-              </div>
+          <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-14">
+            <div className="space-y-4">
+              <p className="text-label text-[var(--color-accent)]">Homeschool</p>
+              <h2 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">
+                A real school system, run from your kitchen table
+              </h2>
+              <p className="text-[var(--color-text-muted)]">
+                Most family organizers stop at reminders. Teaching kids at home is an ongoing
+                record, so we built the record.
+              </p>
+              <ul className="space-y-3 text-sm leading-relaxed text-[var(--color-text-muted)]">
+                <li>
+                  <strong className="text-[var(--color-text)]">Parent and student views.</strong>{" "}
+                  Kids see their own work. You see and grade everything.
+                </li>
+                <li>
+                  <strong className="text-[var(--color-text)]">Gradebook with weighted categories.</strong>{" "}
+                  Tests, homework, and projects count the way you decide, tracked across the whole
+                  year.
+                </li>
+                <li>
+                  <strong className="text-[var(--color-text)]">In-app tests that grade themselves.</strong>{" "}
+                  Build a test, students take it in the app, and scores land in the gradebook. You
+                  can override any answer.
+                </li>
+                <li>
+                  <strong className="text-[var(--color-text)]">Google Docs work, kept honest.</strong>{" "}
+                  Hand out a test as a Google Doc, get each student&apos;s copy back, and freeze the
+                  original at first submission.
+                </li>
+                <li>
+                  <strong className="text-[var(--color-text)]">On the family calendar.</strong>{" "}
+                  Assignments overlay your week, so school isn&apos;t a separate place to look.
+                </li>
+              </ul>
             </div>
-            <div className="group space-y-4">
-              <div className="overflow-hidden rounded-[var(--radius-xl)] shadow-[var(--shadow-card)] transition group-hover:shadow-[var(--shadow-elevated)]">
-                <ThemeAwareScreenshot
-                  {...MARKETING_SCREENSHOTS.health}
-                  alt="Domi Ops health module showing medications, events, and vitals"
-                  className="w-full rounded-none border-0 shadow-none transition duration-300 group-hover:scale-[1.02]"
-                />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold">Encrypted health tracking</h3>
-                <p className="mt-1 text-sm leading-relaxed text-[var(--color-text-muted)]">
-                  Medications grouped by dose so nobody gets five pings for one pill organizer.
-                  Vitals, appointments, and history, encrypted at rest and shared with exactly who
-                  you choose.
-                </p>
-              </div>
+            <div className="overflow-hidden rounded-[var(--radius-xl)] shadow-[var(--shadow-card)]">
+              <ThemeAwareScreenshot
+                {...MARKETING_SCREENSHOTS.school}
+                alt="Domi Ops school module showing classes, assignments, and gradebook"
+                className="w-full rounded-none border-0 shadow-none"
+              />
             </div>
           </div>
         </div>
       </section>
 
       <section className="border-t border-[var(--color-border)] bg-[var(--color-surface-elevated)]/50">
+        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
+          <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-14">
+            <div className="overflow-hidden rounded-[var(--radius-xl)] shadow-[var(--shadow-card)]">
+              <ThemeAwareScreenshot
+                {...MARKETING_SCREENSHOTS.health}
+                alt="Domi Ops health module showing medications, events, and vitals"
+                className="w-full rounded-none border-0 shadow-none"
+              />
+            </div>
+            <div className="space-y-4">
+              <p className="text-label text-[var(--color-accent)]">Health</p>
+              <h2 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">
+                The health side of running a household
+              </h2>
+              <p className="text-[var(--color-text-muted)]">
+                Medications, appointments, and vitals for everyone in the house, shared with exactly
+                who you choose.
+              </p>
+              <ul className="space-y-3 text-sm leading-relaxed text-[var(--color-text-muted)]">
+                <li>
+                  <strong className="text-[var(--color-text)]">Doses grouped, not spammed.</strong>{" "}
+                  One reminder for the pill organizer, not five pings for five pills.
+                </li>
+                <li>
+                  <strong className="text-[var(--color-text)]">Pause and resume.</strong>{" "}
+                  Stopping a medication keeps its dose history, so the record stays intact.
+                </li>
+                <li>
+                  <strong className="text-[var(--color-text)]">Encrypted at rest.</strong>{" "}
+                  Medication names, doses, and notes are encrypted, and seeing a record never grants
+                  the right to edit it.
+                </li>
+                <li>
+                  <strong className="text-[var(--color-text)]">An honest scope.</strong>{" "}
+                  It&apos;s a household tool, not a medical record system, and it makes no HIPAA
+                  claims.
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="border-t border-[var(--color-border)]">
         <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
           <p className="text-label text-[var(--color-accent)]">One Tuesday</p>
           <h2 className="mt-2 font-display text-2xl font-semibold tracking-tight sm:text-3xl">
@@ -205,11 +233,11 @@ export function LandingPage() {
         <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
           <div className="mb-10 max-w-2xl">
             <h2 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">
-              Everything a household runs on
+              And everything else a household runs on
             </h2>
             <p className="mt-3 text-[var(--color-text-muted)]">
-              Calendar and chores up front; turn on school, drive, shopping, expenses, and health
-              as your household needs them.
+              The rest of the house, included in every plan. Turn modules on as your household needs
+              them.
             </p>
           </div>
 
@@ -353,17 +381,22 @@ export function LandingPage() {
         <div className="bg-dot-grid pointer-events-none absolute inset-0" aria-hidden />
         <div className="relative mx-auto max-w-6xl px-4 py-16 text-center sm:px-6 sm:py-20">
           <h2 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
-            Stop running your household on <span className="text-gradient">five logins</span>
+            Teach, track, and run the house from <span className="text-gradient">one place</span>
           </h2>
           <p className="mx-auto mt-3 max-w-xl text-[var(--color-text-muted)]">
             Free to self-host, forever. Or skip the server and let us run it.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
-            <LinkButton
-              href="/pricing"
-              size="lg"
-              className="shadow-[0_0_0_1px_var(--color-accent),0_8px_24px_-4px_var(--color-accent)]"
-            >
+            {urls.demo ? (
+              <AnchorButton
+                href={urls.demo}
+                size="lg"
+                className="shadow-[0_0_0_1px_var(--color-accent),0_8px_24px_-4px_var(--color-accent)]"
+              >
+                Try the demo
+              </AnchorButton>
+            ) : null}
+            <LinkButton href="/pricing" variant="secondary" size="lg">
               Get hosted
             </LinkButton>
             {urls.ossRepoPublic ? (
