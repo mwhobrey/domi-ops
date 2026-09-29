@@ -58,6 +58,18 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 - **Log vitals** starts with blood pressure and heart rate only (WHO-341). Temperature, Blood
   oxygen, and Weight are one-tap chips under the readings, so a sick-day temperature doesn't
   need the metric dropdown. The same chips appear when editing a Vitals event.
+- **Health Today tab** (WHO-344), for whichever person is selected under "Doses for":
+  - **Logged today** groups doses the way the pending list does: one block per scheduled
+    time ("12:01 PM · 2 MEDS"), earliest first, with as-needed doses in their own block at the
+    end. A single dose keeps its "for 8:00 AM" note instead of a header.
+  - **Events** logged that day (vitals, exercise, pain, meals, appointments) show under the
+    doses in their own section, oldest first. Tap one to open it. Medication events are left
+    out since the doses are already listed.
+  - **Vitals / Exercise / Pain / Meal** quick-log buttons moved from the Log tab to Today, so
+    logging doesn't take a tab switch. They appear only if you can log events for that person
+    (after **Managing {name}** when it isn't you), and the sheet is fixed to that person. The
+    Log tab keeps the type filters and **Add event**.
+  No migration and no manual steps.
 - "Today" everywhere in the app is the household's day, not your device's (WHO-336): due
   labels, overdue counts, default dates on new events, expenses, and bills, the calendar's today
   highlight and current-time line, and weekly report ranges. Nothing changes when your device
