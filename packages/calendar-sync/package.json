@@ -20,7 +20,7 @@
     "@domi-ops/crypto": "*",
     "@domi-ops/db": "*",
     "bullmq": "^5.53.2",
-    "drizzle-orm": "^0.45.2",
+    "drizzle-orm": "^0.45.3",
     "web-push": "^3.6.7"
   },
   "devDependencies": {
