@@ -53,11 +53,35 @@ If pending migrations exist when CI runs, `deploy-hosted.sh` **aborts before `co
 
 | Secret | Required | Purpose |
 |--------|----------|---------|
-| `HOSTED_DEPLOY_SSH_KEY` | **Yes** | Private key for SSH (matches droplet access — e.g. same key you use for `ssh domi-ops-hosted`) |
+| `HOSTED_DEPLOY_SSH_KEY` | **Yes** | Private key CI uses to SSH to the droplet. Use a **dedicated** key pair (below), not your personal key |
 | `HOSTED_DEPLOY_HOST` | No | Default `138.197.22.88` |
 | `HOSTED_DEPLOY_USER` | No | Default `root` |
 
 Do **not** store the admin `DATABASE_URL` in GitHub; migrations stay a human pre-step.
+
+**Creating the CI deploy key.** A dedicated key means a leaked secret can be revoked on its own
+without touching your personal access (root on the droplet also holds the admin `DATABASE_URL`
+in `~/.bashrc`, so this key is worth protecting). No passphrase; CI can't type one.
+
+```bash
+ssh-keygen -t ed25519 -f ~/.ssh/domi_ops_ci_deploy -N "" -C "github-actions-domi-ops-deploy"
+```
+
+1. Append `~/.ssh/domi_ops_ci_deploy.pub` to `~/.ssh/authorized_keys` on the droplet, as its own
+   line. A hand-pasted key can get wrapped, or glued onto the previous key when the file lacks a
+   trailing newline; `awk '{print NR": "$1" ... "$NF}' ~/.ssh/authorized_keys` should show it on
+   a separate line. `~/.ssh` must be `700` and `authorized_keys` no looser than `644`.
+2. Test that key alone (swap in your host/user if you set the optional secrets):
+   `ssh -i ~/.ssh/domi_ops_ci_deploy -o IdentitiesOnly=yes root@138.197.22.88 'echo ok'`
+3. Set the secret from stdin:
+   `cat ~/.ssh/domi_ops_ci_deploy | gh secret set HOSTED_DEPLOY_SSH_KEY --repo <owner>/domi-ops`
+4. Prove it: re-run a failed deploy job, or Actions → **Publish images** → **Run workflow** with
+   **deploy_hosted**.
+
+Set the secret with `gh` (or paste with the newline intact). Pasting into the web form can drop
+the trailing newline, and the deploy job then fails with `ssh.ParsePrivateKey: ssh: no key
+found`. To revoke CI's access, delete the `github-actions-domi-ops-deploy` line from
+`authorized_keys` on the droplet.
 
 **Emergency redeploy** (same image tag, or pin manually): Actions → **Publish images** → **Run workflow** → enable **deploy_hosted**, optional **domi_ops_image_tag** (semver without `v`, git sha, or leave empty for `latest` after a main publish).
 
