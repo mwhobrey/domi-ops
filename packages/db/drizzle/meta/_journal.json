@@ -568,6 +568,20 @@
       "when": 1790380000000,
       "tag": "0080_school_records",
       "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1790390000000,
+      "tag": "0081_school_instruction_days",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1790400000000,
+      "tag": "0082_school_grade_scale",
+      "breakpoints": true
     }
   ]
 }

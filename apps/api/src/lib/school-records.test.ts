@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   isAttendanceStatus,
+  buildDayActivity,
   isIsoDate,
   minutesToHours,
   parseMinutes,
-  summarizeSchoolDays,
   tallyAttendance,
   totalMinutes,
+  weekdaysBetween,
 } from "./school-records.js";
 
 describe("isIsoDate", () => {
@@ -41,39 +42,70 @@ describe("tallyAttendance", () => {
   });
 });
 
-describe("summarizeSchoolDays", () => {
-  it("counts a day attended if any class was present or late", () => {
-    const s = summarizeSchoolDays([
-      { attendanceDate: "2026-09-01", status: "absent" },
-      { attendanceDate: "2026-09-01", status: "present" },
-      { attendanceDate: "2026-09-02", status: "late" },
-    ]);
-    expect(s).toEqual({ daysAttended: 2, daysRecorded: 2, daysAbsent: 0, daysExcused: 0 });
-  });
+describe("buildDayActivity", () => {
+  const none = { markedDays: [], hours: [], attendance: [] };
 
-  it("counts absent only when every entry that day was absent", () => {
-    const s = summarizeSchoolDays([
-      { attendanceDate: "2026-09-03", status: "absent" },
-      { attendanceDate: "2026-09-03", status: "absent" },
-    ]);
-    expect(s).toMatchObject({ daysAttended: 0, daysAbsent: 1, daysExcused: 0 });
-  });
-
-  it("counts excused days separately, even alongside an absence", () => {
-    const s = summarizeSchoolDays([
-      { attendanceDate: "2026-09-04", status: "excused" },
-      { attendanceDate: "2026-09-04", status: "absent" },
-    ]);
-    expect(s).toMatchObject({ daysAttended: 0, daysAbsent: 0, daysExcused: 1 });
-  });
-
-  it("handles no data", () => {
-    expect(summarizeSchoolDays([])).toEqual({
-      daysAttended: 0,
-      daysRecorded: 0,
-      daysAbsent: 0,
-      daysExcused: 0,
+  it("counts a day from any one source", () => {
+    const days = buildDayActivity({
+      markedDays: ["2026-09-01"],
+      hours: [{ logDate: "2026-09-02", minutes: 90 }],
+      attendance: [{ attendanceDate: "2026-09-03", status: "present" }],
     });
+    expect(days.map((d) => d.date)).toEqual(["2026-09-01", "2026-09-02", "2026-09-03"]);
+    expect(days[0]).toMatchObject({ marked: true, minutes: 0, classAttendance: false });
+    expect(days[1]).toMatchObject({ marked: false, minutes: 90 });
+    expect(days[2]).toMatchObject({ classAttendance: true });
+  });
+
+  it("counts a day once however many sources agree, and sums minutes", () => {
+    const days = buildDayActivity({
+      markedDays: ["2026-09-01"],
+      hours: [
+        { logDate: "2026-09-01", minutes: 60 },
+        { logDate: "2026-09-01", minutes: 30 },
+      ],
+      attendance: [
+        { attendanceDate: "2026-09-01", status: "late" },
+        { attendanceDate: "2026-09-01", status: "present" },
+      ],
+    });
+    expect(days).toEqual([{ date: "2026-09-01", marked: true, minutes: 90, classAttendance: true }]);
+  });
+
+  it("never counts absent or excused marks, or zero-minute hours", () => {
+    const days = buildDayActivity({
+      markedDays: [],
+      hours: [{ logDate: "2026-09-04", minutes: 0 }],
+      attendance: [
+        { attendanceDate: "2026-09-05", status: "absent" },
+        { attendanceDate: "2026-09-06", status: "excused" },
+      ],
+    });
+    expect(days).toEqual([]);
+  });
+
+  it("sorts by date and handles no data", () => {
+    expect(buildDayActivity(none)).toEqual([]);
+    const days = buildDayActivity({ ...none, markedDays: ["2026-09-03", "2026-09-01"] });
+    expect(days.map((d) => d.date)).toEqual(["2026-09-01", "2026-09-03"]);
+  });
+});
+
+describe("weekdaysBetween", () => {
+  it("skips weekends and includes both ends", () => {
+    // 2026-09-28 is a Monday.
+    expect(weekdaysBetween("2026-09-28", "2026-10-04")).toEqual([
+      "2026-09-28",
+      "2026-09-29",
+      "2026-09-30",
+      "2026-10-01",
+      "2026-10-02",
+    ]);
+  });
+
+  it("returns nothing for a weekend-only or backwards range", () => {
+    expect(weekdaysBetween("2026-10-03", "2026-10-04")).toEqual([]);
+    expect(weekdaysBetween("2026-10-05", "2026-10-01")).toEqual([]);
   });
 });
 

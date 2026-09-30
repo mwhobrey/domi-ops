@@ -7,9 +7,12 @@ import {
   formatHours,
   schoolYearRange,
   type RecordStudent,
+  type RecordsSettings,
   type StudentRecords,
 } from "../lib/school-records";
 import { useHouseholdToday } from "./HouseholdTimeProvider";
+import { SchoolDaysCalendar } from "./SchoolDaysCalendar";
+import { SchoolRecordsSettings } from "./SchoolRecordsSettings";
 import {
   Alert,
   Button,
@@ -35,8 +38,17 @@ export function SchoolRecordsClient({ students }: { students: RecordStudent[] })
   const rangeTo = to ?? year.to;
 
   const [records, setRecords] = useState<StudentRecords | null>(null);
+  const [settings, setSettings] = useState<RecordsSettings | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const loadSettings = useCallback(async () => {
+    try {
+      setSettings(await apiClient.get<RecordsSettings>("/api/school/settings/records"));
+    } catch {
+      setSettings(null);
+    }
+  }, []);
 
   const load = useCallback(async () => {
     if (!studentId) return;
@@ -59,6 +71,10 @@ export function SchoolRecordsClient({ students }: { students: RecordStudent[] })
     void load();
   }, [load]);
 
+  useEffect(() => {
+    void loadSettings();
+  }, [loadSettings]);
+
   if (students.length === 0) {
     return (
       <EmptyState
@@ -69,7 +85,6 @@ export function SchoolRecordsClient({ students }: { students: RecordStudent[] })
     );
   }
 
-  const days = records?.attendance.days;
   const transcriptHref = `/school/transcript/${studentId}?from=${rangeFrom}&to=${rangeTo}`;
 
   return (
@@ -116,16 +131,60 @@ export function SchoolRecordsClient({ students }: { students: RecordStudent[] })
 
       {records && (
         <div className={loading ? "opacity-60 transition" : "transition"}>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatTile label="Days attended" value={days?.daysAttended ?? 0} tone="success" />
-            <StatTile label="Days absent" value={days?.daysAbsent ?? 0} tone={days?.daysAbsent ? "warning" : "default"} />
-            <StatTile label="Days excused" value={days?.daysExcused ?? 0} />
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <StatTile
+              label={records.instruction.target ? `Days of instruction (of ${records.instruction.target})` : "Days of instruction"}
+              value={records.instruction.count}
+              tone={
+                records.instruction.target && records.instruction.count >= records.instruction.target ? "success" : "default"
+              }
+            />
             <StatTile label="Hours logged" value={records.hours.totalHours} />
+            {records.instruction.target ? (
+              <StatTile
+                label="Days to go"
+                value={Math.max(0, records.instruction.target - records.instruction.count)}
+              />
+            ) : null}
           </div>
+          {records.instruction.target ? (
+            <div
+              className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--color-border)]"
+              role="progressbar"
+              aria-label="Days of instruction toward target"
+              aria-valuemin={0}
+              aria-valuemax={records.instruction.target}
+              aria-valuenow={Math.min(records.instruction.count, records.instruction.target)}
+            >
+              <div
+                className="h-full bg-[var(--color-accent)] transition-[width]"
+                style={{ width: `${Math.min(100, (records.instruction.count / records.instruction.target) * 100)}%` }}
+              />
+            </div>
+          ) : null}
 
           <div className="mt-6 space-y-6">
-            <AttendanceByClass records={records} />
+            <SchoolDaysCalendar
+              days={records.instruction.days}
+              today={today}
+              rangeFrom={rangeFrom}
+              rangeTo={rangeTo}
+              studentId={studentId}
+              editableStudentIds={students.filter((s) => s.canEdit).map((s) => s.memberId)}
+              canEdit={records.canEdit}
+              onChanged={load}
+            />
             <HoursLog records={records} studentId={studentId} onChanged={load} today={today} />
+            <AttendanceByClass records={records} />
+            {settings?.canEdit && (
+              <SchoolRecordsSettings
+                key={JSON.stringify([settings.schoolDaysTarget, settings.gradeScaleIsDefault])}
+                initial={settings}
+                onSaved={async () => {
+                  await Promise.all([loadSettings(), load()]);
+                }}
+              />
+            )}
           </div>
         </div>
       )}
@@ -137,12 +196,13 @@ function AttendanceByClass({ records }: { records: StudentRecords }) {
   return (
     <Card>
       <CardHeader>
-        <SectionHeader title="Attendance by class" />
+        <SectionHeader title="Class attendance (optional)" />
       </CardHeader>
       <CardBody>
         {records.attendance.perClass.every((c) => c.recorded === 0) ? (
           <p className="text-sm text-[var(--color-text-muted)]">
-            No attendance recorded in this range. Take attendance from a class page.
+            Nothing recorded. Most families just mark school days above. Class attendance is there for
+            co-op or outside classes, and a class marked present also counts as a school day.
           </p>
         ) : (
           <div className="overflow-x-auto">

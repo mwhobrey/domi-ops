@@ -44,37 +44,57 @@ export function tallyAttendance(rows: Pick<AttendanceRow, "status">[]): Attendan
   return t;
 }
 
-export interface SchoolDaySummary {
-  /** Distinct dates the student attended at least one class (present or late). */
-  daysAttended: number;
-  /** Distinct dates with any attendance recorded. */
-  daysRecorded: number;
-  /** Recorded dates where every entry was absent (excused days are neither attended nor counted against). */
-  daysAbsent: number;
-  daysExcused: number;
+/** One school day for a student and why it counts. */
+export interface DayActivity {
+  date: string;
+  /** Someone marked "school happened" on this day. */
+  marked: boolean;
+  /** Minutes logged in the hours log. */
+  minutes: number;
+  /** A class marked the student present or late. */
+  classAttendance: boolean;
 }
 
 /**
- * Household-level "school days" for one student across all their classes. A day counts as attended
- * if any class marked them present or late; absent only if every entry that day was absent.
- * Days that are only excused (or excused plus absent) count as excused, not absent.
+ * Days of instruction, the number states ask for. Homeschoolers rarely take a roll call, so a
+ * day counts if ANY of these is true: it was marked as a school day, hours were logged, or a
+ * class marked the student present/late. Absent and excused marks never count for or against.
+ * Returned sorted by date; length is the day count.
  */
-export function summarizeSchoolDays(rows: Pick<AttendanceRow, "attendanceDate" | "status">[]): SchoolDaySummary {
-  const byDate = new Map<string, Set<AttendanceStatus>>();
-  for (const r of rows) {
-    const set = byDate.get(r.attendanceDate) ?? new Set<AttendanceStatus>();
-    set.add(r.status);
-    byDate.set(r.attendanceDate, set);
+export function buildDayActivity(input: {
+  markedDays: string[];
+  hours: Pick<HoursRow, "logDate" | "minutes">[];
+  attendance: Pick<AttendanceRow, "attendanceDate" | "status">[];
+}): DayActivity[] {
+  const byDate = new Map<string, DayActivity>();
+  const get = (date: string) => {
+    let d = byDate.get(date);
+    if (!d) {
+      d = { date, marked: false, minutes: 0, classAttendance: false };
+      byDate.set(date, d);
+    }
+    return d;
+  };
+  for (const date of input.markedDays) get(date).marked = true;
+  for (const h of input.hours) {
+    if (h.minutes > 0) get(h.logDate).minutes += h.minutes;
   }
-  let daysAttended = 0;
-  let daysAbsent = 0;
-  let daysExcused = 0;
-  for (const statuses of byDate.values()) {
-    if (statuses.has("present") || statuses.has("late")) daysAttended += 1;
-    else if (statuses.has("excused")) daysExcused += 1;
-    else daysAbsent += 1;
+  for (const a of input.attendance) {
+    if (a.status === "present" || a.status === "late") get(a.attendanceDate).classAttendance = true;
   }
-  return { daysAttended, daysRecorded: byDate.size, daysAbsent, daysExcused };
+  return [...byDate.values()].sort((x, y) => x.date.localeCompare(y.date));
+}
+
+/** Monday to Friday dates from `from` through `to`, inclusive. */
+export function weekdaysBetween(from: string, to: string): string[] {
+  const out: string[] = [];
+  const end = new Date(`${to}T00:00:00Z`).getTime();
+  for (let t = new Date(`${from}T00:00:00Z`).getTime(); t <= end; t += 86_400_000) {
+    const d = new Date(t);
+    const dow = d.getUTCDay();
+    if (dow !== 0 && dow !== 6) out.push(d.toISOString().slice(0, 10));
+  }
+  return out;
 }
 
 export interface HoursRow {

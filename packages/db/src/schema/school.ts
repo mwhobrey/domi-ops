@@ -342,3 +342,19 @@ export const schoolHoursLog = pgTable(
   },
   (t) => [index("school_hours_log_student_date_idx").on(t.householdId, t.studentMemberId, t.logDate)],
 );
+
+/** "School happened for this student on this day." The homeschool alternative to a class roll call. */
+export const schoolInstructionDays = pgTable(
+  "school_instruction_days",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    householdId: uuid("household_id")
+      .notNull()
+      .references(() => households.id, { onDelete: "cascade" }),
+    studentMemberId: uuid("student_member_id").notNull(),
+    day: date("day").notNull(),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("school_instruction_days_student_day").on(t.householdId, t.studentMemberId, t.day)],
+);

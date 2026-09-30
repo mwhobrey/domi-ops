@@ -11,6 +11,7 @@ import {
   schoolClasses,
   schoolEnrollments,
   schoolHoursLog,
+  schoolInstructionDays,
   users,
 } from "@domi-ops/db";
 import { and, asc, desc, eq, gte, inArray, lte } from "drizzle-orm";
@@ -18,18 +19,24 @@ import { isHouseholdModuleEnabled } from "../lib/household-modules.js";
 import { isHouseholdAdmin, resolveClassAccess } from "../lib/school-access.js";
 import { buildClassGradebook } from "../lib/school-gradebook.js";
 import {
+  buildDayActivity,
   isAttendanceStatus,
   isIsoDate,
   minutesToHours,
   parseMinutes,
-  summarizeSchoolDays,
   tallyAttendance,
   totalMinutes,
+  weekdaysBetween,
   type AttendanceStatus,
 } from "../lib/school-records.js";
 import { computePointsAverage, computeWeightedGrade } from "../lib/school-report-math.js";
 import { memberEnrollmentsForHousehold, schoolContextForAuth } from "../lib/school-route-context.js";
-import { buildTranscript } from "../lib/school-transcript-math.js";
+import {
+  buildTranscript,
+  GRADE_SCALE_PRESETS,
+  scaleOrDefault,
+  validateGradeScale,
+} from "../lib/school-transcript-math.js";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 
@@ -38,6 +45,8 @@ type SchoolContext = NonNullable<Awaited<ReturnType<typeof schoolContextForAuth>
 
 const MAX_ATTENDANCE_ENTRIES = 200;
 const MAX_TEXT = 500;
+const MAX_DAYS_PER_REQUEST = 400;
+const MAX_STUDENTS_PER_REQUEST = 20;
 
 function rangeFromQuery(c: Ctx): { from?: string; to?: string } | { error: string } {
   const from = c.req.query("from");
@@ -284,6 +293,33 @@ export function schoolRecordsRoutes(db: Database, env: Env) {
       .where(and(...conditions));
   }
 
+  async function studentMarkedDays(
+    householdId: string,
+    studentMemberId: string,
+    range: { from?: string; to?: string },
+  ): Promise<string[]> {
+    const conditions = [
+      eq(schoolInstructionDays.householdId, householdId),
+      eq(schoolInstructionDays.studentMemberId, studentMemberId),
+    ];
+    if (range.from) conditions.push(gte(schoolInstructionDays.day, range.from));
+    if (range.to) conditions.push(lte(schoolInstructionDays.day, range.to));
+    const rows = await db
+      .select({ day: schoolInstructionDays.day })
+      .from(schoolInstructionDays)
+      .where(and(...conditions));
+    return rows.map((r) => r.day);
+  }
+
+  async function schoolDaysTarget(householdId: string): Promise<number | null> {
+    const [row] = await db
+      .select({ target: households.schoolDaysTarget })
+      .from(households)
+      .where(eq(households.id, householdId))
+      .limit(1);
+    return row?.target ?? null;
+  }
+
   async function studentHours(
     householdId: string,
     studentMemberId: string,
@@ -333,7 +369,9 @@ export function schoolRecordsRoutes(db: Database, env: Env) {
 
     const attendanceRows = await studentAttendance(studentMemberId, classIds, range);
     const hours = await studentHours(auth.householdId, studentMemberId, range);
+    const markedDays = await studentMarkedDays(auth.householdId, studentMemberId, range);
     const labels = await memberLabels(auth.householdId);
+    const days = buildDayActivity({ markedDays, hours, attendance: attendanceRows });
 
     const perClass = classIds.map((id) => ({
       classId: id,
@@ -346,9 +384,139 @@ export function schoolRecordsRoutes(db: Database, env: Env) {
       student: { memberId: studentMemberId, label: labels.get(studentMemberId) ?? "Student" },
       canEdit: scope.editable.has(studentMemberId),
       classes: classIds.map((id) => ({ id, name: classById.get(id)!.name })),
-      attendance: { days: summarizeSchoolDays(attendanceRows), perClass },
+      instruction: { days, count: days.length, target: await schoolDaysTarget(auth.householdId) },
+      attendance: { perClass },
       hours: { entries: hours, totalMinutes: minutes, totalHours: minutesToHours(minutes) },
     });
+  });
+
+  // ---- school days (the homeschool "attendance") ---------------------------------------------
+
+  /**
+   * Mark or unmark days of instruction for one or more students. Either `dates`, or `range` to
+   * mark every Monday-Friday in it. Unmarking removes only the explicit mark: a day that also has
+   * logged hours or class attendance still counts, because those are real records.
+   */
+  app.put("/records/days", async (c) => {
+    const context = await loadContext(c);
+    if (context instanceof Response) return context;
+    const auth = c.get("auth")!;
+    const body = await c.req
+      .json<{
+        studentMemberIds?: unknown;
+        dates?: unknown;
+        range?: { from?: unknown; to?: unknown };
+        marked?: unknown;
+      }>()
+      .catch(() => null);
+    if (!body || typeof body.marked !== "boolean") return c.json({ error: "invalid_body" }, 400);
+    if (
+      !Array.isArray(body.studentMemberIds) ||
+      body.studentMemberIds.length === 0 ||
+      body.studentMemberIds.length > MAX_STUDENTS_PER_REQUEST ||
+      !body.studentMemberIds.every((id): id is string => typeof id === "string")
+    ) {
+      return c.json({ error: "invalid_students" }, 400);
+    }
+
+    let dates: string[];
+    if (body.range) {
+      if (!isIsoDate(body.range.from) || !isIsoDate(body.range.to)) return c.json({ error: "invalid_range" }, 400);
+      dates = weekdaysBetween(body.range.from, body.range.to);
+    } else if (Array.isArray(body.dates) && body.dates.every(isIsoDate)) {
+      dates = [...new Set(body.dates as string[])];
+    } else {
+      return c.json({ error: "invalid_dates" }, 400);
+    }
+    if (dates.length === 0) return c.json({ error: "invalid_dates" }, 400);
+    if (dates.length > MAX_DAYS_PER_REQUEST) return c.json({ error: "too_many_dates" }, 400);
+
+    const scope = await recordScope(auth.householdId, context);
+    const studentIds = [...new Set(body.studentMemberIds)];
+    if (!studentIds.every((id) => scope.editable.has(id))) return c.json({ error: "forbidden" }, 403);
+
+    if (body.marked) {
+      await db
+        .insert(schoolInstructionDays)
+        .values(
+          studentIds.flatMap((studentMemberId) =>
+            dates.map((day) => ({
+              householdId: auth.householdId,
+              studentMemberId,
+              day,
+              createdByUserId: auth.userId,
+            })),
+          ),
+        )
+        .onConflictDoNothing();
+    } else {
+      await db
+        .delete(schoolInstructionDays)
+        .where(
+          and(
+            eq(schoolInstructionDays.householdId, auth.householdId),
+            inArray(schoolInstructionDays.studentMemberId, studentIds),
+            inArray(schoolInstructionDays.day, dates),
+          ),
+        );
+    }
+    return c.json({ ok: true, dates: dates.length, students: studentIds.length });
+  });
+
+  async function recordSettings(householdId: string) {
+    const [row] = await db
+      .select({ target: households.schoolDaysTarget, scale: households.schoolGradeScale })
+      .from(households)
+      .where(eq(households.id, householdId))
+      .limit(1);
+    return {
+      schoolDaysTarget: row?.target ?? null,
+      gradeScale: scaleOrDefault(row?.scale),
+      // True when the household never customised it, so the UI can say "default".
+      gradeScaleIsDefault: row?.scale == null,
+      gradeScalePresets: GRADE_SCALE_PRESETS,
+    };
+  }
+
+  app.get("/settings/records", async (c) => {
+    const context = await loadContext(c);
+    if (context instanceof Response) return context;
+    const auth = c.get("auth")!;
+    return c.json({ ...(await recordSettings(auth.householdId)), canEdit: isHouseholdAdmin(context.householdRole) });
+  });
+
+  /**
+   * Household-wide records settings. Owner/admin only. Send only what changes:
+   * `schoolDaysTarget` (integer or null) and/or `gradeScale` (a scale, or null to reset to default).
+   */
+  app.patch("/settings/records", async (c) => {
+    const context = await loadContext(c);
+    if (context instanceof Response) return context;
+    const auth = c.get("auth")!;
+    if (!isHouseholdAdmin(context.householdRole)) return c.json({ error: "forbidden" }, 403);
+    const body = await c.req.json<{ schoolDaysTarget?: unknown; gradeScale?: unknown }>().catch(() => null);
+    if (!body) return c.json({ error: "invalid_body" }, 400);
+
+    const patch: { schoolDaysTarget?: number | null; schoolGradeScale?: unknown } = {};
+    if ("schoolDaysTarget" in body) {
+      const target = body.schoolDaysTarget;
+      if (target !== null && !(typeof target === "number" && Number.isInteger(target) && target >= 1 && target <= 366)) {
+        return c.json({ error: "invalid_target" }, 400);
+      }
+      patch.schoolDaysTarget = target;
+    }
+    if ("gradeScale" in body) {
+      if (body.gradeScale === null) {
+        patch.schoolGradeScale = null;
+      } else {
+        const parsed = validateGradeScale(body.gradeScale);
+        if ("error" in parsed) return c.json({ error: "invalid_scale", message: parsed.error }, 400);
+        patch.schoolGradeScale = parsed.scale;
+      }
+    }
+    if (Object.keys(patch).length === 0) return c.json({ error: "empty_patch" }, 400);
+    await db.update(households).set(patch).where(eq(households.id, auth.householdId));
+    return c.json(await recordSettings(auth.householdId));
   });
 
   // ---- hours log ----------------------------------------------------------------------------
@@ -562,20 +730,24 @@ export function schoolRecordsRoutes(db: Database, env: Env) {
     const classIds = courses.map((cls) => cls.id);
     const attendanceRows = await studentAttendance(studentMemberId, classIds, range);
     const hours = await studentHours(auth.householdId, studentMemberId, range);
+    const markedDays = await studentMarkedDays(auth.householdId, studentMemberId, range);
+    const daysOfInstruction = buildDayActivity({ markedDays, hours, attendance: attendanceRows }).length;
     const minutes = totalMinutes(hours);
     const labels = await memberLabels(auth.householdId);
     const [household] = await db
-      .select({ name: households.name })
+      .select({ name: households.name, scale: households.schoolGradeScale })
       .from(households)
       .where(eq(households.id, auth.householdId))
       .limit(1);
 
+    const scale = scaleOrDefault(household?.scale);
     return c.json({
       student: { memberId: studentMemberId, label: labels.get(studentMemberId) ?? "Student" },
       householdName: household?.name ?? "",
       range: { from: range.from ?? null, to: range.to ?? null },
-      transcript: buildTranscript(inputs),
-      attendance: summarizeSchoolDays(attendanceRows),
+      transcript: buildTranscript(inputs, scale),
+      gradeScale: scale,
+      daysOfInstruction,
       hours: { totalMinutes: minutes, totalHours: minutesToHours(minutes) },
       generatedAt: new Date().toISOString(),
     });

@@ -295,6 +295,100 @@ maybeDescribe("school records routes (integration)", () => {
     });
   });
 
+  describe("school days", () => {
+    type Records = {
+      instruction: { count: number; target: number | null; days: { date: string; marked: boolean; minutes: number; classAttendance: boolean }[] };
+    };
+    const records = async (as: string, memberId: string, qs = "?from=2026-01-01&to=2026-01-31") =>
+      (await (await call(as, "GET", `/records/${memberId}${qs}`)).json()) as Records;
+
+    it("marks a Mon-Fri range for several students at once", async () => {
+      // 2026-01-05 is a Monday; the range spans a weekend.
+      const res = await call("parent", "PUT", "/records/days", {
+        studentMemberIds: [people.kid!.memberId, people.sibling!.memberId],
+        range: { from: "2026-01-05", to: "2026-01-11" },
+        marked: true,
+      });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ dates: 5, students: 2 });
+      for (const who of ["kid", "sibling"]) {
+        const r = await records("parent", people[who]!.memberId);
+        expect(r.instruction.count).toBe(5);
+        expect(r.instruction.days.every((d) => d.marked)).toBe(true);
+      }
+    });
+
+    it("is idempotent when the same days are marked again", async () => {
+      await call("parent", "PUT", "/records/days", {
+        studentMemberIds: [people.kid!.memberId],
+        dates: ["2026-01-05", "2026-01-06"],
+        marked: true,
+      });
+      expect((await records("parent", people.kid!.memberId)).instruction.count).toBe(5);
+    });
+
+    it("counts a day once when marked, logged, and attended", async () => {
+      const kid = people.kid!.memberId;
+      await call("parent", "POST", "/hours", { studentMemberId: kid, logDate: "2026-01-05", minutes: 45 });
+      await call("parent", "PUT", `/classes/${otherClassId}/attendance`, {
+        date: "2026-01-05",
+        entries: [{ studentMemberId: kid, status: "present" }],
+      });
+      const r = await records("parent", kid);
+      expect(r.instruction.count).toBe(5);
+      expect(r.instruction.days.find((d) => d.date === "2026-01-05")).toMatchObject({
+        marked: true,
+        minutes: 45,
+        classAttendance: true,
+      });
+    });
+
+    it("counts days that exist only because hours were logged", async () => {
+      const kid = people.kid!.memberId;
+      await call("parent", "POST", "/hours", { studentMemberId: kid, logDate: "2026-01-17", minutes: 60 }); // a Saturday
+      const r = await records("parent", kid);
+      expect(r.instruction.count).toBe(6);
+      expect(r.instruction.days.find((d) => d.date === "2026-01-17")).toMatchObject({ marked: false, minutes: 60 });
+    });
+
+    it("unmarking removes the mark but keeps days backed by hours", async () => {
+      const kid = people.kid!.memberId;
+      await call("parent", "PUT", "/records/days", { studentMemberIds: [kid], dates: ["2026-01-05", "2026-01-06"], marked: false });
+      const r = await records("parent", kid);
+      // 01-06 is gone. 01-05 still counts (hours + attendance), now unmarked.
+      expect(r.instruction.days.find((d) => d.date === "2026-01-06")).toBeUndefined();
+      expect(r.instruction.days.find((d) => d.date === "2026-01-05")).toMatchObject({ marked: false });
+      expect(r.instruction.count).toBe(5);
+    });
+
+    it("blocks students and strangers, and rejects bad input", async () => {
+      const kid = people.kid!.memberId;
+      const body = { studentMemberIds: [kid], dates: ["2026-02-02"], marked: true };
+      expect((await call("kid", "PUT", "/records/days", body)).status).toBe(403);
+      expect((await call("stranger", "PUT", "/records/days", body)).status).toBe(403);
+      expect((await call("parent", "PUT", "/records/days", { ...body, dates: ["2026-02-30"] })).status).toBe(400);
+      expect((await call("parent", "PUT", "/records/days", { ...body, dates: [] })).status).toBe(400);
+      expect((await call("parent", "PUT", "/records/days", { ...body, studentMemberIds: [] })).status).toBe(400);
+      expect((await call("parent", "PUT", "/records/days", { studentMemberIds: [kid], dates: ["2026-02-02"] })).status).toBe(400);
+      // The parent is not an enrolled student.
+      expect((await call("parent", "PUT", "/records/days", { ...body, studentMemberIds: [people.parent!.memberId] })).status).toBe(403);
+    });
+
+    it("lets the owner set a days target, and nobody else", async () => {
+      expect((await call("kid", "PATCH", "/settings/records", { schoolDaysTarget: 180 })).status).toBe(403);
+      expect((await call("parent", "PATCH", "/settings/records", { schoolDaysTarget: 0 })).status).toBe(400);
+      expect((await call("parent", "PATCH", "/settings/records", { schoolDaysTarget: 180 })).status).toBe(200);
+      expect((await records("parent", people.kid!.memberId)).instruction.target).toBe(180);
+      expect((await call("parent", "PATCH", "/settings/records", { schoolDaysTarget: null })).status).toBe(200);
+      expect((await records("parent", people.kid!.memberId)).instruction.target).toBeNull();
+    });
+
+    it("gives the transcript the same day count", async () => {
+      const res = await call("parent", "GET", `/transcript/${people.kid!.memberId}?from=2026-01-01&to=2026-01-31`);
+      expect(((await res.json()) as { daysOfInstruction: number }).daysOfInstruction).toBe(5);
+    });
+  });
+
   describe("transcript", () => {
     it("weights the final grade and includes a class whose enrollment ended", async () => {
       const res = await call("parent", "GET", `/transcript/${people.kid!.memberId}`);
@@ -320,6 +414,53 @@ maybeDescribe("school records routes (integration)", () => {
     it("lets a student view their own but not a sibling's", async () => {
       expect((await call("kid", "GET", `/transcript/${people.kid!.memberId}`)).status).toBe(200);
       expect((await call("kid", "GET", `/transcript/${people.sibling!.memberId}`)).status).toBe(404);
+    });
+  });
+  describe("grade scale", () => {
+    type T = { gradeScale: { passingPercent: number }; transcript: { gpa: number | null; creditsEarned: number; terms: { courses: { name: string; letter: string | null }[] }[] } };
+    const transcript = async () =>
+      (await (await call("parent", "GET", `/transcript/${people.kid!.memberId}`)).json()) as T;
+    const sevenPoint = {
+      passingPercent: 70,
+      bands: [
+        { min: 93, letter: "A", points: 4 },
+        { min: 85, letter: "B", points: 3 },
+        { min: 77, letter: "C", points: 2 },
+        { min: 70, letter: "D", points: 1 },
+        { min: 0, letter: "F", points: 0 },
+      ],
+    };
+
+    it("defaults to 90/80/70/60 and says so", async () => {
+      const res = await call("parent", "GET", "/settings/records");
+      const body = (await res.json()) as { gradeScaleIsDefault: boolean; gradeScalePresets: unknown[]; canEdit: boolean };
+      expect(body).toMatchObject({ gradeScaleIsDefault: true, canEdit: true });
+      expect(body.gradeScalePresets.length).toBeGreaterThanOrEqual(3);
+      const asKid = (await (await call("kid", "GET", "/settings/records")).json()) as { canEdit: boolean };
+      expect(asKid.canEdit).toBe(false);
+    });
+
+    it("re-grades the transcript with a custom scale, then resets", async () => {
+      // Algebra's weighted final is 80: a B on the default scale, a C on the 7-point scale.
+      expect((await call("parent", "PATCH", "/settings/records", { gradeScale: sevenPoint })).status).toBe(200);
+      const custom = await transcript();
+      expect(custom.gradeScale.passingPercent).toBe(70);
+      expect(custom.transcript.terms[0]!.courses.find((c) => c.name === "Algebra")!.letter).toBe("C");
+      expect(custom.transcript.gpa).toBe(2);
+      expect(custom.transcript.creditsEarned).toBe(1);
+
+      expect((await call("parent", "PATCH", "/settings/records", { gradeScale: null })).status).toBe(200);
+      const reset = await transcript();
+      expect(reset.transcript.terms[0]!.courses.find((c) => c.name === "Algebra")!.letter).toBe("B");
+      expect(reset.transcript.gpa).toBe(3);
+    });
+
+    it("rejects an invalid scale with a message, and non-owners", async () => {
+      const bad = await call("parent", "PATCH", "/settings/records", { gradeScale: { passingPercent: 60, bands: [{ min: 90, letter: "A", points: 4 }, { min: 50, letter: "F", points: 0 }] } });
+      expect(bad.status).toBe(400);
+      expect(await bad.json()).toMatchObject({ error: "invalid_scale", message: expect.stringContaining("0%") });
+      expect((await call("kid", "PATCH", "/settings/records", { gradeScale: sevenPoint })).status).toBe(403);
+      expect((await call("parent", "PATCH", "/settings/records", {})).status).toBe(400);
     });
   });
 });

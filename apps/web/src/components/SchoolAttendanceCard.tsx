@@ -84,7 +84,7 @@ export function SchoolAttendanceCard({
     <Card {...(changed.length > 0 ? { "data-no-auto-refresh": "" } : {})}>
       <CardHeader>
         <SectionHeader
-          title="Attendance"
+          title="Class attendance (optional)"
           action={
             <Input
               type="date"
@@ -100,6 +100,13 @@ export function SchoolAttendanceCard({
         />
       </CardHeader>
       <CardBody className="space-y-3">
+        <p className="text-xs text-[var(--color-text-muted)]">
+          Optional, for co-op or outside classes. Most families just mark school days on the{" "}
+          <a href="/school/records" className="text-[var(--color-accent)] hover:underline">
+            Records
+          </a>{" "}
+          page. A class marked present or late also counts as a school day.
+        </p>
         {error && <Alert variant="error">{error}</Alert>}
         {loading ? (
           <p className="text-sm text-[var(--color-text-muted)]">Loading…</p>

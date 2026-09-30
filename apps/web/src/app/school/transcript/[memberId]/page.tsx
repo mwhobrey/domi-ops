@@ -5,9 +5,20 @@ import { PrintButton } from "../../../../components/PrintButton";
 import { Alert } from "../../../../components/ui";
 import { apiFetch } from "../../../../lib/api";
 import { loadErrorMessage } from "../../../../lib/load-error";
-import { formatHours, type TranscriptData } from "../../../../lib/school-records";
+import { formatHours, type GradeScale, type TranscriptData } from "../../../../lib/school-records";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** "A 93+, A- 90+, …, F below 60" from the household's own scale. */
+function describeScale(scale: GradeScale): string {
+  const bands = [...scale.bands].sort((a, b) => b.min - a.min);
+  const parts = bands.map((b, i) =>
+    i === bands.length - 1 && b.min === 0
+      ? `${b.letter} below ${bands[i - 1]?.min ?? 0}`
+      : `${b.letter} ${b.min}+`,
+  );
+  return parts.join(", ");
+}
 
 function fmtDate(iso: string): string {
   return new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-US", {
@@ -65,7 +76,7 @@ export default async function SchoolTranscriptPage({
             <p className="mt-2 text-lg">{data.student.label}</p>
             {(data.range.from || data.range.to) && (
               <p className="text-sm text-[var(--color-text-muted)]">
-                Attendance and hours:{" "}
+                Days of instruction and hours:{" "}
                 {data.range.from ? fmtDate(data.range.from) : "start"} to{" "}
                 {data.range.to ? fmtDate(data.range.to) : "present"}
               </p>
@@ -117,15 +128,15 @@ export default async function SchoolTranscriptPage({
           <section className="grid grid-cols-2 gap-4 border-t border-[var(--color-border)] pt-4 sm:grid-cols-4">
             <Stat label="Cumulative GPA" value={data.transcript.gpa ?? "—"} />
             <Stat label="Credits earned" value={data.transcript.creditsEarned} />
-            <Stat label="Days attended" value={data.attendance.daysAttended} />
+            <Stat label="Days of instruction" value={data.daysOfInstruction} />
             <Stat label="Hours logged" value={formatHours(data.hours.totalMinutes)} />
           </section>
 
           <footer className="space-y-1 border-t border-[var(--color-border)] pt-4 text-xs text-[var(--color-text-muted)]">
             <p>
-              Grade scale: A 90–100, B 80–89, C 70–79, D 60–69, F below 60. GPA is unweighted on a 4.0 scale
-              and weighted by credits. A course with no graded work is shown as in progress and excluded from
-              GPA and credits.
+              Grade scale: {describeScale(data.gradeScale)}. Credit is earned at {data.gradeScale.passingPercent}%
+              or above. GPA is unweighted and weighted by credits, using the grade points for each grade. A
+              course with no graded work is shown as in progress and excluded from GPA and credits.
             </p>
             <p>
               Prepared by the student&apos;s parent or instructor from Domi Ops records on{" "}

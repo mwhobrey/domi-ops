@@ -1,6 +1,8 @@
 import {
   bigint,
   boolean,
+  integer,
+  jsonb,
   pgEnum,
   pgTable,
   text,
@@ -35,6 +37,10 @@ export const households = pgTable("households", {
   /** Neon project id or connection ref when tier = hosted_dedicated */
   dedicatedDbRef: varchar("dedicated_db_ref", { length: 256 }),
   timezone: varchar("timezone", { length: 64 }).notNull().default("UTC"),
+  /** Days of instruction required per school year (e.g. 180). Null = no target. */
+  schoolDaysTarget: integer("school_days_target"),
+  /** Transcript grade scale ({ passingPercent, bands }). Null = default 90/80/70/60. */
+  schoolGradeScale: jsonb("school_grade_scale"),
   modulesEnabled: text("modules_enabled").notNull().default('["core","school","calendar_sync"]'),
   /** NULL = unlimited (self-host default); hosted tiers set explicitly in Phase 2 */
   storageQuotaBytes: bigint("storage_quota_bytes", { mode: "number" }),
