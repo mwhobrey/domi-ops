@@ -20,6 +20,8 @@ import {
   schoolClasses,
   schoolEnrollments,
   schoolGrades,
+  schoolHoursLog,
+  schoolInstructionDays,
   schoolSubmissions,
   shoppingItems,
 } from "../schema/index.js";
@@ -28,6 +30,7 @@ import {
   addDaysYmd,
   chicagoYmd,
   dueAtEndOfDayYmd,
+  parseYmd,
   weekDayYmd,
 } from "./dates.js";
 import { DEMO_HOUSEHOLD_NAME, DEMO_MODULES, DEMO_SLUG } from "./constants.js";
@@ -52,6 +55,7 @@ export async function insertDemoHousehold(
       slug: DEMO_SLUG,
       tier: "self_host",
       timezone: "America/Chicago",
+      schoolDaysTarget: 180,
       modulesEnabled: JSON.stringify(DEMO_MODULES),
       storageQuotaBytes: null,
       storageUsedBytes: 0,
@@ -255,6 +259,44 @@ export async function seedDemoContent(
     studentMemberId: lucas.memberId,
     status: "not_started",
   });
+
+  // School days and hours over the last four weeks, so the Records page and transcript have
+  // something to show. Homeschool schedules are irregular, so a few weekdays are off, and one
+  // Saturday field trip counts through its logged hours alone. Relative to seed time.
+  const weekdays: string[] = [];
+  let saturday: string | null = null;
+  for (let back = 1; weekdays.length < 20 && back < 40; back += 1) {
+    const ymd = addDaysYmd(today, -back);
+    const { y, m, d } = parseYmd(ymd);
+    const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+    if (dow === 6 && saturday === null) saturday = ymd;
+    if (dow !== 0 && dow !== 6) weekdays.push(ymd);
+  }
+  const dayRows: { householdId: string; studentMemberId: string; day: string; createdByUserId: string }[] = [];
+  const hoursRows = [];
+  for (const [i, ymd] of weekdays.entries()) {
+    const bothOff = i === 3 || i === 7; // a sick day, a library-and-errands day
+    const sofiaOff = bothOff || i === 11; // Sofia's orthodontist
+    if (!sofiaOff) {
+      dayRows.push({ householdId, studentMemberId: sofia.memberId, day: ymd, createdByUserId: maria.userId });
+      hoursRows.push(
+        { householdId, studentMemberId: sofia.memberId, classId: mathClass.id, logDate: ymd, minutes: 60, activity: "Math", note: "", createdByUserId: maria.userId },
+        { householdId, studentMemberId: sofia.memberId, classId: null, logDate: ymd, minutes: 90, activity: "Reading and writing", note: "", createdByUserId: maria.userId },
+      );
+    }
+    if (!bothOff) {
+      dayRows.push({ householdId, studentMemberId: lucas.memberId, day: ymd, createdByUserId: maria.userId });
+      hoursRows.push({ householdId, studentMemberId: lucas.memberId, classId: scienceClass.id, logDate: ymd, minutes: 75, activity: "Life Science", note: "", createdByUserId: maria.userId });
+    }
+  }
+  if (saturday) {
+    hoursRows.push(
+      { householdId, studentMemberId: sofia.memberId, classId: null, logDate: saturday, minutes: 240, activity: "Science museum field trip", note: "", createdByUserId: maria.userId },
+      { householdId, studentMemberId: lucas.memberId, classId: null, logDate: saturday, minutes: 240, activity: "Science museum field trip", note: "", createdByUserId: maria.userId },
+    );
+  }
+  await db.insert(schoolInstructionDays).values(dayRows);
+  await db.insert(schoolHoursLog).values(hoursRows);
 
   // —— Chores ——
   const [doneChore] = await db

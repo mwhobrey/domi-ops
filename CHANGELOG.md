@@ -8,6 +8,51 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+### Added
+
+- **Homeschool records: school days, hours, and transcripts** (WHO-347). A new **Records** page
+  under School is built for how homeschool actually works: no roll call. Tap the days school
+  happened on a calendar (or "Today was a school day" / "Mark this week"), for one student or all
+  of them at once. A day also counts on its own when you log hours or a class marks it. Set a
+  days-of-instruction target (like 180) to see progress. Log instruction hours as you go, then
+  open a printable **transcript**: courses by term with credits, percent, grade, term and
+  cumulative GPA, plus days of instruction and hours. Per-class attendance is still there on class
+  pages, marked optional, for co-op or outside classes. Classes have a new **Credits** field
+  (1 = a full-year course). Students see only their own; parents and teachers write.
+- **Choose your own grade scale** (WHO-347). There's no universal standard, so transcripts use
+  one you pick: presets for plain A-F (90/80/70/60), plus/minus, and 7-point, or a custom scale
+  with your own cutoffs, labels, GPA points, and the percent that earns credit. The transcript
+  prints the scale it used. *(requires `npm run db:migrate` (`0080`-`0082`))*
+
+### Changed
+
+- **Marketing site now leads with homeschool and health** (WHO-346): new hero ("The household hub
+  for homeschool families"), demo-first calls to action with trial and price up front, dedicated
+  School and Health sections, a homeschool-parent day timeline, and audience keywords in the page
+  title and social preview. Updated once school days, hours, and transcripts shipped, so the FAQ
+  and `/homeschool` describe them (and their limits) instead of listing them as coming soon.
+- **`/homeschool` and `/health` pages** (WHO-346): audience pages with their own feature lists,
+  screenshots, FAQ, and an honest "what's not here yet" block. New FAQ entries (kid logins,
+  attendance and transcripts, curriculum, health record access), FAQ structured data, a sitemap,
+  and robots.txt.
+- **Records screenshots on `/homeschool`** (WHO-346): the school days calendar and a printable
+  transcript, captured from the demo household. The capture script can now reuse an installed
+  browser (`PLAYWRIGHT_CHANNEL=msedge`) instead of downloading one.
+- **Our story page** (WHO-346): a short founder story at `/about`, linked from the header and footer.
+
+### Fixed
+
+- **Class roster no longer shows the wrong enrollment date** (WHO-349). A student enrolled late in
+  the evening could show "Enrolled Sep 30" briefly and then "Sep 29" (or make the page redraw
+  itself), because the date was read in the server's timezone instead of your household's. It now
+  uses the household timezone everywhere on the roster.
+
+- **A tab left open no longer shows stale data** (WHO-348). Come back to a tab after a minute or
+  more and the page re-fetches and redraws with current data, so changes from another device or
+  family member appear without a manual reload. It holds off while a dialog is open or something
+  is half-typed (anything you typed since the page loaded), and never runs on the in-app test
+  taker or editor.
+
 ## [0.4.0] - 2026-09-29
 
 ### Added

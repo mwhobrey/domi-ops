@@ -1,3 +1,5 @@
+import { todayIsoInTimeZone } from "./household-date";
+
 type BadgeTone = "default" | "success" | "warning" | "accent";
 
 export const ENROLLMENT_ROLES = [
@@ -42,17 +44,49 @@ export function enrollmentRoleSortKey(role: string): number {
   return ROLE_SORT[role] ?? 99;
 }
 
+/**
+ * Reduce a stored date to a plain YYYY-MM-DD. Enrollment dates are date-only strings and pass
+ * through. A full timestamp (createdAt) is an instant, so it is read in the household timezone.
+ * Never in the runtime's own zone: the server renders in UTC and the browser in the user's zone,
+ * so a late-evening instant lands on different calendar days and React fails to hydrate.
+ */
+export function toCalendarDate(value: string, timeZone: string | null | undefined): string {
+  if (!value.includes("T")) return value.slice(0, 10);
+  return todayIsoInTimeZone(validZoneOrUtc(timeZone), new Date(value));
+}
+
+/**
+ * A missing or unrecognised zone becomes UTC, not the device's zone. The device zone is exactly
+ * what differs between the server and the browser, so falling back to it would bring the
+ * hydration mismatch back for any household whose timezone hasn't loaded.
+ */
+export function validZoneOrUtc(timeZone: string | null | undefined): string {
+  if (!timeZone) return "UTC";
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone });
+    return timeZone;
+  } catch {
+    return "UTC";
+  }
+}
+
+/** "Sep 30, 2026" from a YYYY-MM-DD. Fixed locale and zone so server and browser agree. */
+function formatCalendarDate(ymd: string): string {
+  return new Date(`${ymd}T12:00:00Z`).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 export function formatEnrollmentActiveRange(
   activeFrom: string | null | undefined,
   activeTo: string | null | undefined,
-  createdAt?: string | null,
+  createdAt: string | null | undefined,
+  timeZone: string | null | undefined,
 ): string | null {
-  const fmt = (iso: string) =>
-    new Date(iso.includes("T") ? iso : `${iso}T12:00:00`).toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
+  const fmt = (value: string) => formatCalendarDate(toCalendarDate(value, timeZone));
 
   if (activeFrom && activeTo) return `${fmt(activeFrom)} – ${fmt(activeTo)}`;
   if (activeFrom) return `From ${fmt(activeFrom)}`;
@@ -61,19 +95,13 @@ export function formatEnrollmentActiveRange(
   return null;
 }
 
+/** Whether an enrollment covers `today` (a YYYY-MM-DD in the household timezone). */
 export function isEnrollmentActive(
   activeFrom: string | null | undefined,
   activeTo: string | null | undefined,
+  today: string,
 ): boolean {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  if (activeFrom) {
-    const from = new Date(`${activeFrom}T12:00:00`);
-    if (from > today) return false;
-  }
-  if (activeTo) {
-    const to = new Date(`${activeTo}T12:00:00`);
-    if (to < today) return false;
-  }
+  if (activeFrom && activeFrom.slice(0, 10) > today) return false;
+  if (activeTo && activeTo.slice(0, 10) < today) return false;
   return true;
 }

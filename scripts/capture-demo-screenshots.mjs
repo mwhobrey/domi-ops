@@ -5,7 +5,7 @@
  * Prerequisites:
  *   - Postgres seeded: npm run db:seed-demo
  *   - App running: npm run dev (web :3000 + api :4000)
- *   - Playwright browsers: npx playwright install chromium
+ *   - Playwright browsers: npx playwright install chromium, or set PLAYWRIGHT_CHANNEL=msedge to use Edge
  *
  * Usage:
  *   npm run marketing:capture-screenshots
@@ -25,6 +25,7 @@ const OUT_DIRS = [
 ];
 
 const DESKTOP = { width: 1280, height: 800 };
+const TRANSCRIPT = { width: 960, height: 680 };
 const MOBILE = { width: 390, height: 844 };
 
 const DEFAULT_EMAIL = "demo@domi-ops.com";
@@ -77,7 +78,9 @@ function pruneLegacyScreenshots() {
   for (const dir of OUT_DIRS) {
     if (!existsSync(dir)) continue;
     for (const file of readdirSync(dir)) {
-      if (!file.endsWith(".png")) continue;
+      // Only old captures named like "p1-school-desktop-1280x800.png" (no theme suffix). Other
+      // images that happen to live in docs/marketing/screenshots are not ours to delete.
+      if (!/^p\d-.+\.png$/.test(file)) continue;
       if (/-(?:light|dark)\.png$/.test(file)) continue;
       unlinkSync(path.join(dir, file));
     }
@@ -141,6 +144,19 @@ async function applyDemoPrefs(page, { calendarView } = {}) {
   return session;
 }
 
+async function fetchStudentId(page, label) {
+  const data = await page.evaluate(async () => {
+    const res = await fetch("/api/school/records/students", { credentials: "include" });
+    if (!res.ok) throw new Error(`records/students ${res.status}`);
+    return res.json();
+  });
+  const student = data.students?.find((s) => s.label === label);
+  if (!student?.memberId) {
+    throw new Error(`Could not find student "${label}" - run npm run db:seed-demo first`);
+  }
+  return student.memberId;
+}
+
 async function fetchMathClassId(page) {
   const data = await page.evaluate(async () => {
     const res = await fetch("/api/school/classes", { credentials: "include" });
@@ -175,6 +191,25 @@ async function waitForRoute(page, route, { calendarView } = {}) {
     }
     await waitForNetworkIdleSoft(page);
     await page.waitForTimeout(800);
+    return;
+  }
+
+  if (route.startsWith("/school/records")) {
+    // Records load client-side: wait for the calendar, then pick the student with graded work.
+    await page.getByRole("grid").first().waitFor({ state: "visible", timeout: 30_000 });
+    const picker = page.locator("#records-student");
+    if (await picker.count()) {
+      await picker.selectOption({ label: "Sofia Rivera" });
+      await page.getByRole("grid").first().waitFor({ state: "visible", timeout: 30_000 });
+    }
+    await waitForNetworkIdleSoft(page);
+    await page.waitForTimeout(800);
+    return;
+  }
+
+  if (route.startsWith("/school/transcript")) {
+    await page.getByRole("heading", { name: /academic transcript/i }).waitFor({ state: "visible", timeout: 30_000 });
+    await page.waitForTimeout(400);
     return;
   }
 
@@ -241,6 +276,18 @@ const SHOTS = [
     path: (ctx) => `/school/class/${ctx.mathClassId}/gradebook`,
   },
   {
+    id: "school-records",
+    priority: "p1",
+    routes: [{ suffix: "desktop", viewport: DESKTOP }],
+    path: "/school/records",
+  },
+  {
+    id: "school-transcript",
+    priority: "p1",
+    routes: [{ suffix: "desktop", viewport: TRANSCRIPT }],
+    path: (ctx) => `/school/transcript/${ctx.sofiaId}?from=${ctx.yearFrom}&to=${ctx.yearTo}`,
+  },
+  {
     id: "chores",
     priority: "p2",
     routes: [{ suffix: "desktop", viewport: DESKTOP }],
@@ -297,7 +344,15 @@ async function captureTheme(browser, theme, shots, baseUrl, email, password) {
       throw new Error("Login failed — /auth/session not authenticated");
     }
 
-    const ctx = { mathClassId: await fetchMathClassId(page) };
+    // School year Jul 1 to Jun 30 around today, matching the Records page default.
+    const now = new Date();
+    const startYear = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1;
+    const ctx = {
+      mathClassId: await fetchMathClassId(page),
+      sofiaId: await fetchStudentId(page, "Sofia Rivera"),
+      yearFrom: `${startYear}-07-01`,
+      yearTo: `${startYear + 1}-06-30`,
+    };
 
     for (const shot of shots) {
       const routePath = typeof shot.path === "function" ? shot.path(ctx) : shot.path;
@@ -347,7 +402,11 @@ async function main() {
 
   pruneLegacyScreenshots();
 
-  const browser = await chromium.launch({ headless: true });
+  // PLAYWRIGHT_CHANNEL=msedge (or chrome) reuses an installed browser instead of the downloaded one.
+  const browser = await chromium.launch({
+    headless: true,
+    channel: process.env.PLAYWRIGHT_CHANNEL || undefined,
+  });
   try {
     for (const t of themes) {
       await captureTheme(browser, t, shots, baseUrl, email, password);

@@ -43,6 +43,7 @@ export interface ClassMeta {
   teacherMemberId: string;
   scheduleJson: string | null;
   archived?: boolean;
+  credits?: number;
 }
 
 export interface Category {

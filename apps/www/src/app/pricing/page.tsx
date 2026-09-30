@@ -9,7 +9,7 @@ import {
 import { getPricingDisplay, type PricingTier } from "@/lib/pricing-display";
 
 export const metadata = {
-  title: "Pricing — Domi Ops",
+  title: "Pricing | Domi Ops",
   description: "Self-host free or choose a Domi Ops cloud plan.",
 };
 

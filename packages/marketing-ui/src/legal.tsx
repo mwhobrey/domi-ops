@@ -87,8 +87,8 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
           <li>
             <strong className="text-[var(--color-text)]">Access controls:</strong> Household members
             see only content their role and per-module permissions allow. Private notes, Drive
-            objects, and health records are further limited by per-record visibility and segment ACLs
-            — there is no operator back door to read private health data on Cloud.
+            objects, and health records are further limited by per-record visibility and segment ACLs.
+            There is no operator back door to read private health data on Cloud.
           </li>
           <li>
             <strong className="text-[var(--color-text)]">We do not sell your data</strong> to
@@ -110,8 +110,8 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
         </ul>
         <p>
           <strong className="text-[var(--color-text)]">Self-hosted:</strong> the person who operates
-          the server is responsible for HTTPS, backups, and protecting <code>ENCRYPTION_KEY</code> —
-          the same encryption behavior applies when the key is configured.
+          the server is responsible for HTTPS, backups, and protecting <code>ENCRYPTION_KEY</code>.
+          The same encryption behavior applies when the key is configured.
         </p>
       </section>
 
@@ -123,23 +123,23 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
         </p>
         <ul>
           <li>
-            <strong className="text-[var(--color-text)]">Sign-in</strong> — basic profile (name,
+            <strong className="text-[var(--color-text)]">Sign-in</strong>: basic profile (name,
             email, profile photo) via OpenID Connect scopes used for authentication.
           </li>
           <li>
-            <strong className="text-[var(--color-text)]">Calendar</strong> — when you connect
+            <strong className="text-[var(--color-text)]">Calendar</strong>: when you connect
             Calendar sync, calendars and events you select so Domi Ops can display and sync household
             events.
           </li>
           <li>
-            <strong className="text-[var(--color-text)]">Drive</strong> — when you enable Docs or
+            <strong className="text-[var(--color-text)]">Drive</strong>: when you enable Docs or
             Drive features, only files you create or open through Domi Ops (Google{" "}
             <code>drive.file</code> scope and the Google Picker), not your entire Drive.
           </li>
         </ul>
         <p>
           We use this Google user data <strong className="text-[var(--color-text)]">only</strong> to
-          provide those features — for example signing you in, showing synced events, or exporting
+          provide those features, for example signing you in, showing synced events, or exporting
           reports you request. We do <strong className="text-[var(--color-text)]">not</strong> use it
           for advertising, and we do <strong className="text-[var(--color-text)]">not</strong> use it
           to train general-purpose artificial intelligence or machine learning models.
@@ -164,7 +164,7 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
         <h2>Processors (when enabled)</h2>
         <ul>
           <li>
-            <strong>Google</strong> — optional sign-in, Calendar sync, and Drive{" "}
+            <strong>Google</strong>: optional sign-in, Calendar sync, and Drive{" "}
             <code>drive.file</code> (Docs/Picker). See{" "}
             <a
               href="https://policies.google.com/privacy"
@@ -176,23 +176,23 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
             . OAuth tokens are encrypted at rest on the instance.
           </li>
           <li>
-            <strong>Object storage</strong> — S3-compatible storage (MinIO or a cloud bucket) for
+            <strong>Object storage</strong>: S3-compatible storage (MinIO or a cloud bucket) for
             uploads.
           </li>
           <li>
-            <strong>Email</strong> — SMTP you or the hosted operator configure (verification and
+            <strong>Email</strong>: SMTP you or the hosted operator configure (verification and
             transactional mail).
           </li>
           <li>
-            <strong>Weather</strong> — Open-Meteo using coordinates you provide; no weather account
+            <strong>Weather</strong>: Open-Meteo using coordinates you provide; no weather account
             is required.
           </li>
           <li>
-            <strong>Web Push</strong> — browser vendors deliver notifications; subscription keys
+            <strong>Web Push</strong>: browser vendors deliver notifications; subscription keys
             stay on the instance.
           </li>
           <li>
-            <strong>Stripe</strong> — billing, trials, and invoices when hosted checkout is live.
+            <strong>Stripe</strong>: billing, trials, and invoices when hosted checkout is live.
             Card details are handled by Stripe, not stored in Domi Ops.
           </li>
         </ul>
@@ -203,8 +203,8 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
         <p>
           Optional. Sensitive fields (titles, notes, medication names, dosage, instructions) are
           encrypted at rest with the instance <code>ENCRYPTION_KEY</code>. Dates, member assignment,
-          and schedule times remain queryable. Access follows per-record visibility and segment ACL
-          — there is <strong className="text-[var(--color-text)]">no admin override</strong> of
+          and schedule times remain queryable. Access follows per-record visibility and segment ACL.
+          There is <strong className="text-[var(--color-text)]">no admin override</strong> of
           private health data. Domi Ops is not a healthcare provider and is{" "}
           <strong className="text-[var(--color-text)]">not HIPAA-compliant</strong>.
         </p>
@@ -245,25 +245,24 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
           collect:
         </p>
         <ul>
-          <li>Technical health — page load speed, JavaScript errors, API response times</li>
+          <li>Technical health: page load speed, JavaScript errors, API response times</li>
           <li>
-            Feature usage — which modules and actions get used (e.g. &quot;a chore was
+            Feature usage: which modules and actions get used (e.g. &quot;a chore was
             completed&quot;), never the content of what you created
           </li>
         </ul>
         <p>
-          These events carry a randomly generated id stored in your browser — not your account,
-          household, name, or email — and nothing in our metrics storage links back to household
+          These events carry a randomly generated id stored in your browser (not your account,
+          household, name, or email), and nothing in our metrics storage links back to household
           data. Turning it off stops collection immediately; turning it on later starts a new random
           id, not a resumed history.{" "}
           <strong className="text-[var(--color-text)]">
             We do not sell this data, or any data, to anyone, ever
-          </strong>{" "}
-          — it is used only to find bugs and decide what to build next.
+          </strong>. It is used only to find bugs and decide what to build next.
         </p>
         <p>
           Separately, anyone can send a bug report or feedback from their Profile page at any time,
-          regardless of this setting — that message (and an optional reply email, if you choose to
+          regardless of this setting. That message (and an optional reply email, if you choose to
           leave one) is sent because you chose to send it, not collected passively.
         </p>
       </section>
