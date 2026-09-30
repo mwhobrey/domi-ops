@@ -371,6 +371,31 @@ export function LandingPage() {
         </div>
       </section>
 
+      <section className="border-t border-[var(--color-border)]">
+        <div className="mx-auto flex max-w-3xl flex-col items-center gap-6 px-4 py-12 text-center sm:flex-row sm:px-6 sm:py-16 sm:text-left">
+          {/* eslint-disable-next-line @next/next/no-img-element -- static photo, no image optimizer in the standalone build */}
+          <img
+            src="/about/mike-family.webp"
+            alt="Mike Whobrey and his wife smiling for a selfie at a national forest overlook"
+            width={715}
+            height={693}
+            className="h-28 w-28 shrink-0 rounded-full object-cover shadow-[var(--shadow-card)]"
+          />
+          <div className="space-y-3">
+            <h2 className="font-display text-2xl font-semibold tracking-tight">
+              Built by a homeschooling family
+            </h2>
+            <p className="text-[var(--color-text-muted)]">
+              I&apos;m Mike. My family homeschools and manages health needs every day, and Domi Ops
+              started as the tool we couldn&apos;t find. We still run our own household on it.
+            </p>
+            <LinkButton href="/about" variant="secondary">
+              Read our story
+            </LinkButton>
+          </div>
+        </div>
+      </section>
+
       <section className="relative overflow-hidden border-t border-[var(--color-border)]">
         <div className="bg-dot-grid pointer-events-none absolute inset-0" aria-hidden />
         <div className="relative mx-auto max-w-6xl px-4 py-16 text-center sm:px-6 sm:py-20">
