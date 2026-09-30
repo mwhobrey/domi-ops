@@ -140,6 +140,11 @@ export function LandingPage() {
                   original at first submission.
                 </li>
                 <li>
+                  <strong className="text-[var(--color-text)]">Days, hours, and transcripts.</strong>{" "}
+                  Tap the days school happened instead of taking roll, log hours as you go, and print a
+                  transcript on your own grading scale.
+                </li>
+                <li>
                   <strong className="text-[var(--color-text)]">On the family calendar.</strong>{" "}
                   Assignments overlay your week, so school isn&apos;t a separate place to look.
                 </li>

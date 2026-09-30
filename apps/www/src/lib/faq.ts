@@ -31,7 +31,11 @@ export const FAQ_ITEMS: FaqItem[] = [
   },
   {
     q: "Does it track attendance, hours, or produce transcripts?",
-    a: "Not yet. Today School covers classes, assignments, submissions, weighted grade categories, and a gradebook. Attendance, hours logs, and transcripts are the next thing we're building, so if your state requires them, check back before you commit.",
+    a: "Yes, built for how homeschooling actually works. There's no roll call: you tap the days school happened on a calendar, and a day also counts on its own when you log hours. Set a days-of-instruction target (like 180) and watch your progress. Log instruction hours as you go, then print a transcript with courses by term, credits, grades, GPA, days, and hours. Requirements differ by state, so check yours. The transcript is prepared by you, not an official district document.",
+  },
+  {
+    q: "Can I use my own grading scale?",
+    a: "Yes. There's no universal scale, so pick a preset (plain A-F, plus/minus, or 7-point) or set your own cutoffs, grade labels, GPA points, and the percent that earns credit. The transcript prints the scale it used. GPA is unweighted, with no honors or AP weighting.",
   },
   {
     q: "Which homeschool curriculum does it work with?",

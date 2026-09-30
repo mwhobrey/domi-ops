@@ -20,7 +20,7 @@ const spaceGrotesk = Space_Grotesk({
 export const metadata: Metadata = {
   title: "Domi Ops — The household hub for homeschool families",
   description:
-    "Homeschool classes, gradebook, and assignments alongside the family calendar, chores, and medication tracking. One household, one login. Self-host free or run on Domi Ops cloud.",
+    "Homeschool classes, gradebook, school days, hours, and transcripts alongside the family calendar, chores, and medication tracking. One household, one login. Self-host free or run on Domi Ops cloud.",
   applicationName: "Domi Ops",
   openGraph: {
     title: "Domi Ops — The household hub for homeschool families",

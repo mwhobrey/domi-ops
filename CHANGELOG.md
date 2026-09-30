@@ -29,7 +29,8 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 - **Marketing site now leads with homeschool and health** (WHO-346): new hero ("The household hub
   for homeschool families"), demo-first calls to action with trial and price up front, dedicated
   School and Health sections, a homeschool-parent day timeline, and audience keywords in the page
-  title and social preview.
+  title and social preview. Updated once school days, hours, and transcripts shipped, so the FAQ
+  and `/homeschool` describe them (and their limits) instead of listing them as coming soon.
 - **`/homeschool` and `/health` pages** (WHO-346): audience pages with their own feature lists,
   screenshots, FAQ, and an honest "what's not here yet" block. New FAQ entries (kid logins,
   attendance and transcripts, curriculum, health record access), FAQ structured data, a sitemap,

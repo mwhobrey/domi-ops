@@ -5,7 +5,7 @@ import { FAQ_ITEMS } from "@/lib/faq";
 export const metadata = {
   title: "Homeschool gradebook and family planner — Domi Ops",
   description:
-    "Classes, assignments, weighted gradebook, and self-grading in-app tests, alongside your family calendar and chores. Parent and student views. Self-host free or hosted.",
+    "Classes, weighted gradebook, school days and hours logs, printable transcripts with your own grade scale, alongside your family calendar and chores. Self-host free or hosted.",
   alternates: { canonical: "/homeschool" },
 };
 
@@ -15,6 +15,7 @@ export const dynamic = "force-dynamic";
 const FAQ_KEYS = [
   "Can my kids have their own logins?",
   "Does it track attendance, hours, or produce transcripts?",
+  "Can I use my own grading scale?",
   "Which homeschool curriculum does it work with?",
   "Can I use it without the homeschool stuff?",
 ];
@@ -51,6 +52,18 @@ export default function HomeschoolPage() {
           body: "Assign a Google Doc, get each student's own copy back, and freeze the original at first submission so nothing changes after the fact.",
         },
         {
+          title: "School days, not roll call",
+          body: "Homeschool doesn't take attendance. Tap the days school happened, for one kid or all of them, and set a days-of-instruction goal like 180 to watch your progress. A day also counts when you log hours.",
+        },
+        {
+          title: "An hours log that stays out of the way",
+          body: "Jot down instruction time as you go: reading, a field trip, co-op. Totals by date range are one click away when a state or umbrella school asks.",
+        },
+        {
+          title: "Transcripts on your grading scale",
+          body: "Print a transcript with courses by term, credits, grades, GPA, days, and hours. Pick a preset scale or set your own cutoffs, labels, and GPA points. It prints the scale it used.",
+        },
+        {
           title: "School on the family calendar",
           body: "Assignment due dates overlay the same week view as appointments and practices. One place to look, not two.",
         },
@@ -72,8 +85,8 @@ export default function HomeschoolPage() {
         },
       ]}
       notYet={{
-        title: "What's not here yet",
-        body: "Attendance tracking, hours logs, and transcripts are the next things we're building. If your state requires them, check back before you commit. Today Domi Ops covers classes, assignments, submissions, and a weighted gradebook.",
+        title: "What to know",
+        body: "State requirements vary, so check yours. Domi Ops keeps the records (days, hours, grades, transcripts); it doesn't file anything for you or replace your umbrella school. Transcripts are prepared by you, not official district documents, and GPA is unweighted (no honors or AP weighting).",
       }}
       faq={FAQ_ITEMS.filter((i) => FAQ_KEYS.includes(i.q))}
       closing={{
