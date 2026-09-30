@@ -26,6 +26,8 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Changed
 
+- **Founder teaser on the landing page** (WHO-350): a short "Built by a homeschooling family" section
+  with a photo and a link to the Our story page.
 - **Marketing site now leads with homeschool and health** (WHO-346): new hero ("The household hub
   for homeschool families"), demo-first calls to action with trial and price up front, dedicated
   School and Health sections, a homeschool-parent day timeline, and audience keywords in the page
