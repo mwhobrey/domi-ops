@@ -42,6 +42,11 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Fixed
 
+- **Class roster no longer shows the wrong enrollment date** (WHO-349). A student enrolled late in
+  the evening could show "Enrolled Sep 30" briefly and then "Sep 29" (or make the page redraw
+  itself), because the date was read in the server's timezone instead of your household's. It now
+  uses the household timezone everywhere on the roster.
+
 - **A tab left open no longer shows stale data** (WHO-348). Come back to a tab after a minute or
   more and the page re-fetches and redraws with current data, so changes from another device or
   family member appear without a manual reload. It holds off while a dialog is open or something

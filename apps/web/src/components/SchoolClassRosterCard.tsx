@@ -12,6 +12,7 @@ import {
   isEnrollmentActive,
 } from "../lib/school-enrollment";
 import { memberLabel, type Enrollment, type Member } from "../lib/school-class-types";
+import { useHouseholdTimeZone, useHouseholdToday } from "./HouseholdTimeProvider";
 import { Alert, Avatar, Badge, Button, Card, CardBody, CardHeader, ConfirmDialog, EmptyState, Input, ListItem, SectionHeader, Select } from "./ui";
 
 /** The "Roster" card on a class detail page — enroll/unenroll household members. Owns its own
@@ -25,6 +26,8 @@ export function SchoolClassRosterCard({
   initialEnrollments: Enrollment[];
   members: Member[];
 }) {
+  const timeZone = useHouseholdTimeZone();
+  const today = useHouseholdToday();
   const [enrollments, setEnrollments] = useState(initialEnrollments);
   const [memberId, setMemberId] = useState("");
   const [enrollRole, setEnrollRole] = useState("student");
@@ -195,8 +198,8 @@ export function SchoolClassRosterCard({
               {sortedEnrollments.map((en) => {
                 const member = members.find((m) => m.id === en.memberId);
                 const label = memberLabel(member, en.memberId);
-                const dateLabel = formatEnrollmentActiveRange(en.activeFrom, en.activeTo, en.createdAt);
-                const active = isEnrollmentActive(en.activeFrom, en.activeTo);
+                const dateLabel = formatEnrollmentActiveRange(en.activeFrom, en.activeTo, en.createdAt, timeZone);
+                const active = isEnrollmentActive(en.activeFrom, en.activeTo, today);
                 return (
                   <ListItem key={en.id} as="li">
                     <Avatar id={en.memberId} name={label} size="md" />
