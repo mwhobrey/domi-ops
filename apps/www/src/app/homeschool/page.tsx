@@ -3,7 +3,7 @@ import { AudiencePage } from "@/components/AudiencePage";
 import { FAQ_ITEMS } from "@/lib/faq";
 
 export const metadata = {
-  title: "Homeschool gradebook and family planner — Domi Ops",
+  title: "Homeschool gradebook and family planner | Domi Ops",
   description:
     "Classes, weighted gradebook, school days and hours logs, printable transcripts with your own grade scale, alongside your family calendar and chores. Self-host free or hosted.",
   alternates: { canonical: "/homeschool" },
@@ -37,39 +37,27 @@ export default function HomeschoolPage() {
       pillars={[
         {
           title: "Parent and student views",
-          body: "Each kid logs in and sees their own assignments and grades. You see the whole class, submit grades, and leave feedback.",
+          body: "Each kid logs in and sees their own assignments and grades. You see the whole class, grade the work, and leave feedback.",
         },
         {
           title: "A gradebook that follows your rules",
-          body: "Weighted categories for tests, homework, and projects. Progress is tracked across the whole year, not a checklist that resets every Monday.",
+          body: "Weighted categories for tests, homework, and projects, tracked across the whole year.",
         },
         {
           title: "Tests that grade themselves",
-          body: "Build a test in the app, students take it there, and scores land in the gradebook. Override any answer when you disagree with the machine.",
-        },
-        {
-          title: "Google Docs, kept honest",
-          body: "Assign a Google Doc, get each student's own copy back, and freeze the original at first submission so nothing changes after the fact.",
+          body: "Build a test in the app, students take it there, and scores land in the gradebook. Override any answer you disagree with.",
         },
         {
           title: "School days, not roll call",
-          body: "Homeschool doesn't take attendance. Tap the days school happened, for one kid or all of them, and set a days-of-instruction goal like 180 to watch your progress. A day also counts when you log hours.",
-        },
-        {
-          title: "An hours log that stays out of the way",
-          body: "Jot down instruction time as you go: reading, a field trip, co-op. Totals by date range are one click away when a state or umbrella school asks.",
+          body: "Homeschool doesn't take attendance, so we don't ask for it. Tap the days school happened, for one kid or all of them, and set a goal like 180 days to watch your progress. A day also counts when you log hours, and the hours log keeps totals by date range for whenever a state or umbrella school asks.",
         },
         {
           title: "Transcripts on your grading scale",
-          body: "Print a transcript with courses by term, credits, grades, GPA, days, and hours. Pick a preset scale or set your own cutoffs, labels, and GPA points. It prints the scale it used.",
+          body: "Print courses by term with credits, grades, GPA, days, and hours. Use a preset scale or set your own cutoffs, labels, and GPA points. The transcript says which scale it used.",
         },
         {
-          title: "School on the family calendar",
-          body: "Assignment due dates overlay the same week view as appointments and practices. One place to look, not two.",
-        },
-        {
-          title: "Your files, attached",
-          body: "Materials and submissions live in Household Drive, so worksheets and finished work stay with the class instead of scattering across folders.",
+          title: "School fits into the week",
+          body: "Assignments sit on the same calendar as everything else, and worksheets and finished work live in Household Drive with the class. Assign a Google Doc and each student gets their own copy; the original freezes at first submission.",
         },
       ]}
       gallery={[

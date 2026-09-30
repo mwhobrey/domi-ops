@@ -120,34 +120,21 @@ export function LandingPage() {
                 record, so we built the record.
               </p>
               <ul className="space-y-3 text-sm leading-relaxed text-[var(--color-text-muted)]">
+                <li>Kids see their own work. You see and grade everything.</li>
                 <li>
-                  <strong className="text-[var(--color-text)]">Parent and student views.</strong>{" "}
-                  Kids see their own work. You see and grade everything.
+                  A gradebook with weighted categories, tracked across the whole year instead of
+                  resetting every Monday.
                 </li>
+                <li>In-app tests that grade themselves, with an override on any answer.</li>
                 <li>
-                  <strong className="text-[var(--color-text)]">Gradebook with weighted categories.</strong>{" "}
-                  Tests, homework, and projects count the way you decide, tracked across the whole
-                  year.
-                </li>
-                <li>
-                  <strong className="text-[var(--color-text)]">In-app tests that grade themselves.</strong>{" "}
-                  Build a test, students take it in the app, and scores land in the gradebook. You
-                  can override any answer.
-                </li>
-                <li>
-                  <strong className="text-[var(--color-text)]">Google Docs work, kept honest.</strong>{" "}
-                  Hand out a test as a Google Doc, get each student&apos;s copy back, and freeze the
-                  original at first submission.
-                </li>
-                <li>
-                  <strong className="text-[var(--color-text)]">Days, hours, and transcripts.</strong>{" "}
-                  Tap the days school happened instead of taking roll, log hours as you go, and print a
+                  Tap the days school happened instead of taking roll. Log hours as you go, then print a
                   transcript on your own grading scale.
                 </li>
                 <li>
-                  <strong className="text-[var(--color-text)]">On the family calendar.</strong>{" "}
-                  Assignments overlay your week, so school isn&apos;t a separate place to look.
+                  Hand out a Google Doc as a test and each student gets their own copy back. The original
+                  freezes at first submission.
                 </li>
+                <li>Assignments show up on the family calendar.</li>
               </ul>
               <LinkButton href="/homeschool" variant="secondary">
                 More on homeschool
@@ -185,21 +172,15 @@ export function LandingPage() {
               </p>
               <ul className="space-y-3 text-sm leading-relaxed text-[var(--color-text-muted)]">
                 <li>
-                  <strong className="text-[var(--color-text)]">Doses grouped, not spammed.</strong>{" "}
                   One reminder for the pill organizer, not five pings for five pills.
                 </li>
+                <li>Pause a medication and its dose history stays.</li>
                 <li>
-                  <strong className="text-[var(--color-text)]">Pause and resume.</strong>{" "}
-                  Stopping a medication keeps its dose history, so the record stays intact.
+                  Medication names, doses, and notes are encrypted at rest, and being able to see a
+                  record never lets someone edit it.
                 </li>
                 <li>
-                  <strong className="text-[var(--color-text)]">Encrypted at rest.</strong>{" "}
-                  Medication names, doses, and notes are encrypted, and seeing a record never grants
-                  the right to edit it.
-                </li>
-                <li>
-                  <strong className="text-[var(--color-text)]">An honest scope.</strong>{" "}
-                  It&apos;s a household tool, not a medical record system, and it makes no HIPAA
+                  Domi Ops is a household tool, not a medical record system, and it makes no HIPAA
                   claims.
                 </li>
               </ul>

@@ -6,7 +6,7 @@ import {
 } from "@domi-ops/marketing-ui";
 
 export const metadata = {
-  title: "Terms of Service — Domi Ops",
+  title: "Terms of Service | Domi Ops",
 };
 
 // Reads NEXT_PUBLIC_* env vars at render time — see app/page.tsx for why this has to be forced

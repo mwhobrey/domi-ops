@@ -31,7 +31,7 @@ export const FAQ_ITEMS: FaqItem[] = [
   },
   {
     q: "Does it track attendance, hours, or produce transcripts?",
-    a: "Yes, built for how homeschooling actually works. There's no roll call: you tap the days school happened on a calendar, and a day also counts on its own when you log hours. Set a days-of-instruction target (like 180) and watch your progress. Log instruction hours as you go, then print a transcript with courses by term, credits, grades, GPA, days, and hours. Requirements differ by state, so check yours. The transcript is prepared by you, not an official district document.",
+    a: "Yes, built for how homeschooling works. There's no roll call: you tap the days school happened on a calendar, and a day also counts on its own when you log hours. Set a days-of-instruction target (like 180) and watch your progress. Log instruction hours as you go, then print a transcript with courses by term, credits, grades, GPA, days, and hours. Requirements differ by state, so check yours. The transcript is prepared by you, not an official district document.",
   },
   {
     q: "Can I use my own grading scale?",

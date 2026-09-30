@@ -2,7 +2,7 @@ import { MarketingShell, resolveMarketingUrls } from "@domi-ops/marketing-ui";
 import { FAQ_ITEMS, faqJsonLd } from "@/lib/faq";
 
 export const metadata = {
-  title: "FAQ — Domi Ops",
+  title: "FAQ | Domi Ops",
   description:
     "Common questions about homeschool tracking, health data, self-hosting, Domi Ops Cloud, privacy, and pricing.",
 };
