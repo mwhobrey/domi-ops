@@ -43,8 +43,9 @@ export default function AboutPage() {
           <p>
             Because Domi Ops holds family schedules and medical details, I built it with privacy in
             mind from the start. Sensitive health fields are encrypted, each record is private or
-            shared on purpose, and on your own server your data stays there unless you turn on an
-            integration like Google sync. It&apos;s open source, so you can run it yourself and check.
+            shared on purpose, and on your own server your records stay there. Features that call an
+            outside service, like weather or Google sync, only do so once you set them up. It&apos;s
+            open source, so you can run it yourself and check.
           </p>
           <p>
             Everything in Domi Ops comes from our own daily use. When a workflow is slow or clunky, I
