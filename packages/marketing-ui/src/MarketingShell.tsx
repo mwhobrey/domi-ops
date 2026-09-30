@@ -44,6 +44,9 @@ export function MarketingShell({
             <LinkButton href="/health" variant="ghost" size="sm" className="hidden md:inline-flex">
               Health
             </LinkButton>
+            <LinkButton href="/about" variant="ghost" size="sm" className="hidden lg:inline-flex">
+              Our story
+            </LinkButton>
             <LinkButton href="/faq" variant="ghost" size="sm" className="hidden sm:inline-flex">
               FAQ
             </LinkButton>
@@ -66,6 +69,9 @@ export function MarketingShell({
                 Try demo
               </AnchorButton>
             )}
+            <Link href="/about" className="min-h-11 inline-flex items-center hover:text-[var(--color-text)]">
+              Our story
+            </Link>
             <Link href="/privacy" className="min-h-11 inline-flex items-center hover:text-[var(--color-text)]">
               Privacy
             </Link>
