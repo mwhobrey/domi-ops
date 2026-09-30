@@ -55,6 +55,13 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
   is half-typed (anything you typed since the page loaded), and never runs on the in-app test
   taker or editor.
 
+### Security
+
+- **Dependency security updates** (WHO-351). Next.js is now 16.3.8, which fixes a critical remote code
+  execution issue in `next/og`; `undici`, `brace-expansion`, `ip-address`, and `dompurify` are updated
+  to patched versions. Routine bumps ride along (Drizzle, Tailwind Merge, Lucide, web-vitals,
+  react-colorful, the AWS presigner, Turborepo). No migrations and no behavior changes.
+
 ## [0.4.0] - 2026-09-29
 
 ### Added

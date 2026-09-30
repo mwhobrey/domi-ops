@@ -35,7 +35,7 @@
   "devDependencies": {
     "playwright": "^1.63.0",
     "node-gyp": "^11.5.0",
-    "turbo": "^2.5.4",
+    "turbo": "^2.11.4",
     "typescript": "^5.8.3",
     "vitest": "^5.0.1"
   },
@@ -43,7 +43,7 @@
     "node": ">=20"
   },
   "overrides": {
-    "drizzle-orm": "^0.45.2",
+    "drizzle-orm": "^0.45.3",
     "esbuild": "^0.28.1"
   }
 }
