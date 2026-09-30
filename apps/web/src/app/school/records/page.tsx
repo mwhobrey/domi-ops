@@ -20,7 +20,7 @@ export default async function SchoolRecordsPage() {
   return (
     <AppShell
       title="Records"
-      description="Attendance, instruction hours, and transcripts"
+      description="School days, instruction hours, and transcripts"
       breadcrumb={[{ label: "School", href: "/school" }, { label: "Records" }]}
     >
       {loadError ? (

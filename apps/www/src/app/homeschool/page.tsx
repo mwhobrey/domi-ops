@@ -62,6 +62,16 @@ export default function HomeschoolPage() {
       ]}
       gallery={[
         {
+          shot: MARKETING_SCREENSHOTS.schoolRecords,
+          alt: "Domi Ops Records page with a school days calendar, hours log, and progress toward 180 days",
+          caption: "Tap the days school happened and log hours as you go. Progress toward your goal updates itself.",
+        },
+        {
+          shot: MARKETING_SCREENSHOTS.schoolTranscript,
+          alt: "Domi Ops printable academic transcript with courses, credits, grades, GPA, days, and hours",
+          caption: "A printable transcript that names the grading scale it used.",
+        },
+        {
           shot: MARKETING_SCREENSHOTS.school,
           alt: "Domi Ops school module showing classes and assignments",
           caption: "Classes and assignments, with each student's status at a glance.",

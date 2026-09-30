@@ -35,6 +35,9 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
   screenshots, FAQ, and an honest "what's not here yet" block. New FAQ entries (kid logins,
   attendance and transcripts, curriculum, health record access), FAQ structured data, a sitemap,
   and robots.txt.
+- **Records screenshots on `/homeschool`** (WHO-346): the school days calendar and a printable
+  transcript, captured from the demo household. The capture script can now reuse an installed
+  browser (`PLAYWRIGHT_CHANNEL=msedge`) instead of downloading one.
 - **Our story page** (WHO-346): a short founder story at `/about`, linked from the header and footer.
 
 ### Fixed

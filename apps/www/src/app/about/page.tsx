@@ -60,9 +60,9 @@ export default function AboutPage() {
           {/* eslint-disable-next-line @next/next/no-img-element -- static photo, no image optimizer in the standalone build */}
           <img
             src="/about/mike-family.webp"
-            alt="Mike Whobrey with his wife and son, standing at a wooden fence"
-            width={556}
-            height={711}
+            alt="Mike Whobrey and his wife smiling for a selfie at a national forest overlook"
+            width={715}
+            height={693}
             className="w-full max-w-56 rounded-[var(--radius-xl)] shadow-[var(--shadow-card)]"
           />
           <div className="space-y-4 text-[var(--color-text-muted)]">

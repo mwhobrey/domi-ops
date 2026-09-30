@@ -164,6 +164,7 @@ export function SchoolRecordsClient({ students }: { students: RecordStudent[] })
           ) : null}
 
           <div className="mt-6 space-y-6">
+            <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
             <SchoolDaysCalendar
               days={records.instruction.days}
               today={today}
@@ -175,6 +176,7 @@ export function SchoolRecordsClient({ students }: { students: RecordStudent[] })
               onChanged={load}
             />
             <HoursLog records={records} studentId={studentId} onChanged={load} today={today} />
+            </div>
             <AttendanceByClass records={records} />
             {settings?.canEdit && (
               <SchoolRecordsSettings
@@ -301,7 +303,7 @@ function HoursLog({
         {records.canEdit && (
           <form
             onSubmit={(e) => void add(e)}
-            className="grid gap-3 sm:grid-cols-[auto_auto_1fr_1fr_auto] sm:items-end"
+            className="flex flex-wrap items-end gap-3"
             // Half-typed entries survive a tab switch (see WHO-348 auto-refresh).
             {...(hours || activity ? { "data-no-auto-refresh": "" } : {})}
           >
@@ -317,7 +319,7 @@ function HoursLog({
               </label>
               <Input id="hours-amount" type="number" step="0.25" min="0.25" max="24" inputMode="decimal" className="mt-1 w-24" placeholder="1.5" value={hours} onChange={(e) => setHours(e.target.value)} />
             </div>
-            <div>
+            <div className="min-w-40 flex-1">
               <label htmlFor="hours-class" className="text-label text-[var(--color-text-muted)]">
                 Class
               </label>
@@ -330,7 +332,7 @@ function HoursLog({
                 ))}
               </Select>
             </div>
-            <div>
+            <div className="min-w-40 flex-1">
               <label htmlFor="hours-activity" className="text-label text-[var(--color-text-muted)]">
                 What
               </label>
