@@ -10,7 +10,7 @@
 | `school_assignment` | `school_assignments` | ✅ | Class list + `/school/assignment/[id]` |
 | `school_submission` | `school_submissions` | ✅ | Submit + status on assignment page |
 | `school_grade_entry` | `school_grades` | ✅ | Grade form on assignment page |
-| `school_attendance` | `school_attendance` | ✅ | ❌ No attendance UI |
+| `school_attendance` | `school_attendance` | ✅ | ✅ Class page **Attendance** card (WHO-347); per-student summary on `/school/records` |
 | `school_submission_artifact` | `school_submission_artifacts` | ✅ + S3 | Presign upload on assignment page |
 
 ## Field-level: `school_class`
@@ -75,3 +75,22 @@
 - [ ] Gradebook / categories (WHO-44, WHO-45) — shipped this session
 - [ ] Attendance marking — not started
 - [ ] Student/parent home (WHO-47) — role-aware landing + class/assignment views
+
+## Homeschool records (WHO-347)
+
+Not from HomeHub. Added for states that require attendance, hours, or a transcript.
+
+| Capability | API (`routes/school-records.ts`) | UI |
+|------------|-----------------------------------|----|
+| Attendance per class per day | `GET/PUT /classes/:id/attendance` (PUT bulk-upserts one date; `status: null` clears) | Class page **Attendance** card |
+| Instruction hours | `GET /records/:studentId`, `POST/PATCH/DELETE /hours` (`school_hours_log`, minutes 1-1440) | `/school/records` hours log |
+| Days attended / absent / excused | `GET /records/:studentId?from&to` | `/school/records` stat tiles |
+| Transcript | `GET /transcript/:studentId?from&to` | `/school/transcript/:id`, printable |
+
+**Rules worth knowing**
+- A school day counts as **attended** if any class marked the student present or late. **Absent** only if every entry that day was absent. Days with only excused (or excused plus absent) marks count as **excused**, never against the student. (`lib/school-records.ts`)
+- **Transcript grade** per course is the weighted category average when the class has weighted categories, else the points average. Scale: A 90+, B 80+, C 70+, D 60+, F below; GPA is unweighted 4.0, credit-weighted. A course with nothing graded is "in progress": no letter, no credit, no GPA effect. F attempts credits but earns none. (`lib/school-transcript-math.ts`)
+- Transcripts include **archived classes and ended enrollments**, since past school years are exactly what they exist for. `buildClassGradebook(..., { includeInactive: true })`.
+- `school_classes.credits` (default 1 = full-year course) is edited on the class details card. Terms group by the class **Term** text, so use a consistent label such as `2025-2026`.
+- **Access:** household owner/admin and class teacher/parent/aide enrollments can write. Staff see only students in classes they manage. A student reads only their own; observers see nothing. Other households get 404.
+- Test: `apps/api/src/routes/school-records.integration.test.ts` (needs Postgres with migration 0080; skipped without one).

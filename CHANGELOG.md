@@ -8,6 +8,18 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+### Added
+
+- **Homeschool records: attendance, hours log, and transcripts** (WHO-347). Take attendance on
+  any class page (Present, Late, Absent, Excused, per student per day). A new **Records** page
+  under School shows days attended and absent, per-class attendance, and an instruction **hours
+  log** you add to as you go, for any date range (defaults to the Jul-Jun school year). From
+  there, open a printable **transcript**: courses grouped by term with credits, percent, letter
+  grade, term and cumulative GPA, plus attendance days and hours. Classes have a new **Credits**
+  field (1 = a full-year course). Students see only their own; parents and teachers write.
+  Excused days never count against a student. *(requires `npm run db:migrate`
+  (`0080_school_records`))*
+
 ## [0.4.0] - 2026-09-29
 
 ### Added
