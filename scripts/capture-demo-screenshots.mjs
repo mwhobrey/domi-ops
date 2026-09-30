@@ -78,7 +78,9 @@ function pruneLegacyScreenshots() {
   for (const dir of OUT_DIRS) {
     if (!existsSync(dir)) continue;
     for (const file of readdirSync(dir)) {
-      if (!file.endsWith(".png")) continue;
+      // Only old captures named like "p1-school-desktop-1280x800.png" (no theme suffix). Other
+      // images that happen to live in docs/marketing/screenshots are not ours to delete.
+      if (!/^p\d-.+\.png$/.test(file)) continue;
       if (/-(?:light|dark)\.png$/.test(file)) continue;
       unlinkSync(path.join(dir, file));
     }
