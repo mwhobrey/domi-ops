@@ -1,6 +1,7 @@
 import {
   boolean,
   date,
+  index,
   integer,
   jsonb,
   pgEnum,
@@ -83,6 +84,8 @@ export const schoolClasses = pgTable("school_classes", {
   term: varchar("term", { length: 64 }),
   teacherMemberId: uuid("teacher_member_id").notNull(),
   scheduleJson: text("schedule_json").default("{}"),
+  /** Carnegie-style credit value for transcripts (1 = a full-year course). */
+  credits: real("credits").notNull().default(1),
   archived: boolean("archived").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -318,4 +321,40 @@ export const schoolAttendance = pgTable(
       t.attendanceDate,
     ),
   ],
+);
+
+/** Instruction time per student per day, for states that require an hours log. */
+export const schoolHoursLog = pgTable(
+  "school_hours_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    householdId: uuid("household_id")
+      .notNull()
+      .references(() => households.id, { onDelete: "cascade" }),
+    studentMemberId: uuid("student_member_id").notNull(),
+    classId: uuid("class_id").references(() => schoolClasses.id, { onDelete: "set null" }),
+    logDate: date("log_date").notNull(),
+    minutes: integer("minutes").notNull(),
+    activity: varchar("activity", { length: 128 }).notNull().default(""),
+    note: text("note").notNull().default(""),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("school_hours_log_student_date_idx").on(t.householdId, t.studentMemberId, t.logDate)],
+);
+
+/** "School happened for this student on this day." The homeschool alternative to a class roll call. */
+export const schoolInstructionDays = pgTable(
+  "school_instruction_days",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    householdId: uuid("household_id")
+      .notNull()
+      .references(() => households.id, { onDelete: "cascade" }),
+    studentMemberId: uuid("student_member_id").notNull(),
+    day: date("day").notNull(),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("school_instruction_days_student_day").on(t.householdId, t.studentMemberId, t.day)],
 );

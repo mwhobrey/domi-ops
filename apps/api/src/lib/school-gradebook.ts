@@ -114,6 +114,7 @@ export async function buildClassGradebook(
   db: Database,
   classId: string,
   now = new Date(),
+  opts: { includeInactive?: boolean } = {},
 ): Promise<GradebookData> {
   const enrollmentRows = await db
     .select()
@@ -121,7 +122,9 @@ export async function buildClassGradebook(
     .where(eq(schoolEnrollments.classId, classId));
 
   const studentEnrollments = enrollmentRows.filter(
-    (e) => e.role === "student" && isEnrollmentActiveNow(e.activeFrom, e.activeTo),
+    (e) =>
+      e.role === "student" &&
+      (opts.includeInactive || isEnrollmentActiveNow(e.activeFrom, e.activeTo)),
   );
 
   const assignmentRows = await db

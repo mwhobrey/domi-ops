@@ -4,7 +4,7 @@ import { AppShell } from "../../components/AppShell";
 import { SchoolClassList } from "../../components/SchoolClassList";
 import { apiFetch } from "../../lib/api";
 import type { SchoolContext } from "../../lib/school-access";
-import { Alert } from "../../components/ui";
+import { Alert, LinkButton } from "../../components/ui";
 
 interface SchoolClass {
   id: string;
@@ -47,6 +47,13 @@ export default async function SchoolPage() {
   return (
     <AppShell
       title="School"
+      actions={
+        context?.viewMode === "observer" ? undefined : (
+          <LinkButton href="/school/records" variant="ghost" size="sm">
+            Records
+          </LinkButton>
+        )
+      }
       description={
         context?.viewMode === "student"
           ? "Your classes, assignments, and grades"

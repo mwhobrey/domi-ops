@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { GradebookData } from "../lib/school-gradebook";
 import type { SchoolClassAccess } from "../lib/school-access";
 import type { Category, ClassMeta, Enrollment, Member, Assignment } from "../lib/school-class-types";
+import { SchoolAttendanceCard } from "./SchoolAttendanceCard";
 import { SchoolCategoryList } from "./SchoolCategoryList";
 import { SchoolClassAssignmentsCard } from "./SchoolClassAssignmentsCard";
 import { SchoolClassDetailsCard } from "./SchoolClassDetailsCard";
@@ -91,6 +92,18 @@ export function SchoolClassDetail({
           />
         </CardBody>
       </Card>
+
+      {(canViewRoster || access.viewMode === "student") && (
+        <SchoolAttendanceCard
+          classId={classId}
+          students={initialEnrollments
+            .filter((e) => e.role === "student")
+            .map((e) => {
+              const m = members.find((x) => x.id === e.memberId);
+              return { id: e.memberId, label: m?.shownLabel || m?.email || "Student" };
+            })}
+        />
+      )}
 
       <SchoolClassAssignmentsCard
         classId={classId}

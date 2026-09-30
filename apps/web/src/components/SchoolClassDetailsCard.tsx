@@ -27,6 +27,7 @@ export function SchoolClassDetailsCard({
   const [metaTeacherId, setMetaTeacherId] = useState(classMeta.teacherMemberId);
   const [metaSchedule, setMetaSchedule] = useState(formatClassSchedule(classMeta.scheduleJson) ?? "");
   const [metaArchived, setMetaArchived] = useState(classMeta.archived ?? false);
+  const [metaCredits, setMetaCredits] = useState(String(classMeta.credits ?? 1));
   const [metaSaving, setMetaSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,6 +35,11 @@ export function SchoolClassDetailsCard({
   const scheduleLabel = formatClassSchedule(classMeta.scheduleJson);
 
   async function saveMeta() {
+    const credits = Number(metaCredits);
+    if (!Number.isFinite(credits) || credits < 0 || credits > 10) {
+      setError("Credits must be between 0 and 10");
+      return;
+    }
     setMetaSaving(true);
     setError(null);
     try {
@@ -42,6 +48,7 @@ export function SchoolClassDetailsCard({
         teacherMemberId: metaTeacherId,
         scheduleJson: scheduleToJson(metaSchedule),
         archived: metaArchived,
+        credits,
       });
       setClassMeta((prev) => ({ ...prev, ...data.class }));
       setEditingMeta(false);
@@ -68,6 +75,7 @@ export function SchoolClassDetailsCard({
                   setMetaTeacherId(classMeta.teacherMemberId);
                   setMetaSchedule(formatClassSchedule(classMeta.scheduleJson) ?? "");
                   setMetaArchived(classMeta.archived ?? false);
+                  setMetaCredits(String(classMeta.credits ?? 1));
                   setEditingMeta(true);
                 }}
                 aria-label="Edit class details"
@@ -117,6 +125,22 @@ export function SchoolClassDetailsCard({
                   </option>
                 ))}
               </Select>
+            </div>
+            <div>
+              <label htmlFor="class-credits" className="text-label text-[var(--color-text-muted)]">
+                Credits
+              </label>
+              <Input
+                id="class-credits"
+                type="number"
+                step="0.25"
+                min="0"
+                max="10"
+                className="mt-1"
+                value={metaCredits}
+                onChange={(e) => setMetaCredits(e.target.value)}
+              />
+              <p className="mt-1 text-xs text-[var(--color-text-muted)]">1 = a full-year course. Used on transcripts.</p>
             </div>
             <div className="sm:col-span-2">
               <label htmlFor="class-schedule" className="text-label text-[var(--color-text-muted)]">
@@ -187,6 +211,10 @@ export function SchoolClassDetailsCard({
                   <span className="text-[var(--color-text-muted)]">Unknown</span>
                 )}
               </dd>
+            </div>
+            <div>
+              <dt className="text-label text-[var(--color-text-muted)]">Credits</dt>
+              <dd className="mt-1 text-sm font-medium">{classMeta.credits ?? 1}</dd>
             </div>
             {scheduleLabel && (
               <div className="sm:col-span-3">
