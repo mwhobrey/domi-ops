@@ -135,8 +135,9 @@ export default async function SchoolTranscriptPage({
           <footer className="space-y-1 border-t border-[var(--color-border)] pt-4 text-xs text-[var(--color-text-muted)]">
             <p>
               Grade scale: {describeScale(data.gradeScale)}. Credit is earned at {data.gradeScale.passingPercent}%
-              or above. GPA is unweighted and weighted by credits, using the grade points for each grade. A
-              course with no graded work is shown as in progress and excluded from GPA and credits.
+              or above. GPA averages each grade's points across courses, counting each by its credits, with no
+              honors or AP bonus. A course with no graded work is shown as in progress and excluded from
+              GPA and credits.
             </p>
             <p>
               Prepared by the student&apos;s parent or instructor from Domi Ops records on{" "}

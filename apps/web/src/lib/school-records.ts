@@ -117,9 +117,9 @@ export function schoolYearRange(today: string): { from: string; to: string } {
   return { from: `${start}-07-01`, to: `${start + 1}-06-30` };
 }
 
+/** Hours to at most two decimals, no trailing zeros: 75 -> "1.25", 90 -> "1.5", 120 -> "2". */
 export function formatHours(minutes: number): string {
-  const hours = Math.round((minutes / 60) * 10) / 10;
-  return `${hours}`;
+  return `${Math.round((minutes / 60) * 100) / 100}`;
 }
 
 /** Pulls the server's message out of a failed settings save, if it sent one. */

@@ -56,6 +56,32 @@ export default function AboutPage() {
         <p className="mt-8 font-display text-lg font-semibold">Mike Whobrey</p>
         <p className="text-sm text-[var(--color-text-muted)]">Domi Ops</p>
 
+        <section className="mt-12 grid items-start gap-6 border-t border-[var(--color-border)] pt-10 sm:grid-cols-[14rem_1fr]">
+          {/* eslint-disable-next-line @next/next/no-img-element -- static photo, no image optimizer in the standalone build */}
+          <img
+            src="/about/mike-family.webp"
+            alt="Mike Whobrey with his wife and son, standing at a wooden fence"
+            width={556}
+            height={711}
+            className="w-full max-w-56 rounded-[var(--radius-xl)] shadow-[var(--shadow-card)]"
+          />
+          <div className="space-y-4 text-[var(--color-text-muted)]">
+            <h2 className="font-display text-2xl font-semibold tracking-tight text-[var(--color-text)]">
+              A little about me
+            </h2>
+            <p>
+              I was born and raised in Mississippi, and I used to ride bulls for a living. These days
+              I&apos;m a software engineer, and I have been for over a decade. My wife and I have been
+              married for just as long.
+            </p>
+            <p>
+              My focus now is my wife and our son. Our family&apos;s health needs are growing and will
+              keep growing, so I spend my time building things that make the days easier to manage. I
+              also enjoy coding and creating tools for their own sake.
+            </p>
+          </div>
+        </section>
+
         <div className="mt-12 flex flex-wrap items-center gap-4 border-t border-[var(--color-border)] pt-8">
           {urls.demo ? (
             <AnchorButton

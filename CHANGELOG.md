@@ -42,7 +42,8 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 - **A tab left open no longer shows stale data** (WHO-348). Come back to a tab after a minute or
   more and the page re-fetches and redraws with current data, so changes from another device or
   family member appear without a manual reload. It holds off while a dialog is open or something
-  is half-typed, and never runs on the in-app test taker or editor.
+  is half-typed (anything you typed since the page loaded), and never runs on the in-app test
+  taker or editor.
 
 ## [0.4.0] - 2026-09-29
 

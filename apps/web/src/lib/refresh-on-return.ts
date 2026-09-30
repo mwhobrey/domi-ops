@@ -13,24 +13,23 @@ export function shouldRefreshOnReturn(input: {
   return input.awayMs >= STALE_AFTER_MS;
 }
 
-const TEXT_INPUT_TYPES = new Set(["text", "email", "url", "tel", "number", "password", "date", "datetime-local", "time"]);
+const TEXT_INPUT_TYPES = new Set(["text", "email", "url", "tel", "number", "password", "date", "datetime-local", "time", "search"]);
+
+/** True for a field a person types into. Checkboxes and buttons are not "half-typed" work. */
+export function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target instanceof HTMLTextAreaElement) return true;
+  if (target instanceof HTMLInputElement) return TEXT_INPUT_TYPES.has(target.type);
+  return target.isContentEditable;
+}
 
 /**
- * True when refreshing would be rude: an open dialog/sheet, an opted-out page, or anything
- * half-typed. Conservative on purpose. Re-seeding client state from fresh props would wipe it.
+ * True when refreshing would be rude: an open dialog/sheet, an opted-out page, or something the
+ * user typed that hasn't been saved. Typing is tracked from real input events rather than by
+ * reading field values, because plenty of pages pre-fill fields (date ranges, settings) and those
+ * would otherwise block refreshing forever.
  */
-export function isUserBusy(doc: Document): boolean {
-  if (doc.querySelector(`dialog[open], [aria-modal="true"], [${NO_AUTO_REFRESH_ATTR}]`)) return true;
-
-  for (const el of doc.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("main input, main textarea")) {
-    if (el instanceof HTMLTextAreaElement) {
-      if (el.value.trim() !== "") return true;
-    } else if (TEXT_INPUT_TYPES.has(el.type) && el.value.trim() !== "") {
-      return true;
-    }
-  }
-  for (const el of doc.querySelectorAll<HTMLElement>('main [contenteditable="true"]')) {
-    if ((el.textContent ?? "").trim() !== "") return true;
-  }
-  return false;
+export function isUserBusy(doc: Document, userEdited: boolean): boolean {
+  if (userEdited) return true;
+  return doc.querySelector(`dialog[open], [aria-modal="true"], [${NO_AUTO_REFRESH_ATTR}]`) !== null;
 }

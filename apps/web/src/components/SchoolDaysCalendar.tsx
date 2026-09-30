@@ -99,7 +99,7 @@ export function SchoolDaysCalendar({
             : "Days of instruction recorded for this student."}
         </p>
 
-        <div role="grid" aria-label={`School days, ${monthLabel}`} className={cn("select-none", busy && "opacity-60")}>
+        <div role="grid" aria-label={`School days, ${monthLabel}`} className={cn("mx-auto max-w-md select-none", busy && "opacity-60")}>
           <div role="row" className="grid grid-cols-7 gap-1 text-center text-xs text-[var(--color-text-muted)]">
             {WEEKDAYS.map((d) => (
               <div key={d} role="columnheader" className="py-1">

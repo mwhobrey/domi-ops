@@ -178,7 +178,6 @@ export function SchoolRecordsClient({ students }: { students: RecordStudent[] })
             <AttendanceByClass records={records} />
             {settings?.canEdit && (
               <SchoolRecordsSettings
-                key={JSON.stringify([settings.schoolDaysTarget, settings.gradeScaleIsDefault])}
                 initial={settings}
                 onSaved={async () => {
                   await Promise.all([loadSettings(), load()]);
@@ -352,7 +351,7 @@ function HoursLog({
                 <div className="min-w-0">
                   <span className="tabular-nums text-[var(--color-text-muted)]">{h.logDate}</span>{" "}
                   <span className="font-medium">{h.activity || "Instruction"}</span>
-                  {h.classId && classNames.get(h.classId) && (
+                  {h.classId && classNames.get(h.classId) && classNames.get(h.classId) !== h.activity && (
                     <span className="text-[var(--color-text-muted)]"> · {classNames.get(h.classId)}</span>
                   )}
                 </div>
