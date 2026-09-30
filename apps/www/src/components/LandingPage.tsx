@@ -144,6 +144,9 @@ export function LandingPage() {
                   Assignments overlay your week, so school isn&apos;t a separate place to look.
                 </li>
               </ul>
+              <LinkButton href="/homeschool" variant="secondary">
+                More on homeschool
+              </LinkButton>
             </div>
             <div className="overflow-hidden rounded-[var(--radius-xl)] shadow-[var(--shadow-card)]">
               <ThemeAwareScreenshot
@@ -195,6 +198,9 @@ export function LandingPage() {
                   claims.
                 </li>
               </ul>
+              <LinkButton href="/health" variant="secondary">
+                More on health
+              </LinkButton>
             </div>
           </div>
         </div>
