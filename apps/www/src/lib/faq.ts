@@ -11,7 +11,7 @@ export const FAQ_ITEMS: FaqItem[] = [
   },
   {
     q: "Do you sell or share my data?",
-    a: "No. Self-hosted, your data never leaves your server; we don't have access to it at all. On Cloud, it stays in your household's isolated data, and it's never sold to anyone, for any reason.",
+    a: "No. Self-hosted, your data stays on your server unless you turn on an integration such as Google sync, and we don't have access to your server. On Cloud, it stays in your household's isolated data, and it's never sold to anyone, for any reason.",
   },
   {
     q: "Is the health module HIPAA-compliant?",

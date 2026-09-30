@@ -1,7 +1,7 @@
 "use client";
 
 import { FileText, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { apiClient } from "../lib/client-api";
 import {
   formatHours,
@@ -50,20 +50,24 @@ export function SchoolRecordsClient({ students }: { students: RecordStudent[] })
     }
   }, []);
 
+  // Switching students quickly leaves earlier requests in flight. If an old one lands last it
+  // would show one student's records under another student's name, so only the newest applies.
+  const loadSequence = useRef(0);
+
   const load = useCallback(async () => {
     if (!studentId) return;
+    const sequence = ++loadSequence.current;
     setLoading(true);
     setError(null);
     try {
-      setRecords(
-        await apiClient.get<StudentRecords>(
-          `/api/school/records/${studentId}?from=${rangeFrom}&to=${rangeTo}`,
-        ),
+      const res = await apiClient.get<StudentRecords>(
+        `/api/school/records/${studentId}?from=${rangeFrom}&to=${rangeTo}`,
       );
+      if (sequence === loadSequence.current) setRecords(res);
     } catch {
-      setError("Could not load records");
+      if (sequence === loadSequence.current) setError("Could not load records");
     } finally {
-      setLoading(false);
+      if (sequence === loadSequence.current) setLoading(false);
     }
   }, [studentId, rangeFrom, rangeTo]);
 

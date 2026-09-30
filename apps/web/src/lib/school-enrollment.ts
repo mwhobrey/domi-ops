@@ -52,7 +52,22 @@ export function enrollmentRoleSortKey(role: string): number {
  */
 export function toCalendarDate(value: string, timeZone: string | null | undefined): string {
   if (!value.includes("T")) return value.slice(0, 10);
-  return todayIsoInTimeZone(timeZone, new Date(value));
+  return todayIsoInTimeZone(validZoneOrUtc(timeZone), new Date(value));
+}
+
+/**
+ * A missing or unrecognised zone becomes UTC, not the device's zone. The device zone is exactly
+ * what differs between the server and the browser, so falling back to it would bring the
+ * hydration mismatch back for any household whose timezone hasn't loaded.
+ */
+export function validZoneOrUtc(timeZone: string | null | undefined): string {
+  if (!timeZone) return "UTC";
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone });
+    return timeZone;
+  } catch {
+    return "UTC";
+  }
 }
 
 /** "Sep 30, 2026" from a YYYY-MM-DD. Fixed locale and zone so server and browser agree. */

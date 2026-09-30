@@ -14,7 +14,10 @@ export function useRefreshOnReturn(): number {
   const [pending, startTransition] = useTransition();
   const leftAt = useRef<number | null>(null);
   const wasPending = useRef(false);
-  // Set by a real keystroke in a text field; cleared when a form is submitted or the page remounts.
+  // Set by a real keystroke in a text field and kept until the page remounts. A "submit" event
+  // can be canceled or the save can fail, so it says nothing about whether typed work was saved,
+  // and one form's submit must not clear another form's edits. Erring toward "busy" costs a
+  // refresh; erring the other way costs someone's typing.
   const userEdited = useRef(false);
 
   useEffect(() => {
@@ -33,19 +36,13 @@ export function useRefreshOnReturn(): number {
     const onInput = (e: Event) => {
       if (e.isTrusted && isTypingTarget(e.target)) userEdited.current = true;
     };
-    const onSubmit = () => {
-      userEdited.current = false;
-    };
-
     document.addEventListener("visibilitychange", onVisibility);
     document.addEventListener("input", onInput, true);
-    document.addEventListener("submit", onSubmit, true);
     window.addEventListener("blur", onLeave);
     window.addEventListener("focus", onReturn);
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
       document.removeEventListener("input", onInput, true);
-      document.removeEventListener("submit", onSubmit, true);
       window.removeEventListener("blur", onLeave);
       window.removeEventListener("focus", onReturn);
     };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatEnrollmentActiveRange, isEnrollmentActive, toCalendarDate } from "./school-enrollment";
+import { formatEnrollmentActiveRange, isEnrollmentActive, toCalendarDate, validZoneOrUtc } from "./school-enrollment";
 
 // 2026-09-30 03:30 UTC is still Sep 29 in Chicago. This is the instant that made the roster
 // render "Sep 30" on the UTC server and "Sep 29" in a Central browser (hydration failure).
@@ -14,6 +14,25 @@ describe("toCalendarDate", () => {
   it("passes a date-only value straight through", () => {
     expect(toCalendarDate("2026-09-30", "America/Chicago")).toBe("2026-09-30");
     expect(toCalendarDate("2026-09-30", "Pacific/Kiritimati")).toBe("2026-09-30");
+  });
+});
+
+describe("validZoneOrUtc", () => {
+  it("keeps a real zone", () => {
+    expect(validZoneOrUtc("America/Chicago")).toBe("America/Chicago");
+  });
+
+  it("falls back to UTC, never the device zone, for missing or invalid zones", () => {
+    expect(validZoneOrUtc(null)).toBe("UTC");
+    expect(validZoneOrUtc(undefined)).toBe("UTC");
+    expect(validZoneOrUtc("")).toBe("UTC");
+    expect(validZoneOrUtc("Not/AZone")).toBe("UTC");
+  });
+
+  it("makes a timestamp read the same on the server and in the browser when the zone is unknown", () => {
+    // The same answer no matter which machine renders it, because it never consults the device.
+    expect(toCalendarDate(lateEvening, null)).toBe("2026-09-30");
+    expect(toCalendarDate(lateEvening, "Not/AZone")).toBe("2026-09-30");
   });
 });
 

@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ApiError, apiClient } from "../lib/client-api";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { apiClient } from "../lib/client-api";
 import {
   ATTENDANCE_OPTIONS,
   type AttendanceRow,
@@ -31,8 +31,11 @@ export function SchoolAttendanceCard({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedNote, setSavedNote] = useState<string | null>(null);
+  // Changing the date fast leaves earlier requests in flight; only the newest may apply.
+  const loadSequence = useRef(0);
 
   const load = useCallback(async () => {
+    const sequence = ++loadSequence.current;
     setLoading(true);
     setError(null);
     try {
@@ -41,13 +44,15 @@ export function SchoolAttendanceCard({
       );
       const next: Marks = {};
       for (const row of res.attendance) next[row.studentMemberId] = row.status;
+      if (sequence !== loadSequence.current) return;
       setSaved(next);
       setMarks(next);
       setCanEdit(res.canEdit);
-    } catch (e) {
-      setError(e instanceof ApiError ? "Could not load attendance" : "Could not load attendance");
+    } catch {
+      if (sequence !== loadSequence.current) return;
+      setError("Could not load attendance");
     } finally {
-      setLoading(false);
+      if (sequence === loadSequence.current) setLoading(false);
     }
   }, [classId, day]);
 

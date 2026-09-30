@@ -337,8 +337,9 @@ export function LandingPage() {
                     Self-hosted means self-hosted
                   </strong>
                   <p className="mt-1.5 text-sm leading-relaxed text-[var(--color-text-muted)]">
-                    Run Domi Ops on your own server and the data never leaves it: no phone-home
-                    telemetry, no vendor holding your family's calendar hostage. We built the hosted
+                    Run Domi Ops on your own server and your data stays there unless you turn on an
+                    integration like Google sync. Telemetry is off unless you opt in, and no vendor
+                    holds your family's calendar hostage. We built the hosted
                     version because setting up a VPS isn't for everyone, not because self-hosting is
                     a second-class option.
                   </p>

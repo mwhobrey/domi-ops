@@ -36,7 +36,7 @@ export function SchoolClassDetailsCard({
 
   async function saveMeta() {
     const credits = Number(metaCredits);
-    if (!Number.isFinite(credits) || credits < 0 || credits > 10) {
+    if (metaCredits.trim() === "" || !Number.isFinite(credits) || credits < 0 || credits > 10) {
       setError("Credits must be between 0 and 10");
       return;
     }
