@@ -35,6 +35,13 @@ export const MARKETING_SCREENSHOTS = {
     width: 1280,
     height: 800,
   },
+  schoolMobile: {
+    priority: "p1",
+    id: "school",
+    suffix: "mobile",
+    width: 390,
+    height: 844,
+  },
   schoolGradebook: {
     priority: "p1",
     id: "school-gradebook",

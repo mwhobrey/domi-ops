@@ -38,6 +38,12 @@ export function MarketingShell({
                 Docs (coming soon)
               </span>
             )}
+            <LinkButton href="/homeschool" variant="ghost" size="sm" className="hidden md:inline-flex">
+              Homeschool
+            </LinkButton>
+            <LinkButton href="/health" variant="ghost" size="sm" className="hidden md:inline-flex">
+              Health
+            </LinkButton>
             <LinkButton href="/faq" variant="ghost" size="sm" className="hidden sm:inline-flex">
               FAQ
             </LinkButton>
