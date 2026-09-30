@@ -44,6 +44,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Fixed
 
+- **Docker image publishing works with Node 24 again** (WHO-351). Restored two missing optional
+  dependency entries in the lockfile that npm 11 requires; Node 22 CI had accepted the incomplete
+  lockfile. CI now builds all five production Docker images before merge.
+
 - **Class roster no longer shows the wrong enrollment date** (WHO-349). A student enrolled late in
   the evening could show "Enrolled Sep 30" briefly and then "Sep 29" (or make the page redraw
   itself), because the date was read in the server's timezone instead of your household's. It now
