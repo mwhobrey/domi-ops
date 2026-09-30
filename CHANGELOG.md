@@ -24,6 +24,13 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
   with your own cutoffs, labels, GPA points, and the percent that earns credit. The transcript
   prints the scale it used. *(requires `npm run db:migrate` (`0080`-`0082`))*
 
+### Fixed
+
+- **A tab left open no longer shows stale data** (WHO-348). Come back to a tab after a minute or
+  more and the page re-fetches and redraws with current data, so changes from another device or
+  family member appear without a manual reload. It holds off while a dialog is open or something
+  is half-typed, and never runs on the in-app test taker or editor.
+
 ## [0.4.0] - 2026-09-29
 
 ### Added

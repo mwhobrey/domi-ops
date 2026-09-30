@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { LayoutGrid, Menu } from "lucide-react";
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { filterVisibleNav } from "../lib/app-nav";
 import { cn } from "../lib/cn";
 import { authClient } from "../lib/auth-client";
+import { useRefreshOnReturn } from "../lib/use-refresh-on-return";
 import { NoticeBoardActions } from "./NoticeBoard";
 import { Avatar } from "./ui/Avatar";
 import { Drawer } from "./ui/Drawer";
@@ -81,6 +82,7 @@ export function AppChrome({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const contentKey = useRefreshOnReturn();
   const [menuOpen, setMenuOpen] = useState(false);
   const [modulesOpen, setModulesOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
@@ -365,7 +367,7 @@ export function AppChrome({
       <main className="mx-auto max-w-6xl px-4 py-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
         <DemoModeBanner />
         {user && <ProfileOnboardingBanner name={user.name} memberId={user.memberId} />}
-        {children}
+        <Fragment key={contentKey}>{children}</Fragment>
       </main>
     </div>
   );
