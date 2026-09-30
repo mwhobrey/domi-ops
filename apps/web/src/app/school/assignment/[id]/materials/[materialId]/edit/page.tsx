@@ -67,19 +67,21 @@ export default async function SchoolTestEditPage({
           {loadError}. <a href={`/school/assignment/${assignmentId}`}>Back to assignment</a>
         </Alert>
       ) : material && access ? (
-        <SchoolTestEditorClient
-          assignmentId={assignmentId}
-          materialId={materialId}
-          assignmentTitle={assignmentTitle}
-          classId={classId}
-          className={className}
-          initialDisplayName={material.displayName}
-          initialPointsMode={
-            (material.nativeTestPointsMode as SchoolNativeTestPointsMode | undefined) ?? "explicit"
-          }
-          assignmentPointsPossible={pointsPossible}
-          frozen={Boolean(material.frozenAt)}
-        />
+        <div data-no-auto-refresh>
+          <SchoolTestEditorClient
+            assignmentId={assignmentId}
+            materialId={materialId}
+            assignmentTitle={assignmentTitle}
+            classId={classId}
+            className={className}
+            initialDisplayName={material.displayName}
+            initialPointsMode={
+              (material.nativeTestPointsMode as SchoolNativeTestPointsMode | undefined) ?? "explicit"
+            }
+            assignmentPointsPossible={pointsPossible}
+            frozen={Boolean(material.frozenAt)}
+          />
+        </div>
       ) : (
         <Alert variant="error">Could not open this in-app test.</Alert>
       )}

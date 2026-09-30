@@ -67,13 +67,15 @@ export default async function SchoolTestTakePage({
           {loadError}. <a href={`/school/assignment/${assignmentId}`}>Back to assignment</a>
         </Alert>
       ) : material && access ? (
-        <SchoolTestTakerClient
-          assignmentId={assignmentId}
-          materialId={materialId}
-          assignmentTitle={assignmentTitle}
-          classId={classId}
-          className={className}
-        />
+        <div data-no-auto-refresh>
+          <SchoolTestTakerClient
+            assignmentId={assignmentId}
+            materialId={materialId}
+            assignmentTitle={assignmentTitle}
+            classId={classId}
+            className={className}
+          />
+        </div>
       ) : (
         <Alert variant="error">Could not open this test.</Alert>
       )}
