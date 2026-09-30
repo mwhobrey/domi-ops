@@ -379,7 +379,14 @@ export function schoolClassesRoutes(db: Database, env: Env) {
       teacherMemberId?: string;
       scheduleJson?: string;
       archived?: boolean;
+      credits?: number;
     }>();
+    if (
+      body.credits !== undefined &&
+      !(typeof body.credits === "number" && Number.isFinite(body.credits) && body.credits >= 0 && body.credits <= 10)
+    ) {
+      return c.json({ error: "invalid_credits" }, 400);
+    }
     const patch: Record<string, unknown> = { updatedAt: new Date() };
     if (body.name !== undefined) patch.name = body.name;
     if (body.subject !== undefined) patch.subject = body.subject;
@@ -387,6 +394,7 @@ export function schoolClassesRoutes(db: Database, env: Env) {
     if (body.teacherMemberId !== undefined) patch.teacherMemberId = body.teacherMemberId;
     if (body.scheduleJson !== undefined) patch.scheduleJson = body.scheduleJson;
     if (body.archived !== undefined) patch.archived = body.archived;
+    if (body.credits !== undefined) patch.credits = body.credits;
     const [row] = await db
       .update(schoolClasses)
       .set(patch)
