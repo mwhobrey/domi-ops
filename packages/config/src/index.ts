@@ -55,6 +55,8 @@ export const envSchema = z
     S3_ACCESS_KEY: z.string().optional(),
     S3_SECRET_KEY: z.string().optional(),
     S3_BUCKET: z.string().default("domi-ops"),
+    /** MyAllyFile functions base URL (ADR 006). Unset on hosted = production; set on self-host/dev to opt in. */
+    MYALLYFILE_API_BASE: z.string().url().optional(),
     S3_FORCE_PATH_STYLE: z
       .string()
       .optional()
@@ -236,6 +238,16 @@ export function deployAvailableModules(envModules: readonly string[]): string[] 
 
 export function isHostedDeployment(env: Pick<Env, "DEPLOYMENT_MODE">): boolean {
   return env.DEPLOYMENT_MODE === "shared" || env.DEPLOYMENT_MODE === "dedicated";
+}
+
+const MYALLYFILE_PROD_BASE = "https://us-central1-myallyfile.cloudfunctions.net";
+
+/** MyAllyFile med sync (ADR 006): on for hosted by default, or anywhere MYALLYFILE_API_BASE is set. */
+export function myallyfileApiBase(
+  env: Pick<Env, "DEPLOYMENT_MODE" | "MYALLYFILE_API_BASE">,
+): string | null {
+  if (env.MYALLYFILE_API_BASE) return env.MYALLYFILE_API_BASE.replace(/\/+$/, "");
+  return isHostedDeployment(env) ? MYALLYFILE_PROD_BASE : null;
 }
 
 /** Settings toggle ceiling: deploy catalog ∩ subscription entitlements (hosted) or deploy only (self-host). */

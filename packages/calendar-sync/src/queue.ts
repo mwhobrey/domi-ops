@@ -126,3 +126,17 @@ export async function ensureHealthMedReminderScheduler(redisUrl: string): Promis
     },
   );
 }
+
+/** MyAllyFile med sync push (WHO-363): every 30s; per-link debounce lives in the scan. */
+export async function ensureMyallyfileSyncScheduler(redisUrl: string): Promise<void> {
+  const q = getSyncQueue(redisUrl);
+  await q.upsertJobScheduler(
+    "myallyfile-sync-scan",
+    { every: 30 * 1000 },
+    {
+      name: "myallyfile.sync.scan",
+      data: { name: "myallyfile.sync.scan", payload: { householdId: "scan" } },
+      opts: { removeOnComplete: 20, removeOnFail: 20 },
+    },
+  );
+}

@@ -15,6 +15,7 @@ import {
   ensureChoreDigestScheduler,
   ensureDriveQuotaScheduler,
   ensureHealthMedReminderScheduler,
+  ensureMyallyfileSyncScheduler,
 } from "@domi-ops/calendar-sync";
 
 const env = loadEnv();
@@ -30,6 +31,7 @@ const CROSS_TENANT_SCAN_JOBS = new Set<SyncJobName>([
   "chore.digest.scan",
   "drive.quota.scan",
   "health.med.reminder.scan",
+  "myallyfile.sync.scan",
 ]);
 
 const worker = new Worker<{ name: SyncJobName; payload: SyncJobPayload }>(
@@ -95,6 +97,10 @@ void ensureDriveQuotaScheduler(redisUrl).catch((err) => {
 
 void ensureHealthMedReminderScheduler(redisUrl).catch((err) => {
   console.error("Failed to schedule health med reminder scan", err);
+});
+
+void ensureMyallyfileSyncScheduler(redisUrl).catch((err) => {
+  console.error("Failed to schedule MyAllyFile sync scan", err);
 });
 
 console.log(`domi-ops worker listening on queue ${SYNC_QUEUE}`);
