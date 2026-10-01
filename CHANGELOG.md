@@ -8,6 +8,8 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-10-01
+
 ### Changed
 
 - **MyAllyFile sync moved to Settings and now covers every medication** (WHO-364). The link card
