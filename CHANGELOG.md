@@ -19,6 +19,8 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
   `MYALLYFILE_API_BASE`. **Migration `0083`** adds `health_myallyfile_links` and
   `health_medication_myallyfile_sync`. Design: [ADR 006](docs/adr/006-myallyfile-med-sync.md).
 
+## [0.5.1] - 2026-10-01
+
 ### Fixed
 
 - School → Due this week / Overdue showed due dates in UTC for students and other members
