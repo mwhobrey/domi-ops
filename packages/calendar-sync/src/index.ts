@@ -17,7 +17,8 @@ export type SyncJobName =
   | "school.reminder.scan"
   | "chore.digest.scan"
   | "drive.quota.scan"
-  | "health.med.reminder.scan";
+  | "health.med.reminder.scan"
+  | "myallyfile.sync.scan";
 
 export interface SyncJobPayload {
   householdId: string;
@@ -37,6 +38,7 @@ export {
   ensureChoreDigestScheduler,
   ensureDriveQuotaScheduler,
   ensureHealthMedReminderScheduler,
+  ensureMyallyfileSyncScheduler,
 } from "./queue.js";
 export { runCalendarSyncJob, syncConnection, pullLinkedCalendar } from "./sync.js";
 export { eventToFields, eventToGoogleBody, inferSourceCategory } from "./mapper.js";
@@ -66,6 +68,21 @@ export {
 } from "./med-interval-schedule.js";
 export { scanSchoolReminders } from "./school-reminder-scan.js";
 export { scanHealthMedReminders } from "./health-med-reminder-scan.js";
+export {
+  MyallyfileError,
+  MYALLYFILE_MAX_MEDICATIONS,
+  buildMedSnapshot,
+  decryptMyallyfileSecret,
+  encryptMyallyfileSecret,
+  markMyallyfileSyncNeeded,
+  myallyfileExchangeLinkCode,
+  myallyfileRevokeLink,
+  scanMyallyfileSync,
+  shapeSnapshot,
+  snapshotHash,
+  type MyallyfileErrorCode,
+  type SnapshotMedication,
+} from "./myallyfile-sync.js";
 export { checkHouseholdBudgetAlerts, scanBudgetAlerts } from "./budget-alert-scan.js";
 export {
   inferGoogleCategories,

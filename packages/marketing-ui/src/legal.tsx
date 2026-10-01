@@ -208,6 +208,17 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
           private health data. Domi Ops is not a healthcare provider and is{" "}
           <strong className="text-[var(--color-text)]">not HIPAA-compliant</strong>.
         </p>
+        <p>
+          <strong className="text-[var(--color-text)]">MyAllyFile (optional).</strong> If you link a
+          household member to a MyAllyFile profile, Domi Ops sends that profile the name, dose,
+          instructions, schedule type, and paused status of the medications you select, and sends an
+          update whenever they change. Nothing is sent until you link and select medications, and
+          nothing is read back. Anyone with that profile&apos;s emergency PIN can see the synced
+          medications, as with any MyAllyFile profile data. The link is stored as an encrypted
+          credential that you can revoke from either product; unlinking removes the synced
+          medications from the MyAllyFile profile. MyAllyFile is a separate service with its own
+          privacy policy.
+        </p>
       </section>
 
       <section>

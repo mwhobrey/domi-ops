@@ -46,7 +46,7 @@ import {
   validateHealthShareMemberIds,
   type HealthAclGrants,
 } from "../lib/health-access.js";
-import { addDaysIso, todayIsoDateInTz, zonedLocalToUtc, formatTimeLabelInTz, resolveAlertTimeZone, nextIntervalPending, parseIntervalSchedule, intervalSlotShiftsForEdit, localDateOfInstant, localTimeHhmm } from "@domi-ops/calendar-sync";
+import { addDaysIso, todayIsoDateInTz, zonedLocalToUtc, formatTimeLabelInTz, resolveAlertTimeZone, nextIntervalPending, parseIntervalSchedule, intervalSlotShiftsForEdit, localDateOfInstant, localTimeHhmm, markMyallyfileSyncNeeded } from "@domi-ops/calendar-sync";
 import {
   encryptHealthTextFields,
   enrichHealthEvents,
@@ -1357,6 +1357,9 @@ export function householdHealthRoutes(db: Database, env: Env) {
         .where(eq(healthMedications.id, id))
         .returning();
       await recordMedicationEnabledChange(db, row.id, existing.enabled, row.enabled);
+      // MyAllyFile med sync (ADR 006): flag the link(s); a no-op unless the member is linked.
+      await markMyallyfileSyncNeeded(db, row.memberId);
+      if (existing.memberId !== row.memberId) await markMyallyfileSyncNeeded(db, existing.memberId);
 
       if (body.sharedMemberIds !== undefined && row.visibility === "private") {
         const sharedMemberIds = await validateHealthShareMemberIds(
@@ -1423,6 +1426,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
       .set({ deletedAt: now, enabled: false, updatedAt: now })
       .where(eq(healthMedications.id, id));
     await removeMedicationFromAllGroups(db, id);
+    await markMyallyfileSyncNeeded(db, existing.memberId);
     return c.json({ ok: true });
   });
 

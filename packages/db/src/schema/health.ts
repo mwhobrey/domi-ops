@@ -451,3 +451,70 @@ export const healthMedGroupReminderSent = pgTable(
       .where(sql`${t.subscriptionId} is null`),
   ],
 );
+
+/**
+ * Link state for the MyAllyFile medication sync (WHO-356, ADR 006).
+ * `active` syncs; `entitlement_required` = the MyAllyFile owner is not on Plus/Pro; `revoked` =
+ * token rejected or unlinked from the MyAllyFile side; `error` = profile gone or payload rejected.
+ */
+export const myallyfileLinkStatusEnum = pgEnum("myallyfile_link_status", [
+  "active",
+  "entitlement_required",
+  "revoked",
+  "error",
+]);
+
+/**
+ * One MyAllyFile profile linked to one Domi Ops member. `tokenEncrypted` and `profileName` are
+ * encrypted text (health-crypto convention); the token is never returned by the API.
+ *
+ * The sync outbox lives on this row: `syncRequestedAt` is set whenever something that feeds the
+ * snapshot changes, and the worker clears it after a successful push. `nextAttemptAt` and
+ * `attempts` drive retry backoff. `lastSnapshotHash` lets the worker skip an unchanged snapshot.
+ */
+export const healthMyallyfileLinks = pgTable(
+  "health_myallyfile_links",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    householdId: uuid("household_id")
+      .notNull()
+      .references(() => households.id, { onDelete: "cascade" }),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => householdMembers.id, { onDelete: "cascade" }),
+    myallyfileProfileId: text("myallyfile_profile_id").notNull(),
+    profileName: text("profile_name"),
+    instanceLabel: text("instance_label"),
+    tokenEncrypted: text("token_encrypted").notNull(),
+    status: myallyfileLinkStatusEnum("status").notNull().default("active"),
+    includePrn: boolean("include_prn").notNull().default(false),
+    includeOtc: boolean("include_otc").notNull().default(false),
+    includePaused: boolean("include_paused").notNull().default(true),
+    linkedByUserId: uuid("linked_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    linkedAt: timestamp("linked_at", { withTimezone: true }).notNull().defaultNow(),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+    lastError: text("last_error"),
+    lastSnapshotHash: text("last_snapshot_hash"),
+    syncRequestedAt: timestamp("sync_requested_at", { withTimezone: true }),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
+    attempts: integer("attempts").notNull().default(0),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // One link per member: a member maps to a single MyAllyFile profile.
+    uniqueIndex("health_myallyfile_links_member_unique").on(t.memberId),
+    index("health_myallyfile_links_pending_idx")
+      .on(t.syncRequestedAt)
+      .where(sql`${t.syncRequestedAt} is not null`),
+  ],
+);
+
+/** Per-medication opt-in: a medication syncs to MyAllyFile only if it has a row here. */
+export const healthMedicationMyallyfileSync = pgTable("health_medication_myallyfile_sync", {
+  medicationId: uuid("medication_id")
+    .primaryKey()
+    .references(() => healthMedications.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});

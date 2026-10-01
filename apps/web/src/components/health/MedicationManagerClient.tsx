@@ -7,6 +7,7 @@ import type { NoteShareMember } from "../NoteSharePicker";
 import { NoteSharePicker } from "../NoteSharePicker";
 import type { HealthAclGrants } from "../HealthPeopleAccessPanel";
 import { HealthMedicationSheet } from "./HealthMedicationSheet";
+import { MyAllyFilePanel } from "./MyAllyFilePanel";
 import { isAsNeededMedScheduleKind, memberLabel, resolveDefaultMemberId, scheduleKindLabel } from "./health-helpers";
 import type { HealthMedication } from "./health-types";
 import {
@@ -703,6 +704,13 @@ export function MedicationManagerClient({
               )}
             </CardBody>
           </Card>
+
+          <MyAllyFilePanel
+            memberId={selectedMemberId}
+            memberName={memberLabel(members, selectedMemberId)}
+            medications={memberMeds}
+            canWrite={canWriteSelected}
+          />
         </>
       )}
 
