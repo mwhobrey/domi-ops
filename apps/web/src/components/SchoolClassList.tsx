@@ -22,6 +22,7 @@ interface SchoolGlance {
   classCount: number;
   dueSoon: number;
   overdue: number;
+  toGrade: number;
 }
 
 export function SchoolClassList({
@@ -43,6 +44,7 @@ export function SchoolClassList({
   const isStudent = context?.viewMode === "student";
   const isObserver = context?.viewMode === "observer";
   const canCreate = context?.canCreateClass ?? true;
+  const canGrade = context?.viewMode === "admin" || context?.viewMode === "staff";
   const statLabels = isStudent
     ? { due: "Due this week", overdue: "Overdue" }
     : { due: "Due this week", overdue: "Overdue" };
@@ -62,7 +64,15 @@ export function SchoolClassList({
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="grid flex-1 gap-3 sm:grid-cols-2">
+        <div className={`grid flex-1 gap-3 ${canGrade ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
+          {canGrade ? (
+            <StatTile
+              label="To grade"
+              value={glance.toGrade}
+              href="/school/grading"
+              tone={glance.toGrade > 0 ? "warning" : "success"}
+            />
+          ) : null}
           <StatTile
             label={statLabels.due}
             value={glance.dueSoon}

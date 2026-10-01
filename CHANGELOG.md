@@ -10,6 +10,12 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Added
 
+- **Grading queue and submission alerts for teachers.** A new **To grade** page under School lists
+  every turned-in assignment still waiting on a grade, across all the classes you teach (or all
+  classes, for household admins), oldest first, with late and resubmitted flags. The School
+  landing page has a matching **To grade** tile. Teachers, parents and aides on a class also get a
+  notification when a student turns work in (resubmits notify again). It follows the existing
+  school push setting under Profile.
 - **Homeschool records: school days, hours, and transcripts** (WHO-347). A new **Records** page
   under School is built for how homeschool actually works: no roll call. Tap the days school
   happened on a calendar (or "Today was a school day" / "Mark this week"), for one student or all

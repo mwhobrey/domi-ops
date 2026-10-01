@@ -16,7 +16,7 @@ interface SchoolClass {
 
 export default async function SchoolPage() {
   let classes: SchoolClass[] = [];
-  let glance = { classCount: 0, dueSoon: 0, overdue: 0 };
+  let glance = { classCount: 0, dueSoon: 0, overdue: 0, toGrade: 0 };
   let context: SchoolContext | null = null;
   let loadError: string | null = null;
   try {
@@ -26,6 +26,7 @@ export default async function SchoolPage() {
         classCount: number;
         dueSoon: number;
         overdue: number;
+        toGrade?: number;
         enabled?: boolean;
         context?: SchoolContext | null;
       }>("/api/school/glance"),
@@ -37,6 +38,7 @@ export default async function SchoolPage() {
         classCount: glanceRes.classCount,
         dueSoon: glanceRes.dueSoon,
         overdue: glanceRes.overdue,
+        toGrade: glanceRes.toGrade ?? 0,
       };
       if (!context && glanceRes.context) context = glanceRes.context;
     }
