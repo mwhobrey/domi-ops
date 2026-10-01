@@ -89,6 +89,14 @@ export function MyAllyFilePanel({
     void load();
   }, [load]);
 
+  // The push happens in the worker, so while one is pending re-read the status until it settles.
+  const pending = state?.links.some((l) => l.memberId === memberId && l.syncPending) ?? false;
+  useEffect(() => {
+    if (!pending) return;
+    const timer = setTimeout(() => void load(), 5000);
+    return () => clearTimeout(timer);
+  }, [pending, state, load]);
+
   async function run(action: () => Promise<unknown>) {
     setBusy(true);
     setError(null);
