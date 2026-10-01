@@ -49,7 +49,7 @@ export default function HealthPage() {
         },
         {
           title: "Keeps an emergency profile current",
-          body: "Link a member to their MyAllyFile profile and the medications you pick are copied there whenever they change, so the QR code on the fridge or the keychain never lists last month's pills. It only goes one way, you choose which medications go, and it needs a MyAllyFile Plus or Pro plan.",
+          body: "Link a member to their MyAllyFile profile and their current medications are copied there whenever they change, so the QR code on the fridge or the keychain never lists last month's pills. It only goes one way, you link it on purpose from Settings, and it needs a MyAllyFile Plus or Pro plan.",
         },
         {
           title: "On the household calendar",

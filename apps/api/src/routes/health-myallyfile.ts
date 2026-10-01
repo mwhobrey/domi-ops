@@ -10,17 +10,13 @@ import {
   myallyfileRevokeLink,
 } from "@domi-ops/calendar-sync";
 import type { Database } from "@domi-ops/db";
-import {
-  healthMedicationMyallyfileSync,
-  healthMedications,
-  healthMyallyfileLinks,
-} from "@domi-ops/db";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { healthMyallyfileLinks } from "@domi-ops/db";
+import { and, eq, inArray } from "drizzle-orm";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireHouseholdModule } from "../lib/household-modules.js";
 import { decryptHealthFieldOrPassthrough, encryptHealthField } from "../lib/health-crypto.js";
-import { hasHealthSegmentAccess, healthMedicationVisibleWhere } from "../lib/health-access.js";
+import { hasHealthSegmentAccess } from "../lib/health-access.js";
 
 /** Crockford base32 without I, L, O, U (MyAllyFile link codes: XXXX-XXXX). */
 const LINK_CODE_RE = /^[0-9A-HJKMNP-TV-Z]{8}$/;
@@ -67,7 +63,7 @@ export function healthMyallyfileRoutes(db: Database, env: Env) {
   /** Links the caller may see (medications read), plus which visible meds are opted in. */
   app.get("/", async (c) => {
     const auth = c.get("auth")!;
-    if (!enabled()) return c.json({ enabled: false, links: [], syncedMedicationIds: [] });
+    if (!enabled()) return c.json({ enabled: false, links: [] });
 
     const rows = await db
       .select()
@@ -80,12 +76,7 @@ export function healthMyallyfileRoutes(db: Database, env: Env) {
       }
     }
 
-    const synced = await db
-      .select({ id: healthMedicationMyallyfileSync.medicationId })
-      .from(healthMedicationMyallyfileSync)
-      .innerJoin(healthMedications, eq(healthMedications.id, healthMedicationMyallyfileSync.medicationId))
-      .where(and(healthMedicationVisibleWhere(db, auth), isNull(healthMedications.deletedAt)));
-    return c.json({ enabled: true, links, syncedMedicationIds: synced.map((r) => r.id) });
+    return c.json({ enabled: true, links });
   });
 
   app.post("/links", async (c) => {
@@ -139,8 +130,9 @@ export function healthMyallyfileRoutes(db: Database, env: Env) {
         profileName: encryptHealthField(linked.profileName, env),
         instanceLabel: instanceLabel(env),
         tokenEncrypted: encryptMyallyfileSecret(linked.token, env),
-        includePrn: body.includePrn === true,
-        includeOtc: body.includeOtc === true,
+        // As-needed and OTC meds matter to a responder, so they're on unless switched off.
+        includePrn: body.includePrn !== false,
+        includeOtc: body.includeOtc !== false,
         includePaused: body.includePaused !== false,
         linkedByUserId: auth.userId,
         // First push goes out on the next scan, even if no meds are opted in yet (clears any
@@ -243,41 +235,6 @@ export function healthMyallyfileRoutes(db: Database, env: Env) {
     }
     await db.delete(healthMyallyfileLinks).where(eq(healthMyallyfileLinks.id, row.id));
     return c.json({ ok: true, revokedRemotely: revoked });
-  });
-
-  /** Opt a medication in or out of syncing. Needs medications write on the med's member. */
-  app.put("/medications/:id", async (c) => {
-    const auth = c.get("auth")!;
-    if (!enabled()) return c.json({ error: "not_available" }, 404);
-    const id = c.req.param("id");
-    const body = await c.req.json<{ sync?: boolean }>().catch(() => ({}) as { sync?: boolean });
-    if (typeof body.sync !== "boolean") return c.json({ error: "invalid_body" }, 400);
-
-    const [med] = await db
-      .select()
-      .from(healthMedications)
-      .where(
-        and(
-          eq(healthMedications.id, id),
-          eq(healthMedications.householdId, auth.householdId),
-          isNull(healthMedications.deletedAt),
-        ),
-      )
-      .limit(1);
-    if (!med) return c.json({ error: "not_found" }, 404);
-    if (!(await hasHealthSegmentAccess(db, auth, med.memberId, "medications", "write"))) {
-      return c.json({ error: "forbidden" }, 403);
-    }
-
-    if (body.sync) {
-      await db.insert(healthMedicationMyallyfileSync).values({ medicationId: id }).onConflictDoNothing();
-    } else {
-      await db
-        .delete(healthMedicationMyallyfileSync)
-        .where(eq(healthMedicationMyallyfileSync.medicationId, id));
-    }
-    await markMyallyfileSyncNeeded(db, med.memberId);
-    return c.json({ ok: true, sync: body.sync });
   });
 
   return app;
