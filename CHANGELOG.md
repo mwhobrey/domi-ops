@@ -8,6 +8,8 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-01
+
 ### Added
 
 - **Keep a MyAllyFile emergency profile in sync with your medications** (WHO-356, 357, 359, 363).
