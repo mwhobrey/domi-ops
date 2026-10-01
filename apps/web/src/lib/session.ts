@@ -3,6 +3,8 @@ export type AuthSessionResponse = {
   authenticated?: boolean;
   modulesEnabled?: string[];
   telemetryOptIn?: boolean;
+  /** Readable by every member, unlike `GET /api/core/household/settings` (admin-only). */
+  householdTimezone?: string;
   user?: {
     email?: string | null;
     username?: string | null;

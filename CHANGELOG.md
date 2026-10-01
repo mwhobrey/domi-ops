@@ -8,6 +8,14 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+### Fixed
+
+- School → Due this week / Overdue showed due dates in UTC for students and other members
+  who aren't household admins (a 10:30 PM Sunday deadline in Chicago read as 3:30 AM Monday).
+  They now use the household's time zone for everyone, as does the Health page (WHO-343).
+- Drive: on a self-hosted install with `DRIVE_PUBLIC_SHARES_ENABLED=false`, members who aren't
+  admins still saw a share-link button that failed. It's now hidden for everyone (WHO-343).
+
 ## [0.5.0] - 2026-09-30
 
 ### Added

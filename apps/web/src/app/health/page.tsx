@@ -25,16 +25,13 @@ export default async function HealthPage({
   let loadError: string | null = null;
 
   try {
-    const [rosterData, session, settings] = await Promise.all([
+    const [rosterData, session] = await Promise.all([
       apiFetch<{ members: NoteShareMember[] }>("/api/core/household/roster"),
       apiFetch<AuthSessionResponse>("/auth/session"),
-      apiFetch<{ timezone?: string }>("/api/core/household/settings").catch(
-        () => ({ timezone: undefined }),
-      ),
     ]);
     members = rosterData.members ?? [];
     currentMemberId = sessionMemberId(session);
-    householdTimezone = settings.timezone?.trim() || "UTC";
+    householdTimezone = session.householdTimezone?.trim() || "UTC";
   } catch {
     loadError = "Could not load household roster.";
   }
