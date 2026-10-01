@@ -153,4 +153,14 @@ jobs:
             set -euo pipefail
             cd ~/domi-ops
             export DOMI_OPS_IMAGE_TAG='${{ steps.image.outputs.tag }}'
-            bash deploy/deploy-hosted.sh
+            # The admin DB URL lives only on the droplet, never in GitHub. A non-interactive SSH
+            # shell returns early from most ~/.bashrc files, so pull the export line out directly.
+            admin_line="$(grep -E '^[[:space:]]*export[[:space:]]+DATABASE_URL_ADMIN=' ~/.bashrc | tail -n1 || true)"
+            if [[ -z "$admin_line" ]]; then
+              echo "::error::No 'export DATABASE_URL_ADMIN=...' line in ~/.bashrc on the droplet; nothing was touched. See deploy/HOSTED_OPS.md."
+              exit 1
+            fi
+            eval "$admin_line"
+            # Applies pending migrations (admin connection), re-grants domi_ops_app, then deploys.
+            # A no-op when nothing is pending.
+            bash deploy/deploy-hosted.sh --migrate

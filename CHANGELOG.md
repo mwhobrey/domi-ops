@@ -32,6 +32,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Changed
 
+- **Hosted releases now apply database migrations automatically** (WHO-354). The tag-triggered
+  deploy runs `deploy-hosted.sh --migrate`, reading the admin database URL from the droplet's
+  `~/.bashrc` (it is never stored in GitHub). If a migration fails, the old containers keep running.
+  Self-hosters are unaffected: the API image still migrates on boot.
 - **Founder teaser on the landing page** (WHO-350): a short "Built by a homeschooling family" section
   with a photo and a link to the Our story page.
 - **Marketing site now leads with homeschool and health** (WHO-346): new hero ("The household hub
