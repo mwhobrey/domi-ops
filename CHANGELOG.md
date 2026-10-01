@@ -8,6 +8,8 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-30
+
 ### Added
 
 - **Grading queue and submission alerts for teachers.** A new **To grade** page under School lists
