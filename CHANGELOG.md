@@ -8,6 +8,8 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-01
+
 ### Fixed
 
 - School → Due this week / Overdue showed due dates in UTC for students and other members
