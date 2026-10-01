@@ -25,14 +25,15 @@ async function DrivePageContent() {
         apiFetch<AuthSessionResponse>("/auth/session"),
         apiFetch<{ write?: boolean; publicSharesEnabled?: boolean }>(
           "/api/core/drive/access",
-        ).catch(() => ({ write: true, publicSharesEnabled: true })),
+        ).catch(() => ({ write: true, publicSharesEnabled: false })),
       ]);
     objects = objectsRes.objects;
     folders = foldersRes.folders;
     members = rosterRes.members;
     currentMemberId = sessionMemberId(sessionRes);
     canWrite = accessRes.write !== false;
-    publicSharesEnabled = accessRes.publicSharesEnabled !== false;
+    // Fail closed: a Share button that 403s is worse than a briefly missing one.
+    publicSharesEnabled = accessRes.publicSharesEnabled === true;
   } catch (e) {
     loadError = e instanceof Error ? e.message : "Could not load Drive";
   }

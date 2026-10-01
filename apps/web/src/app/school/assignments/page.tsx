@@ -40,7 +40,8 @@ export default async function SchoolAssignmentsPage({
         assignments: SchoolAssignmentSummary[];
         context: SchoolContext;
       }>(`/api/school/assignments?filter=${filter}`),
-      apiFetch<AuthSessionResponse>("/auth/session"),
+      // Only supplies the display time zone here, so a failure falls back to UTC, not an error page.
+      apiFetch<AuthSessionResponse>("/auth/session").catch(() => ({}) as AuthSessionResponse),
     ]);
     assignments = data.assignments;
     context = data.context;
