@@ -22,6 +22,7 @@ import {
   resolveClassAccess,
   visibleClassIdsForMember,
 } from "../lib/school-access.js";
+import { notifyTeachersOfSubmission } from "../lib/push-school.js";
 import { canSubmitPastDue, isSubmissionLate } from "../lib/school-submission.js";
 import { freezeAssignmentTestMaterials } from "../lib/school-material-freeze.js";
 import { SchoolMaterialFreezeError } from "../lib/school-material-freeze-errors.js";
@@ -809,6 +810,32 @@ export function schoolAssignmentsRoutes(db: Database, env: Env) {
       .from(schoolGrades)
       .where(eq(schoolGrades.submissionId, submissionRow.id))
       .limit(1);
+
+    // Only once the turn-in has fully succeeded (a freeze failure above returns early and the
+    // student retries). Awaited so it finishes while the request is still open, but a
+    // notification failure must never fail the turn-in.
+    try {
+      const [student] = await db
+        .select({ name: householdMembers.name })
+        .from(householdMembers)
+        .where(eq(householdMembers.id, studentMemberId))
+        .limit(1);
+      await notifyTeachersOfSubmission(db, env, {
+        householdId: auth.householdId,
+        classId: cls.id,
+        teacherMemberId: cls.teacherMemberId,
+        className: cls.name,
+        assignmentId,
+        assignmentTitle: assignmentRow.title,
+        submissionId: submissionRow.id,
+        turnInCount: submissionRow.turnInCount,
+        studentMemberId,
+        studentLabel: memberShownLabel({ name: student?.name ?? null }),
+        isLate,
+      });
+    } catch (err) {
+      console.error("submission notification failed", err);
+    }
 
     return c.json({
       submission: freshSubmission ?? submissionRow,

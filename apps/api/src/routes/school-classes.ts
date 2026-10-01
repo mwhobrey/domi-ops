@@ -14,6 +14,7 @@ import {
 import { and, eq } from "drizzle-orm";
 import { resolveClassAccess, visibleClassIdsForMember } from "../lib/school-access.js";
 import { buildClassGradebook } from "../lib/school-gradebook.js";
+import { countGradingQueue, gradableClassIds, loadGradingQueue } from "../lib/school-grading-queue.js";
 import { listOpenWork, loadOpenWorkLists } from "../lib/school-open-work.js";
 import { buildSchoolReports, canViewSchoolReports } from "../lib/school-reports.js";
 import {
@@ -154,16 +155,63 @@ export function schoolClassesRoutes(db: Database, env: Env) {
       tone = "success";
     }
 
+    const toGrade = await countGradingQueue(db, {
+      householdId: auth.householdId,
+      classIds: gradableClassIds({
+        memberId: context.memberId,
+        householdRole: context.householdRole,
+        classes: allClassRows.map((r) => ({
+          id: r.id,
+          teacherMemberId: r.teacherMemberId,
+          archived: r.archived ?? false,
+        })),
+        enrollments,
+      }),
+    });
+
     return c.json({
       enabled: true,
       classCount,
       dueSoon,
       overdue,
+      toGrade,
       summary: { headline, tone },
       items,
       overflow,
       context,
     });
+  });
+
+  /** Everything turned in and not yet graded, across every class the viewer can grade. */
+  app.get("/grading", async (c) => {
+    const auth = c.get("auth")!;
+    if (!(await isHouseholdModuleEnabled(db, env, auth.householdId, "school"))) {
+      return c.json({ error: "school_disabled" }, 403);
+    }
+    const context = await schoolContextForAuth(db, auth);
+    if (!context) return c.json({ error: "not_a_member" }, 403);
+
+    const allClassRows = await db
+      .select({
+        id: schoolClasses.id,
+        teacherMemberId: schoolClasses.teacherMemberId,
+        archived: schoolClasses.archived,
+      })
+      .from(schoolClasses)
+      .where(eq(schoolClasses.householdId, auth.householdId));
+    const enrollments = await memberEnrollmentsForHousehold(db, auth.householdId, context.memberId);
+    const classIds = gradableClassIds({
+      memberId: context.memberId,
+      householdRole: context.householdRole,
+      classes: allClassRows.map((r) => ({
+        id: r.id,
+        teacherMemberId: r.teacherMemberId,
+        archived: r.archived ?? false,
+      })),
+      enrollments,
+    });
+    const submissions = await loadGradingQueue(db, { householdId: auth.householdId, classIds });
+    return c.json({ submissions, context });
   });
 
   app.get("/assignments", async (c) => {
