@@ -589,6 +589,13 @@
       "when": 1790500000000,
       "tag": "0083_myallyfile_med_sync",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1790600000000,
+      "tag": "0084_myallyfile_sync_all_meds",
+      "breakpoints": true
     }
   ]
 }

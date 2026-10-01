@@ -487,8 +487,8 @@ export const healthMyallyfileLinks = pgTable(
     instanceLabel: text("instance_label"),
     tokenEncrypted: text("token_encrypted").notNull(),
     status: myallyfileLinkStatusEnum("status").notNull().default("active"),
-    includePrn: boolean("include_prn").notNull().default(false),
-    includeOtc: boolean("include_otc").notNull().default(false),
+    includePrn: boolean("include_prn").notNull().default(true),
+    includeOtc: boolean("include_otc").notNull().default(true),
     includePaused: boolean("include_paused").notNull().default(true),
     linkedByUserId: uuid("linked_by_user_id").references(() => users.id, {
       onDelete: "set null",
@@ -511,10 +511,3 @@ export const healthMyallyfileLinks = pgTable(
   ],
 );
 
-/** Per-medication opt-in: a medication syncs to MyAllyFile only if it has a row here. */
-export const healthMedicationMyallyfileSync = pgTable("health_medication_myallyfile_sync", {
-  medicationId: uuid("medication_id")
-    .primaryKey()
-    .references(() => healthMedications.id, { onDelete: "cascade" }),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});

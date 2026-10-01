@@ -2,11 +2,7 @@ import { createHash } from "node:crypto";
 import { myallyfileApiBase, type Env } from "@domi-ops/config";
 import { decryptSensitive, encryptSensitive } from "@domi-ops/crypto";
 import type { Database } from "@domi-ops/db";
-import {
-  healthMedicationMyallyfileSync,
-  healthMedications,
-  healthMyallyfileLinks,
-} from "@domi-ops/db";
+import { healthMedications, healthMyallyfileLinks } from "@domi-ops/db";
 import { and, eq, isNotNull, isNull, lte, or } from "drizzle-orm";
 
 /**
@@ -203,7 +199,7 @@ export type SnapshotSourceRow = {
 
 export type SnapshotToggles = { includePrn: boolean; includeOtc: boolean; includePaused: boolean };
 
-/** Pure: rows the user opted in -> contract payload (filtered, decrypted, capped, ordered). */
+/** Pure: a member's medications -> contract payload (filtered, decrypted, capped, ordered). */
 export function shapeSnapshot(
   rows: SnapshotSourceRow[],
   toggles: SnapshotToggles,
@@ -248,8 +244,7 @@ export async function buildMedSnapshot(
       scheduleKind: healthMedications.scheduleKind,
       enabled: healthMedications.enabled,
     })
-    .from(healthMedicationMyallyfileSync)
-    .innerJoin(healthMedications, eq(healthMedications.id, healthMedicationMyallyfileSync.medicationId))
+    .from(healthMedications)
     .where(
       and(
         eq(healthMedications.householdId, link.householdId),

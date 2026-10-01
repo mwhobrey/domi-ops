@@ -8,6 +8,14 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+### Changed
+
+- **MyAllyFile sync moved to Settings and now covers every medication** (WHO-364). The link card
+  that was on the Medications tab now lives under **Settings** (and **Profile**, for your own),
+  one row per person you manage. Linking copies all of that person's current medications, with
+  switches for as-needed, over-the-counter and paused ones. The per-medication ticks are gone.
+  **Migration `0084`** (requires `npm run db:migrate`; no manual steps) drops the opt-in table.
+
 ## [0.6.0] - 2026-10-01
 
 ### Added

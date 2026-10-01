@@ -2,6 +2,7 @@ import { AccountSettingsNav } from "../../components/AccountSettingsNav";
 import { AppShell } from "../../components/AppShell";
 import { FeedbackCard } from "../../components/FeedbackCard";
 import { GlanceConfigCard, type GlanceTileOption } from "../../components/GlanceConfigCard";
+import { MyAllyFileSettings } from "../../components/MyAllyFileSettings";
 import { OnboardingReplayCard } from "../../components/OnboardingReplayCard";
 import { PendingTourRunner } from "../../components/PendingTourRunner";
 import { ProfileEditor } from "../../components/ProfileEditor";
@@ -114,6 +115,7 @@ export default async function ProfilePage() {
               modulesEnabled={modulesEnabled}
             />
             <GlanceConfigCard available={availableGlanceTiles} initialConfig={glanceConfig} />
+            <MyAllyFileSettings />
             <OnboardingReplayCard />
             <FeedbackCard
               endpoint={process.env.TELEMETRY_ENDPOINT ?? "https://app.domi-ops.com/api/telemetry"}

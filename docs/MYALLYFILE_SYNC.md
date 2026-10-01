@@ -5,9 +5,10 @@ Operator notes for the MyAllyFile integration. The design and the wire contract 
 
 ## What it does
 
-A household member can be linked to one MyAllyFile profile. The medications the user ticks are
-copied to that profile (name, dose, instructions, schedule type, paused) whenever they change.
-One way only. MyAllyFile checks the profile owner's plan on every sync (Plus or Pro).
+A household member can be linked to one MyAllyFile profile, from Settings (admins, any person they
+manage) or Profile (your own). All of that person's current medications are copied to the profile
+(name, dose, instructions, schedule type, paused) whenever they change. Switches cover as-needed,
+over-the-counter and paused meds. One way only. MyAllyFile checks the profile owner's plan on every sync (Plus or Pro).
 
 ## Turning it on
 

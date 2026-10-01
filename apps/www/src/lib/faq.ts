@@ -19,7 +19,7 @@ export const FAQ_ITEMS: FaqItem[] = [
   },
   {
     q: "Does Domi Ops work with MyAllyFile?",
-    a: "Yes, on Domi Ops Cloud. MyAllyFile is a separate emergency medical profile that first responders open with a QR code and PIN. Link a household member to their MyAllyFile profile and the medications you choose are copied across whenever they change, so the emergency profile doesn't go stale. It only goes one way, from Domi Ops to MyAllyFile, and nothing is read back. Unlinking removes the synced medications from the profile. Linking needs a MyAllyFile Plus or Pro plan.",
+    a: "Yes, on Domi Ops Cloud. MyAllyFile is a separate emergency medical profile that first responders open with a QR code and PIN. Link a household member to their MyAllyFile profile and all of their current medications are copied across whenever they change, so the emergency profile doesn't go stale. It only goes one way, from Domi Ops to MyAllyFile, and nothing is read back. Unlinking removes the synced medications from the profile. Linking needs a MyAllyFile Plus or Pro plan.",
   },
   {
     q: "Who can see and edit a family member's health records?",

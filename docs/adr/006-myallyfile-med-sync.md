@@ -27,8 +27,11 @@ MyAllyFile profile carries a derived snapshot. Nothing is read back.
   field and leaves hand-entered `currentMedications` alone.
 - **Per profile.** A link maps one Domi Ops member to one MyAllyFile profile (the primary
   profile or a dependent profile).
-- **Opt-in per medication.** Nothing syncs until the user picks it. `private` meds are never
-  auto-included.
+- **All of a person's medications.** Nothing syncs until the user links a member with a code.
+  After that every current (not deleted) medication of that member syncs, with category switches
+  for as-needed, over-the-counter and paused. There is no per-medication selection (revised
+  2026-10-01, WHO-364: picking some meds and not others made no sense for an emergency profile).
+  Linking lives in Settings (and Profile for your own), not on the Medications tab.
 
 ## Contract v1
 
@@ -114,8 +117,8 @@ from MyAllyFile. Either way MyAllyFile deletes the synced meds.
 
 - A link is created by the subject member, or a grantee with `medications_access = write` in
   `health_member_acl`.
-- Snapshot = the member's enabled, non-deleted, opted-in medications. Paused meds are included
-  with `paused: true`. PRN and OTC meds follow per-link toggles.
+- Snapshot = the member's non-deleted medications. Paused meds are included with `paused: true`
+  unless switched off. PRN and OTC meds follow per-link switches (both on by default).
 - Sync is asynchronous and never blocks or fails a medication write. Bursts are debounced and an
   unchanged snapshot is not re-sent.
 - Free-text fields are truncated to the contract caps before sending.
