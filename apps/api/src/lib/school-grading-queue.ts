@@ -80,7 +80,7 @@ export type GradingQueueItem = {
 /**
  * Turned-in work still waiting on a grade across `classIds`, oldest first. Auto-graded tests that
  * need no teacher input are already "graded" and never appear. Closed assignments stay on the
- * list: closing stops new turn-ins, it doesn't grade what's already in.
+ * list (closing stops new turn-ins, it doesn't grade what's already in); drafts never appear.
  */
 export async function loadGradingQueue(
   db: Database,
@@ -111,6 +111,7 @@ export async function loadGradingQueue(
       and(
         eq(schoolClasses.householdId, params.householdId),
         inArray(schoolClasses.id, params.classIds),
+        inArray(schoolAssignments.visibility, ["assigned", "closed"]),
         eq(schoolSubmissions.status, "submitted"),
       ),
     )
@@ -147,6 +148,7 @@ export async function countGradingQueue(
       and(
         eq(schoolClasses.householdId, params.householdId),
         inArray(schoolClasses.id, params.classIds),
+        inArray(schoolAssignments.visibility, ["assigned", "closed"]),
         eq(schoolSubmissions.status, "submitted"),
       ),
     );
