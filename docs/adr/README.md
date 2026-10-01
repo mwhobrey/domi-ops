@@ -7,5 +7,6 @@
 | [003](./003-hosted-db-architecture.md) | Hosted DB architecture (Starter RLS + Family routing) | Accepted |
 | [004](./004-school-native-test-builder.md) | School native in-app test builder (WHO-213) | Accepted |
 | [005](./005-mobile-distribution.md) | Mobile distribution (Capacitor 8 both stores, remote WebView; not TWA / not rewrite) | Accepted |
+| [006](./006-myallyfile-med-sync.md) | MyAllyFile medication sync (one-way, parallel field, gated by MyAllyFile plan) | Accepted |
 
 New ADRs: `NNN-short-title.md` — include status, date, context, decision, consequences. Link Linear issue when applicable.
