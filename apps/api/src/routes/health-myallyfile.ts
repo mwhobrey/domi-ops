@@ -123,6 +123,8 @@ export function healthMyallyfileRoutes(db: Database, env: Env) {
     } catch (e) {
       if (e instanceof MyallyfileError) {
         if (e.code === "code_invalid") return c.json({ error: "code_invalid" }, 422);
+        if (e.code === "entitlement_required") return c.json({ error: "entitlement_required" }, 402);
+        if (e.code === "profile_not_found") return c.json({ error: "profile_not_found" }, 404);
         return c.json({ error: "myallyfile_unavailable" }, 502);
       }
       throw e;

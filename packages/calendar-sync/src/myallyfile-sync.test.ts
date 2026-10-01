@@ -111,6 +111,18 @@ describe("MyAllyFile client", () => {
     });
   });
 
+  it("keeps entitlement and deleted-profile outcomes distinct on link exchange", async () => {
+    await expect(
+      myallyfileExchangeLinkCode(cfg, "ABCD1234", "Home", json(403, { ok: false, code: "entitlement_required" })),
+    ).rejects.toMatchObject({ code: "entitlement_required" });
+    await expect(
+      myallyfileExchangeLinkCode(cfg, "ABCD1234", "Home", json(404, { ok: false, code: "profile_not_found" })),
+    ).rejects.toMatchObject({ code: "profile_not_found" });
+    await expect(
+      myallyfileExchangeLinkCode(cfg, "ABCD1234", "Home", json(422, { ok: false, code: "validation_failed", field: "code" })),
+    ).rejects.toMatchObject({ code: "code_invalid" });
+  });
+
   it("refuses to run when sync is not enabled", async () => {
     await expect(
       myallyfileSyncMedications({ DEPLOYMENT_MODE: "single", MYALLYFILE_API_BASE: undefined }, "t", [], new Date(), json(200, {})),

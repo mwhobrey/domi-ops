@@ -115,6 +115,12 @@ async function callMyallyfile(
     });
   }
   if (fn === "exchangeLinkCode") {
+    // The code's owner can have downgraded, or the profile can have been deleted, since it was
+    // minted; those get their own states. Anything else (unknown, used, expired, malformed) is a
+    // bad code.
+    if (rawCode === "entitlement_required" || rawCode === "profile_not_found") {
+      throw new MyallyfileError(rawCode, rawCode, { status });
+    }
     throw new MyallyfileError("code_invalid", "Link code is invalid or expired", { status });
   }
   const code = (KNOWN_CODES.has(rawCode) ? rawCode : "validation_failed") as MyallyfileErrorCode;

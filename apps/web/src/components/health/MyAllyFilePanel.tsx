@@ -31,6 +31,8 @@ const MYALLYFILE_URL = "https://myallyfile.com";
 
 function linkErrorMessage(err: unknown): string {
   if (err instanceof ApiError) {
+    if (err.status === 402) return "That MyAllyFile account needs a Plus or Pro plan to connect. Upgrade at myallyfile.com/pricing, then make a new code.";
+    if (err.status === 404) return "That MyAllyFile profile no longer exists. Pick another profile and make a new code.";
     if (err.status === 422) return "That code didn't work. It may have expired (they last 10 minutes) or been used already. Make a new one in MyAllyFile.";
     if (err.status === 400) return "Enter the 8-character code from MyAllyFile (like AB3D-7XYZ).";
     if (err.status === 409) return "This person is already linked to a MyAllyFile profile.";
