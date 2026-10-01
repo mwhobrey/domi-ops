@@ -5,6 +5,7 @@ import { ClipboardList } from "lucide-react";
 import { AppShell } from "../../../components/AppShell";
 import { apiFetch } from "../../../lib/api";
 import { loadErrorMessage } from "../../../lib/load-error";
+import type { AuthSessionResponse } from "../../../lib/session";
 import type { SchoolContext } from "../../../lib/school-access";
 import { Alert, Card, CardBody, EmptyState, LinkButton, SectionHeader } from "../../../components/ui";
 import {
@@ -34,18 +35,17 @@ export default async function SchoolAssignmentsPage({
   let timeZone = "UTC";
 
   try {
-    const [data, settings] = await Promise.all([
+    const [data, session] = await Promise.all([
       apiFetch<{
         assignments: SchoolAssignmentSummary[];
         context: SchoolContext;
       }>(`/api/school/assignments?filter=${filter}`),
-      apiFetch<{ timezone?: string }>("/api/core/household/settings").catch(() => ({
-        timezone: undefined,
-      })),
+      // Only supplies the display time zone here, so a failure falls back to UTC, not an error page.
+      apiFetch<AuthSessionResponse>("/auth/session").catch(() => ({}) as AuthSessionResponse),
     ]);
     assignments = data.assignments;
     context = data.context;
-    timeZone = settings.timezone?.trim() || "UTC";
+    timeZone = session.householdTimezone?.trim() || "UTC";
   } catch (e) {
     loadError = loadErrorMessage(e, "Could not load assignments");
   }
