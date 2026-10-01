@@ -14,6 +14,7 @@ export const dynamic = "force-dynamic";
 
 const FAQ_KEYS = [
   "Is the health module HIPAA-compliant?",
+  "Does Domi Ops work with MyAllyFile?",
   "Who can see and edit a family member's health records?",
   "Do you sell or share my data?",
   "What happens to my data if I cancel Cloud?",
@@ -45,6 +46,10 @@ export default function HealthPage() {
         {
           title: "Encrypted, and shared on purpose",
           body: "Medication names, doses, and notes are encrypted at rest. Each record is private or shared, and seeing a record never lets someone edit it.",
+        },
+        {
+          title: "Keeps an emergency profile current",
+          body: "Link a member to their MyAllyFile profile and the medications you pick are copied there whenever they change, so the QR code on the fridge or the keychain never lists last month's pills. It only goes one way, you choose which medications go, and it needs a MyAllyFile Plus or Pro plan.",
         },
         {
           title: "On the household calendar",

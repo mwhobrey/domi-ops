@@ -8,6 +8,17 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+### Added
+
+- **Keep a MyAllyFile emergency profile in sync with your medications** (WHO-356, 357, 359, 363).
+  On the Medications tab, link a household member to their [MyAllyFile](https://myallyfile.com)
+  profile with a one-time code, tick the medications to share, and Domi Ops copies them to the
+  profile whenever they change (name, dose, instructions, schedule type, paused). It is one way
+  only, nothing is read back, and unlinking removes the synced medications from MyAllyFile.
+  Needs a MyAllyFile Plus or Pro plan. On by default for hosted Cloud; self-hosters opt in with
+  `MYALLYFILE_API_BASE`. **Migration `0083`** adds `health_myallyfile_links` and
+  `health_medication_myallyfile_sync`. Design: [ADR 006](docs/adr/006-myallyfile-med-sync.md).
+
 ## [0.5.0] - 2026-09-30
 
 ### Added

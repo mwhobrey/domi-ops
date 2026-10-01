@@ -18,6 +18,10 @@ export const FAQ_ITEMS: FaqItem[] = [
     a: "No, and it's not trying to be. It's a household tool, not a medical record system. Sensitive fields (medication names, dosage, notes) are encrypted at rest, but Domi Ops isn't a healthcare provider and makes no HIPAA claims.",
   },
   {
+    q: "Does Domi Ops work with MyAllyFile?",
+    a: "Yes, on Domi Ops Cloud. MyAllyFile is a separate emergency medical profile that first responders open with a QR code and PIN. Link a household member to their MyAllyFile profile and the medications you choose are copied across whenever they change, so the emergency profile doesn't go stale. It only goes one way, from Domi Ops to MyAllyFile, and nothing is read back. Unlinking removes the synced medications from the profile. Linking needs a MyAllyFile Plus or Pro plan.",
+  },
+  {
     q: "Who can see and edit a family member's health records?",
     a: "You choose. Each record is private or shared with the household, and sharing is read-only by default. Editing needs the creator, the person the record is about, an owner or admin, or someone you've explicitly granted write access.",
   },

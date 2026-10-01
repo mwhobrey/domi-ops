@@ -52,6 +52,10 @@ Response 200:
 { "token": "string", "profileId": "string", "profileName": "string" }
 ```
 
+Link codes are `XXXX-XXXX`, Crockford base32 uppercase (no I, L, O, U), single use, 10 minute
+expiry; input is case-insensitive and spaces and hyphens are stripped. An expired, used, or
+unknown code returns 401 `code_invalid`. Tokens are opaque, up to 128 characters.
+
 The token is long-lived, bound to one `profileId`, write-only for `syncedMedications`, shown
 once, and stored by MyAllyFile only as a hash. Domi Ops stores it encrypted at rest and never
 returns it from its own API. `instanceLabel` is private: MyAllyFile never shows it to responders.
