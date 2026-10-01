@@ -40,8 +40,10 @@ Any PR that adds a file to `packages/db/drizzle/` (a new migration) must:
    with `DOMI_OPS_IMAGE_TAG=X.Y.Z` (see [deploy/HOSTED_OPS.md](../deploy/HOSTED_OPS.md)).
 5. Create a GitHub Release from the tag. GitHub auto-drafts notes from merged PRs via
    `.github/release.yml`; edit for clarity and paste in the matching CHANGELOG section.
-6. If the release includes a migration, say so at the top of the release notes **and apply it to
-   hosted Postgres before pushing the tag** (admin URL from an allowlisted machine — not CI).
+6. If the release includes a migration, say so at the top of the release notes. The hosted deploy
+   applies it automatically: CI runs `deploy-hosted.sh --migrate`, which reads `DATABASE_URL_ADMIN`
+   from `~/.bashrc` on the droplet (the admin URL is never stored in GitHub). Watch the deploy job
+   for the migration step; if it fails the old containers keep running.
 
 If a release goes bad, see [docs/ROLLBACK.md](ROLLBACK.md).
 

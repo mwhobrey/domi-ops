@@ -38,16 +38,11 @@ PgBouncer in **transaction mode** for Starter prod (see ADR 003). Migrations run
 
 Pushing a **`v*`** git tag triggers [`.github/workflows/publish-images.yml`](../.github/workflows/publish-images.yml):
 GHCR images for that release (`X.Y.Z`, matching semver without the `v` prefix), then an SSH job on the
-hosted droplet runs `deploy/deploy-hosted.sh` with `DOMI_OPS_IMAGE_TAG=X.Y.Z`.
+hosted droplet runs `deploy/deploy-hosted.sh --migrate` with `DOMI_OPS_IMAGE_TAG=X.Y.Z`. Pending migrations are applied automatically (admin connection, then `domi_ops_app` is re-granted) before the containers are recreated; with nothing pending it is a no-op.
 
-**Before you tag** a release that includes new migrations, either:
+**Prerequisite (one-time, on the droplet):** `export DATABASE_URL_ADMIN='postgresql://doadmin:...'` in `~/.bashrc`. CI reads that line straight out of the file (a non-interactive SSH shell returns early from most `~/.bashrc` files, so sourcing it is unreliable). If the line is missing the deploy job fails with `No 'export DATABASE_URL_ADMIN=...' line` before anything is touched.
 
-- **On the droplet:** `export DATABASE_URL_ADMIN='…'` in `~/.bashrc`, then `deploy/deploy-hosted.sh --migrate` (applies DDL, re-grants `domi_ops_app`, then deploys), or
-- **From a dev machine** on the Postgres **Trusted Sources** allowlist: `DATABASE_URL="<admin connection string>" npm run db:migrate`, then re-run `npm run db:create-app-role` with the same admin URL if the migration added tables (see [HOSTED_BETA_SETUP.md](./HOSTED_BETA_SETUP.md)).
-
-Then cut the tag per [docs/RELEASE_PROCESS.md](../docs/RELEASE_PROCESS.md).
-
-If pending migrations exist when CI runs, `deploy-hosted.sh` **aborts before `compose up`**; the Actions log shows `ABORTING deploy — containers were NOT touched.` SSH to the droplet and run `deploy/deploy-hosted.sh --migrate` (with `DATABASE_URL_ADMIN` exported in the shell), or apply migrations from another machine, then re-run deploy (re-push the tag only if images were never published, or use **workflow_dispatch** below).
+If a migration fails, `deploy-hosted.sh` stops before `compose up` and the old containers keep running. Fix forward and re-run via **workflow_dispatch** below, or apply migrations by hand: on the droplet `deploy/deploy-hosted.sh --migrate`, or from a dev machine on the Postgres **Trusted Sources** allowlist `DATABASE_URL="<admin connection string>" npm run db:migrate` followed by `npm run db:create-app-role` with the same admin URL if the migration added tables (see [HOSTED_BETA_SETUP.md](./HOSTED_BETA_SETUP.md)).
 
 **GitHub repository secrets** (Settings → Secrets and variables → Actions):
 
@@ -57,7 +52,7 @@ If pending migrations exist when CI runs, `deploy-hosted.sh` **aborts before `co
 | `HOSTED_DEPLOY_HOST` | No | Default `138.197.22.88` |
 | `HOSTED_DEPLOY_USER` | No | Default `root` |
 
-Do **not** store the admin `DATABASE_URL` in GitHub; migrations stay a human pre-step.
+Do **not** store the admin `DATABASE_URL` in GitHub; it stays on the droplet and CI reads it there at deploy time.
 
 **Creating the CI deploy key.** A dedicated key means a leaked secret can be revoked on its own
 without touching your personal access (root on the droplet also holds the admin `DATABASE_URL`
