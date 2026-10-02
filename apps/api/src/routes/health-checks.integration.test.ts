@@ -26,6 +26,7 @@ import {
 import type { AppVariables } from "../middleware/auth.js";
 import { createTenantMiddleware } from "../middleware/tenant.js";
 import { healthCheckGroupRoutes } from "./health-check-groups.js";
+import { householdHealthRoutes } from "./household-health.js";
 import { healthCheckRoutes } from "./health-checks.js";
 
 /**
@@ -185,6 +186,8 @@ maybeDescribe("health checks routes (integration)", () => {
     app.use("*", createTenantMiddleware(scoped, env));
     app.route("/checks", healthCheckRoutes(scoped, env));
     app.route("/check-groups", healthCheckGroupRoutes(scoped, env));
+    // The events routes, to prove deleting / re-typing a reading unlinks the slots it completed.
+    app.route("/health", householdHealthRoutes(scoped, env));
   }, 60_000);
 
   afterAll(async () => {
@@ -1066,6 +1069,253 @@ maybeDescribe("health checks routes (integration)", () => {
     it("needs the health module and a signed-in caller", async () => {
       expect((await call("nohealth", "GET", `/checks/slots?from=${PAST}&to=${PAST}`)).status).toBe(403);
       expect((await call("nobody", "GET", `/checks/slots?from=${PAST}&to=${PAST}`)).status).toBe(401);
+    });
+  });
+
+
+  describe("undo and edit a logged slot (WHO-385)", () => {
+    const DAY = "2025-04-07"; // a Monday long ago, so every unanswered slot is overdue
+    const slot = (hhmm: string) => `${DAY}T${hhmm}:00.000Z`;
+
+    beforeEach(async () => {
+      await withHouseholdContext(baseDb, people.mom!.householdId, (tx) =>
+        tx.delete(healthEvents).where(like(healthEvents.title, "who385%")),
+      );
+    });
+
+    async function reading(at: string, memberKey = "ally") {
+      const [row] = await withHouseholdContext(baseDb, people.mom!.householdId, async (tx) => {
+        const [ev] = await tx
+          .insert(healthEvents)
+          .values({
+            householdId: people.mom!.householdId,
+            memberId: people[memberKey]!.memberId,
+            type: "vitals",
+            title: "who385 reading",
+            startedAt: new Date(at),
+            createdByUserId: people.mom!.userId,
+          })
+          .returning({ id: healthEvents.id });
+        for (const metric of ["blood_pressure_systolic", "blood_pressure_diastolic"]) {
+          await tx.insert(healthVitalsReadings).values({ eventId: ev!.id, metric: metric as never, value: "1", unit: "x" });
+        }
+        return [ev!];
+      });
+      return row!.id;
+    }
+    const bpCheck = (over: Record<string, unknown> = {}) =>
+      makeCheck("mom", {
+        name: "385 BP",
+        startDate: null,
+        endDate: null,
+        template: { metrics: ["blood_pressure_systolic", "blood_pressure_diastolic"] },
+        schedule: { times: ["08:00", "12:00"] },
+        ...over,
+      });
+    const logSlot = async (as: string, checkId: string, body: unknown) => {
+      const res = await call(as, "POST", `/checks/${checkId}/log`, body);
+      expect(res.status, JSON.stringify(res.json)).toBeLessThan(300);
+      return res.json.log;
+    };
+    const status = async (as: string, checkId: string) => {
+      const res = await app.request(`/checks/slots?checkId=${checkId}&from=${DAY}&to=${DAY}`, { headers: { "x-as": as } });
+      const json = (await res.json()) as Json;
+      return (json.checks[0]?.slots as Json[]).map((x) => `${String(x.scheduledAt).slice(11, 16)} ${x.status}`);
+    };
+    const eventStatus = async (id: string) => (await call("mom", "GET", `/health/events/${id}`)).status;
+    const rawLogs = (checkId: string) =>
+      withWorkerScanContext(baseDb, (tx) => tx.select().from(healthCheckLogs).where(eq(healthCheckLogs.checkId, checkId)));
+
+    it("undo reopens the slot and keeps the reading", async () => {
+      const check = await bpCheck();
+      const eventId = await reading(slot("03:00")); // far from either slot: only a link can complete one
+      const done = await logSlot("mom", check.id, { scheduledAt: slot("12:00"), eventId });
+      expect(await status("mom", check.id)).toEqual(["08:00 overdue", "12:00 done"]);
+
+      const res = await call("mom", "DELETE", `/checks/${check.id}/logs/${done.id}`);
+      expect(res.json).toEqual({ ok: true, deletedEvent: false });
+      expect(await status("mom", check.id)).toEqual(["08:00 overdue", "12:00 overdue"]);
+      expect(await eventStatus(eventId)).toBe(200);
+      expect(await rawLogs(check.id)).toHaveLength(0);
+    });
+
+    it("undo can delete the reading too, unless another check relies on it", async () => {
+      const check = await bpCheck();
+      const other = await bpCheck({ name: "385 BP twin" });
+      const solo = await reading(slot("03:00"));
+      const soloLog = await logSlot("mom", check.id, { scheduledAt: slot("12:00"), eventId: solo });
+      const res = await call("sitter", "DELETE", `/checks/${check.id}/logs/${soloLog.id}?deleteEvent=true`);
+      expect(res.json).toEqual({ ok: true, deletedEvent: true });
+      expect(await eventStatus(solo)).toBe(404);
+
+      const both = await reading(slot("04:00"));
+      const first = await logSlot("mom", check.id, { scheduledAt: slot("08:00"), eventId: both });
+      await logSlot("mom", other.id, { scheduledAt: slot("08:00"), eventId: both });
+      const blocked = await call("mom", "DELETE", `/checks/${check.id}/logs/${first.id}?deleteEvent=true`);
+      expect({ status: blocked.status, error: blocked.json.error }).toEqual({ status: 409, error: "event_in_use" });
+      // Nothing changed.
+      expect(await rawLogs(check.id)).toHaveLength(1);
+      expect(await eventStatus(both)).toBe(200);
+    });
+
+    it("edits done to skipped and back, and the slots follow", async () => {
+      const check = await bpCheck();
+      const eventId = await reading(slot("03:00"));
+      const done = await logSlot("mom", check.id, { scheduledAt: slot("12:00"), eventId });
+
+      const skipped = await call("mom", "PATCH", `/checks/${check.id}/logs/${done.id}`, { status: "skipped" });
+      expect(skipped.json).toMatchObject({ outcome: "updated", log: { status: "skipped", healthEventId: null } });
+      expect(await status("mom", check.id)).toEqual(["08:00 overdue", "12:00 skipped"]);
+      expect(await eventStatus(eventId)).toBe(200); // the reading is untouched
+
+      const again = await call("mom", "PATCH", `/checks/${check.id}/logs/${done.id}`, { status: "done", eventId });
+      expect(again.json.log).toMatchObject({ status: "done", healthEventId: eventId });
+      expect(await status("mom", check.id)).toEqual(["08:00 overdue", "12:00 done"]);
+    });
+
+    it("moves a log to another slot, and refuses a slot that is taken", async () => {
+      const check = await bpCheck();
+      const a = await logSlot("mom", check.id, { scheduledAt: slot("08:00"), status: "skipped" });
+      await logSlot("mom", check.id, { scheduledAt: slot("12:00"), status: "skipped" });
+      const taken = await call("mom", "PATCH", `/checks/${check.id}/logs/${a.id}`, { scheduledAt: slot("12:00") });
+      expect({ status: taken.status, error: taken.json.error }).toEqual({ status: 409, error: "slot_taken" });
+
+      await call("mom", "DELETE", `/checks/${check.id}/logs/${(await rawLogs(check.id)).find((l) => l.scheduledAt.toISOString() === slot("12:00"))!.id}`);
+      const moved = await call("mom", "PATCH", `/checks/${check.id}/logs/${a.id}`, { scheduledAt: `${DAY}T12:00:41.000Z` });
+      expect(moved.json.log.scheduledAt).toBe(slot("12:00"));
+      expect(await status("mom", check.id)).toEqual(["08:00 overdue", "12:00 skipped"]);
+    });
+
+    it("edits the note", async () => {
+      const check = await bpCheck();
+      const l = await logSlot("mom", check.id, { scheduledAt: slot("08:00"), status: "skipped" });
+      const res = await call("mom", "PATCH", `/checks/${check.id}/logs/${l.id}`, { notes: "slept in" });
+      expect(res.json.log.notes).toBe("slept in");
+      expect((await call("mom", "PATCH", `/checks/${check.id}/logs/${l.id}`, { notes: null })).json.log.notes).toBeNull();
+    });
+
+    it("validates the edit", async () => {
+      const check = await bpCheck();
+      const eventId = await reading(slot("03:00"));
+      const l = await logSlot("mom", check.id, { scheduledAt: slot("12:00"), eventId });
+      const patch = async (body: unknown, status: number, error: string) => {
+        const res = await call("mom", "PATCH", `/checks/${check.id}/logs/${l.id}`, body);
+        expect({ status: res.status, error: res.json?.error }, JSON.stringify(body)).toEqual({ status, error });
+      };
+      await patch({}, 400, "invalid_body");
+      await patch({ status: "missed" }, 400, "invalid_status");
+      await patch({ status: "taken" }, 400, "invalid_status");
+      await patch({ eventId: "nope" }, 400, "invalid_body");
+      await patch({ notes: 5 }, 400, "invalid_body");
+      await patch({ notes: "x".repeat(2001) }, 400, "invalid_body");
+      await patch({ scheduledAt: "noon" }, 400, "invalid_scheduled_at");
+      await patch({ eventId: null }, 400, "event_required");
+      await patch({ status: "skipped", eventId }, 400, "event_not_allowed");
+      await patch({ eventId: randomUUID() }, 404, "event_not_found");
+      const wrongKind = await readingOfType("pain");
+      await patch({ eventId: wrongKind }, 400, "event_type_mismatch");
+      expect((await rawLogs(check.id))[0]!.status).toBe("done");
+
+      async function readingOfType(type: "pain") {
+        const [row] = await withHouseholdContext(baseDb, people.mom!.householdId, (tx) =>
+          tx
+            .insert(healthEvents)
+            .values({
+              householdId: people.mom!.householdId,
+              memberId: people.ally!.memberId,
+              type,
+              title: "who385 pain",
+              startedAt: new Date(slot("12:00")),
+              createdByUserId: people.mom!.userId,
+            })
+            .returning({ id: healthEvents.id }),
+        );
+        return row!.id;
+      }
+    });
+
+    it("needs events write on the person and sight of the check, like logging does", async () => {
+      const check = await bpCheck();
+      const l = await logSlot("mom", check.id, { scheduledAt: slot("12:00"), status: "skipped" });
+      const base = `/checks/${check.id}/logs/${l.id}`;
+      for (const [as, expected] of [["reader", 403], ["dad", 404], ["stranger", 404], ["outsider", 404]] as const) {
+        expect((await call(as, "PATCH", base, { notes: "x" })).status, `PATCH as ${as}`).toBe(expected);
+        expect((await call(as, "DELETE", base)).status, `DELETE as ${as}`).toBe(expected);
+      }
+      expect(await rawLogs(check.id)).toHaveLength(1);
+      expect((await call("sitter", "PATCH", base, { notes: "by sitter" })).status).toBe(200);
+      expect((await call("ally", "DELETE", base)).status).toBe(200);
+    });
+
+    it("cannot reach a log through the wrong check, a bad id, or a deleted check", async () => {
+      const check = await bpCheck();
+      const other = await bpCheck({ name: "385 other" });
+      const l = await logSlot("mom", check.id, { scheduledAt: slot("12:00"), status: "skipped" });
+      expect((await call("mom", "PATCH", `/checks/${other.id}/logs/${l.id}`, { notes: "x" })).status).toBe(404);
+      expect((await call("mom", "DELETE", `/checks/${other.id}/logs/${l.id}`)).status).toBe(404);
+      expect((await call("mom", "PATCH", `/checks/${check.id}/logs/not-a-uuid`, { notes: "x" })).status).toBe(404);
+      expect((await call("mom", "DELETE", `/checks/${check.id}/logs/${randomUUID()}`)).status).toBe(404);
+
+      await call("mom", "DELETE", `/checks/${check.id}`);
+      expect((await call("mom", "PATCH", `/checks/${check.id}/logs/${l.id}`, { notes: "x" })).status).toBe(404);
+      expect((await call("mom", "DELETE", `/checks/${check.id}/logs/${l.id}`)).status).toBe(404);
+      // History survives a soft delete: the log is still there for reports.
+      expect(await rawLogs(check.id)).toHaveLength(1);
+    });
+
+    it("pausing and resuming keeps the logs", async () => {
+      const check = await bpCheck();
+      await logSlot("mom", check.id, { scheduledAt: slot("12:00"), status: "skipped" });
+      await call("mom", "PATCH", `/checks/${check.id}`, { enabled: false });
+      await call("mom", "PATCH", `/checks/${check.id}`, { enabled: true });
+      expect(await rawLogs(check.id)).toHaveLength(1);
+      expect(await status("mom", check.id)).toEqual(["08:00 overdue", "12:00 skipped"]);
+    });
+
+    describe("when the reading it points at changes", () => {
+      it("deleting the reading reopens the slot instead of leaving a done slot with nothing behind it", async () => {
+        const check = await bpCheck();
+        const eventId = await reading(slot("03:00"));
+        await logSlot("mom", check.id, { scheduledAt: slot("12:00"), eventId });
+        expect((await call("mom", "DELETE", `/health/events/${eventId}`)).status).toBe(200);
+        expect(await rawLogs(check.id)).toHaveLength(0);
+        expect(await status("mom", check.id)).toEqual(["08:00 overdue", "12:00 overdue"]);
+      });
+
+      it("re-typing the reading stops it completing the slot", async () => {
+        const check = await bpCheck();
+        const eventId = await reading(slot("03:00"));
+        await logSlot("mom", check.id, { scheduledAt: slot("12:00"), eventId });
+        expect((await call("mom", "PATCH", `/health/events/${eventId}`, { type: "pain" })).status).toBe(200);
+        expect(await rawLogs(check.id)).toHaveLength(0);
+        expect(await status("mom", check.id)).toEqual(["08:00 overdue", "12:00 overdue"]);
+      });
+
+      it("handing the reading to someone else stops it completing the slot", async () => {
+        const check = await bpCheck();
+        const eventId = await reading(slot("03:00"));
+        await logSlot("mom", check.id, { scheduledAt: slot("12:00"), eventId });
+        expect((await call("mom", "PATCH", `/health/events/${eventId}`, { memberId: people.dad!.memberId })).status).toBe(200);
+        expect(await rawLogs(check.id)).toHaveLength(0);
+      });
+
+      it("editing something else about the reading leaves the slot done", async () => {
+        const check = await bpCheck();
+        const eventId = await reading(slot("03:00"));
+        await logSlot("mom", check.id, { scheduledAt: slot("12:00"), eventId });
+        expect((await call("mom", "PATCH", `/health/events/${eventId}`, { title: "renamed", type: "vitals" })).status).toBe(200);
+        expect(await rawLogs(check.id)).toHaveLength(1);
+        expect(await status("mom", check.id)).toEqual(["08:00 overdue", "12:00 done"]);
+      });
+
+      it("skipped slots are not touched by event changes", async () => {
+        const check = await bpCheck();
+        const eventId = await reading(slot("03:00"));
+        await logSlot("mom", check.id, { scheduledAt: slot("08:00"), status: "skipped" });
+        await logSlot("mom", check.id, { scheduledAt: slot("12:00"), eventId });
+        await call("mom", "DELETE", `/health/events/${eventId}`);
+        expect((await rawLogs(check.id)).map((l) => l.status)).toEqual(["skipped"]);
+      });
     });
   });
 });

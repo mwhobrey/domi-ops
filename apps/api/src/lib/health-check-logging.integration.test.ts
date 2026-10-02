@@ -17,8 +17,12 @@ import {
 } from "@domi-ops/db";
 import {
   RecordCheckError,
+  deleteCheckLog,
+  editCheckLog,
   normalizeSlotInstant,
   recordCheck,
+  unlinkCheckLogsForEvent,
+  type EditCheckLogInput,
   type RecordCheckErrorCode,
   type RecordCheckInput,
 } from "./health-check-logging.js";
@@ -321,6 +325,194 @@ maybeDescribe("recordCheck (integration)", () => {
           await tx.delete(users).where(eq(users.id, foreign.userId));
         });
       }
+    });
+  });
+
+
+  describe("editing a log (WHO-385)", () => {
+    const eight = new Date("2026-10-02T08:00:00.000Z");
+
+    const rowFor = async (checkId: string, at: Date) => {
+      const rows = await logsFor(checkId);
+      return rows.find((r) => r.scheduledAt.getTime() === at.getTime())!;
+    };
+    const edit = async (
+      patch: EditCheckLogInput["patch"],
+      over: { at?: Date; check?: typeof bp } = {},
+    ) => {
+      const check = over.check ?? bp;
+      const log = await rowFor(check.id, over.at ?? noon);
+      return withHouseholdContext(db, householdId, (tx) =>
+        editCheckLog(tx, env, { check, log, loggedByUserId: userId, now: new Date("2026-10-03T00:00:00.000Z"), patch }),
+      );
+    };
+    const eventExists = async (id: string) =>
+      (await withHouseholdContext(db, householdId, (tx) => tx.select({ id: healthEvents.id }).from(healthEvents).where(eq(healthEvents.id, id)))).length === 1;
+
+    it("done to skipped unlinks the entry but leaves it alone", async () => {
+      await clear();
+      await run({ status: "done", source: "single", healthEventId: events.vitals1 });
+      const { log, outcome } = await edit({ status: "skipped" });
+      expect(outcome).toBe("updated");
+      expect(log).toMatchObject({ status: "skipped", healthEventId: null, loggedByUserId: userId });
+      expect(await eventExists(events.vitals1)).toBe(true);
+    });
+
+    it("skipped to done needs an entry, and only done may have one", async () => {
+      await clear();
+      await run({ status: "skipped", source: "single" });
+      expect(await codeOf(edit({ status: "done" }))).toBe("event_required");
+      expect(await codeOf(edit({ status: "done", healthEventId: null }))).toBe("event_required");
+      expect(await codeOf(edit({ healthEventId: events.vitals1 }))).toBe("event_not_allowed");
+      const done = await edit({ status: "done", healthEventId: events.vitals1 });
+      expect(done.log).toMatchObject({ status: "done", healthEventId: events.vitals1 });
+
+      // And a done slot cannot lose its entry without becoming something else.
+      expect(await codeOf(edit({ healthEventId: null }))).toBe("event_required");
+      expect((await rowFor(bp.id, noon)).status).toBe("done");
+    });
+
+    it("swaps the entry, applying the same rules as logging", async () => {
+      await clear();
+      await run({ status: "done", source: "single", healthEventId: events.vitals1 });
+      expect((await edit({ healthEventId: events.vitals2 })).log.healthEventId).toBe(events.vitals2);
+      expect(await codeOf(edit({ healthEventId: events.pain }))).toBe("event_type_mismatch");
+      expect(await codeOf(edit({ healthEventId: events.otherMember }))).toBe("event_member_mismatch");
+      expect(await codeOf(edit({ healthEventId: randomUUID() }))).toBe("event_not_found");
+      expect((await rowFor(bp.id, noon)).healthEventId).toBe(events.vitals2);
+    });
+
+    it("refuses an entry that already completes another slot of the check", async () => {
+      await clear();
+      await run({ status: "done", source: "single", healthEventId: events.vitals1, scheduledAt: eight });
+      await run({ status: "done", source: "single", healthEventId: events.vitals2, scheduledAt: noon });
+      expect(await codeOf(edit({ healthEventId: events.vitals1 }))).toBe("event_already_used");
+    });
+
+    it("moves a log to a free slot, keeping its entry, and not counting against itself", async () => {
+      await clear();
+      await run({ status: "done", source: "single", healthEventId: events.vitals1 });
+      const moved = await edit({ scheduledAt: new Date("2026-10-02T16:00:30.900Z") });
+      expect(moved.log.scheduledAt).toBe(four.toISOString()); // truncated to the minute
+      expect(moved.log.healthEventId).toBe(events.vitals1);
+      expect(await logsFor(bp.id)).toHaveLength(1);
+    });
+
+    it("will not move onto a slot that already has a log", async () => {
+      await clear();
+      await run({ status: "skipped", source: "single", scheduledAt: noon });
+      await run({ status: "skipped", source: "single", scheduledAt: four });
+      expect(await codeOf(edit({ scheduledAt: four }))).toBe("slot_taken");
+      expect((await logsFor(bp.id)).map((l) => l.scheduledAt.toISOString()).sort()).toEqual([noon.toISOString(), four.toISOString()]);
+    });
+
+    it("two logs racing for one free slot: one moves, the other is refused", async () => {
+      await clear();
+      await run({ status: "skipped", source: "single", scheduledAt: noon });
+      await run({ status: "skipped", source: "single", scheduledAt: eight });
+      const target = new Date("2026-10-02T20:00:00.000Z");
+      const settled = await Promise.allSettled([
+        edit({ scheduledAt: target }, { at: noon }),
+        edit({ scheduledAt: target }, { at: eight }),
+      ]);
+      const codes = settled.map((r) => (r.status === "fulfilled" ? "ok" : (r.reason as RecordCheckError).code));
+      expect(codes.sort()).toEqual(["ok", "slot_taken"]);
+      expect(await logsFor(bp.id)).toHaveLength(2);
+    });
+
+    it("edits a note without counting as a new decision", async () => {
+      await clear();
+      const first = await run({ status: "done", source: "single", healthEventId: events.vitals1, notes: "first" });
+      const edited = await edit({ notes: "after a walk" });
+      expect(edited.outcome).toBe("updated");
+      expect(edited.log.notes).toBe("after a walk");
+      expect(edited.log.loggedAt).toBe(first.log.loggedAt); // not re-stamped
+      const [row] = await logsFor(bp.id);
+      expect(row!.notes!.startsWith("enc:v1:")).toBe(true);
+
+      const cleared = await edit({ notes: null });
+      expect(cleared.log.notes).toBeNull();
+    });
+
+    it("changing nothing is a no-op", async () => {
+      await clear();
+      await run({ status: "done", source: "single", healthEventId: events.vitals1 });
+      expect((await edit({})).outcome).toBe("unchanged");
+      expect((await edit({ status: "done", healthEventId: events.vitals1 })).outcome).toBe("unchanged");
+    });
+
+    it("can answer a system-set missed slot", async () => {
+      await clear();
+      await run({ status: "missed", source: "single" });
+      expect(await codeOf(edit({ status: "done" }))).toBe("event_required");
+      expect((await edit({ status: "done", healthEventId: events.vitals1 })).log.status).toBe("done");
+      await clear();
+      await run({ status: "missed", source: "single" });
+      expect((await edit({ status: "skipped" })).log.status).toBe("skipped");
+    });
+  });
+
+  describe("undoing a log (WHO-385)", () => {
+    const undo = async (checkId: string, deleteEvent: boolean, at = noon) => {
+      const [log] = (await logsFor(checkId)).filter((l) => l.scheduledAt.getTime() === at.getTime());
+      return withHouseholdContext(db, householdId, (tx) => deleteCheckLog(tx, { log: log!, deleteEvent }));
+    };
+    const eventExists = async (id: string) =>
+      (await withHouseholdContext(db, householdId, (tx) => tx.select({ id: healthEvents.id }).from(healthEvents).where(eq(healthEvents.id, id)))).length === 1;
+
+    it("removes the log and keeps the person's reading", async () => {
+      await clear();
+      await run({ status: "done", source: "single", healthEventId: events.vitals1 });
+      expect(await undo(bp.id, false)).toEqual({ deletedEvent: false });
+      expect(await logsFor(bp.id)).toHaveLength(0);
+      expect(await eventExists(events.vitals1)).toBe(true);
+    });
+
+    it("deletes the reading too when asked", async () => {
+      await clear();
+      await makeEvent("disposable", memberId, "vitals");
+      await run({ status: "done", source: "single", healthEventId: events.disposable });
+      expect(await undo(bp.id, true)).toEqual({ deletedEvent: true });
+      expect(await logsFor(bp.id)).toHaveLength(0);
+      expect(await eventExists(events.disposable)).toBe(false);
+    });
+
+    it("refuses to delete a reading that also completes another check, and changes nothing", async () => {
+      await clear();
+      await makeEvent("shared", memberId, "vitals");
+      await run({ status: "done", source: "single", healthEventId: events.shared });
+      await run({ check: weight, status: "done", source: "single", healthEventId: events.shared });
+      expect(await codeOf(undo(bp.id, true))).toBe("event_in_use");
+      expect(await logsFor(bp.id)).toHaveLength(1);
+      expect(await logsFor(weight.id)).toHaveLength(1);
+      expect(await eventExists(events.shared)).toBe(true);
+      // Without the delete flag the same undo is fine.
+      expect(await undo(bp.id, false)).toEqual({ deletedEvent: false });
+      expect(await eventExists(events.shared)).toBe(true);
+    });
+
+    it("undoing a skip has no entry to delete", async () => {
+      await clear();
+      await run({ status: "skipped", source: "single" });
+      expect(await undo(bp.id, true)).toEqual({ deletedEvent: false });
+      expect(await logsFor(bp.id)).toHaveLength(0);
+    });
+  });
+
+  describe("a reading that stops being the right entry (WHO-385)", () => {
+    it("unlinkCheckLogsForEvent removes every completion it backs, and only those", async () => {
+      await clear();
+      await makeEvent("backs", memberId, "vitals");
+      await run({ status: "done", source: "single", healthEventId: events.backs });
+      await run({ check: weight, status: "done", source: "single", healthEventId: events.backs });
+      await run({ status: "done", source: "single", healthEventId: events.vitals1, scheduledAt: four });
+      await run({ status: "skipped", source: "single", scheduledAt: new Date("2026-10-02T20:00:00.000Z") });
+
+      const removed = await withHouseholdContext(db, householdId, (tx) => unlinkCheckLogsForEvent(tx, events.backs));
+      expect(removed).toBe(2);
+      expect((await logsFor(bp.id)).map((l) => l.status).sort()).toEqual(["done", "skipped"]);
+      expect(await logsFor(weight.id)).toHaveLength(0);
+      expect(await withHouseholdContext(db, householdId, (tx) => unlinkCheckLogsForEvent(tx, events.backs))).toBe(0);
     });
   });
 });

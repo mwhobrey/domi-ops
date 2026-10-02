@@ -85,6 +85,7 @@ import {
   recordDose,
 } from "../lib/health-med-logging.js";
 import { recordMedicationEnabledChange } from "../lib/health-med-pauses.js";
+import { unlinkCheckLogsForEvent } from "../lib/health-check-logging.js";
 import { isUniqueViolationError } from "../lib/db-errors.js";
 
 function encryptionErrorResponse(c: { json: (body: unknown, status?: number) => Response }, e: unknown) {
@@ -1069,6 +1070,15 @@ export function householdHealthRoutes(db: Database, env: Env) {
       }
       if (body.visibility !== undefined) patch.visibility = normalizeHealthVisibility(body.visibility);
 
+      // Re-typed or handed to someone else, it is no longer the right entry for the check slots
+      // it completed. Those completions are removed rather than left quietly wrong.
+      if (
+        (patch.type !== undefined && patch.type !== existing.type) ||
+        (patch.memberId !== undefined && patch.memberId !== existing.memberId)
+      ) {
+        await unlinkCheckLogsForEvent(db, id);
+      }
+
       const [row] = await db
         .update(healthEvents)
         .set(patch)
@@ -1169,6 +1179,9 @@ export function householdHealthRoutes(db: Database, env: Env) {
     if (!canDelete) {
       return c.json({ error: "forbidden" }, 403);
     }
+    // A reading that completes a check slot stops doing so, so the slot reads open again
+    // instead of "done" with nothing behind it.
+    await unlinkCheckLogsForEvent(db, id);
     await db.delete(healthEvents).where(eq(healthEvents.id, id));
     return c.json({ ok: true });
   });

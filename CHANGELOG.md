@@ -10,6 +10,12 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Added
 
+- **Undo or change a logged health check** (WHO-385, API only). A logged slot can be switched between
+  done and skipped, pointed at a different entry, moved to another slot, given a note, or undone so it
+  reads open again. Undoing keeps the reading itself unless you ask to delete it too, and that is
+  refused while another check relies on it. Deleting a reading, changing what kind of entry it is, or
+  handing it to someone else now also reopens any check slot it was completing, instead of leaving a
+  slot marked done with nothing behind it. There is no screen for it yet.
 - **Where each health check stands** (WHO-384, API only). `GET /api/health/checks/slots` reports every
   slot of the checks you can see as done, skipped, due, overdue or upcoming. If someone logs a reading
   from the Log tab instead of through the check, it still completes the slot it is within 30 minutes

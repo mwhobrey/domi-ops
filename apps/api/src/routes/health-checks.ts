@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { Env } from "@domi-ops/config";
 import { resolveAlertTimeZone, todayIsoDateInTz } from "@domi-ops/calendar-sync";
 import type { Database } from "@domi-ops/db";
-import { healthChecks, healthEvents, householdMembers } from "@domi-ops/db";
+import { healthCheckLogs, healthChecks, healthEvents, householdMembers } from "@domi-ops/db";
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -19,7 +19,13 @@ import {
   removeCheckFromAllGroups,
   replaceHealthCheckShares,
 } from "../lib/health-check-access.js";
-import { RecordCheckError, recordCheck, type RecordCheckErrorCode } from "../lib/health-check-logging.js";
+import {
+  RecordCheckError,
+  deleteCheckLog,
+  editCheckLog,
+  recordCheck,
+  type RecordCheckErrorCode,
+} from "../lib/health-check-logging.js";
 import { recordCheckEnabledChange } from "../lib/health-check-pauses.js";
 import { datesBetween, loadCheckSlotStatuses } from "../lib/health-check-status.js";
 import { CheckScheduleError, normalizeCheckSchedule } from "../lib/health-check-schedule.js";
@@ -50,6 +56,8 @@ const RECORD_CHECK_STATUS: Record<RecordCheckErrorCode, 400 | 404 | 409> = {
   event_member_mismatch: 400,
   event_type_mismatch: 400,
   event_already_used: 409,
+  slot_taken: 409,
+  event_in_use: 409,
 };
 function encryptionErrorResponse(c: { json: (body: unknown, status?: number) => Response }, e: unknown) {
   if (e instanceof HealthEncryptionError) {
@@ -507,6 +515,138 @@ export function healthCheckRoutes(db: Database, env: Env) {
       if (e instanceof RecordCheckError) return c.json({ error: e.code }, RECORD_CHECK_STATUS[e.code]);
       const resp = encryptionErrorResponse(c, e);
       if (resp) return resp;
+      throw e;
+    }
+  });
+
+  /**
+   * A log of a check the caller may change: they must see the check and have `events` write on
+   * the person, the same bar as logging a slot. Logs of a deleted check are not reachable.
+   */
+  async function loadWritableLog(auth: Auth, checkId: string, logId: string) {
+    const check = await loadVisibleCheck(auth, checkId);
+    if (!check) return { ok: false as const, status: 404 as const, error: "not_found" };
+    if (!(await hasHealthSegmentAccess(db, auth, check.memberId, "events", "write"))) {
+      return { ok: false as const, status: 403 as const, error: "forbidden" };
+    }
+    if (!isUuid(logId)) return { ok: false as const, status: 404 as const, error: "not_found" };
+    const [log] = await db
+      .select()
+      .from(healthCheckLogs)
+      .where(and(eq(healthCheckLogs.id, logId), eq(healthCheckLogs.checkId, check.id)))
+      .limit(1);
+    if (!log) return { ok: false as const, status: 404 as const, error: "not_found" };
+    return { ok: true as const, check, log };
+  }
+
+  /**
+   * Change a logged slot: done <-> skipped, swap the entry it points at, move it to another slot,
+   * or edit its note. Going to `skipped` unlinks the entry but never deletes it. When the
+   * reading was taken is a property of the entry, so change that with `PATCH /events/:id`.
+   */
+  app.patch("/:id/logs/:logId", async (c) => {
+    const auth = c.get("auth")!;
+    const loaded = await loadWritableLog(auth, c.req.param("id"), c.req.param("logId"));
+    if (!loaded.ok) return c.json({ error: loaded.error }, loaded.status);
+
+    const body = await c.req
+      .json<{ status?: unknown; eventId?: unknown; notes?: unknown; scheduledAt?: unknown }>()
+      .catch(() => null);
+    if (!body || typeof body !== "object") return c.json({ error: "invalid_body" }, 400);
+    if (
+      body.status === undefined &&
+      body.eventId === undefined &&
+      body.notes === undefined &&
+      body.scheduledAt === undefined
+    ) {
+      return c.json({ error: "invalid_body" }, 400);
+    }
+    if (body.status !== undefined && body.status !== "done" && body.status !== "skipped") {
+      return c.json({ error: "invalid_status" }, 400);
+    }
+    if (body.eventId !== undefined && body.eventId !== null && !isUuid(body.eventId)) {
+      return c.json({ error: "invalid_body" }, 400);
+    }
+    if (
+      body.notes !== undefined &&
+      body.notes !== null &&
+      (typeof body.notes !== "string" || body.notes.length > MAX_LOG_NOTES_LENGTH)
+    ) {
+      return c.json({ error: "invalid_body" }, 400);
+    }
+    let scheduledAt: Date | undefined;
+    if (body.scheduledAt !== undefined) {
+      scheduledAt =
+        typeof body.scheduledAt === "string" && body.scheduledAt.includes("T")
+          ? new Date(body.scheduledAt)
+          : undefined;
+      if (!scheduledAt || Number.isNaN(scheduledAt.getTime())) {
+        return c.json({ error: "invalid_scheduled_at" }, 400);
+      }
+    }
+
+    // Same rule as logging: the caller must be able to see the entry they link.
+    if (typeof body.eventId === "string") {
+      const [event] = await db
+        .select({ id: healthEvents.id })
+        .from(healthEvents)
+        .where(and(eq(healthEvents.id, body.eventId), healthEventVisibleWhere(db, auth)))
+        .limit(1);
+      if (!event) return c.json({ error: "event_not_found" }, 404);
+    }
+
+    try {
+      const { log, outcome } = await editCheckLog(db, env, {
+        check: loaded.check,
+        log: loaded.log,
+        loggedByUserId: auth.userId,
+        now: new Date(),
+        patch: {
+          status: body.status as "done" | "skipped" | undefined,
+          healthEventId: body.eventId as string | null | undefined,
+          notes: body.notes as string | null | undefined,
+          scheduledAt,
+        },
+      });
+      return c.json({ log, outcome });
+    } catch (e) {
+      if (e instanceof RecordCheckError) return c.json({ error: e.code }, RECORD_CHECK_STATUS[e.code]);
+      const resp = encryptionErrorResponse(c, e);
+      if (resp) return resp;
+      throw e;
+    }
+  });
+
+  /**
+   * Undo a slot, so it reads open again. The entry it pointed at is the person's real reading and
+   * is kept; add `?deleteEvent=true` to delete it too, which needs the right to delete that entry
+   * and is refused while it also completes another check.
+   */
+  app.delete("/:id/logs/:logId", async (c) => {
+    const auth = c.get("auth")!;
+    const loaded = await loadWritableLog(auth, c.req.param("id"), c.req.param("logId"));
+    if (!loaded.ok) return c.json({ error: loaded.error }, loaded.status);
+
+    const wantsEventDeleted = ["true", "1"].includes(c.req.query("deleteEvent") ?? "");
+    if (wantsEventDeleted && loaded.log.healthEventId) {
+      // Deleting the entry is its own permission: same bar as DELETE /events/:id, plus seeing it.
+      const [event] = await db
+        .select({ id: healthEvents.id, memberId: healthEvents.memberId, createdByUserId: healthEvents.createdByUserId })
+        .from(healthEvents)
+        .where(and(eq(healthEvents.id, loaded.log.healthEventId), healthEventVisibleWhere(db, auth)))
+        .limit(1);
+      const mayDelete =
+        event &&
+        (event.createdByUserId === auth.userId ||
+          (await hasHealthSegmentAccess(db, auth, event.memberId, "events", "write")));
+      if (!mayDelete) return c.json({ error: "forbidden" }, 403);
+    }
+
+    try {
+      const { deletedEvent } = await deleteCheckLog(db, { log: loaded.log, deleteEvent: wantsEventDeleted });
+      return c.json({ ok: true, deletedEvent });
+    } catch (e) {
+      if (e instanceof RecordCheckError) return c.json({ error: e.code }, RECORD_CHECK_STATUS[e.code]);
       throw e;
     }
   });
