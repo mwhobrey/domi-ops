@@ -37,6 +37,8 @@ Helper function: `app.tenant_household_id()` reads the same setting.
 
 **51 tables** with `household_isolation` policy — direct `household_id` match or `EXISTS` join to a parent row.
 
+Every table with RLS also needs a `worker_scan` policy if any cross-tenant worker scan reads it; without one the scan sees the table as empty and nothing fails loudly (this is how `health_member_acl` hid every caregiver from the reminder worker, WHO-403). `packages/db/src/rls-worker-scan-coverage.integration.test.ts` fails if a table lacks one and is not on its explicit "never scanned" list.
+
 Later migrations add their own tables with the same two policies (`household_isolation` + `worker_scan`). `0085_health_checks` adds nine health check tables; see [HOSTED_TENANT_TESTS.md](./HOSTED_TENANT_TESTS.md).
 
 ## Excluded (v1)

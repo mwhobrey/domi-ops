@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, like } from "drizzle-orm";
+import { and, count, eq, inArray, like } from "drizzle-orm";
 import type { Env } from "@domi-ops/config";
 import {
   closeDb,
@@ -38,7 +38,24 @@ maybeDescribe("scanHealthMedReminders (integration)", () => {
   const userIds: Record<string, string> = {};
   const memberIds: Record<string, string> = {};
 
-  const runScan = () => withWorkerScanContext(db, (tx) => scanHealthMedReminders(tx, env));
+  /** Reminders recorded for this test's household. */
+  const remindersRecorded = () =>
+    withWorkerScanContext(db, async (tx) => {
+      const [row] = await tx
+        .select({ n: count() })
+        .from(healthMedReminderSent)
+        .innerJoin(healthMedications, eq(healthMedications.id, healthMedReminderSent.medicationId))
+        .where(eq(healthMedications.householdId, householdId));
+      return row!.n;
+    });
+
+  // The scan is cross-tenant and returns a global count, which other suites running against the
+  // same database at the same time would change, so report what it did in this household only.
+  const runScan = async () => {
+    const before = await remindersRecorded();
+    await withWorkerScanContext(db, (tx) => scanHealthMedReminders(tx, env));
+    return (await remindersRecorded()) - before;
+  };
 
   const hhmmIn = (minutes: number) => {
     const t = new Date(Date.now() + minutes * 60_000);

@@ -22,6 +22,7 @@ import { scanBudgetAlerts } from "./budget-alert-scan.js";
 import { scanChoreReminders } from "./chore-reminder-scan.js";
 import { scanChoreDigest } from "./chore-digest-scan.js";
 import { scanDriveQuotaWarnings } from "./drive-quota-scan.js";
+import { scanHealthCheckReminders } from "./health-check-reminder-scan.js";
 import { scanHealthMedReminders } from "./health-med-reminder-scan.js";
 import { scanMyallyfileSync } from "./myallyfile-sync.js";
 import { scanSchoolReminders } from "./school-reminder-scan.js";
@@ -384,6 +385,9 @@ export async function runCalendarSyncJob(
       break;
     case "health.med.reminder.scan":
       await scanHealthMedReminders(db, env);
+      break;
+    case "health.check.reminder.scan":
+      await scanHealthCheckReminders(db, env);
       break;
     case "myallyfile.sync.scan":
       await scanMyallyfileSync(db, env);

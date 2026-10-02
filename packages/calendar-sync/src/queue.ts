@@ -127,6 +127,20 @@ export async function ensureHealthMedReminderScheduler(redisUrl: string): Promis
   );
 }
 
+/** Health check reminders (every 5 minutes), same cadence as medication doses. */
+export async function ensureHealthCheckReminderScheduler(redisUrl: string): Promise<void> {
+  const q = getSyncQueue(redisUrl);
+  await q.upsertJobScheduler(
+    "health-check-reminder-scan",
+    { every: 5 * 60 * 1000 },
+    {
+      name: "health.check.reminder.scan",
+      data: { name: "health.check.reminder.scan", payload: { householdId: "scan" } },
+      opts: { removeOnComplete: 20, removeOnFail: 20 },
+    },
+  );
+}
+
 /** MyAllyFile med sync push (WHO-363): every 30s; per-link debounce lives in the scan. */
 export async function ensureMyallyfileSyncScheduler(redisUrl: string): Promise<void> {
   const q = getSyncQueue(redisUrl);

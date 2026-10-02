@@ -67,7 +67,15 @@ export function datesBetween(from: string, to: string): string[] {
 export async function loadCheckSlotStatuses(
   db: Database,
   env: Env,
-  input: { checks: HealthCheckRow[]; from: string; to: string; timeZone: string; now: Date },
+  input: {
+    checks: HealthCheckRow[];
+    from: string;
+    to: string;
+    timeZone: string;
+    now: Date;
+    /** See `intervalCheckSlots`. Reminders pass false. */
+    includeAwaitingFirst?: boolean;
+  },
 ): Promise<Map<string, SlotResult[]>> {
   const result = new Map<string, SlotResult[]>();
   const { checks, timeZone, now } = input;
@@ -199,6 +207,7 @@ export async function loadCheckSlotStatuses(
         endDate: check.endDate,
         pauses,
         deletedAt: check.deletedAt,
+        includeAwaitingFirst: input.includeAwaitingFirst,
       });
       // Interval slots are dynamic, so answered ones exist only as logs: bring them in, held to
       // the same rules as the pending ones (inside the requested days, not paused, not deleted).

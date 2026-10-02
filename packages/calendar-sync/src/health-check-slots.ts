@@ -92,6 +92,12 @@ export function intervalCheckSlots(input: {
   endDate?: string | null;
   pauses?: PausePeriod[];
   deletedAt?: Date | null;
+  /**
+   * Include the "start" slot offered today when the schedule begins at the first reading. It is
+   * created at `now` on every call, so it is right for showing a Start button and wrong for
+   * anything that keys on the slot's instant, like a reminder. Default true.
+   */
+  includeAwaitingFirst?: boolean;
 }): Date[] {
   const slots: Date[] = [];
   for (const date of input.dates) {
@@ -106,7 +112,7 @@ export function intervalCheckSlots(input: {
     });
     if (!pending) continue;
     // "Start" only makes sense today; it is not a slot on any other day.
-    if (pending.awaitingFirst && date !== input.today) continue;
+    if (pending.awaitingFirst && (date !== input.today || input.includeAwaitingFirst === false)) continue;
     slots.push(pending.scheduledAt);
   }
   return excludeInactiveInstants(slots, input.pauses ?? [], input.deletedAt ?? null);

@@ -18,6 +18,7 @@ export type SyncJobName =
   | "chore.digest.scan"
   | "drive.quota.scan"
   | "health.med.reminder.scan"
+  | "health.check.reminder.scan"
   | "myallyfile.sync.scan";
 
 export interface SyncJobPayload {
@@ -38,6 +39,7 @@ export {
   ensureChoreDigestScheduler,
   ensureDriveQuotaScheduler,
   ensureHealthMedReminderScheduler,
+  ensureHealthCheckReminderScheduler,
   ensureMyallyfileSyncScheduler,
 } from "./queue.js";
 export { runCalendarSyncJob, syncConnection, pullLinkedCalendar } from "./sync.js";
@@ -93,6 +95,14 @@ export {
 } from "./health-schedule.js";
 export { scanSchoolReminders } from "./school-reminder-scan.js";
 export { scanHealthMedReminders } from "./health-med-reminder-scan.js";
+export {
+  OVERDUE_NUDGE_AFTER_MINUTES,
+  buildCheckReminderCopy,
+  buildCheckReminderDeepLink,
+  planCheckReminders,
+  scanHealthCheckReminders,
+  type CheckReminderKind,
+} from "./health-check-reminder-scan.js";
 export {
   MyallyfileError,
   MYALLYFILE_MAX_MEDICATIONS,
