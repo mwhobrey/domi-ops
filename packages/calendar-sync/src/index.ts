@@ -66,6 +66,8 @@ export {
   type IntervalPendingDose,
   type IntervalEditLog,
 } from "./med-interval-schedule.js";
+export { datesBetween, loadCheckSlotStatuses } from "./health-check-status.js";
+export { parseCheckTemplate, type CheckTemplate } from "./health-check-template.js";
 export {
   CHECK_SLOT_TOLERANCE_MINUTES,
   CHECK_SLOT_TOLERANCE_MS,

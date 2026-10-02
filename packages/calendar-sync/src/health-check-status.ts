@@ -1,4 +1,5 @@
 import type { Env } from "@domi-ops/config";
+import { decryptSensitive } from "@domi-ops/crypto";
 import type { Database } from "@domi-ops/db";
 import {
   healthCheckLogs,
@@ -7,29 +8,42 @@ import {
   healthVitalsReadings,
 } from "@domi-ops/db";
 import type { healthChecks } from "@domi-ops/db";
+import { and, between, eq, inArray } from "drizzle-orm";
+import { parseFixedTimeSchedule } from "./health-schedule.js";
 import {
   CHECK_SLOT_TOLERANCE_MS,
-  addDaysIso,
   computeSlotStatuses,
   eventQualifiesForCheck,
   excludeInactiveInstants,
   intervalCheckSlots,
-  localDateOfInstant,
-  parseFixedTimeSchedule,
-  parseIntervalSchedule,
   scheduledCheckSlots,
-  zonedLocalToUtc,
   type CheckSlotEvent,
   type CheckSlotLog,
   type PausePeriod,
   type SlotResult,
-} from "@domi-ops/calendar-sync";
-import type { IntervalLog } from "@domi-ops/calendar-sync";
-import { and, between, eq, inArray } from "drizzle-orm";
-import { decryptHealthFieldOrPassthrough } from "./health-crypto.js";
+} from "./health-check-slots.js";
 import { parseCheckTemplate } from "./health-check-template.js";
+import { addDaysIso, localDateOfInstant, zonedLocalToUtc } from "./household-time.js";
+import { parseIntervalSchedule, type IntervalLog } from "./med-interval-schedule.js";
 
 type HealthCheckRow = typeof healthChecks.$inferSelect;
+
+/**
+ * Stored health text is encrypted with `enc:v1:`. A template that can't be read (key changed or
+ * missing) is treated as empty rather than throwing: the reminder worker must not abort a scan
+ * over every household because of one unreadable field, and an empty template only means an
+ * unlinked vitals entry is matched on type and person alone.
+ */
+function readTemplateText(value: string | null, env: Env): string | null {
+  if (!value) return null;
+  if (!value.startsWith("enc:v1:")) return value;
+  if (!env.ENCRYPTION_KEY) return null;
+  try {
+    return decryptSensitive(value, env.ENCRYPTION_KEY);
+  } catch {
+    return null;
+  }
+}
 
 /** Local dates `from`..`to`, inclusive. */
 export function datesBetween(from: string, to: string): string[] {
@@ -141,7 +155,7 @@ export async function loadCheckSlotStatuses(
   const eventTime = new Map(eventRows.map((e) => [e.id, e.startedAt] as const));
 
   for (const check of checks) {
-    const template = parseCheckTemplate(decryptHealthFieldOrPassthrough(check.templateJson, env));
+    const template = parseCheckTemplate(readTemplateText(check.templateJson, env));
     const forCheck = {
       eventType: check.eventType,
       memberId: check.memberId,
