@@ -10,6 +10,12 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Added
 
+- **Marking a health check done or skipped** (WHO-383, API only). `POST /api/health/checks/:id/log`
+  records one slot of a check by linking the entry that completes it, or by skipping it. A slot
+  counts as done however early or late the entry was taken. The entry has to be for the same person
+  and the same kind of thing the check asks for (a pain entry cannot complete a blood pressure
+  check), and one entry cannot tick two slots of the same check. Logging a slot again replaces the
+  earlier answer. There is no screen for it yet, so there is no visible change.
 - **Scheduled health checks API** (WHO-382). `/api/health/checks` and `/api/health/check-groups`
   create, edit, pause and delete "log vitals / pain / food / exercise at these times" checks and bundle
   them into groups, with the same schedules, privacy and sharing as medications. Anyone with write
