@@ -648,4 +648,87 @@ maybeDescribe("health checks routes (integration)", () => {
       expect(still.json.check.groupIds).toEqual([]);
     });
   });
+
+
+  describe("sharedMemberIds input", () => {
+    // Not an array, not strings, not UUIDs: each used to reach validateHealthShareMemberIds and 500.
+    const bad = (): unknown[] => ["abc", {}, 5, [5], ["nope"], [people.stranger!.memberId, "nope"], [null]];
+
+    it("rejects malformed values with 400 on create, for checks and groups", async () => {
+      for (const value of bad()) {
+        const check = await call("mom", "POST", "/checks", bp({ sharedMemberIds: value }));
+        expect({ value, status: check.status, error: check.json?.error }).toEqual({
+          value,
+          status: 400,
+          error: "invalid_body",
+        });
+        const group = await call("mom", "POST", "/check-groups", {
+          memberId: people.ally!.memberId,
+          name: "Bad shares",
+          schedule: { times: ["08:00"] },
+          sharedMemberIds: value,
+        });
+        expect({ value, status: group.status, error: group.json?.error }).toEqual({
+          value,
+          status: 400,
+          error: "invalid_body",
+        });
+      }
+      // Nothing was created by the rejected requests.
+      const list = await call("mom", "GET", "/check-groups");
+      expect((list.json.groups as Json[]).some((g) => g.name === "Bad shares")).toBe(false);
+    });
+
+    it("rejects malformed values with 400 on update, before changing anything", async () => {
+      const check = await makeCheck("mom", { name: "Untouched check" });
+      const group = await makeGroup("mom", { name: "Untouched group" });
+      for (const value of bad()) {
+        const onCheck = await call("mom", "PATCH", `/checks/${check.id}`, {
+          name: "Changed",
+          enabled: false,
+          sharedMemberIds: value,
+        });
+        expect({ value, status: onCheck.status, error: onCheck.json?.error }).toEqual({
+          value,
+          status: 400,
+          error: "invalid_body",
+        });
+        const onGroup = await call("mom", "PATCH", `/check-groups/${group.id}`, {
+          name: "Changed",
+          enabled: false,
+          sharedMemberIds: value,
+        });
+        expect({ value, status: onGroup.status, error: onGroup.json?.error }).toEqual({
+          value,
+          status: 400,
+          error: "invalid_body",
+        });
+      }
+
+      // The rejected requests wrote nothing: not the name, not enabled, not a pause period.
+      const freshCheck = (await call("mom", "GET", `/checks/${check.id}`)).json.check;
+      expect(freshCheck).toMatchObject({ name: "Untouched check", enabled: true });
+      const freshGroup = (await call("mom", "GET", `/check-groups/${group.id}`)).json.group;
+      expect(freshGroup).toMatchObject({ name: "Untouched group", enabled: true });
+      const pauses = await withWorkerScanContext(baseDb, (tx) =>
+        tx.select().from(healthCheckPauses).where(eq(healthCheckPauses.checkId, check.id)),
+      );
+      expect(pauses).toHaveLength(0);
+    });
+
+    it("still accepts an empty list and valid ids", async () => {
+      const check = await makeCheck("mom", { name: "Shares ok" });
+      const cleared = await call("mom", "PATCH", `/checks/${check.id}`, { sharedMemberIds: [] });
+      expect(cleared.status).toBe(200);
+      const shared = await call("mom", "PATCH", `/checks/${check.id}`, {
+        sharedMemberIds: [people.stranger!.memberId],
+      });
+      expect(shared.json.check.sharedMemberIds).toEqual([people.stranger!.memberId]);
+
+      const group = await makeGroup("mom", { name: "Shares ok group", sharedMemberIds: [people.stranger!.memberId] });
+      expect(group.sharedMemberIds).toEqual([people.stranger!.memberId]);
+      const groupCleared = await call("mom", "PATCH", `/check-groups/${group.id}`, { sharedMemberIds: [] });
+      expect(groupCleared.status).toBe(200);
+    });
+  });
 });

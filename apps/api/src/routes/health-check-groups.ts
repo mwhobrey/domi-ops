@@ -33,17 +33,12 @@ import {
 import { validateCheckDateRange } from "../lib/health-check-template.js";
 import { isForeignKeyViolationError } from "../lib/db-errors.js";
 import { parseMedSchedule } from "../lib/health-serialize.js";
+import { isUuid, isUuidList } from "../lib/uuid.js";
 
 type Auth = NonNullable<AppVariables["auth"]>;
 type GroupRow = typeof healthCheckGroups.$inferSelect;
 
 const MAX_NAME_LENGTH = 200;
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function isUuid(value: unknown): value is string {
-  return typeof value === "string" && UUID_RE.test(value);
-}
-
 function encryptionErrorResponse(c: { json: (body: unknown, status?: number) => Response }, e: unknown) {
   if (e instanceof HealthEncryptionError) {
     return c.json({ error: "encryption_key_required", message: e.message }, 503);
@@ -205,7 +200,8 @@ export function healthCheckGroupRoutes(db: Database, env: Env) {
       !body.name.trim() ||
       body.name.trim().length > MAX_NAME_LENGTH ||
       (body.enabled !== undefined && typeof body.enabled !== "boolean") ||
-      (body.checkIds !== undefined && !(Array.isArray(body.checkIds) && body.checkIds.every(isUuid)))
+      (body.checkIds !== undefined && !isUuidList(body.checkIds)) ||
+      (body.sharedMemberIds !== undefined && !isUuidList(body.sharedMemberIds))
     ) {
       return c.json({ error: "invalid_body" }, 400);
     }
@@ -308,6 +304,10 @@ export function healthCheckGroupRoutes(db: Database, env: Env) {
       return c.json({ error: "immutable_field", field: "memberId" }, 400);
     }
     if (body.enabled !== undefined && typeof body.enabled !== "boolean") {
+      return c.json({ error: "invalid_body" }, 400);
+    }
+    // Before any write: a malformed list would otherwise blow up after the row is already updated.
+    if (body.sharedMemberIds !== undefined && !isUuidList(body.sharedMemberIds)) {
       return c.json({ error: "invalid_body" }, 400);
     }
     if (body.name !== undefined) {
