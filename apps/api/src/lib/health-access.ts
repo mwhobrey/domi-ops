@@ -383,7 +383,7 @@ export async function hasHealthSegmentAccess(
   return canAccessHealthSegment(map.get(subjectMemberId) ?? emptyHealthAclGrants(), segment, min);
 }
 
-function aclExistsSql(
+export function aclExistsSql(
   db: Database,
   authMemberId: string,
   subjectMemberIdCol: AnyColumn,

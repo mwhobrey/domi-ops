@@ -10,6 +10,12 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Added
 
+- **Scheduled health checks API** (WHO-382). `/api/health/checks` and `/api/health/check-groups`
+  create, edit, pause and delete "log vitals / pain / food / exercise at these times" checks and bundle
+  them into groups, with the same schedules, privacy and sharing as medications. Anyone with write
+  access to a person's health events can manage their checks. A check is for one person and one kind
+  of entry, and those two cannot be changed afterwards. There is no screen for it yet, so there is no
+  visible change.
 - **Database groundwork for scheduled health checks** (WHO-379, WHO-380). New tables for recurring
   "log vitals / pain / food / exercise at these times" checks, their groups, pauses, completion
   log and reminder bookkeeping, all isolated per household. Nothing uses them yet, so there is no

@@ -54,6 +54,24 @@ Added with the scheduled health checks tables (WHO-379/380, migration `0085_heal
 
 These only mean anything as the non-superuser `domi_ops_app` role; as a superuser the four isolation cases fail by design.
 
+## Health checks API matrix (`apps/api/src/routes/health-checks.integration.test.ts`)
+
+WHO-382. Drives the real `/api/health/checks` and `/api/health/check-groups` handlers through the real tenant middleware (a fake-auth parent app sets `auth` from an `x-as` header), so every request runs in a household-scoped RLS transaction. Seeds its own households and deletes them afterwards.
+
+| Case | Expectation |
+|------|-------------|
+| Who sees a private check | Creator, the subject, and `events` read/write grantees. Not an admin without a grant, not a stranger, not another household. List and single GET always agree |
+| Write by someone who cannot see it | 404 (existence is not revealed), never 403 |
+| Household-visible check | Everyone sees it; only the creator or an `events` writer can PATCH/DELETE (WHO-339) |
+| Shares | Household members only (other households and the creator are filtered out), read-only, hidden from non-editors, cleared when made household-visible |
+| Create | `events` write on the member; member must belong to the caller's household (404 otherwise) |
+| Validation | `medication` type, `prn`/`otc`, empty vitals template, bad dates, oversized names, non-boolean flags all 400 with a specific code |
+| Immutable fields | `memberId` and `eventType` cannot change after create |
+| Pause / resume | `enabled` flips open and close pause periods, once per change |
+| Soft delete | `deleted_at` set, disabled, hidden, removed from groups; a second delete is 404 |
+| Groups | Only the group member's checks (400 `member_mismatch`); several groups per check; viewers only see member checks they may see; same write rules as checks |
+| Module / auth | 403 without the health module; 401 unauthenticated |
+
 ## Manual API checks (after `dev:hosted` stack)
 
 1. Log in as `alpha@hosted-qa.domi-ops.test` — `/api/core/notes` returns one note.
