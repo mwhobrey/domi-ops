@@ -24,6 +24,7 @@ import {
   addMedicationToGroup,
   canAccessHealthSegment,
   hasHealthSegmentAccess,
+  isHouseholdMember,
   healthMedicationGroupVisibleWhere,
   loadGroupMemberMedicationIdsMap,
   loadHealthAclBySubjectForGrantee,
@@ -319,6 +320,9 @@ export function healthMedicationGroupRoutes(db: Database, env: Env) {
     }
     if (isAsNeededMedScheduleKind(body.scheduleKind)) {
       return c.json({ error: "group_schedule_must_be_scheduled_or_interval" }, 400);
+    }
+    if (!(await isHouseholdMember(db, auth.householdId, body.memberId))) {
+      return c.json({ error: "member_not_found" }, 404);
     }
     if (!(await hasHealthSegmentAccess(db, auth, body.memberId, "medications", "write"))) {
       return c.json({ error: "forbidden" }, 403);

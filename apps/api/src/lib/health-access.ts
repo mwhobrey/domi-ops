@@ -12,6 +12,7 @@ import {
 } from "@domi-ops/db";
 import { and, eq, exists, inArray, or, type AnyColumn } from "drizzle-orm";
 import { isHouseholdAdmin } from "./school-access.js";
+import { isUuid } from "./uuid.js";
 
 export type HealthVisibility = "household" | "private";
 
@@ -114,6 +115,26 @@ export async function validateHealthShareMemberIds(
     );
   const valid = new Set(rows.map((r) => r.id));
   return unique.filter((id) => valid.has(id));
+}
+
+/**
+ * True when `memberId` is a member of `householdId`. Household admins pass every
+ * `hasHealthSegmentAccess` check for any member id, RLS only checks a row's own household_id, and
+ * the foreign key only checks the member exists, so a write that takes a member id from the
+ * request must verify it here first (WHO-402). Anything that is not a UUID is simply "no".
+ */
+export async function isHouseholdMember(
+  db: Database,
+  householdId: string,
+  memberId: unknown,
+): Promise<boolean> {
+  if (!isUuid(memberId)) return false;
+  const [row] = await db
+    .select({ id: householdMembers.id })
+    .from(householdMembers)
+    .where(and(eq(householdMembers.id, memberId), eq(householdMembers.householdId, householdId)))
+    .limit(1);
+  return row !== undefined;
 }
 
 export async function replaceHealthEventShares(
