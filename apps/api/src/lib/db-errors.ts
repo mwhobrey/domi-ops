@@ -19,3 +19,12 @@ export function isUniqueViolationError(err: unknown): boolean {
   }
   return false;
 }
+
+/** Postgres `foreign_key_violation` (23503), through Drizzle's `cause` chain. */
+export function isForeignKeyViolationError(err: unknown): boolean {
+  for (let e: unknown = err, depth = 0; e && depth < 5; depth++) {
+    if (typeof e === "object" && (e as { code?: unknown }).code === "23503") return true;
+    e = (e as { cause?: unknown }).cause;
+  }
+  return false;
+}
