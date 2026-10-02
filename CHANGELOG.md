@@ -8,6 +8,13 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+### Added
+
+- **Database groundwork for scheduled health checks** (WHO-379, WHO-380). New tables for recurring
+  "log vitals / pain / food / exercise at these times" checks, their groups, pauses, completion
+  log and reminder bookkeeping, all isolated per household. Nothing uses them yet, so there is no
+  visible change. **Migration `0085`** (requires `npm run db:migrate`; no manual steps).
+
 ### Changed
 
 - **Medication reminders and the calendar's dose chips now share one schedule engine** (WHO-381).

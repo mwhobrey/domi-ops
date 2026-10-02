@@ -37,6 +37,8 @@ Helper function: `app.tenant_household_id()` reads the same setting.
 
 **51 tables** with `household_isolation` policy — direct `household_id` match or `EXISTS` join to a parent row.
 
+Later migrations add their own tables with the same two policies (`household_isolation` + `worker_scan`). `0085_health_checks` adds nine health check tables; see [HOSTED_TENANT_TESTS.md](./HOSTED_TENANT_TESTS.md).
+
 ## Excluded (v1)
 
 No RLS on auth / global identity tables (API must scope):

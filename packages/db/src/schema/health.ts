@@ -511,3 +511,226 @@ export const healthMyallyfileLinks = pgTable(
   ],
 );
 
+// ---------------------------------------------------------------------------------------------
+// Health checks (WHO-379 / WHO-380): scheduled "log vitals / pain / food / exercise" reminders.
+// Siblings to the medication tables above, with the same schedule kinds, groups, shares, pauses
+// and reminder dedupe. See migration 0085.
+// ---------------------------------------------------------------------------------------------
+
+export const healthCheckLogStatusEnum = pgEnum("health_check_log_status", [
+  "done",
+  "skipped",
+  "missed",
+]);
+
+/**
+ * A recurring prompt to log one kind of health event for one member (e.g. "Ally BP", vitals,
+ * 8/12/4/8). `name` and `templateJson` follow the health-crypto convention (encrypted text).
+ *
+ * `eventType` is the `health_events.type` that completes the check (never `medication`: doses go
+ * through health_medication_logs). `templateJson` holds the per-type field template, e.g. the
+ * vitals metrics to prompt for. `scheduleKind` is restricted to `scheduled | interval` by a CHECK;
+ * as-needed kinds have no due time. Soft delete + `health_check_pauses` mirror WHO-338.
+ *
+ * Completion link: `health_check_logs.health_event_id`. There is deliberately no column on
+ * health_events: one reading can satisfy several checks (BP + weight in a single vitals entry).
+ */
+export const healthChecks = pgTable(
+  "health_checks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    householdId: uuid("household_id")
+      .notNull()
+      .references(() => households.id, { onDelete: "cascade" }),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => householdMembers.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    eventType: healthEventTypeEnum("event_type").notNull(),
+    templateJson: text("template_json").default("{}"),
+    scheduleKind: medScheduleKindEnum("schedule_kind").notNull().default("scheduled"),
+    scheduleJson: text("schedule_json").default("{}"),
+    reminderOffsetsJson: text("reminder_offsets_json").default("[0]"),
+    startDate: date("start_date"),
+    endDate: date("end_date"),
+    enabled: boolean("enabled").notNull().default(true),
+    visibility: noteVisibilityEnum("visibility").notNull().default("private"),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => [index("health_checks_household_member_idx").on(t.householdId, t.memberId)],
+);
+
+export const healthCheckShares = pgTable(
+  "health_check_shares",
+  {
+    checkId: uuid("check_id")
+      .notNull()
+      .references(() => healthChecks.id, { onDelete: "cascade" }),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => householdMembers.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.checkId, t.memberId] })],
+);
+
+/** When a check was paused (enabled → false) and resumed; `resumedAt` null = still paused. */
+export const healthCheckPauses = pgTable(
+  "health_check_pauses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    checkId: uuid("check_id")
+      .notNull()
+      .references(() => healthChecks.id, { onDelete: "cascade" }),
+    pausedAt: timestamp("paused_at", { withTimezone: true }).notNull().defaultNow(),
+    resumedAt: timestamp("resumed_at", { withTimezone: true }),
+  },
+  (t) => [index("health_check_pauses_check_id_idx").on(t.checkId)],
+);
+
+/**
+ * A bundle of checks that share one schedule so recipients get one consolidated reminder
+ * ("Morning: BP, weight, pain"). Same many-to-many membership and claiming rule as
+ * healthMedicationGroups (see its doc comment), scoped to a single member.
+ */
+export const healthCheckGroups = pgTable(
+  "health_check_groups",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    householdId: uuid("household_id")
+      .notNull()
+      .references(() => households.id, { onDelete: "cascade" }),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => householdMembers.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    scheduleKind: medScheduleKindEnum("schedule_kind").notNull().default("scheduled"),
+    scheduleJson: text("schedule_json").default("{}"),
+    reminderOffsetsJson: text("reminder_offsets_json").default("[0]"),
+    startDate: date("start_date"),
+    endDate: date("end_date"),
+    enabled: boolean("enabled").notNull().default(true),
+    visibility: noteVisibilityEnum("visibility").notNull().default("private"),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("health_check_groups_household_member_idx").on(t.householdId, t.memberId)],
+);
+
+export const healthCheckGroupShares = pgTable(
+  "health_check_group_shares",
+  {
+    groupId: uuid("group_id")
+      .notNull()
+      .references(() => healthCheckGroups.id, { onDelete: "cascade" }),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => householdMembers.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.groupId, t.memberId] })],
+);
+
+export const healthCheckGroupMembers = pgTable(
+  "health_check_group_members",
+  {
+    groupId: uuid("group_id")
+      .notNull()
+      .references(() => healthCheckGroups.id, { onDelete: "cascade" }),
+    checkId: uuid("check_id")
+      .notNull()
+      .references(() => healthChecks.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.groupId, t.checkId] })],
+);
+
+/**
+ * One row per done / skipped / missed slot. `scheduledAt` is always set. The unique index is the
+ * DB backstop behind the single writer (recordCheck, mirroring recordDose): one log per check
+ * per instant. `healthEventId` links the completing event (null for skips).
+ */
+export const healthCheckLogs = pgTable(
+  "health_check_logs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    checkId: uuid("check_id")
+      .notNull()
+      .references(() => healthChecks.id, { onDelete: "cascade" }),
+    scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull(),
+    status: healthCheckLogStatusEnum("status").notNull(),
+    loggedAt: timestamp("logged_at", { withTimezone: true }).notNull().defaultNow(),
+    loggedByUserId: uuid("logged_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    notes: text("notes"),
+    healthEventId: uuid("health_event_id").references(() => healthEvents.id, {
+      onDelete: "set null",
+    }),
+  },
+  (t) => [
+    uniqueIndex("health_check_logs_instant_unique").on(t.checkId, t.scheduledAt),
+    index("health_check_logs_event_idx")
+      .on(t.healthEventId)
+      .where(sql`${t.healthEventId} is not null`),
+  ],
+);
+
+/** Same dedupe/idempotency shape as healthMedReminderSent, keyed by check. */
+export const healthCheckReminderSent = pgTable(
+  "health_check_reminder_sent",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    checkId: uuid("check_id")
+      .notNull()
+      .references(() => healthChecks.id, { onDelete: "cascade" }),
+    scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull(),
+    offsetMinutes: integer("offset_minutes").notNull(),
+    /** Null = inbox-only / no push endpoint. */
+    subscriptionId: uuid("subscription_id").references(() => pushSubscriptions.id, {
+      onDelete: "cascade",
+    }),
+    /** Recipient user for inbox-only dedupe across subject + caregivers. */
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("health_check_reminder_sent_sub_unique")
+      .on(t.checkId, t.scheduledAt, t.offsetMinutes, t.subscriptionId)
+      .where(sql`${t.subscriptionId} is not null`),
+    uniqueIndex("health_check_reminder_sent_nosub_unique")
+      .on(t.checkId, t.scheduledAt, t.offsetMinutes, t.userId)
+      .where(sql`${t.subscriptionId} is null`),
+  ],
+);
+
+/** Same shape as healthCheckReminderSent, keyed by group. */
+export const healthCheckGroupReminderSent = pgTable(
+  "health_check_group_reminder_sent",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    groupId: uuid("group_id")
+      .notNull()
+      .references(() => healthCheckGroups.id, { onDelete: "cascade" }),
+    scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull(),
+    offsetMinutes: integer("offset_minutes").notNull(),
+    subscriptionId: uuid("subscription_id").references(() => pushSubscriptions.id, {
+      onDelete: "cascade",
+    }),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("health_check_group_reminder_sent_sub_unique")
+      .on(t.groupId, t.scheduledAt, t.offsetMinutes, t.subscriptionId)
+      .where(sql`${t.subscriptionId} is not null`),
+    uniqueIndex("health_check_group_reminder_sent_nosub_unique")
+      .on(t.groupId, t.scheduledAt, t.offsetMinutes, t.userId)
+      .where(sql`${t.subscriptionId} is null`),
+  ],
+);

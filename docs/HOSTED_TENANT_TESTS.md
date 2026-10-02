@@ -37,6 +37,21 @@ Added 2026-08-25 after the Stripe webhook's household/`household_subscriptions` 
 | Household + `household_subscriptions` insert inside `withSystemContext` | Succeeds |
 | Read `household_subscriptions` by `stripeCustomerId` inside `withSystemContext` | Finds the row (same shape as `hosted-setup/validate`) |
 
+## Health checks matrix (`packages/db/src/health-checks-isolation.integration.test.ts`)
+
+Added with the scheduled health checks tables (WHO-379/380, migration `0085_health_checks`: `health_checks`, `health_check_groups`, `health_check_group_members`, `health_check_group_shares`, `health_check_shares`, `health_check_pauses`, `health_check_logs`, `health_check_reminder_sent`, `health_check_group_reminder_sent`). Seeds its own rows in Alpha and Beta and deletes them afterwards.
+
+| Case | Expectation |
+|------|-------------|
+| Alpha / Beta read checks and groups | Each sees only its own |
+| Child tables (logs, pauses, shares, group members) | Scoped through the parent check or group; asking for the other tenant's ids returns nothing |
+| No household context | Zero rows |
+| Cross-tenant insert (check, log, reminder-sent) | Rejected by RLS; an UPDATE aimed at the other tenant's row matches nothing |
+| Worker scan context | Sees both tenants |
+| DB constraints | `medication` event type, `prn`/`otc` schedule kinds, and a second log for the same check and instant are all rejected |
+
+These only mean anything as the non-superuser `domi_ops_app` role; as a superuser the four isolation cases fail by design.
+
 ## Manual API checks (after `dev:hosted` stack)
 
 1. Log in as `alpha@hosted-qa.domi-ops.test` — `/api/core/notes` returns one note.
