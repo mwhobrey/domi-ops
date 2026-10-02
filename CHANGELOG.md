@@ -8,6 +8,13 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+### Changed
+
+- **Medication reminders and the calendar's dose chips now share one schedule engine** (WHO-381).
+  Nothing changes on screen. It is groundwork for scheduled health checks, so a repeating
+  "take vitals at 8, 12, 4 and 8" schedule behaves exactly like a medication's. A schedule saved
+  with garbled times is now ignored instead of producing odd reminders.
+
 ## [0.6.1] - 2026-10-01
 
 ### Changed

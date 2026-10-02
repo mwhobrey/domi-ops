@@ -27,8 +27,8 @@ import {
   formatTimeLabelInTz,
   localDateOfInstant,
   todayIsoDateInTz,
-  zonedLocalToUtc,
 } from "./household-time.js";
+import { expandScheduledSlots, parseFixedTimeSchedule } from "./health-schedule.js";
 import { nextIntervalPending, parseIntervalSchedule } from "./med-interval-schedule.js";
 import {
   deliverUserNotificationToSubscriptions,
@@ -97,17 +97,6 @@ function decryptMedName(nameEnc: string, env: Env): string {
     return decryptSensitive(nameEnc, env.ENCRYPTION_KEY);
   } catch {
     return "Medication";
-  }
-}
-
-type MedSchedule = { times?: string[]; daysOfWeek?: number[] };
-
-function parseSchedule(raw: string | null | undefined): MedSchedule {
-  if (!raw) return {};
-  try {
-    return JSON.parse(raw) as MedSchedule;
-  } catch {
-    return {};
   }
 }
 
@@ -652,7 +641,7 @@ export async function scanHealthMedReminders(db: Database, env: Env): Promise<nu
       for (const groupId of medGroupMembershipMap.get(medId) ?? []) {
         const group = groupById.get(groupId);
         if (!group || group.scheduleKind !== "scheduled") continue;
-        for (const t of (parseSchedule(group.scheduleJson).times ?? [])) {
+        for (const t of (parseFixedTimeSchedule(group.scheduleJson).times ?? [])) {
           claimed.add(t.slice(0, 5));
         }
       }
@@ -737,58 +726,53 @@ export async function scanHealthMedReminders(db: Database, env: Env): Promise<nu
             continue;
           }
 
-          const schedule = parseSchedule(med.scheduleJson);
+          const schedule = parseFixedTimeSchedule(med.scheduleJson);
           const times = schedule.times ?? [];
           if (times.length === 0) continue;
           const claimedTimes = scheduledTimesClaimedByGroups(med.id);
 
-          for (const date of datesAround(tz)) {
-            if (med.startDate && date < med.startDate) continue;
-            if (med.endDate && date > med.endDate) continue;
-            if (schedule.daysOfWeek?.length) {
-              const dow = new Date(`${date}T12:00:00Z`).getUTCDay();
-              if (!schedule.daysOfWeek.includes(dow)) continue;
-            }
+          for (const { date, hhmm, scheduledAt } of expandScheduledSlots({
+            times,
+            daysOfWeek: schedule.daysOfWeek,
+            startDate: med.startDate,
+            endDate: med.endDate,
+            dates: datesAround(tz),
+            timeZone: tz,
+            skipHhmm: claimedTimes, // those doses belong to a group instead
+          })) {
+            for (const offsetMinutes of offsets) {
+              const fireAt = new Date(scheduledAt.getTime() - offsetMinutes * 60 * 1000);
+              if (fireAt > windowEnd) continue;
+              if (fireAt < lookbackStart) continue;
 
-            for (const time of times) {
-              const hhmm = time.length >= 5 ? time.slice(0, 5) : time;
-              if (claimedTimes.has(hhmm)) continue; // this dose belongs to a group instead
-              const scheduledAt = zonedLocalToUtc(date, hhmm, tz);
+              const [logged] = await db
+                .select({ id: healthMedicationLogs.id })
+                .from(healthMedicationLogs)
+                .where(
+                  and(
+                    eq(healthMedicationLogs.medicationId, med.id),
+                    eq(healthMedicationLogs.scheduledAt, scheduledAt),
+                  ),
+                )
+                .limit(1);
+              if (logged) continue;
 
-              for (const offsetMinutes of offsets) {
-                const fireAt = new Date(scheduledAt.getTime() - offsetMinutes * 60 * 1000);
-                if (fireAt > windowEnd) continue;
-                if (fireAt < lookbackStart) continue;
-
-                const [logged] = await db
-                  .select({ id: healthMedicationLogs.id })
-                  .from(healthMedicationLogs)
-                  .where(
-                    and(
-                      eq(healthMedicationLogs.medicationId, med.id),
-                      eq(healthMedicationLogs.scheduledAt, scheduledAt),
-                    ),
-                  )
-                  .limit(1);
-                if (logged) continue;
-
-                const tag = `health-med-${med.id}-${date}-${hhmm}-${offsetMinutes}`;
-                if (
-                  await deliverOneMedReminder(db, env, {
-                    householdId: household.id,
-                    medicationId: med.id,
-                    medName,
-                    scheduledAt,
-                    offsetMinutes,
-                    tag,
-                    now,
-                    recipient,
-                    subjectLabel,
-                    target,
-                  })
-                ) {
-                  sent += 1;
-                }
+              const tag = `health-med-${med.id}-${date}-${hhmm}-${offsetMinutes}`;
+              if (
+                await deliverOneMedReminder(db, env, {
+                  householdId: household.id,
+                  medicationId: med.id,
+                  medName,
+                  scheduledAt,
+                  offsetMinutes,
+                  tag,
+                  now,
+                  recipient,
+                  subjectLabel,
+                  target,
+                })
+              ) {
+                sent += 1;
               }
             }
           }
@@ -894,72 +878,67 @@ export async function scanHealthMedReminders(db: Database, env: Env): Promise<nu
             continue;
           }
 
-          const schedule = parseSchedule(group.scheduleJson);
+          const schedule = parseFixedTimeSchedule(group.scheduleJson);
           const times = schedule.times ?? [];
           if (times.length === 0) continue;
 
-          for (const date of datesAround(tz)) {
-            if (group.startDate && date < group.startDate) continue;
-            if (group.endDate && date > group.endDate) continue;
-            if (schedule.daysOfWeek?.length) {
-              const dow = new Date(`${date}T12:00:00Z`).getUTCDay();
-              if (!schedule.daysOfWeek.includes(dow)) continue;
-            }
+          for (const { date, hhmm, scheduledAt } of expandScheduledSlots({
+            times,
+            daysOfWeek: schedule.daysOfWeek,
+            startDate: group.startDate,
+            endDate: group.endDate,
+            dates: datesAround(tz),
+            timeZone: tz,
+          })) {
+            // Which members actually have a dose at THIS specific time — belonging to the
+            // group doesn't mean every one of a member's own times matches every group time.
+            const membersAtThisTime = memberMeds.filter(
+              (m) =>
+                m.scheduleKind === "scheduled" &&
+                (parseFixedTimeSchedule(m.scheduleJson).times ?? []).some((t) => t.slice(0, 5) === hhmm),
+            );
+            if (membersAtThisTime.length === 0) continue;
+            const membersAtThisTimeIds = membersAtThisTime.map((m) => m.id);
+            const medNamesAtThisTime = membersAtThisTime.map((m) => decryptMedName(m.name, env));
 
-            for (const time of times) {
-              const hhmm = time.length >= 5 ? time.slice(0, 5) : time;
-              const scheduledAt = zonedLocalToUtc(date, hhmm, tz);
+            for (const offsetMinutes of offsets) {
+              const fireAt = new Date(scheduledAt.getTime() - offsetMinutes * 60 * 1000);
+              if (fireAt > windowEnd) continue;
+              if (fireAt < lookbackStart) continue;
 
-              // Which members actually have a dose at THIS specific time — belonging to the
-              // group doesn't mean every one of a member's own times matches every group time.
-              const membersAtThisTime = memberMeds.filter(
-                (m) =>
-                  m.scheduleKind === "scheduled" &&
-                  (parseSchedule(m.scheduleJson).times ?? []).some((t) => t.slice(0, 5) === hhmm),
-              );
-              if (membersAtThisTime.length === 0) continue;
-              const membersAtThisTimeIds = membersAtThisTime.map((m) => m.id);
-              const medNamesAtThisTime = membersAtThisTime.map((m) => decryptMedName(m.name, env));
+              // Partial-take: a group dose stays pending until EVERY member medication has a
+              // log for this instant — someone taking 2 of 3 meds early shouldn't suppress the
+              // group's reminder before the rest are handled.
+              const loggedRows = await db
+                .select({ medicationId: healthMedicationLogs.medicationId })
+                .from(healthMedicationLogs)
+                .where(
+                  and(
+                    inArray(healthMedicationLogs.medicationId, membersAtThisTimeIds),
+                    eq(healthMedicationLogs.scheduledAt, scheduledAt),
+                  ),
+                );
+              if (new Set(loggedRows.map((r) => r.medicationId)).size >= membersAtThisTime.length) {
+                continue;
+              }
 
-              for (const offsetMinutes of offsets) {
-                const fireAt = new Date(scheduledAt.getTime() - offsetMinutes * 60 * 1000);
-                if (fireAt > windowEnd) continue;
-                if (fireAt < lookbackStart) continue;
-
-                // Partial-take: a group dose stays pending until EVERY member medication has a
-                // log for this instant — someone taking 2 of 3 meds early shouldn't suppress the
-                // group's reminder before the rest are handled.
-                const loggedRows = await db
-                  .select({ medicationId: healthMedicationLogs.medicationId })
-                  .from(healthMedicationLogs)
-                  .where(
-                    and(
-                      inArray(healthMedicationLogs.medicationId, membersAtThisTimeIds),
-                      eq(healthMedicationLogs.scheduledAt, scheduledAt),
-                    ),
-                  );
-                if (new Set(loggedRows.map((r) => r.medicationId)).size >= membersAtThisTime.length) {
-                  continue;
-                }
-
-                const tag = `health-medgroup-${group.id}-${date}-${hhmm}-${offsetMinutes}`;
-                if (
-                  await deliverOneMedGroupReminder(db, env, {
-                    householdId: household.id,
-                    groupId: group.id,
-                    groupName,
-                    medNames: medNamesAtThisTime,
-                    scheduledAt,
-                    offsetMinutes,
-                    tag,
-                    now,
-                    recipient,
-                    subjectLabel,
-                    target,
-                  })
-                ) {
-                  sent += 1;
-                }
+              const tag = `health-medgroup-${group.id}-${date}-${hhmm}-${offsetMinutes}`;
+              if (
+                await deliverOneMedGroupReminder(db, env, {
+                  householdId: household.id,
+                  groupId: group.id,
+                  groupName,
+                  medNames: medNamesAtThisTime,
+                  scheduledAt,
+                  offsetMinutes,
+                  tag,
+                  now,
+                  recipient,
+                  subjectLabel,
+                  target,
+                })
+              ) {
+                sent += 1;
               }
             }
           }

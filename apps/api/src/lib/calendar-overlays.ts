@@ -11,6 +11,7 @@ import {
   users,
 } from "@domi-ops/db";
 import {
+  expandScheduledSlots,
   localDateOfInstant,
   localHourInTz,
   nextIntervalPending,
@@ -445,36 +446,32 @@ export async function buildMedicationDoseOverlays(
 
     if (group.scheduleKind === "scheduled") {
       const schedule = parseMedSchedule(group.scheduleJson);
-      const times = schedule.times ?? [];
-      for (const date of dates) {
-        if (group.startDate && date < group.startDate) continue;
-        if (group.endDate && date > group.endDate) continue;
-        if (schedule.daysOfWeek?.length) {
-          const dow = new Date(`${date}T12:00:00Z`).getUTCDay();
-          if (!schedule.daysOfWeek.includes(dow)) continue;
-        }
-        for (const time of times) {
-          const hhmm = time.length >= 5 ? time.slice(0, 5) : time;
-          const scheduledAt = zonedLocalToUtc(date, hhmm, timeZone);
-          const membersAtThisTime = members.filter((m) =>
-            m.scheduleKind === "scheduled" ? medHasScheduledTime(m.scheduleJson, hhmm) : true,
-          );
-          if (membersAtThisTime.length === 0) continue;
-          const allLogged = membersAtThisTime.every((m) =>
-            isInstantLogged(doseLogMap, m.id, scheduledAt),
-          );
-          if (allLogged) continue;
-          const iso = scheduledAt.toISOString();
-          overlays.push(
-            medOverlay({
-              id: `overlay:health:medgroup:${group.id}:${iso}`,
-              title: name,
-              date,
-              hhmm,
-              deepLink: `/health?takeGroup=${encodeURIComponent(group.id)}&scheduledAt=${encodeURIComponent(iso)}`,
-            }),
-          );
-        }
+      for (const { date, hhmm, scheduledAt } of expandScheduledSlots({
+        times: schedule.times,
+        daysOfWeek: schedule.daysOfWeek,
+        startDate: group.startDate,
+        endDate: group.endDate,
+        dates,
+        timeZone,
+      })) {
+        const membersAtThisTime = members.filter((m) =>
+          m.scheduleKind === "scheduled" ? medHasScheduledTime(m.scheduleJson, hhmm) : true,
+        );
+        if (membersAtThisTime.length === 0) continue;
+        const allLogged = membersAtThisTime.every((m) =>
+          isInstantLogged(doseLogMap, m.id, scheduledAt),
+        );
+        if (allLogged) continue;
+        const iso = scheduledAt.toISOString();
+        overlays.push(
+          medOverlay({
+            id: `overlay:health:medgroup:${group.id}:${iso}`,
+            title: name,
+            date,
+            hhmm,
+            deepLink: `/health?takeGroup=${encodeURIComponent(group.id)}&scheduledAt=${encodeURIComponent(iso)}`,
+          }),
+        );
       }
       continue;
     }
@@ -526,29 +523,26 @@ export async function buildMedicationDoseOverlays(
       const times = schedule.times ?? [];
       if (times.length === 0) continue;
       const claimed = scheduledTimesClaimedByGroups(med.id);
-      for (const date of dates) {
-        if (med.startDate && date < med.startDate) continue;
-        if (med.endDate && date > med.endDate) continue;
-        if (schedule.daysOfWeek?.length) {
-          const dow = new Date(`${date}T12:00:00Z`).getUTCDay();
-          if (!schedule.daysOfWeek.includes(dow)) continue;
-        }
-        for (const time of times) {
-          const hhmm = time.length >= 5 ? time.slice(0, 5) : time;
-          if (claimed.has(hhmm)) continue;
-          const scheduledAt = zonedLocalToUtc(date, hhmm, timeZone);
-          if (isInstantLogged(doseLogMap, med.id, scheduledAt)) continue;
-          const iso = scheduledAt.toISOString();
-          overlays.push(
-            medOverlay({
-              id: `overlay:health:med:${med.id}:${iso}`,
-              title: name,
-              date,
-              hhmm,
-              deepLink: `/health?take=${encodeURIComponent(med.id)}&scheduledAt=${encodeURIComponent(iso)}`,
-            }),
-          );
-        }
+      for (const { date, hhmm, scheduledAt } of expandScheduledSlots({
+        times,
+        daysOfWeek: schedule.daysOfWeek,
+        startDate: med.startDate,
+        endDate: med.endDate,
+        dates,
+        timeZone,
+        skipHhmm: claimed,
+      })) {
+        if (isInstantLogged(doseLogMap, med.id, scheduledAt)) continue;
+        const iso = scheduledAt.toISOString();
+        overlays.push(
+          medOverlay({
+            id: `overlay:health:med:${med.id}:${iso}`,
+            title: name,
+            date,
+            hhmm,
+            deepLink: `/health?take=${encodeURIComponent(med.id)}&scheduledAt=${encodeURIComponent(iso)}`,
+          }),
+        );
       }
       continue;
     }
