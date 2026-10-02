@@ -66,6 +66,13 @@ export {
   type IntervalPendingDose,
   type IntervalEditLog,
 } from "./med-interval-schedule.js";
+export {
+  expandScheduledSlots,
+  parseFixedTimeSchedule,
+  scheduleHhmm,
+  type FixedTimeSchedule,
+  type ScheduledSlot,
+} from "./health-schedule.js";
 export { scanSchoolReminders } from "./school-reminder-scan.js";
 export { scanHealthMedReminders } from "./health-med-reminder-scan.js";
 export {
