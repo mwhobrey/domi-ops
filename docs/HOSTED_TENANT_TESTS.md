@@ -37,6 +37,23 @@ Added 2026-08-25 after the Stripe webhook's household/`household_subscriptions` 
 | Household + `household_subscriptions` insert inside `withSystemContext` | Succeeds |
 | Read `household_subscriptions` by `stripeCustomerId` inside `withSystemContext` | Finds the row (same shape as `hosted-setup/validate`) |
 
+## Health checks matrix (`packages/db/src/health-checks-isolation.integration.test.ts`)
+
+Added with the scheduled health checks tables (WHO-379/380, migration `0085_health_checks`: `health_checks`, `health_check_groups`, `health_check_group_members`, `health_check_group_shares`, `health_check_shares`, `health_check_pauses`, `health_check_logs`, `health_check_reminder_sent`, `health_check_group_reminder_sent`). Seeds its own rows in Alpha and Beta (plus a second Alpha member) and deletes them afterwards.
+
+| Case | Expectation |
+|------|-------------|
+| Alpha / Beta read checks and groups | Each sees only its own |
+| Child tables (logs, pauses, shares, group members, group shares) | Each tenant gets back exactly its own rows (asserted by id, not just count); asking for only the other tenant's ids returns nothing |
+| No household context | Zero rows |
+| Cross-tenant insert (check, log, reminder-sent) | Rejected by RLS (`42501`); an UPDATE aimed at the other tenant's row matches nothing |
+| Links to another household's records | A log pointing at the other tenant's event, a check or group shared with the other tenant's member, and a group containing the other tenant's check are all rejected by RLS; the same log with the tenant's own event is allowed (positive control) |
+| Group holds only one member's checks | A group cannot contain a check of a different member, even in the same household (composite foreign key, `23503`) |
+| Worker scan context | Sees both tenants |
+| DB constraints | `medication` event type and `prn`/`otc` schedule kinds (checks and groups) are rejected by CHECK (`23514`); a second log for the same check and instant is rejected (`23505`) |
+
+These only mean anything as the non-superuser `domi_ops_app` role; as a superuser the four isolation cases fail by design.
+
 ## Manual API checks (after `dev:hosted` stack)
 
 1. Log in as `alpha@hosted-qa.domi-ops.test` — `/api/core/notes` returns one note.
