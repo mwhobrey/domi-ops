@@ -1,8 +1,9 @@
 import { Hono } from "hono";
 import type { Env } from "@domi-ops/config";
+import { resolveAlertTimeZone, todayIsoDateInTz } from "@domi-ops/calendar-sync";
 import type { Database } from "@domi-ops/db";
 import { healthChecks, healthEvents, householdMembers } from "@domi-ops/db";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireHouseholdModule } from "../lib/household-modules.js";
@@ -20,20 +21,25 @@ import {
 } from "../lib/health-check-access.js";
 import { RecordCheckError, recordCheck, type RecordCheckErrorCode } from "../lib/health-check-logging.js";
 import { recordCheckEnabledChange } from "../lib/health-check-pauses.js";
+import { datesBetween, loadCheckSlotStatuses } from "../lib/health-check-status.js";
 import { CheckScheduleError, normalizeCheckSchedule } from "../lib/health-check-schedule.js";
 import { enrichHealthChecks } from "../lib/health-check-serialize.js";
 import {
   CheckTemplateError,
   isCheckEventType,
+  isIsoDate,
   normalizeCheckTemplate,
   validateCheckDateRange,
 } from "../lib/health-check-template.js";
+import { householdTimezone } from "../lib/household-time.js";
 import { parseMedSchedule } from "../lib/health-serialize.js";
 import { isUuid, isUuidList } from "../lib/uuid.js";
 
 type Auth = NonNullable<AppVariables["auth"]>;
 
 const MAX_NAME_LENGTH = 200;
+/** Most local days one `/slots` request may cover. */
+const MAX_SLOT_RANGE_DAYS = 35;
 const MAX_LOG_NOTES_LENGTH = 2000;
 
 /** HTTP status for each reason recordCheck can refuse a link. */
@@ -120,6 +126,86 @@ export function healthCheckRoutes(db: Database, env: Env) {
       .orderBy(desc(healthChecks.createdAt));
     try {
       return c.json({ checks: await enrichHealthChecks(db, env, auth, rows) });
+    } catch (e) {
+      const resp = encryptionErrorResponse(c, e);
+      if (resp) return resp;
+      throw e;
+    }
+  });
+
+  /**
+   * Where each slot of the caller's checks stands over a range of local days: `done`,
+   * `skipped`, `due`, `overdue` or `upcoming` (WHO-384). Registered before `/:id`.
+   *
+   * An entry logged outside the check still completes a slot it is within 30 minutes of; a slot
+   * answered through `POST /:id/log` counts however far off it was. The status reflects every
+   * entry of the person, but `eventId` is only returned for entries the caller may open, so this
+   * never reveals one they can't. Days are in the `x-client-timezone` header's zone (else
+   * `?timezone=`, else the household's), because that is the zone the person is looking at.
+   */
+  app.get("/slots", async (c) => {
+    const auth = c.get("auth")!;
+    const memberId = c.req.query("memberId");
+    const checkId = c.req.query("checkId");
+    if (memberId !== undefined && !isUuid(memberId)) return c.json({ error: "invalid_member" }, 400);
+    if (checkId !== undefined && !isUuid(checkId)) return c.json({ error: "invalid_check" }, 400);
+
+    const timeZone = resolveAlertTimeZone({
+      deviceTimezone: c.req.header("x-client-timezone") ?? c.req.query("timezone"),
+      householdTimezone: await householdTimezone(db, auth.householdId),
+    });
+    const now = new Date();
+    const from = c.req.query("from") ?? todayIsoDateInTz(timeZone);
+    const to = c.req.query("to") ?? from;
+    if (!isIsoDate(from) || !isIsoDate(to)) return c.json({ error: "invalid_date" }, 400);
+    if (to < from) return c.json({ error: "end_before_start" }, 400);
+    if (datesBetween(from, to).length > MAX_SLOT_RANGE_DAYS) return c.json({ error: "range_too_large" }, 400);
+
+    const rows = await db
+      .select()
+      .from(healthChecks)
+      .where(
+        and(
+          healthCheckVisibleWhere(db, auth),
+          isNull(healthChecks.deletedAt),
+          memberId ? eq(healthChecks.memberId, memberId) : undefined,
+          checkId ? eq(healthChecks.id, checkId) : undefined,
+        ),
+      );
+
+    try {
+      const statuses = await loadCheckSlotStatuses(db, env, { checks: rows, from, to, timeZone, now });
+
+      // Only name entries the caller is allowed to open.
+      const linkedIds = [
+        ...new Set([...statuses.values()].flat().map((r) => r.eventId).filter((id): id is string => id != null)),
+      ];
+      const openable = new Set<string>();
+      if (linkedIds.length > 0) {
+        const visible = await db
+          .select({ id: healthEvents.id })
+          .from(healthEvents)
+          .where(and(inArray(healthEvents.id, linkedIds), healthEventVisibleWhere(db, auth)));
+        for (const v of visible) openable.add(v.id);
+      }
+
+      return c.json({
+        timeZone,
+        from,
+        to,
+        now: now.toISOString(),
+        checks: rows.map((check) => ({
+          checkId: check.id,
+          memberId: check.memberId,
+          slots: (statuses.get(check.id) ?? []).map((r) => ({
+            scheduledAt: r.scheduledAt.toISOString(),
+            status: r.status,
+            source: r.source,
+            logId: r.logId,
+            eventId: r.eventId && openable.has(r.eventId) ? r.eventId : null,
+          })),
+        })),
+      });
     } catch (e) {
       const resp = encryptionErrorResponse(c, e);
       if (resp) return resp;

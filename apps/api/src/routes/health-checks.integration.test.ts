@@ -1,6 +1,6 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, like } from "drizzle-orm";
 import { Hono } from "hono";
 import type { Env } from "@domi-ops/config";
 import {
@@ -14,6 +14,7 @@ import {
   healthChecks,
   healthEvents,
   healthMemberAcl,
+  healthVitalsReadings,
   householdMembers,
   households,
   users,
@@ -900,6 +901,171 @@ maybeDescribe("health checks routes (integration)", () => {
       await call("mom", "DELETE", `/checks/${check.id}`);
       expect((await log("mom", check.id, { scheduledAt: slot, status: "skipped" })).status).toBe(404);
       expect((await log("mom", "not-a-uuid", { scheduledAt: slot, status: "skipped" })).status).toBe(404);
+    });
+  });
+
+
+  describe("slot status (WHO-384)", () => {
+    // A Monday long ago (everything is overdue) and one far ahead (everything is upcoming), so the
+    // real clock cannot change the answers. Household time zone is UTC.
+    const PAST = "2025-03-03";
+    const FUTURE = "2099-03-02";
+    const BP = ["blood_pressure_systolic", "blood_pressure_diastolic"];
+
+    // A reading left by an earlier test could be nearer a slot than this test's own, and win.
+    beforeEach(async () => {
+      await withHouseholdContext(baseDb, people.mom!.householdId, (tx) =>
+        tx.delete(healthEvents).where(like(healthEvents.title, "who384%")),
+      );
+    });
+
+    const slotsFor = async (as: string, checkId: string, query: string, headers: Record<string, string> = {}) => {
+      const res = await app.request(`/checks/slots?checkId=${checkId}&${query}`, {
+        headers: { "x-as": as, ...headers },
+      });
+      const json = (await res.json()) as Json;
+      return { status: res.status, json, slots: (json?.checks?.[0]?.slots ?? []) as Json[] };
+    };
+    const compact = (slots: Json[]) => slots.map((x) => `${String(x.scheduledAt).slice(11, 16)} ${x.status}`);
+
+    async function makeBpCheck(over: Record<string, unknown> = {}) {
+      return makeCheck("mom", {
+        name: "Slots BP",
+        startDate: null,
+        endDate: null,
+        template: { metrics: BP },
+        schedule: { times: ["08:00", "12:00"] },
+        ...over,
+      });
+    }
+
+    async function readingAt(iso: string, metrics: string[] = BP, type: "vitals" | "pain" = "vitals") {
+      const [row] = await withHouseholdContext(baseDb, people.mom!.householdId, async (tx) => {
+        const [ev] = await tx
+          .insert(healthEvents)
+          .values({
+            householdId: people.mom!.householdId,
+            memberId: people.ally!.memberId,
+            type,
+            title: "who384 reading",
+            startedAt: new Date(iso),
+            createdByUserId: people.mom!.userId, // private, so only mom (its creator) and Ally's ACL grantees can open it
+          })
+          .returning({ id: healthEvents.id });
+        for (const metric of metrics) {
+          await tx.insert(healthVitalsReadings).values({ eventId: ev!.id, metric: metric as never, value: "1", unit: "x" });
+        }
+        return [ev!];
+      });
+      return row!.id;
+    }
+
+    it("is not mistaken for a check id", async () => {
+      const check = await makeBpCheck();
+      const res = await slotsFor("mom", check.id, `from=${PAST}&to=${PAST}`);
+      expect(res.status).toBe(200);
+      expect(res.json).toMatchObject({ timeZone: "UTC", from: PAST, to: PAST });
+      expect(res.json.checks).toHaveLength(1);
+    });
+
+    it("validates the request", async () => {
+      const bad = async (query: string, error: string) => {
+        const res = await call("mom", "GET", `/checks/slots?${query}`);
+        expect({ query, status: res.status, error: res.json?.error }).toEqual({ query, status: 400, error });
+      };
+      await bad("from=soon", "invalid_date");
+      await bad(`from=${PAST}&to=2025-02-30`, "invalid_date");
+      await bad(`from=${PAST}&to=2025-03-01`, "end_before_start");
+      await bad(`from=${PAST}&to=2025-05-01`, "range_too_large");
+      await bad("memberId=nope", "invalid_member");
+      await bad("checkId=nope", "invalid_check");
+    });
+
+    it("reports a past day as overdue and a future day as upcoming", async () => {
+      const check = await makeBpCheck();
+      expect(compact((await slotsFor("mom", check.id, `from=${PAST}&to=${PAST}`)).slots)).toEqual(["08:00 overdue", "12:00 overdue"]);
+      expect(compact((await slotsFor("mom", check.id, `from=${FUTURE}&to=${FUTURE}`)).slots)).toEqual(["08:00 upcoming", "12:00 upcoming"]);
+    });
+
+    it("a reading logged outside the check completes the slot it is near, checking its metrics", async () => {
+      const check = await makeBpCheck();
+      await readingAt(`${PAST}T12:10:00.000Z`);
+      await readingAt(`${PAST}T08:05:00.000Z`, ["weight"]); // weight only: not a blood pressure
+      const res = await slotsFor("mom", check.id, `from=${PAST}&to=${PAST}`);
+      expect(compact(res.slots)).toEqual(["08:00 overdue", "12:00 done"]);
+      expect(res.slots[1]).toMatchObject({ source: "event", logId: null });
+      expect(res.slots[1].eventId).toBeTruthy();
+    });
+
+    it("a slot answered through the log endpoint counts, and a skip stays a skip", async () => {
+      const check = await makeBpCheck();
+      const far = await readingAt(`${PAST}T03:00:00.000Z`);
+      await call("mom", "POST", `/checks/${check.id}/log`, { scheduledAt: `${PAST}T08:00:00.000Z`, eventId: far });
+      await call("mom", "POST", `/checks/${check.id}/log`, { scheduledAt: `${PAST}T12:00:00.000Z`, status: "skipped" });
+      await readingAt(`${PAST}T12:02:00.000Z`); // would complete 12:00, but it was skipped on purpose
+      const res = await slotsFor("mom", check.id, `from=${PAST}&to=${PAST}`);
+      expect(compact(res.slots)).toEqual(["08:00 done", "12:00 skipped"]);
+      expect(res.slots[0]).toMatchObject({ source: "log", eventId: far });
+      expect(res.slots[1]).toMatchObject({ source: "log", eventId: null });
+    });
+
+    it("only names entries the caller may open, but still reports the slot as done", async () => {
+      const check = await makeBpCheck({ visibility: "household" });
+      const reading = await readingAt(`${PAST}T12:10:00.000Z`);
+      // mom created it; the sitter has events access to Ally; the stranger can see the check only.
+      expect((await slotsFor("mom", check.id, `from=${PAST}&to=${PAST}`)).slots[1].eventId).toBe(reading);
+      expect((await slotsFor("sitter", check.id, `from=${PAST}&to=${PAST}`)).slots[1].eventId).toBe(reading);
+      const asStranger = await slotsFor("stranger", check.id, `from=${PAST}&to=${PAST}`);
+      expect(compact(asStranger.slots)).toEqual(["08:00 overdue", "12:00 done"]);
+      expect(asStranger.slots[1]).toMatchObject({ source: "event", eventId: null });
+    });
+
+    it("lays the day out in the caller's time zone", async () => {
+      const check = await makeBpCheck({ schedule: { times: ["08:00"] } });
+      const utc = await slotsFor("mom", check.id, `from=${PAST}&to=${PAST}`);
+      expect(utc.slots[0].scheduledAt).toBe(`${PAST}T08:00:00.000Z`);
+      const chicago = await slotsFor("mom", check.id, `from=${PAST}&to=${PAST}`, { "x-client-timezone": "America/Chicago" });
+      expect(chicago.json.timeZone).toBe("America/Chicago");
+      expect(chicago.slots[0].scheduledAt).toBe(`${PAST}T14:00:00.000Z`); // CST, UTC-6, in early March
+      // A garbage zone falls back to the household's.
+      const junk = await slotsFor("mom", check.id, `from=${PAST}&to=${PAST}`, { "x-client-timezone": "Not/AZone" });
+      expect(junk.json.timeZone).toBe("UTC");
+    });
+
+    it("has no slots while a check is paused", async () => {
+      const paused = await makeBpCheck({ enabled: false });
+      expect((await slotsFor("mom", paused.id, `from=${FUTURE}&to=${FUTURE}`)).slots).toEqual([]);
+      await call("mom", "PATCH", `/checks/${paused.id}`, { enabled: true });
+      expect(compact((await slotsFor("mom", paused.id, `from=${FUTURE}&to=${FUTURE}`)).slots)).toEqual(["08:00 upcoming", "12:00 upcoming"]);
+    });
+
+    it("only covers checks the caller can see, and skips deleted ones", async () => {
+      const check = await makeBpCheck();
+      const idsFor = async (as: string) =>
+        ((await call(as, "GET", `/checks/slots?from=${PAST}&to=${PAST}`)).json.checks as Json[]).map((c) => c.checkId);
+      expect(await idsFor("mom")).toContain(check.id);
+      expect(await idsFor("ally")).toContain(check.id);
+      expect(await idsFor("sitter")).toContain(check.id);
+      expect(await idsFor("dad")).not.toContain(check.id); // an admin with no grant sees no private check
+      expect(await idsFor("stranger")).not.toContain(check.id);
+      expect(await idsFor("outsider")).not.toContain(check.id);
+
+      await call("mom", "DELETE", `/checks/${check.id}`);
+      expect(await idsFor("mom")).not.toContain(check.id);
+    });
+
+    it("filters by member", async () => {
+      const forDad = await makeBpCheck({ memberId: people.dad!.memberId, name: "Dad slots" });
+      const res = await call("mom", "GET", `/checks/slots?from=${PAST}&to=${PAST}&memberId=${people.dad!.memberId}`);
+      const checks = res.json.checks as Json[];
+      expect(checks.map((c) => c.checkId)).toContain(forDad.id);
+      // Every check returned is Dad's, and none of Ally's.
+      expect(checks.every((c) => c.memberId === people.dad!.memberId)).toBe(true);
+    });
+
+    it("needs the health module and a signed-in caller", async () => {
+      expect((await call("nohealth", "GET", `/checks/slots?from=${PAST}&to=${PAST}`)).status).toBe(403);
+      expect((await call("nobody", "GET", `/checks/slots?from=${PAST}&to=${PAST}`)).status).toBe(401);
     });
   });
 });

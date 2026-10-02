@@ -71,6 +71,7 @@ WHO-382. Drives the real `/api/health/checks` and `/api/health/check-groups` han
 | Soft delete | `deleted_at` set, disabled, hidden, removed from groups; a second delete is 404 |
 | Groups | Only the group member's checks (400 `member_mismatch`); several groups per check; viewers only see member checks they may see; same write rules as checks |
 | Module / auth | 403 without the health module; 401 unauthenticated |
+| Slot status (`GET /checks/slots`, WHO-384) | Only checks the caller can see (admin without a grant, stranger and other households get none). A slot is done through a log, or through an unlinked entry of the same person, kind and (vitals) metrics within 30 minutes, closest first and one entry per slot; an explicit skip beats a nearby entry; `eventId` is only returned for entries the caller may open, but the slot still reads done; days are laid out in the `x-client-timezone` zone; paused and deleted checks have no slots |
 | Logging a slot (`POST /checks/:id/log`, WHO-383) | Needs `events` write on the person and visibility of the check (reader 403, admin without a grant 404). The linked event must be visible to the caller (otherwise 404, nothing revealed), the same person, and the same kind of entry; 409 if it already completes another slot of the check. Seconds are truncated, repeating a slot replaces the answer, and a slot counts however early or late the event was |
 
 ## Manual API checks (after `dev:hosted` stack)
