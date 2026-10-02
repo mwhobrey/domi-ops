@@ -67,6 +67,22 @@ export {
   type IntervalEditLog,
 } from "./med-interval-schedule.js";
 export {
+  CHECK_SLOT_TOLERANCE_MINUTES,
+  CHECK_SLOT_TOLERANCE_MS,
+  computeSlotStatuses,
+  eventQualifiesForCheck,
+  excludeInactiveInstants,
+  intervalCheckSlots,
+  matchEventsToSlots,
+  scheduledCheckSlots,
+  type CheckForSlots,
+  type CheckSlotEvent,
+  type CheckSlotLog,
+  type PausePeriod,
+  type SlotResult,
+  type SlotStatus,
+} from "./health-check-slots.js";
+export {
   expandScheduledSlots,
   parseFixedTimeSchedule,
   scheduleHhmm,

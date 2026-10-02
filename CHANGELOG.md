@@ -10,6 +10,13 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Added
 
+- **Where each health check stands** (WHO-384, API only). `GET /api/health/checks/slots` reports every
+  slot of the checks you can see as done, skipped, due, overdue or upcoming. If someone logs a reading
+  from the Log tab instead of through the check, it still completes the slot it is within 30 minutes
+  of (closest slot first, and a reading only ever counts once), as long as it is for the same person,
+  the same kind of entry and, for vitals, holds the metrics the check asks for. A slot that was
+  skipped on purpose stays skipped. Paused and deleted checks have no slots. There is no screen for it
+  yet, so there is no visible change.
 - **Marking a health check done or skipped** (WHO-383, API only). `POST /api/health/checks/:id/log`
   records one slot of a check by linking the entry that completes it, or by skipping it. A slot
   counts as done however early or late the entry was taken. The entry has to be for the same person
