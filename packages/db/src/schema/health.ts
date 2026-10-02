@@ -1,6 +1,7 @@
 import {
   boolean,
   date,
+  foreignKey,
   index,
   integer,
   pgEnum,
@@ -8,6 +9,7 @@ import {
   primaryKey,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -562,7 +564,11 @@ export const healthChecks = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
-  (t) => [index("health_checks_household_member_idx").on(t.householdId, t.memberId)],
+  (t) => [
+    index("health_checks_household_member_idx").on(t.householdId, t.memberId),
+    // Target of the composite FK from health_check_group_members.
+    unique("health_checks_id_member_unique").on(t.id, t.memberId),
+  ],
 );
 
 export const healthCheckShares = pgTable(
@@ -621,7 +627,10 @@ export const healthCheckGroups = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("health_check_groups_household_member_idx").on(t.householdId, t.memberId)],
+  (t) => [
+    index("health_check_groups_household_member_idx").on(t.householdId, t.memberId),
+    unique("health_check_groups_id_member_unique").on(t.id, t.memberId),
+  ],
 );
 
 export const healthCheckGroupShares = pgTable(
@@ -637,17 +646,30 @@ export const healthCheckGroupShares = pgTable(
   (t) => [primaryKey({ columns: [t.groupId, t.memberId] })],
 );
 
+/**
+ * `memberId` is denormalised so both composite FKs reference `(id, member_id)`: the database
+ * guarantees a group only ever holds checks belonging to the same member as the group.
+ */
 export const healthCheckGroupMembers = pgTable(
   "health_check_group_members",
   {
-    groupId: uuid("group_id")
-      .notNull()
-      .references(() => healthCheckGroups.id, { onDelete: "cascade" }),
-    checkId: uuid("check_id")
-      .notNull()
-      .references(() => healthChecks.id, { onDelete: "cascade" }),
+    groupId: uuid("group_id").notNull(),
+    checkId: uuid("check_id").notNull(),
+    memberId: uuid("member_id").notNull(),
   },
-  (t) => [primaryKey({ columns: [t.groupId, t.checkId] })],
+  (t) => [
+    primaryKey({ columns: [t.groupId, t.checkId] }),
+    foreignKey({
+      name: "health_check_group_members_group_fk",
+      columns: [t.groupId, t.memberId],
+      foreignColumns: [healthCheckGroups.id, healthCheckGroups.memberId],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "health_check_group_members_check_fk",
+      columns: [t.checkId, t.memberId],
+      foreignColumns: [healthChecks.id, healthChecks.memberId],
+    }).onDelete("cascade"),
+  ],
 );
 
 /**

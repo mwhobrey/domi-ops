@@ -30,7 +30,9 @@ CREATE TABLE IF NOT EXISTS "health_checks" (
   -- A medication dose is logged through health_medication_logs, not a check.
   CONSTRAINT "health_checks_event_type_not_medication" CHECK ("event_type"::text <> 'medication'),
   -- prn / otc have no due time to remind about.
-  CONSTRAINT "health_checks_schedule_kind_timed" CHECK ("schedule_kind"::text IN ('scheduled', 'interval'))
+  CONSTRAINT "health_checks_schedule_kind_timed" CHECK ("schedule_kind"::text IN ('scheduled', 'interval')),
+  -- Target of the composite FK from health_check_group_members (a group only holds its own member's checks).
+  CONSTRAINT "health_checks_id_member_unique" UNIQUE ("id", "member_id")
 );
 
 CREATE INDEX IF NOT EXISTS "health_checks_household_member_idx"
@@ -67,7 +69,8 @@ CREATE TABLE IF NOT EXISTS "health_check_groups" (
   "created_by_user_id" uuid REFERENCES "users"("id") ON DELETE set null,
   "created_at" timestamp with time zone DEFAULT now() NOT NULL,
   "updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-  CONSTRAINT "health_check_groups_schedule_kind_timed" CHECK ("schedule_kind"::text IN ('scheduled', 'interval'))
+  CONSTRAINT "health_check_groups_schedule_kind_timed" CHECK ("schedule_kind"::text IN ('scheduled', 'interval')),
+  CONSTRAINT "health_check_groups_id_member_unique" UNIQUE ("id", "member_id")
 );
 
 CREATE INDEX IF NOT EXISTS "health_check_groups_household_member_idx"
@@ -79,10 +82,17 @@ CREATE TABLE IF NOT EXISTS "health_check_group_shares" (
   PRIMARY KEY ("group_id", "member_id")
 );
 
+-- member_id is denormalised on purpose: both composite FKs reference (id, member_id), so a group
+-- can only hold checks of the same member. A single-column FK could not express that.
 CREATE TABLE IF NOT EXISTS "health_check_group_members" (
-  "group_id" uuid NOT NULL REFERENCES "health_check_groups"("id") ON DELETE cascade,
-  "check_id" uuid NOT NULL REFERENCES "health_checks"("id") ON DELETE cascade,
-  PRIMARY KEY ("group_id", "check_id")
+  "group_id" uuid NOT NULL,
+  "check_id" uuid NOT NULL,
+  "member_id" uuid NOT NULL,
+  PRIMARY KEY ("group_id", "check_id"),
+  CONSTRAINT "health_check_group_members_group_fk" FOREIGN KEY ("group_id", "member_id")
+    REFERENCES "health_check_groups"("id", "member_id") ON DELETE cascade,
+  CONSTRAINT "health_check_group_members_check_fk" FOREIGN KEY ("check_id", "member_id")
+    REFERENCES "health_checks"("id", "member_id") ON DELETE cascade
 );
 
 -- One row per completed / skipped / missed slot. scheduled_at is always set (every log is for a
@@ -165,7 +175,8 @@ ALTER TABLE "health_check_shares" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS household_isolation ON "health_check_shares";
 CREATE POLICY household_isolation ON "health_check_shares" FOR ALL
   USING (EXISTS (SELECT 1 FROM health_checks p WHERE p.id = health_check_shares.check_id AND p.household_id = NULLIF(current_setting('app.current_household_id', true), '')::uuid))
-  WITH CHECK (EXISTS (SELECT 1 FROM health_checks p WHERE p.id = health_check_shares.check_id AND p.household_id = NULLIF(current_setting('app.current_household_id', true), '')::uuid));
+  WITH CHECK (EXISTS (SELECT 1 FROM health_checks p WHERE p.id = health_check_shares.check_id AND p.household_id = NULLIF(current_setting('app.current_household_id', true), '')::uuid)
+    AND EXISTS (SELECT 1 FROM household_members m WHERE m.id = health_check_shares.member_id AND m.household_id = NULLIF(current_setting('app.current_household_id', true), '')::uuid));
 DROP POLICY IF EXISTS worker_scan ON "health_check_shares";
 CREATE POLICY worker_scan ON "health_check_shares" FOR ALL
   USING (current_setting('app.worker_scan', true) = 'true')
@@ -185,7 +196,9 @@ ALTER TABLE "health_check_logs" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS household_isolation ON "health_check_logs";
 CREATE POLICY household_isolation ON "health_check_logs" FOR ALL
   USING (EXISTS (SELECT 1 FROM health_checks p WHERE p.id = health_check_logs.check_id AND p.household_id = NULLIF(current_setting('app.current_household_id', true), '')::uuid))
-  WITH CHECK (EXISTS (SELECT 1 FROM health_checks p WHERE p.id = health_check_logs.check_id AND p.household_id = NULLIF(current_setting('app.current_household_id', true), '')::uuid));
+  WITH CHECK (EXISTS (SELECT 1 FROM health_checks p WHERE p.id = health_check_logs.check_id AND p.household_id = NULLIF(current_setting('app.current_household_id', true), '')::uuid)
+    AND (health_check_logs.health_event_id IS NULL
+      OR EXISTS (SELECT 1 FROM health_events e WHERE e.id = health_check_logs.health_event_id AND e.household_id = NULLIF(current_setting('app.current_household_id', true), '')::uuid)));
 DROP POLICY IF EXISTS worker_scan ON "health_check_logs";
 CREATE POLICY worker_scan ON "health_check_logs" FOR ALL
   USING (current_setting('app.worker_scan', true) = 'true')
@@ -205,7 +218,8 @@ ALTER TABLE "health_check_group_shares" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS household_isolation ON "health_check_group_shares";
 CREATE POLICY household_isolation ON "health_check_group_shares" FOR ALL
   USING (EXISTS (SELECT 1 FROM health_check_groups p WHERE p.id = health_check_group_shares.group_id AND p.household_id = NULLIF(current_setting('app.current_household_id', true), '')::uuid))
-  WITH CHECK (EXISTS (SELECT 1 FROM health_check_groups p WHERE p.id = health_check_group_shares.group_id AND p.household_id = NULLIF(current_setting('app.current_household_id', true), '')::uuid));
+  WITH CHECK (EXISTS (SELECT 1 FROM health_check_groups p WHERE p.id = health_check_group_shares.group_id AND p.household_id = NULLIF(current_setting('app.current_household_id', true), '')::uuid)
+    AND EXISTS (SELECT 1 FROM household_members m WHERE m.id = health_check_group_shares.member_id AND m.household_id = NULLIF(current_setting('app.current_household_id', true), '')::uuid));
 DROP POLICY IF EXISTS worker_scan ON "health_check_group_shares";
 CREATE POLICY worker_scan ON "health_check_group_shares" FOR ALL
   USING (current_setting('app.worker_scan', true) = 'true')
@@ -215,7 +229,8 @@ ALTER TABLE "health_check_group_members" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS household_isolation ON "health_check_group_members";
 CREATE POLICY household_isolation ON "health_check_group_members" FOR ALL
   USING (EXISTS (SELECT 1 FROM health_check_groups p WHERE p.id = health_check_group_members.group_id AND p.household_id = NULLIF(current_setting('app.current_household_id', true), '')::uuid))
-  WITH CHECK (EXISTS (SELECT 1 FROM health_check_groups p WHERE p.id = health_check_group_members.group_id AND p.household_id = NULLIF(current_setting('app.current_household_id', true), '')::uuid));
+  WITH CHECK (EXISTS (SELECT 1 FROM health_check_groups p WHERE p.id = health_check_group_members.group_id AND p.household_id = NULLIF(current_setting('app.current_household_id', true), '')::uuid)
+    AND EXISTS (SELECT 1 FROM health_checks c WHERE c.id = health_check_group_members.check_id AND c.household_id = NULLIF(current_setting('app.current_household_id', true), '')::uuid));
 DROP POLICY IF EXISTS worker_scan ON "health_check_group_members";
 CREATE POLICY worker_scan ON "health_check_group_members" FOR ALL
   USING (current_setting('app.worker_scan', true) = 'true')
