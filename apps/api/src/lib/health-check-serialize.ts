@@ -1,6 +1,6 @@
 import type { Env } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
-import type { healthCheckGroups, healthChecks } from "@domi-ops/db";
+import type { healthCheckGroups, healthCheckLogs, healthChecks } from "@domi-ops/db";
 import { decryptHealthFieldOrPassthrough } from "./health-crypto.js";
 import {
   canAccessHealthSegment,
@@ -13,6 +13,7 @@ import { parseMedSchedule } from "./health-serialize.js";
 
 type HealthCheckRow = typeof healthChecks.$inferSelect;
 type HealthCheckGroupRow = typeof healthCheckGroups.$inferSelect;
+type HealthCheckLogRow = typeof healthCheckLogs.$inferSelect;
 
 type Auth = { userId: string; memberId: string; householdId: string; role: string };
 
@@ -121,5 +122,18 @@ export function serializeHealthCheckGroup(
     sharedMemberIds: extras?.sharedMemberIds,
     isOwnedByMe: extras?.isOwnedByMe,
     canEdit: extras?.canEdit,
+  };
+}
+
+export function serializeHealthCheckLog(row: HealthCheckLogRow, env: Env) {
+  return {
+    id: row.id,
+    checkId: row.checkId,
+    scheduledAt: row.scheduledAt.toISOString(),
+    status: row.status,
+    loggedAt: row.loggedAt.toISOString(),
+    loggedByUserId: row.loggedByUserId,
+    notes: decryptHealthFieldOrPassthrough(row.notes, env),
+    healthEventId: row.healthEventId,
   };
 }

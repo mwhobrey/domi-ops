@@ -8,9 +8,11 @@ import {
   createDb,
   createScopedDb,
   healthCheckGroupMembers,
+  healthCheckLogs,
   healthCheckPauses,
   healthCheckShares,
   healthChecks,
+  healthEvents,
   healthMemberAcl,
   householdMembers,
   households,
@@ -729,6 +731,175 @@ maybeDescribe("health checks routes (integration)", () => {
       expect(group.sharedMemberIds).toEqual([people.stranger!.memberId]);
       const groupCleared = await call("mom", "PATCH", `/check-groups/${group.id}`, { sharedMemberIds: [] });
       expect(groupCleared.status).toBe(200);
+    });
+  });
+
+
+  describe("logging a slot (WHO-383)", () => {
+    const slot = "2026-10-02T12:00:00.000Z";
+
+    async function makeEvent(memberKey: string, type: "vitals" | "pain" = "vitals", createdBy = "mom") {
+      const [row] = await withHouseholdContext(baseDb, people.mom!.householdId, (tx) =>
+        tx
+          .insert(healthEvents)
+          .values({
+            householdId: people.mom!.householdId,
+            memberId: people[memberKey]!.memberId,
+            type,
+            title: "who383 reading",
+            startedAt: new Date(slot),
+            createdByUserId: people[createdBy]!.userId,
+          })
+          .returning({ id: healthEvents.id }),
+      );
+      return row!.id;
+    }
+
+    const log = (as: string, checkId: string, body: unknown) => call(as, "POST", `/checks/${checkId}/log`, body);
+
+    const rowsFor = (checkId: string) =>
+      withWorkerScanContext(baseDb, (tx) =>
+        tx.select().from(healthCheckLogs).where(eq(healthCheckLogs.checkId, checkId)),
+      );
+
+    it("links an event to the slot and marks it done", async () => {
+      const check = await makeCheck("mom");
+      const eventId = await makeEvent("ally");
+      const res = await log("mom", check.id, { scheduledAt: slot, eventId, notes: "after a walk" });
+      expect(res.status, JSON.stringify(res.json)).toBe(201);
+      expect(res.json.outcome).toBe("inserted");
+      expect(res.json.log).toMatchObject({
+        checkId: check.id,
+        scheduledAt: slot,
+        status: "done",
+        healthEventId: eventId,
+        notes: "after a walk",
+        loggedByUserId: people.mom!.userId,
+      });
+      const [row] = await rowsFor(check.id);
+      expect(row!.notes!.startsWith("enc:v1:")).toBe(true);
+    });
+
+    it("logging the same slot again replaces the answer: Skip, then Done", async () => {
+      const check = await makeCheck("mom");
+      const eventId = await makeEvent("ally");
+      expect((await log("mom", check.id, { scheduledAt: slot, status: "skipped" })).json.log.status).toBe("skipped");
+      const done = await log("mom", check.id, { scheduledAt: slot, eventId });
+      expect(done.status).toBe(200);
+      expect(done.json.outcome).toBe("updated");
+      expect(done.json.log).toMatchObject({ status: "done", healthEventId: eventId });
+      expect(await rowsFor(check.id)).toHaveLength(1);
+    });
+
+    it("skips a slot without an event, and treats 12:00:07 as the 12:00 slot", async () => {
+      const check = await makeCheck("mom");
+      const skipped = await log("mom", check.id, { scheduledAt: "2026-10-02T12:00:07.250Z", status: "skipped" });
+      expect(skipped.status).toBe(201);
+      expect(skipped.json.log).toMatchObject({ status: "skipped", healthEventId: null, scheduledAt: slot });
+      const again = await log("mom", check.id, { scheduledAt: slot, status: "skipped" });
+      expect(again.json.outcome).toBe("updated");
+      expect(await rowsFor(check.id)).toHaveLength(1);
+    });
+
+    it("validates the request", async () => {
+      const check = await makeCheck("mom");
+      const eventId = await makeEvent("ally");
+      const bad = async (body: unknown, status: number, error: string) => {
+        const res = await log("mom", check.id, body);
+        expect({ status: res.status, error: res.json?.error }, JSON.stringify(body)).toEqual({ status, error });
+      };
+      await bad({}, 400, "invalid_scheduled_at");
+      await bad({ scheduledAt: "noon" }, 400, "invalid_scheduled_at");
+      await bad({ scheduledAt: "2026-13-45T99:00:00Z" }, 400, "invalid_scheduled_at");
+      await bad({ scheduledAt: 5 }, 400, "invalid_scheduled_at");
+      await bad({ scheduledAt: slot, status: "missed", eventId }, 400, "invalid_status");
+      await bad({ scheduledAt: slot, status: "taken" }, 400, "invalid_status");
+      await bad({ scheduledAt: slot, eventId: "nope" }, 400, "invalid_body");
+      await bad({ scheduledAt: slot, eventId, notes: 5 }, 400, "invalid_body");
+      await bad({ scheduledAt: slot, eventId, notes: "x".repeat(2001) }, 400, "invalid_body");
+      // Done needs an event; skipping must not carry one.
+      await bad({ scheduledAt: slot }, 400, "event_required");
+      await bad({ scheduledAt: slot, status: "skipped", eventId }, 400, "event_not_allowed");
+      expect(await rowsFor(check.id)).toHaveLength(0);
+    });
+
+    it("only accepts an event that could have completed the check", async () => {
+      const check = await makeCheck("mom");
+      // The wrong kind of entry: a pain entry cannot complete a vitals check.
+      const pain = await makeEvent("ally", "pain");
+      expect((await log("mom", check.id, { scheduledAt: slot, eventId: pain })).json.error).toBe("event_type_mismatch");
+      // Someone else's reading, visible to mom (she created it).
+      const moms = await makeEvent("mom");
+      expect((await log("mom", check.id, { scheduledAt: slot, eventId: moms })).json.error).toBe("event_member_mismatch");
+      expect((await log("mom", check.id, { scheduledAt: slot, eventId: randomUUID() })).json.error).toBe("event_not_found");
+      expect(await rowsFor(check.id)).toHaveLength(0);
+    });
+
+    it("cannot link an event the caller cannot see, and does not reveal it exists", async () => {
+      const check = await makeCheck("mom");
+      // A private reading about mom, created by mom: the sitter (events write on Ally only) cannot see it.
+      const moms = await makeEvent("mom");
+      const res = await log("sitter", check.id, { scheduledAt: slot, eventId: moms });
+      expect({ status: res.status, error: res.json.error }).toEqual({ status: 404, error: "event_not_found" });
+      expect(await rowsFor(check.id)).toHaveLength(0);
+    });
+
+    it("one reading completes one slot of a check, but may complete other checks", async () => {
+      const bpCheck = await makeCheck("mom", { name: "BP" });
+      const weightCheck = await makeCheck("mom", { name: "Weight", template: { metrics: ["weight"] } });
+      const eventId = await makeEvent("ally");
+      expect((await log("mom", bpCheck.id, { scheduledAt: slot, eventId })).status).toBe(201);
+      const second = await log("mom", bpCheck.id, { scheduledAt: "2026-10-02T16:00:00.000Z", eventId });
+      expect({ status: second.status, error: second.json.error }).toEqual({ status: 409, error: "event_already_used" });
+      expect((await log("mom", weightCheck.id, { scheduledAt: slot, eventId })).status).toBe(201);
+    });
+
+    it("counts however early or late the reading was taken", async () => {
+      const check = await makeCheck("mom");
+      const [yesterday] = await withHouseholdContext(baseDb, people.mom!.householdId, (tx) =>
+        tx
+          .insert(healthEvents)
+          .values({
+            householdId: people.mom!.householdId,
+            memberId: people.ally!.memberId,
+            type: "vitals",
+            title: "who383 yesterday",
+            startedAt: new Date("2026-10-01T07:41:00.000Z"),
+            createdByUserId: people.mom!.userId,
+          })
+          .returning({ id: healthEvents.id }),
+      );
+      const res = await log("mom", check.id, { scheduledAt: slot, eventId: yesterday!.id });
+      expect(res.status).toBe(201);
+      expect(res.json.log.status).toBe("done");
+    });
+
+    it("needs events write on the person, and visibility of the check", async () => {
+      const check = await makeCheck("mom");
+      const eventId = await makeEvent("ally");
+      // Can see it, cannot log it.
+      expect((await log("reader", check.id, { scheduledAt: slot, status: "skipped" })).status).toBe(403);
+      // Cannot see it at all: 404, not 403. An admin without a grant gets no override.
+      expect((await log("dad", check.id, { scheduledAt: slot, status: "skipped" })).status).toBe(404);
+      expect((await log("stranger", check.id, { scheduledAt: slot, status: "skipped" })).status).toBe(404);
+      expect((await log("outsider", check.id, { scheduledAt: slot, status: "skipped" })).status).toBe(404);
+      expect(await rowsFor(check.id)).toHaveLength(0);
+      // The subject and an events writer can.
+      expect((await log("ally", check.id, { scheduledAt: slot, eventId })).status).toBe(201);
+      expect((await log("sitter", check.id, { scheduledAt: slot, status: "skipped" })).status).toBe(200);
+    });
+
+    it("a household-visible check is loggable only by people who may write the person's events", async () => {
+      const check = await makeCheck("mom", { visibility: "household" });
+      expect((await log("stranger", check.id, { scheduledAt: slot, status: "skipped" })).status).toBe(403);
+      expect((await log("sitter", check.id, { scheduledAt: slot, status: "skipped" })).status).toBe(201);
+    });
+
+    it("cannot log a deleted check", async () => {
+      const check = await makeCheck("mom");
+      await call("mom", "DELETE", `/checks/${check.id}`);
+      expect((await log("mom", check.id, { scheduledAt: slot, status: "skipped" })).status).toBe(404);
+      expect((await log("mom", "not-a-uuid", { scheduledAt: slot, status: "skipped" })).status).toBe(404);
     });
   });
 });

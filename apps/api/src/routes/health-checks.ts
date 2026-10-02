@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { Env } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
-import { healthChecks, householdMembers } from "@domi-ops/db";
+import { healthChecks, healthEvents, householdMembers } from "@domi-ops/db";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -9,6 +9,7 @@ import { requireHouseholdModule } from "../lib/household-modules.js";
 import { encryptHealthField, HealthEncryptionError } from "../lib/health-crypto.js";
 import {
   hasHealthSegmentAccess,
+  healthEventVisibleWhere,
   normalizeHealthVisibility,
   validateHealthShareMemberIds,
 } from "../lib/health-access.js";
@@ -17,6 +18,7 @@ import {
   removeCheckFromAllGroups,
   replaceHealthCheckShares,
 } from "../lib/health-check-access.js";
+import { RecordCheckError, recordCheck, type RecordCheckErrorCode } from "../lib/health-check-logging.js";
 import { recordCheckEnabledChange } from "../lib/health-check-pauses.js";
 import { CheckScheduleError, normalizeCheckSchedule } from "../lib/health-check-schedule.js";
 import { enrichHealthChecks } from "../lib/health-check-serialize.js";
@@ -32,6 +34,17 @@ import { isUuid, isUuidList } from "../lib/uuid.js";
 type Auth = NonNullable<AppVariables["auth"]>;
 
 const MAX_NAME_LENGTH = 200;
+const MAX_LOG_NOTES_LENGTH = 2000;
+
+/** HTTP status for each reason recordCheck can refuse a link. */
+const RECORD_CHECK_STATUS: Record<RecordCheckErrorCode, 400 | 404 | 409> = {
+  event_required: 400,
+  event_not_allowed: 400,
+  event_not_found: 404,
+  event_member_mismatch: 400,
+  event_type_mismatch: 400,
+  event_already_used: 409,
+};
 function encryptionErrorResponse(c: { json: (body: unknown, status?: number) => Response }, e: unknown) {
   if (e instanceof HealthEncryptionError) {
     return c.json({ error: "encryption_key_required", message: e.message }, 503);
@@ -338,6 +351,78 @@ export function healthCheckRoutes(db: Database, env: Env) {
       .where(eq(healthChecks.id, existing.id));
     await removeCheckFromAllGroups(db, existing.id);
     return c.json({ ok: true });
+  });
+
+  /**
+   * Record one slot of a check: link the health event that completes it, or skip it.
+   *
+   * The event is created first, through the existing `POST /events`, and linked here. That keeps
+   * this endpoint small and also covers "this reading I already logged counts for the 12:00
+   * check". A slot counts as done however early or late the event is. If the second call is lost,
+   * nothing is: the event exists and this call is safe to retry.
+   *
+   * Needs `events` write on the check's person; an `events` reader can see the check but not log
+   * it. `missed` is set by the system, never by a client.
+   */
+  app.post("/:id/log", async (c) => {
+    const auth = c.get("auth")!;
+    const check = await loadVisibleCheck(auth, c.req.param("id"));
+    if (!check) return c.json({ error: "not_found" }, 404);
+    if (!(await hasHealthSegmentAccess(db, auth, check.memberId, "events", "write"))) {
+      return c.json({ error: "forbidden" }, 403);
+    }
+
+    const body = await c.req
+      .json<{ scheduledAt?: unknown; status?: unknown; eventId?: unknown; notes?: unknown }>()
+      .catch(() => null);
+    if (!body) return c.json({ error: "invalid_body" }, 400);
+
+    const scheduledAt =
+      typeof body.scheduledAt === "string" && body.scheduledAt.includes("T")
+        ? new Date(body.scheduledAt)
+        : null;
+    if (!scheduledAt || Number.isNaN(scheduledAt.getTime())) {
+      return c.json({ error: "invalid_scheduled_at" }, 400);
+    }
+    const status = body.status === undefined ? "done" : body.status;
+    if (status !== "done" && status !== "skipped") return c.json({ error: "invalid_status" }, 400);
+    if (body.eventId !== undefined && !isUuid(body.eventId)) return c.json({ error: "invalid_body" }, 400);
+    if (
+      body.notes !== undefined &&
+      (typeof body.notes !== "string" || body.notes.length > MAX_LOG_NOTES_LENGTH)
+    ) {
+      return c.json({ error: "invalid_body" }, 400);
+    }
+
+    // The caller must be able to see the event they are linking, or this would confirm that an
+    // event id exists. Not found and not visible look the same.
+    if (body.eventId !== undefined) {
+      const [event] = await db
+        .select({ id: healthEvents.id })
+        .from(healthEvents)
+        .where(and(eq(healthEvents.id, body.eventId), healthEventVisibleWhere(db, auth)))
+        .limit(1);
+      if (!event) return c.json({ error: "event_not_found" }, 404);
+    }
+
+    try {
+      const { log, outcome } = await recordCheck(db, env, {
+        check,
+        loggedByUserId: auth.userId,
+        status,
+        scheduledAt,
+        loggedAt: new Date(),
+        notes: body.notes ?? null,
+        healthEventId: body.eventId ?? null,
+        source: "single",
+      });
+      return c.json({ log, outcome }, outcome === "inserted" ? 201 : 200);
+    } catch (e) {
+      if (e instanceof RecordCheckError) return c.json({ error: e.code }, RECORD_CHECK_STATUS[e.code]);
+      const resp = encryptionErrorResponse(c, e);
+      if (resp) return resp;
+      throw e;
+    }
   });
 
   return app;
