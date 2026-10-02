@@ -28,6 +28,7 @@ import { HealthEncryptionError } from "../lib/health-crypto.js";
 import {
   canManageMemberHealth,
   hasHealthSegmentAccess,
+  isHouseholdMember,
   healthEventVisibleWhere,
   healthMedicationGroupVisibleWhere,
   healthMedicationVisibleWhere,
@@ -863,6 +864,9 @@ export function householdHealthRoutes(db: Database, env: Env) {
     if (!body.memberId || !body.title?.trim()) {
       return c.json({ error: "invalid_body" }, 400);
     }
+    if (!(await isHouseholdMember(db, auth.householdId, body.memberId))) {
+      return c.json({ error: "member_not_found" }, 404);
+    }
     if (!(await hasHealthSegmentAccess(db, auth, body.memberId, "events", "write"))) {
       return c.json({ error: "forbidden" }, 403);
     }
@@ -1055,6 +1059,9 @@ export function householdHealthRoutes(db: Database, env: Env) {
         patch.endedAt = null;
       }
       if (body.memberId !== undefined) {
+        if (!(await isHouseholdMember(db, auth.householdId, body.memberId))) {
+          return c.json({ error: "member_not_found" }, 404);
+        }
         if (!(await hasHealthSegmentAccess(db, auth, body.memberId, "events", "write"))) {
           return c.json({ error: "forbidden" }, 403);
         }
@@ -1196,6 +1203,9 @@ export function householdHealthRoutes(db: Database, env: Env) {
 
     if (!body.memberId || !body.name?.trim()) {
       return c.json({ error: "invalid_body" }, 400);
+    }
+    if (!(await isHouseholdMember(db, auth.householdId, body.memberId))) {
+      return c.json({ error: "member_not_found" }, 404);
     }
     if (!(await hasHealthSegmentAccess(db, auth, body.memberId, "medications", "write"))) {
       return c.json({ error: "forbidden" }, 403);
@@ -1345,6 +1355,9 @@ export function householdHealthRoutes(db: Database, env: Env) {
       if (body.enabled !== undefined) patch.enabled = body.enabled;
       if (body.visibility !== undefined) patch.visibility = normalizeHealthVisibility(body.visibility);
       if (body.memberId !== undefined) {
+        if (!(await isHouseholdMember(db, auth.householdId, body.memberId))) {
+          return c.json({ error: "member_not_found" }, 404);
+        }
         if (!(await hasHealthSegmentAccess(db, auth, body.memberId, "medications", "write"))) {
           return c.json({ error: "forbidden" }, 403);
         }

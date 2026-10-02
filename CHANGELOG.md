@@ -21,6 +21,15 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
   log and reminder bookkeeping, all isolated per household. Nothing uses them yet, so there is no
   visible change. **Migration `0085`** (requires `npm run db:migrate`; no manual steps).
 
+### Fixed
+
+- **Health records can no longer be attached to a person in another household** (WHO-402). An
+  owner or admin could create a medication, health event, medication group or MyAllyFile link
+  for a member id belonging to a different household, or move an existing medication or event
+  onto one. These now answer "member not found", the same whether or not the person exists.
+  It needed a signed-in owner or admin and the other person's id, and it exposed no data, but it
+  could leave records pointing across households.
+
 ### Changed
 
 - **Medication reminders and the calendar's dose chips now share one schedule engine** (WHO-381).

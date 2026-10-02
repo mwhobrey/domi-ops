@@ -16,7 +16,7 @@ import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireHouseholdModule } from "../lib/household-modules.js";
 import { decryptHealthFieldOrPassthrough, encryptHealthField } from "../lib/health-crypto.js";
-import { hasHealthSegmentAccess } from "../lib/health-access.js";
+import { hasHealthSegmentAccess, isHouseholdMember } from "../lib/health-access.js";
 
 /** Crockford base32 without I, L, O, U (MyAllyFile link codes: XXXX-XXXX). */
 const LINK_CODE_RE = /^[0-9A-HJKMNP-TV-Z]{8}$/;
@@ -98,6 +98,9 @@ export function healthMyallyfileRoutes(db: Database, env: Env) {
     if (!memberId) return c.json({ error: "invalid_body" }, 400);
     if (!code) return c.json({ error: "invalid_code" }, 400);
 
+    if (!(await isHouseholdMember(db, auth.householdId, memberId))) {
+      return c.json({ error: "member_not_found" }, 404);
+    }
     if (!(await hasHealthSegmentAccess(db, auth, memberId, "medications", "write"))) {
       return c.json({ error: "forbidden" }, 403);
     }
