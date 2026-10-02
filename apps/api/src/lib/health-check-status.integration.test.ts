@@ -254,6 +254,34 @@ maybeDescribe("loadCheckSlotStatuses (integration)", () => {
       expect(r.map((s) => s.status)).toContain("done");
     });
 
+    it("only returns answered slots inside the requested days, like scheduled checks do", async () => {
+      const check = await makeCheck({ scheduleKind: "interval", scheduleJson: grid });
+      await withHouseholdContext(db, householdId, (tx) =>
+        tx.insert(healthCheckLogs).values([
+          // Inside the 30-minute padding the query uses to find nearby readings, but on the wrong day.
+          { checkId: check.id, scheduledAt: at("2026-10-01T23:45:00.000Z"), status: "skipped" },
+          { checkId: check.id, scheduledAt: at("2026-10-03T00:15:00.000Z"), status: "skipped" },
+        ]),
+      );
+      const r = await load(check, "2026-10-02", "2026-10-02", "2026-10-02T09:00:00.000Z");
+      expect(summary(r)).toEqual(["08:00 overdue"]);
+    });
+
+    it("drops answered slots that fall inside a pause or after deletion", async () => {
+      const paused = await makeCheck({ scheduleKind: "interval", scheduleJson: grid });
+      await withHouseholdContext(db, householdId, async (tx) => {
+        await tx.insert(healthCheckLogs).values({ checkId: paused.id, scheduledAt: at("2026-10-02T12:00:00.000Z"), status: "skipped" });
+        await tx.insert(healthCheckPauses).values({ checkId: paused.id, pausedAt: at("2026-10-02T10:00:00.000Z") });
+      });
+      expect(summary(await load(paused, "2026-10-02", "2026-10-02", "2026-10-02T09:00:00.000Z"))).toEqual(["08:00 overdue"]);
+
+      const deleted = await makeCheck({ scheduleKind: "interval", scheduleJson: grid, deletedAt: at("2026-10-02T10:00:00.000Z"), enabled: false });
+      await withHouseholdContext(db, householdId, (tx) =>
+        tx.insert(healthCheckLogs).values({ checkId: deleted.id, scheduledAt: at("2026-10-02T12:00:00.000Z"), status: "skipped" }),
+      );
+      expect(summary(await load(deleted, "2026-10-02", "2026-10-02", "2026-10-02T09:00:00.000Z"))).toEqual(["08:00 overdue"]);
+    });
+
     it("a malformed interval schedule yields no slots instead of an error", async () => {
       const check = await makeCheck({ scheduleKind: "interval", scheduleJson: "{}" });
       expect(await load(check, "2026-10-02", "2026-10-02", "2026-10-02T09:00:00.000Z")).toEqual([]);

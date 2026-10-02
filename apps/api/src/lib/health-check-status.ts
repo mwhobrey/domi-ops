@@ -12,6 +12,7 @@ import {
   addDaysIso,
   computeSlotStatuses,
   eventQualifiesForCheck,
+  excludeInactiveInstants,
   intervalCheckSlots,
   localDateOfInstant,
   parseFixedTimeSchedule,
@@ -59,8 +60,12 @@ export async function loadCheckSlotStatuses(
   if (checks.length === 0) return result;
 
   const dates = datesBetween(input.from, input.to);
-  const windowStart = new Date(zonedLocalToUtc(input.from, "00:00", timeZone).getTime() - CHECK_SLOT_TOLERANCE_MS);
-  const windowEnd = new Date(zonedLocalToUtc(addDaysIso(input.to, 1), "00:00", timeZone).getTime() + CHECK_SLOT_TOLERANCE_MS);
+  // The days asked for, and that range padded by the tolerance: slots only come from the first,
+  // but a reading just outside the range can still complete a slot on its edge.
+  const rangeStart = zonedLocalToUtc(input.from, "00:00", timeZone);
+  const rangeEnd = zonedLocalToUtc(addDaysIso(input.to, 1), "00:00", timeZone);
+  const windowStart = new Date(rangeStart.getTime() - CHECK_SLOT_TOLERANCE_MS);
+  const windowEnd = new Date(rangeEnd.getTime() + CHECK_SLOT_TOLERANCE_MS);
   const checkIds = checks.map((c) => c.id);
   const householdId = checks[0]!.householdId;
   const today = localDateOfInstant(now, timeZone);
@@ -181,10 +186,13 @@ export async function loadCheckSlotStatuses(
         pauses,
         deletedAt: check.deletedAt,
       });
-      // Interval slots are dynamic, so answered ones exist only as logs: bring them in.
-      const answered = logs
-        .map((l) => l.scheduledAt)
-        .filter((t) => t >= windowStart && t < windowEnd);
+      // Interval slots are dynamic, so answered ones exist only as logs: bring them in, held to
+      // the same rules as the pending ones (inside the requested days, not paused, not deleted).
+      const answered = excludeInactiveInstants(
+        logs.map((l) => l.scheduledAt).filter((t) => t >= rangeStart && t < rangeEnd),
+        pauses,
+        check.deletedAt,
+      );
       slots = [...pending, ...answered];
     } else {
       const schedule = parseFixedTimeSchedule(check.scheduleJson);
