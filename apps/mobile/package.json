@@ -14,7 +14,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@capacitor-firebase/authentication": "^8.0.1",
+    "@capacitor-firebase/authentication": "^8.5.2",
     "@capacitor/android": "^8.5.1",
     "@capacitor/app": "^8.0.0",
     "@capacitor/core": "^8.5.1",
