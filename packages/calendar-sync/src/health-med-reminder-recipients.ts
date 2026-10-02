@@ -47,10 +47,15 @@ export function mergeHealthMedReminderRecipients(input: {
   return { recipients: [...byUser.values()], subjectLabel };
 }
 
-/** Subject + ACL `doses: write` grantees with health med push enabled. */
-export async function listHealthMedReminderRecipients(
+/**
+ * Subject + grantees with `write` on `segment` who have health reminder push enabled. Medication
+ * doses ride the `doses` segment; scheduled health checks ride `events`, because logging a check
+ * creates an event.
+ */
+async function listReminderRecipients(
   db: Database,
   input: { householdId: string; subjectMemberId: string },
+  segment: "doses" | "events",
 ): Promise<HealthMedReminderRecipientBundle> {
   const [subject] = await db
     .select({
@@ -82,7 +87,7 @@ export async function listHealthMedReminderRecipients(
       and(
         eq(healthMemberAcl.householdId, input.householdId),
         eq(healthMemberAcl.subjectMemberId, input.subjectMemberId),
-        eq(healthMemberAcl.dosesAccess, "write"),
+        eq(segment === "doses" ? healthMemberAcl.dosesAccess : healthMemberAcl.eventsAccess, "write"),
       ),
     );
 
@@ -108,4 +113,20 @@ export async function listHealthMedReminderRecipients(
     doseWriters,
     pushEnabledUserIds,
   });
+}
+
+/** Subject + ACL `doses: write` grantees with health med push enabled. */
+export function listHealthMedReminderRecipients(
+  db: Database,
+  input: { householdId: string; subjectMemberId: string },
+): Promise<HealthMedReminderRecipientBundle> {
+  return listReminderRecipients(db, input, "doses");
+}
+
+/** Subject + ACL `events: write` grantees with health reminder push enabled (health checks). */
+export function listHealthCheckReminderRecipients(
+  db: Database,
+  input: { householdId: string; subjectMemberId: string },
+): Promise<HealthMedReminderRecipientBundle> {
+  return listReminderRecipients(db, input, "events");
 }
