@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ApiError, apiClient } from "../../lib/client-api";
 import type { NoteShareMember } from "../NoteSharePicker";
+import type { CheckLogContext } from "./health-check-helpers";
 import { NoteSharePicker } from "../NoteSharePicker";
 import { Alert, Button, Select, Sheet, Textarea } from "../ui";
 import { FoodLogEntriesEditor } from "./FoodLogEntriesEditor";
@@ -26,6 +27,7 @@ export function LogMealSheet({
   initialMemberId,
   lockMember,
   writableMemberIds,
+  checkContext,
   onClose,
   onSaved,
 }: {
@@ -37,8 +39,11 @@ export function LogMealSheet({
   /** Fixes the member to `initialMemberId` (Today has already confirmed who is being managed). */
   lockMember?: boolean;
   writableMemberIds: string[];
+  /** Set when this log is for a slot of a scheduled check: prefills from its template. */
+  checkContext?: CheckLogContext;
   onClose: () => void;
-  onSaved: () => void;
+  /** The id of the event just created, so a check's slot can be linked to it. */
+  onSaved: (eventId?: string) => void;
 }) {
   const memberChoices = members.filter((m) => writableMemberIds.includes(m.memberId));
   const defaultMemberId = resolveDefaultMemberId(
@@ -76,10 +81,10 @@ export function LogMealSheet({
     setBusy(true);
     setErr(null);
     try {
-      await apiClient.post("/api/health/events", {
+      const res = await apiClient.post<{ event?: { id: string } }>("/api/health/events", {
         memberId,
         type: "food_intake",
-        title: defaultMealTitle(foodDrafts),
+        title: checkContext?.title ?? defaultMealTitle(foodDrafts),
         notes: notes.trim() || undefined,
         startedAt: new Date().toISOString(),
         durationKind: "single_day",
@@ -87,7 +92,7 @@ export function LogMealSheet({
         sharedMemberIds: visibility === "private" ? sharedMemberIds : undefined,
         foodLogEntries,
       });
-      onSaved();
+      onSaved(res.event?.id);
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "Save failed");
     } finally {
@@ -99,6 +104,9 @@ export function LogMealSheet({
     <Sheet open={open} onClose={onClose} title="Log meal">
       <fieldset className="space-y-4 px-6 py-4">
         {err ? <Alert variant="error">{err}</Alert> : null}
+        {checkContext ? (
+          <p className="text-sm text-[var(--color-text-muted)]">For {checkContext.heading}</p>
+        ) : null}
         <label className="block space-y-1 text-sm">
           <span>Member</span>
           <Select value={memberId} onChange={(e) => setMemberId(e.target.value)} disabled={lockMember}>

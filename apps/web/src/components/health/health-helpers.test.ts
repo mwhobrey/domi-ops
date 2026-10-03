@@ -17,6 +17,8 @@ import {
   isDosePastDue,
   memberLabel,
   mergeTodayEntriesForMember,
+  painDraftsForRegions,
+  readingDraftsForMetrics,
   resolveDefaultMemberId,
   scheduleKindLabel,
 } from "./health-helpers";
@@ -354,5 +356,43 @@ describe("eventsOnDayForMember", () => {
       "UTC",
     );
     expect(out.map((e) => e.id)).toEqual(["appt"]);
+  });
+});
+
+describe("painDraftsForRegions", () => {
+  it("pre-selects the check's regions at the severity a tap on the map starts with", () => {
+    expect(painDraftsForRegions(["chest", "neck_front"]).map((d) => [d.region, d.severity])).toEqual([
+      ["chest", 5],
+      ["neck_front", 5],
+    ]);
+  });
+
+  it("ignores names that are not body regions, including ones every object inherits", () => {
+    expect(
+      painDraftsForRegions(["toString", "constructor", "__proto__", "hasOwnProperty", "nope", "chest"]).map(
+        (d) => d.region,
+      ),
+    ).toEqual(["chest"]);
+  });
+
+  it("is empty without regions", () => {
+    expect(painDraftsForRegions(undefined)).toEqual([]);
+  });
+});
+
+describe("readingDraftsForMetrics", () => {
+  it("gives exactly the named metrics, in order, with their usual units", () => {
+    expect(
+      readingDraftsForMetrics(["heart_rate", "blood_pressure_systolic"]).map((d) => [d.metric, d.unit, d.value]),
+    ).toEqual([
+      ["heart_rate", "bpm", ""],
+      ["blood_pressure_systolic", "mmHg", ""],
+    ]);
+  });
+
+  it("falls back to the sheet's default rows when none (or none we know) are named", () => {
+    const defaults = readingDraftsForMetrics(undefined).map((d) => d.metric);
+    expect(defaults).toEqual(["blood_pressure_systolic", "blood_pressure_diastolic", "heart_rate"]);
+    expect(readingDraftsForMetrics(["nope"]).map((d) => d.metric)).toEqual(defaults);
   });
 });

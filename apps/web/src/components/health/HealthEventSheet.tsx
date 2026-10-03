@@ -39,6 +39,9 @@ export function HealthEventSheet({
   householdTimezone,
   writableMemberIds,
   readOnly = false,
+  initialMemberId,
+  initialType,
+  initialTitle,
   onClose,
   onSaved,
 }: {
@@ -49,17 +52,22 @@ export function HealthEventSheet({
   householdTimezone: string;
   writableMemberIds: string[];
   readOnly?: boolean;
+  /** For a new event: who it is for, its type and a starting title (a scheduled check's slot). */
+  initialMemberId?: string;
+  initialType?: HealthEventType;
+  initialTitle?: string;
   onClose: () => void;
-  onSaved: () => void;
+  /** The id of the event just created or edited. */
+  onSaved: (eventId?: string) => void;
 }) {
   const memberChoices = members.filter((m) => writableMemberIds.includes(m.memberId));
   const defaultMemberId = resolveDefaultMemberId(
-    currentMemberId,
+    initialMemberId ?? currentMemberId,
     memberChoices.length > 0 ? memberChoices : members,
   );
   const [memberId, setMemberId] = useState(event?.memberId ?? defaultMemberId);
-  const [type, setType] = useState<HealthEventType>(event?.type ?? "other");
-  const [title, setTitle] = useState(event?.title ?? "");
+  const [type, setType] = useState<HealthEventType>(event?.type ?? initialType ?? "other");
+  const [title, setTitle] = useState(event?.title ?? initialTitle ?? "");
   const [notes, setNotes] = useState(event?.notes ?? "");
   const [startDate, setStartDate] = useState(event?.startDate ?? "");
   const [startTime, setStartTime] = useState(event?.startTime ?? "");
@@ -94,8 +102,8 @@ export function HealthEventSheet({
   useEffect(() => {
     if (!open) return;
     setMemberId(event?.memberId ?? defaultMemberId);
-    setType(event?.type ?? "other");
-    setTitle(event?.title ?? "");
+    setType(event?.type ?? initialType ?? "other");
+    setTitle(event?.title ?? initialTitle ?? "");
     setNotes(event?.notes ?? "");
     setStartDate(event?.startDate ?? (event ? "" : todayInTz(householdTimezone)));
     setStartTime(event?.startTime ?? "");
@@ -110,7 +118,7 @@ export function HealthEventSheet({
     setPainEntries(painLogsToDrafts(event?.painLogs));
     setFoodDrafts(foodLogEntriesToDrafts(event?.foodLogEntries));
     setSharedMemberIds(event?.sharedMemberIds ?? []);
-  }, [open, event, defaultMemberId, householdTimezone]);
+  }, [open, event, defaultMemberId, householdTimezone, initialType, initialTitle]);
 
   async function save() {
     if (readOnly || !title.trim()) return;
@@ -154,12 +162,15 @@ export function HealthEventSheet({
       foodLogEntries,
     };
     try {
+      let savedId: string | undefined;
       if (event) {
         await apiClient.patch(`/api/health/events/${event.id}`, body);
+        savedId = event.id;
       } else {
-        await apiClient.post("/api/health/events", body);
+        const res = await apiClient.post<{ event?: { id: string } }>("/api/health/events", body);
+        savedId = res.event?.id;
       }
-      onSaved();
+      onSaved(savedId);
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "Save failed");
     } finally {

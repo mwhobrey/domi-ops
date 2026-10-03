@@ -3,11 +3,12 @@
 import { useEffect, useState } from "react";
 import { ApiError, apiClient } from "../../lib/client-api";
 import type { NoteShareMember } from "../NoteSharePicker";
+import type { CheckLogContext } from "./health-check-helpers";
 import { NoteSharePicker } from "../NoteSharePicker";
 import { Alert, Button, Select, Sheet, Textarea } from "../ui";
 import { BodyPainMap } from "./BodyPainMap";
 import { PAIN_BODY_REGION_LABELS, type PainLogDraft } from "./health-types";
-import { draftsToPainLogs, resolveDefaultMemberId } from "./health-helpers";
+import { draftsToPainLogs, painDraftsForRegions, resolveDefaultMemberId } from "./health-helpers";
 
 /**
  * Fast path for the common case — one check-in, logged right now, tapped on the body map.
@@ -20,6 +21,7 @@ export function LogPainSheet({
   initialMemberId,
   lockMember,
   writableMemberIds,
+  checkContext,
   onClose,
   onSaved,
 }: {
@@ -31,8 +33,11 @@ export function LogPainSheet({
   /** Fixes the member to `initialMemberId` (Today has already confirmed who is being managed). */
   lockMember?: boolean;
   writableMemberIds: string[];
+  /** Set when this log is for a slot of a scheduled check: prefills from its template. */
+  checkContext?: CheckLogContext;
   onClose: () => void;
-  onSaved: () => void;
+  /** The id of the event just created, so a check's slot can be linked to it. */
+  onSaved: (eventId?: string) => void;
 }) {
   const memberChoices = members.filter((m) => writableMemberIds.includes(m.memberId));
   const defaultMemberId = resolveDefaultMemberId(
@@ -40,7 +45,7 @@ export function LogPainSheet({
     memberChoices.length > 0 ? memberChoices : members,
   );
   const [memberId, setMemberId] = useState(defaultMemberId);
-  const [entries, setEntries] = useState<PainLogDraft[]>([]);
+  const [entries, setEntries] = useState<PainLogDraft[]>(() => painDraftsForRegions(checkContext?.regions));
   const [notes, setNotes] = useState("");
   const [visibility, setVisibility] = useState<"household" | "private">("private");
   const [sharedMemberIds, setSharedMemberIds] = useState<string[]>([]);
@@ -50,7 +55,7 @@ export function LogPainSheet({
   useEffect(() => {
     if (!open) return;
     setMemberId(defaultMemberId);
-    setEntries([]);
+    setEntries(painDraftsForRegions(checkContext?.regions));
     setNotes("");
     setVisibility("private");
     setSharedMemberIds([]);
@@ -59,6 +64,7 @@ export function LogPainSheet({
   }, [open, defaultMemberId]);
 
   function defaultTitle(): string {
+    if (checkContext?.title) return checkContext.title;
     if (entries.length === 0) return "Pain";
     return entries.map((e) => PAIN_BODY_REGION_LABELS[e.region]).join(", ");
   }
@@ -71,7 +77,7 @@ export function LogPainSheet({
     setBusy(true);
     setErr(null);
     try {
-      await apiClient.post("/api/health/events", {
+      const res = await apiClient.post<{ event?: { id: string } }>("/api/health/events", {
         memberId,
         type: "pain",
         title: defaultTitle(),
@@ -82,7 +88,7 @@ export function LogPainSheet({
         sharedMemberIds: visibility === "private" ? sharedMemberIds : undefined,
         painLogs: draftsToPainLogs(entries),
       });
-      onSaved();
+      onSaved(res.event?.id);
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "Save failed");
     } finally {
@@ -94,6 +100,9 @@ export function LogPainSheet({
     <Sheet open={open} onClose={onClose} title="Log pain">
       <fieldset className="space-y-4 px-6 py-4">
         {err ? <Alert variant="error">{err}</Alert> : null}
+        {checkContext ? (
+          <p className="text-sm text-[var(--color-text-muted)]">For {checkContext.heading}</p>
+        ) : null}
         <label className="block space-y-1 text-sm">
           <span>Member</span>
           <Select value={memberId} onChange={(e) => setMemberId(e.target.value)} disabled={lockMember}>

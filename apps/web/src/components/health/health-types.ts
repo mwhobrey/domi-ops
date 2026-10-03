@@ -348,3 +348,47 @@ export interface DoseLogEntry {
   scheduledAt: string | null;
   loggedAt: string;
 }
+
+// ---------------------------------------------------------------------------------------------
+// Scheduled health checks (WHO-379..): "log Ally's BP at 8, 12, 4 and 8"
+// ---------------------------------------------------------------------------------------------
+
+/** Mirrors the API's template: what to prompt for when this check is logged. */
+export interface HealthCheckTemplate {
+  title?: string;
+  metrics?: string[];
+  regions?: string[];
+  activity?: string;
+}
+
+/** The API's SerializedHealthCheck, as far as the Today tab needs it. */
+export interface HealthCheck {
+  id: string;
+  memberId: string;
+  groupIds: string[];
+  name: string;
+  eventType: HealthEventType;
+  template: HealthCheckTemplate;
+  scheduleKind: "scheduled" | "interval" | string;
+  enabled: boolean;
+  /** `events: write` on the person: may log, skip and undo. */
+  canLog?: boolean;
+  canEdit?: boolean;
+}
+
+export type CheckSlotStatus = "done" | "skipped" | "missed" | "due" | "overdue" | "upcoming";
+
+export interface CheckSlot {
+  scheduledAt: string;
+  status: CheckSlotStatus;
+  source: "log" | "event" | null;
+  logId: string | null;
+  /** The completing entry, only when the viewer may open it. */
+  eventId: string | null;
+}
+
+/** One line on the Today tab: a slot of a check. */
+export interface CheckSlotRow {
+  check: HealthCheck;
+  slot: CheckSlot;
+}

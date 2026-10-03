@@ -16,6 +16,17 @@ import { LogExerciseSheet } from "./health/LogExerciseSheet";
 import { LogPainSheet } from "./health/LogPainSheet";
 import { LogMealSheet } from "./health/LogMealSheet";
 import { HealthRow, MedGroupDoseCard } from "./health/TodayTabRows";
+import { TodayChecksCard, checkSlotKey, formatSlotTime } from "./health/TodayChecksCard";
+import {
+  buildCheckLogContext,
+  checkLogSheet,
+  checkSlotRowsForMember,
+  findDeepLinkedRow,
+  groupHighlightKeys,
+  isCheckSlotPending,
+  slotLookupRange,
+  type CheckLogContext,
+} from "./health/health-check-helpers";
 import { PrnQuickLog } from "./health/PrnQuickLog";
 import { avatarStyle } from "../lib/member-color";
 import { useHouseholdTimeZone } from "./HouseholdTimeProvider";
@@ -43,7 +54,10 @@ import {
 } from "./health/health-helpers";
 import {
   EVENT_TYPES,
+  type CheckSlot,
+  type CheckSlotRow,
   type DoseLogEntry,
+  type HealthCheck,
   type HealthEvent,
   type HealthEventType,
   type HealthMedication,
@@ -71,6 +85,9 @@ export function HealthPageClient({
   initialTakeMedicationId,
   initialTakeGroupId,
   initialTakeScheduledAt,
+  initialCheckId,
+  initialCheckGroupId,
+  initialCheckScheduledAt,
   pushAction,
 }: {
   members: NoteShareMember[];
@@ -83,6 +100,11 @@ export function HealthPageClient({
   /** Calendar group overlay deep-link → Today group card. */
   initialTakeGroupId?: string;
   initialTakeScheduledAt?: string;
+  /** Health check reminder deep link: open that slot's log sheet (WHO-388/391). */
+  initialCheckId?: string;
+  /** Check group reminder deep link: show the group's checks at that time. */
+  initialCheckGroupId?: string;
+  initialCheckScheduledAt?: string;
   /** iOS / no-actions deep-link auto-log (WHO-235). */
   pushAction?: {
     medicationId: string;
@@ -120,6 +142,16 @@ export function HealthPageClient({
   const [collapsedLoggedMembers, setCollapsedLoggedMembers] = useState<Set<string>>(new Set());
   const [highlightTakeKey, setHighlightTakeKey] = useState<string | null>(null);
   const [prnLoggingId, setPrnLoggingId] = useState<string | null>(null);
+  const [checks, setChecks] = useState<HealthCheck[]>([]);
+  /** The checks request itself failed, so an empty list means "unknown", not "none". */
+  const [checksLoadFailed, setChecksLoadFailed] = useState(false);
+  const [checkSlots, setCheckSlots] = useState<Record<string, CheckSlot[]>>({});
+  const [checkBusyKey, setCheckBusyKey] = useState<string | null>(null);
+  const [checkHighlight, setCheckHighlight] = useState<Set<string>>(new Set());
+  /** The slot of a scheduled check the open log sheet is for. Null for an ad hoc log. */
+  const [activeCheckLog, setActiveCheckLog] = useState<{ row: CheckSlotRow; context: CheckLogContext } | null>(null);
+  const checkLinkHandled = useRef(false);
+  const checkHighlightRef = useRef<HTMLDivElement | null>(null);
   const [todayMemberId, setTodayMemberId] = useState(() =>
     resolveDefaultMemberId(currentMemberId, members),
   );
@@ -133,7 +165,8 @@ export function HealthPageClient({
     setLoading(true);
     setError(null);
     try {
-      const [eventsRes, glanceRes, capsRes, doseLogsRes] = await Promise.all([
+      let checksFailed = false;
+      const [eventsRes, glanceRes, capsRes, doseLogsRes, checksRes, slotsRes] = await Promise.all([
         apiClient.get<{ events: HealthEvent[] }>("/api/health/events"),
         apiClient.get<{
           pendingDoses: PendingDose[];
@@ -145,6 +178,14 @@ export function HealthPageClient({
         apiClient
           .get<{ logs: DoseLogEntry[] }>("/api/health/dose-logs")
           .catch(() => ({ logs: [] as DoseLogEntry[] })),
+        // Scheduled checks are additive: if they fail to load the rest of the page still works.
+        apiClient.get<{ checks: HealthCheck[] }>("/api/health/checks").catch(() => {
+          checksFailed = true;
+          return { checks: [] as HealthCheck[] };
+        }),
+        apiClient
+          .get<{ checks: { checkId: string; slots: CheckSlot[] }[] }>("/api/health/checks/slots")
+          .catch(() => ({ checks: [] as { checkId: string; slots: CheckSlot[] }[] })),
       ]);
       setEvents(eventsRes.events);
       setDoseLogs(doseLogsRes.logs);
@@ -153,6 +194,9 @@ export function HealthPageClient({
       setPrnMeds(glanceRes.prnMedications);
       setLoggedToday(glanceRes.loggedToday ?? []);
       setCapabilities(capsRes.bySubject ?? {});
+      setChecks(checksRes.checks);
+      setChecksLoadFailed(checksFailed);
+      setCheckSlots(Object.fromEntries(slotsRes.checks.map((c) => [c.checkId, c.slots])));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load health data");
     } finally {
@@ -249,6 +293,83 @@ export function HealthPageClient({
     })();
   }, [pushAction, load, router]);
 
+  // A health check reminder's link: open that slot's log sheet (WHO-388). It is loaded on its own
+  // because the slot may be on another day than the Today list shows.
+  useEffect(() => {
+    if (!initialCheckId || checkLinkHandled.current || loading) return;
+    checkLinkHandled.current = true;
+    void (async () => {
+      try {
+        const check = checks.find((c) => c.id === initialCheckId);
+        if (!check) {
+          setError(
+            checksLoadFailed ? "Could not open that health check." : "That health check is no longer available.",
+          );
+          return;
+        }
+        const { from, to } = slotLookupRange(initialCheckScheduledAt);
+        const res = await apiClient.get<{ checks: { checkId: string; slots: CheckSlot[] }[] }>(
+          `/api/health/checks/slots?checkId=${check.id}&from=${from}&to=${to}`,
+        );
+        const row = findDeepLinkedRow(
+          (res.checks[0]?.slots ?? []).map((slot) => ({ check, slot })),
+          check.id,
+          initialCheckScheduledAt,
+        );
+        setTab("today");
+        selectTodayMember(check.memberId);
+        if (!row) {
+          setError("That time is no longer part of this check's schedule.");
+        } else if (!isCheckSlotPending(row.slot.status)) {
+          setPushActionNotice(
+            row.slot.status === "done"
+              ? `${check.name} at ${formatSlotTime(row.slot.scheduledAt)} is already logged.`
+              : `${check.name} at ${formatSlotTime(row.slot.scheduledAt)} was already ${row.slot.status}.`,
+          );
+          setCheckHighlight(new Set([checkSlotKey(row)]));
+        } else if (check.canLog) {
+          // The notification was for this person's check and the sheet names and locks who it is
+          // for, so this stands in for the "Managing …" confirmation.
+          setManagingOtherConfirmed(true);
+          startCheckLog(row);
+        } else {
+          setError(`You can see ${check.name} but not log it.`);
+        }
+      } catch {
+        setError("Could not open that health check.");
+      } finally {
+        router.replace("/health");
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialCheckId, initialCheckScheduledAt, loading, checks, checksLoadFailed]);
+
+  // A check group reminder's link: show that person's checks and mark the group's at that time.
+  useEffect(() => {
+    if (!initialCheckGroupId || checkLinkHandled.current || loading) return;
+    checkLinkHandled.current = true;
+    void (async () => {
+      try {
+        const res = await apiClient.get<{ group: { memberId: string; checks: { id: string }[] } }>(
+          `/api/health/check-groups/${initialCheckGroupId}`,
+        );
+        setTab("today");
+        selectTodayMember(res.group.memberId);
+        setCheckHighlight(groupHighlightKeys(res.group.checks.map((c) => c.id), initialCheckScheduledAt));
+      } catch {
+        setError("Could not open that group of health checks.");
+      } finally {
+        router.replace("/health");
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialCheckGroupId, initialCheckScheduledAt, loading]);
+
+  useEffect(() => {
+    if (checkHighlight.size === 0 || tab !== "today" || loading) return;
+    checkHighlightRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [checkHighlight, tab, loading, checkSlots]);
+
   async function logDose(
     medicationId: string,
     opts: { scheduledAt?: string; alsoCreateEvent?: boolean; status?: string },
@@ -329,6 +450,84 @@ export function HealthPageClient({
     }
   }
 
+  /** Open the right log sheet for a slot of a scheduled check, prefilled from the check's template. */
+  function startCheckLog(row: CheckSlotRow) {
+    setActiveCheckLog({ row, context: buildCheckLogContext(row.check, formatSlotTime(row.slot.scheduledAt)) });
+    switch (checkLogSheet(row.check)) {
+      case "vitals":
+        setVitalsSheetOpen(true);
+        break;
+      case "pain":
+        setPainSheetOpen(true);
+        break;
+      case "meal":
+        setMealSheetOpen(true);
+        break;
+      case "exercise":
+        setExerciseSheetOpen(true);
+        break;
+      default:
+        // Types without a quick sheet use the full editor, which hands back the new entry's id
+        // like the quick sheets do, so the slot is linked rather than left to time matching.
+        setEditingEvent(null);
+        setEventSheetOpen(true);
+    }
+  }
+
+  /** A log sheet saved an entry: if it was for a check's slot, link the two, then refresh. */
+  async function afterLogSheetSaved(eventId?: string) {
+    const active = activeCheckLog;
+    setActiveCheckLog(null);
+    if (active) {
+      try {
+        if (!eventId) throw new Error("no event id");
+        await apiClient.post(`/api/health/checks/${active.row.check.id}/log`, {
+          scheduledAt: active.row.slot.scheduledAt,
+          eventId,
+        });
+      } catch (err) {
+        // The entry itself is saved, and one within half an hour of the slot still counts for it.
+        setError(
+          `Saved, but it could not be marked against ${active.row.check.name}${
+            err instanceof ApiError ? ` (${err.message})` : ""
+          }. It will still count if it was logged close to the time.`,
+        );
+      }
+    }
+    await load();
+  }
+
+  async function skipCheckSlot(row: CheckSlotRow) {
+    if (checkBusyKey) return;
+    setError(null);
+    setCheckBusyKey(checkSlotKey(row));
+    try {
+      await apiClient.post(`/api/health/checks/${row.check.id}/log`, {
+        scheduledAt: row.slot.scheduledAt,
+        status: "skipped",
+      });
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not skip");
+    } finally {
+      setCheckBusyKey(null);
+    }
+  }
+
+  async function undoCheckSlot(row: CheckSlotRow) {
+    if (checkBusyKey || !row.slot.logId) return;
+    setError(null);
+    setCheckBusyKey(checkSlotKey(row));
+    try {
+      await apiClient.delete(`/api/health/checks/${row.check.id}/logs/${row.slot.logId}`);
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not undo");
+    } finally {
+      setCheckBusyKey(null);
+    }
+  }
+
   function toggleGroupDoseExpanded(key: string) {
     setExpandedGroupDoses((prev) => {
       const next = new Set(prev);
@@ -390,6 +589,10 @@ export function HealthPageClient({
     return canLogForMember(memberId) && canActOnTodayMember(memberId);
   }
 
+  const todayCheckRows = useMemo(
+    () => checkSlotRowsForMember(checks, new Map(Object.entries(checkSlots)), todayMemberId),
+    [checks, checkSlots, todayMemberId],
+  );
   const todayMemberStyle = avatarStyle(todayMemberId);
   const todayMemberName = memberLabel(members, todayMemberId);
   const todayEvents = eventsOnDayForMember(
@@ -500,6 +703,20 @@ export function HealthPageClient({
             canLog={(med) => (med.canLog ?? canLogForMember(med.memberId)) && canLogDoseForToday(med.memberId)}
             logging={prnLoggingId}
             onLog={logPrnDose}
+          />
+          <TodayChecksCard
+            title={todayMemberId === currentMemberId ? "My checks" : `${todayMemberName}'s checks`}
+            rows={todayCheckRows}
+            events={events}
+            loading={loading}
+            borderColor={todayMemberStyle.background}
+            canAct={(row) => row.check.canLog === true && canActOnTodayMember(row.check.memberId)}
+            highlightKeys={checkHighlight}
+            highlightRef={checkHighlightRef}
+            busyKey={checkBusyKey}
+            onLog={startCheckLog}
+            onSkip={(row) => void skipCheckSlot(row)}
+            onUndo={(row) => void undoCheckSlot(row)}
           />
           <Card
             className="overflow-hidden border-l-4"
@@ -964,15 +1181,19 @@ export function HealthPageClient({
           .filter((m) => capabilities[m.memberId]?.events === "write")
           .map((m) => m.memberId)}
         readOnly={Boolean(editingEvent && editingEvent.canEdit === false)}
+        initialMemberId={activeCheckLog?.row.check.memberId}
+        initialType={activeCheckLog?.row.check.eventType}
+        initialTitle={activeCheckLog ? activeCheckLog.context.title ?? activeCheckLog.row.check.name : undefined}
         onClose={() => {
           setEventSheetOpen(false);
           setEditingEvent(null);
+          setActiveCheckLog(null);
           router.replace("/health");
         }}
-        onSaved={() => {
+        onSaved={(eventId) => {
           setEventSheetOpen(false);
           setEditingEvent(null);
-          void load();
+          void afterLogSheetSaved(eventId);
         }}
       />
 
@@ -990,15 +1211,19 @@ export function HealthPageClient({
         initialMemberId={todayMemberId}
         lockMember
         open={vitalsSheetOpen}
+        checkContext={activeCheckLog?.context}
         members={members}
         currentMemberId={currentMemberId}
         writableMemberIds={members
           .filter((m) => capabilities[m.memberId]?.events === "write")
           .map((m) => m.memberId)}
-        onClose={() => setVitalsSheetOpen(false)}
-        onSaved={() => {
+        onClose={() => {
           setVitalsSheetOpen(false);
-          void load();
+          setActiveCheckLog(null);
+        }}
+        onSaved={(eventId) => {
+          setVitalsSheetOpen(false);
+          void afterLogSheetSaved(eventId);
         }}
       />
 
@@ -1006,15 +1231,19 @@ export function HealthPageClient({
         initialMemberId={todayMemberId}
         lockMember
         open={exerciseSheetOpen}
+        checkContext={activeCheckLog?.context}
         members={members}
         currentMemberId={currentMemberId}
         writableMemberIds={members
           .filter((m) => capabilities[m.memberId]?.events === "write")
           .map((m) => m.memberId)}
-        onClose={() => setExerciseSheetOpen(false)}
-        onSaved={() => {
+        onClose={() => {
           setExerciseSheetOpen(false);
-          void load();
+          setActiveCheckLog(null);
+        }}
+        onSaved={(eventId) => {
+          setExerciseSheetOpen(false);
+          void afterLogSheetSaved(eventId);
         }}
       />
 
@@ -1022,15 +1251,19 @@ export function HealthPageClient({
         initialMemberId={todayMemberId}
         lockMember
         open={painSheetOpen}
+        checkContext={activeCheckLog?.context}
         members={members}
         currentMemberId={currentMemberId}
         writableMemberIds={members
           .filter((m) => capabilities[m.memberId]?.events === "write")
           .map((m) => m.memberId)}
-        onClose={() => setPainSheetOpen(false)}
-        onSaved={() => {
+        onClose={() => {
           setPainSheetOpen(false);
-          void load();
+          setActiveCheckLog(null);
+        }}
+        onSaved={(eventId) => {
+          setPainSheetOpen(false);
+          void afterLogSheetSaved(eventId);
         }}
       />
 
@@ -1038,15 +1271,19 @@ export function HealthPageClient({
         initialMemberId={todayMemberId}
         lockMember
         open={mealSheetOpen}
+        checkContext={activeCheckLog?.context}
         members={members}
         currentMemberId={currentMemberId}
         writableMemberIds={members
           .filter((m) => capabilities[m.memberId]?.events === "write")
           .map((m) => m.memberId)}
-        onClose={() => setMealSheetOpen(false)}
-        onSaved={() => {
+        onClose={() => {
           setMealSheetOpen(false);
-          void load();
+          setActiveCheckLog(null);
+        }}
+        onSaved={(eventId) => {
+          setMealSheetOpen(false);
+          void afterLogSheetSaved(eventId);
         }}
       />
 
