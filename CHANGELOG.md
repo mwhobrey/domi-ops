@@ -10,6 +10,12 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Added
 
+- **Reminders for scheduled health checks** (WHO-386, no screen yet). Every five minutes Domi Ops checks
+  each person's health checks and sends a notification to them and to any caregiver who can log for
+  them, at the time you set (or earlier, if you chose to be reminded in advance), on each device in
+  that device's own time zone. A check that was already logged, from the check or from the Log tab,
+  gets no reminder. A slot still unlogged half an hour later gets one gentle "hasn't been logged
+  yet" nudge. Paused and deleted checks stay quiet. It uses your existing health reminder setting.
 - **Undo or change a logged health check** (WHO-385, API only). A logged slot can be switched between
   done and skipped, pointed at a different entry, moved to another slot, given a note, or undone so it
   reads open again. Undoing keeps the reading itself unless you ask to delete it too, and that is
@@ -42,6 +48,11 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Fixed
 
+- **Caregivers now get medication reminders on hosted Domi Ops** (WHO-403). The reminder worker could not
+  read who has been given permission to log doses for someone, so on the hosted service only the person
+  themselves was reminded and their caregivers silently were not. Self-hosted installs were not
+  affected. Medication and health check reminders now run as one job per household, so one household's
+  problem can no longer stop everyone else's reminders, and each job can only see its own household's data.
 - **Health records can no longer be attached to a person in another household** (WHO-402). An
   owner or admin could create a medication, health event, medication group or MyAllyFile link
   for a member id belonging to a different household, or move an existing medication or event

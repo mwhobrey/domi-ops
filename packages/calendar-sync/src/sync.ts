@@ -22,7 +22,10 @@ import { scanBudgetAlerts } from "./budget-alert-scan.js";
 import { scanChoreReminders } from "./chore-reminder-scan.js";
 import { scanChoreDigest } from "./chore-digest-scan.js";
 import { scanDriveQuotaWarnings } from "./drive-quota-scan.js";
+import { scanHealthCheckReminders } from "./health-check-reminder-scan.js";
 import { scanHealthMedReminders } from "./health-med-reminder-scan.js";
+import { fanOutCheckReminderScans, fanOutMedReminderScans } from "./health-reminder-fanout.js";
+import { householdReminderEnqueuer } from "./queue.js";
 import { scanMyallyfileSync } from "./myallyfile-sync.js";
 import { scanSchoolReminders } from "./school-reminder-scan.js";
 import { setSyncRun } from "./sync-run.js";
@@ -316,6 +319,8 @@ export async function syncConnection(
   }
 }
 
+const redisUrlOf = (env: Env) => env.REDIS_URL ?? "redis://localhost:6379";
+
 export async function runCalendarSyncJob(
   db: Database,
   env: Env,
@@ -382,8 +387,18 @@ export async function runCalendarSyncJob(
     case "drive.quota.scan":
       await scanDriveQuotaWarnings(db, env);
       break;
+    // The 5-minute ticks only enqueue; the work runs per household in that household's own context.
     case "health.med.reminder.scan":
-      await scanHealthMedReminders(db, env);
+      await fanOutMedReminderScans(db, { enqueue: householdReminderEnqueuer(redisUrlOf(env)) });
+      break;
+    case "health.check.reminder.scan":
+      await fanOutCheckReminderScans(db, { enqueue: householdReminderEnqueuer(redisUrlOf(env)) });
+      break;
+    case "health.med.reminder.household":
+      await scanHealthMedReminders(db, env, { householdId: payload.householdId });
+      break;
+    case "health.check.reminder.household":
+      await scanHealthCheckReminders(db, env, { householdId: payload.householdId });
       break;
     case "myallyfile.sync.scan":
       await scanMyallyfileSync(db, env);

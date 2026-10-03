@@ -1,6 +1,5 @@
 import type { Env } from "@domi-ops/config";
 import {
-  decryptSensitive,
   healthMedPushActionSecret,
   mintHealthMedGroupPushActionToken,
   mintHealthMedPushActionToken,
@@ -14,10 +13,8 @@ import {
   healthMedicationLogs,
   healthMedications,
   households,
-  pushSubscriptions,
 } from "@domi-ops/db";
 import { and, eq, inArray, isNull } from "drizzle-orm";
-import { resolveAlertTimeZone } from "./alert-timezone.js";
 import {
   listHealthMedReminderRecipients,
   type HealthMedReminderRecipient,
@@ -25,10 +22,19 @@ import {
 import {
   addDaysIso,
   formatTimeLabelInTz,
-  localDateOfInstant,
   todayIsoDateInTz,
 } from "./household-time.js";
 import { expandScheduledSlots, parseFixedTimeSchedule } from "./health-schedule.js";
+import {
+  LOOKBACK_MS,
+  WINDOW_MS,
+  decryptReminderName,
+  householdHasHealthModule,
+  parseReminderOffsets,
+  reminderWhenLabel,
+  targetsForRecipient,
+  type DeliveryTarget,
+} from "./health-reminder-shared.js";
 import { nextIntervalPending, parseIntervalSchedule } from "./med-interval-schedule.js";
 import {
   deliverUserNotificationToSubscriptions,
@@ -39,9 +45,6 @@ const MED_PUSH_ACTIONS = [
   { action: "taken", title: "Taken" },
   { action: "skip", title: "Skip" },
 ] as const;
-
-const WINDOW_MS = 6 * 60 * 1000;
-const LOOKBACK_MS = 30 * 60 * 1000;
 
 function buildMedReminderDeepLink(input: {
   medicationId: string;
@@ -83,59 +86,9 @@ function mintMedActionToken(
   }
 }
 
-function householdHasHealthModule(modulesEnabled: string): boolean {
-  try {
-    return (JSON.parse(modulesEnabled) as string[]).includes("health");
-  } catch {
-    return false;
-  }
-}
-
-function decryptMedName(nameEnc: string, env: Env): string {
-  if (!env.ENCRYPTION_KEY || !nameEnc.startsWith("enc:v1:")) return nameEnc;
-  try {
-    return decryptSensitive(nameEnc, env.ENCRYPTION_KEY);
-  } catch {
-    return "Medication";
-  }
-}
-
-function parseOffsets(raw: string | null | undefined): number[] {
-  if (!raw) return [0];
-  try {
-    const v = JSON.parse(raw) as unknown;
-    if (Array.isArray(v)) return v.filter((n): n is number => typeof n === "number" && n >= 0);
-  } catch {
-    // ignore
-  }
-  return [0];
-}
-
 function datesAround(tz: string): string[] {
   const today = todayIsoDateInTz(tz);
   return [addDaysIso(today, -1), today, addDaysIso(today, 1)];
-}
-
-/** "2:49 PM" today, "Sep 24, 2:49 PM" another day, with the year only when it differs. */
-function doseWhenLabel(scheduledAt: Date, timeZone: string, now: Date = new Date()): string {
-  try {
-    const day = localDateOfInstant(scheduledAt, timeZone);
-    const today = localDateOfInstant(now, timeZone);
-    return scheduledAt.toLocaleString("en-US", {
-      timeZone,
-      ...(day === today
-        ? {}
-        : {
-            month: "short" as const,
-            day: "numeric" as const,
-            ...(day.slice(0, 4) === today.slice(0, 4) ? {} : { year: "numeric" as const }),
-          }),
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  } catch {
-    return `${scheduledAt.toISOString().slice(0, 10)} ${scheduledAt.toISOString().slice(11, 16)}`;
-  }
 }
 
 function medReminderBody(input: {
@@ -147,7 +100,7 @@ function medReminderBody(input: {
   subjectLabel: string;
   now?: Date;
 }): string {
-  const whenLabel = doseWhenLabel(input.scheduledAt, input.timeZone, input.now);
+  const whenLabel = reminderWhenLabel(input.scheduledAt, input.timeZone, input.now);
 
   const core =
     input.minutesUntil <= 0 ? `Time to take ${input.medName} at ${whenLabel}` : `${input.medName} at ${whenLabel}`;
@@ -238,7 +191,7 @@ function medGroupReminderBody(input: {
   const shown = input.medNames.slice(0, MAX_NAMED);
   const extra = input.medNames.length - shown.length;
   const list = extra > 0 ? `${shown.join(", ")} + ${extra} more` : shown.join(", ");
-  const whenLabel = doseWhenLabel(input.scheduledAt, input.timeZone, input.now);
+  const whenLabel = reminderWhenLabel(input.scheduledAt, input.timeZone, input.now);
 
   const core =
     input.minutesUntil <= 0 ? `Time to take ${list} at ${whenLabel}` : `${list} at ${whenLabel}`;
@@ -272,21 +225,6 @@ export function buildMedGroupReminderCopy(input: {
     }),
   };
 }
-
-type DeliveryTarget = {
-  subscriptionId: string | null;
-  userId: string;
-  timezone: string;
-  push?: {
-    id: string;
-    userId: string;
-    endpoint: string;
-    p256dh: string;
-    authKey: string;
-    platform?: string | null;
-    deviceToken?: string | null;
-  };
-};
 
 async function alreadySent(
   db: Database,
@@ -532,46 +470,12 @@ async function deliverOneMedGroupReminder(
   return true;
 }
 
-async function targetsForRecipient(
+/** `householdId` limits the scan to one household (the per-household job; see health-reminder-fanout.ts). */
+export async function scanHealthMedReminders(
   db: Database,
-  recipient: HealthMedReminderRecipient,
-  householdTz: string,
-): Promise<DeliveryTarget[]> {
-  const subs = await db
-    .select()
-    .from(pushSubscriptions)
-    .where(eq(pushSubscriptions.userId, recipient.userId));
-
-  if (subs.length > 0) {
-    return subs.map((sub) => ({
-      subscriptionId: sub.id,
-      userId: recipient.userId,
-      timezone: resolveAlertTimeZone({
-        deviceTimezone: sub.timezone,
-        householdTimezone: householdTz,
-      }),
-      push: {
-        id: sub.id,
-        userId: recipient.userId,
-        endpoint: sub.endpoint,
-        p256dh: sub.p256dh,
-        authKey: sub.authKey,
-        platform: sub.platform,
-        deviceToken: sub.deviceToken,
-      },
-    }));
-  }
-
-  return [
-    {
-      subscriptionId: null,
-      userId: recipient.userId,
-      timezone: resolveAlertTimeZone({ householdTimezone: householdTz }),
-    },
-  ];
-}
-
-export async function scanHealthMedReminders(db: Database, env: Env): Promise<number> {
+  env: Env,
+  opts: { householdId?: string } = {},
+): Promise<number> {
   const now = new Date();
   const windowEnd = new Date(now.getTime() + WINDOW_MS);
   const lookbackStart = new Date(now.getTime() - LOOKBACK_MS);
@@ -582,7 +486,8 @@ export async function scanHealthMedReminders(db: Database, env: Env): Promise<nu
       modulesEnabled: households.modulesEnabled,
       timezone: households.timezone,
     })
-    .from(households);
+    .from(households)
+    .where(opts.householdId ? eq(households.id, opts.householdId) : undefined);
 
   const enabled = householdRows.filter((h) => householdHasHealthModule(h.modulesEnabled));
   if (enabled.length === 0) return 0;
@@ -656,8 +561,8 @@ export async function scanHealthMedReminders(db: Database, env: Env): Promise<nu
 
     for (const med of meds) {
       if (med.scheduleKind === "interval" && isDelegatedToIntervalGroup(med.id)) continue;
-      const offsets = parseOffsets(med.reminderOffsetsJson);
-      const medName = decryptMedName(med.name, env);
+      const offsets = parseReminderOffsets(med.reminderOffsetsJson);
+      const medName = decryptReminderName(med.name, env, "Medication");
 
       const { recipients, subjectLabel } = await listHealthMedReminderRecipients(db, {
         householdId: household.id,
@@ -802,10 +707,10 @@ export async function scanHealthMedReminders(db: Database, env: Env): Promise<nu
           : [];
       if (memberMeds.length === 0) continue;
       const memberMedIds = memberMeds.map((m) => m.id);
-      const medNames = memberMeds.map((m) => decryptMedName(m.name, env));
+      const medNames = memberMeds.map((m) => decryptReminderName(m.name, env, "Medication"));
 
-      const offsets = parseOffsets(group.reminderOffsetsJson);
-      const groupName = decryptMedName(group.name, env);
+      const offsets = parseReminderOffsets(group.reminderOffsetsJson);
+      const groupName = decryptReminderName(group.name, env, "Medication");
 
       const { recipients, subjectLabel } = await listHealthMedReminderRecipients(db, {
         householdId: household.id,
@@ -899,7 +804,7 @@ export async function scanHealthMedReminders(db: Database, env: Env): Promise<nu
             );
             if (membersAtThisTime.length === 0) continue;
             const membersAtThisTimeIds = membersAtThisTime.map((m) => m.id);
-            const medNamesAtThisTime = membersAtThisTime.map((m) => decryptMedName(m.name, env));
+            const medNamesAtThisTime = membersAtThisTime.map((m) => decryptReminderName(m.name, env, "Medication"));
 
             for (const offsetMinutes of offsets) {
               const fireAt = new Date(scheduledAt.getTime() - offsetMinutes * 60 * 1000);

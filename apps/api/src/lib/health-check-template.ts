@@ -1,4 +1,8 @@
 import { healthEventTypeEnum, healthPainBodyRegionEnum, healthVitalsMetricEnum } from "@domi-ops/db";
+import type { CheckTemplate } from "@domi-ops/calendar-sync";
+
+// The stored shape and its tolerant parser are shared with the reminder worker.
+export { parseCheckTemplate, type CheckTemplate } from "@domi-ops/calendar-sync";
 
 /**
  * Health checks (WHO-382): the event type a check asks for, and the per-type field template that
@@ -15,17 +19,6 @@ export type CheckEventType = Exclude<(typeof healthEventTypeEnum.enumValues)[num
 export function isCheckEventType(value: unknown): value is CheckEventType {
   return typeof value === "string" && CHECK_EVENT_TYPES.includes(value);
 }
-
-export type CheckTemplate = {
-  /** Default title for the logged event. */
-  title?: string;
-  /** vitals: the metrics to prompt for, in display order. */
-  metrics?: string[];
-  /** pain: body regions to pre-select. */
-  regions?: string[];
-  /** exercise: default activity name. */
-  activity?: string;
-};
 
 export type CheckTemplateErrorCode =
   | "invalid_template"
@@ -102,27 +95,6 @@ export function normalizeCheckTemplate(eventType: CheckEventType, raw: unknown):
       break;
   }
   return out;
-}
-
-/** Tolerant read of a stored (already decrypted) template: junk becomes an empty template. */
-export function parseCheckTemplate(raw: string | null | undefined): CheckTemplate {
-  if (!raw) return {};
-  try {
-    const parsed = JSON.parse(raw) as Record<string, unknown> | null;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
-    const out: CheckTemplate = {};
-    if (typeof parsed.title === "string" && parsed.title) out.title = parsed.title;
-    if (Array.isArray(parsed.metrics)) {
-      out.metrics = parsed.metrics.filter((m): m is string => typeof m === "string");
-    }
-    if (Array.isArray(parsed.regions)) {
-      out.regions = parsed.regions.filter((r): r is string => typeof r === "string");
-    }
-    if (typeof parsed.activity === "string" && parsed.activity) out.activity = parsed.activity;
-    return out;
-  } catch {
-    return {};
-  }
 }
 
 /** `YYYY-MM-DD` and a real calendar date. */

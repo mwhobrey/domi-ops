@@ -18,6 +18,9 @@ export type SyncJobName =
   | "chore.digest.scan"
   | "drive.quota.scan"
   | "health.med.reminder.scan"
+  | "health.med.reminder.household"
+  | "health.check.reminder.scan"
+  | "health.check.reminder.household"
   | "myallyfile.sync.scan";
 
 export interface SyncJobPayload {
@@ -38,7 +41,9 @@ export {
   ensureChoreDigestScheduler,
   ensureDriveQuotaScheduler,
   ensureHealthMedReminderScheduler,
+  ensureHealthCheckReminderScheduler,
   ensureMyallyfileSyncScheduler,
+  householdReminderEnqueuer,
 } from "./queue.js";
 export { runCalendarSyncJob, syncConnection, pullLinkedCalendar } from "./sync.js";
 export { eventToFields, eventToGoogleBody, inferSourceCategory } from "./mapper.js";
@@ -66,6 +71,8 @@ export {
   type IntervalPendingDose,
   type IntervalEditLog,
 } from "./med-interval-schedule.js";
+export { datesBetween, loadCheckSlotStatuses } from "./health-check-status.js";
+export { parseCheckTemplate, type CheckTemplate } from "./health-check-template.js";
 export {
   CHECK_SLOT_TOLERANCE_MINUTES,
   CHECK_SLOT_TOLERANCE_MS,
@@ -91,6 +98,22 @@ export {
 } from "./health-schedule.js";
 export { scanSchoolReminders } from "./school-reminder-scan.js";
 export { scanHealthMedReminders } from "./health-med-reminder-scan.js";
+export {
+  REMINDER_SCAN_INTERVAL_MS,
+  fanOutCheckReminderScans,
+  fanOutMedReminderScans,
+  householdReminderJobId,
+  type EnqueueHouseholdReminderScan,
+  type HouseholdReminderJob,
+} from "./health-reminder-fanout.js";
+export {
+  OVERDUE_NUDGE_AFTER_MINUTES,
+  buildCheckReminderCopy,
+  buildCheckReminderDeepLink,
+  planCheckReminders,
+  scanHealthCheckReminders,
+  type CheckReminderKind,
+} from "./health-check-reminder-scan.js";
 export {
   MyallyfileError,
   MYALLYFILE_MAX_MEDICATIONS,

@@ -1,6 +1,11 @@
 import { Hono } from "hono";
 import type { Env } from "@domi-ops/config";
-import { resolveAlertTimeZone, todayIsoDateInTz } from "@domi-ops/calendar-sync";
+import {
+  datesBetween,
+  loadCheckSlotStatuses,
+  resolveAlertTimeZone,
+  todayIsoDateInTz,
+} from "@domi-ops/calendar-sync";
 import type { Database } from "@domi-ops/db";
 import { healthCheckLogs, healthChecks, healthEvents, householdMembers } from "@domi-ops/db";
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
@@ -27,7 +32,6 @@ import {
   type RecordCheckErrorCode,
 } from "../lib/health-check-logging.js";
 import { recordCheckEnabledChange } from "../lib/health-check-pauses.js";
-import { datesBetween, loadCheckSlotStatuses } from "../lib/health-check-status.js";
 import { CheckScheduleError, normalizeCheckSchedule } from "../lib/health-check-schedule.js";
 import { enrichHealthChecks } from "../lib/health-check-serialize.js";
 import {

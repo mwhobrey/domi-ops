@@ -15,6 +15,7 @@ import {
   ensureChoreDigestScheduler,
   ensureDriveQuotaScheduler,
   ensureHealthMedReminderScheduler,
+  ensureHealthCheckReminderScheduler,
   ensureMyallyfileSyncScheduler,
 } from "@domi-ops/calendar-sync";
 
@@ -31,6 +32,7 @@ const CROSS_TENANT_SCAN_JOBS = new Set<SyncJobName>([
   "chore.digest.scan",
   "drive.quota.scan",
   "health.med.reminder.scan",
+  "health.check.reminder.scan",
   "myallyfile.sync.scan",
 ]);
 
@@ -68,7 +70,11 @@ worker.on("failed", (job, err) => {
   // for triage than console.error's free text would be); this line stays for local log
   // visibility only.
   console.log(`Job ${job?.id} failed:`, err);
-  Sentry.captureException(err, { tags: { jobName: job?.data.name } });
+  // Per-household jobs (health reminders) carry their household so a failure is attributable.
+  Sentry.captureException(err, {
+    tags: { jobName: job?.data.name },
+    extra: { householdId: job?.data.payload.householdId },
+  });
 });
 
 void ensureCalendarReminderScheduler(redisUrl).catch((err) => {
@@ -97,6 +103,9 @@ void ensureDriveQuotaScheduler(redisUrl).catch((err) => {
 
 void ensureHealthMedReminderScheduler(redisUrl).catch((err) => {
   console.error("Failed to schedule health med reminder scan", err);
+});
+void ensureHealthCheckReminderScheduler(redisUrl).catch((err) => {
+  console.error("Failed to schedule health check reminder scan", err);
 });
 
 void ensureMyallyfileSyncScheduler(redisUrl).catch((err) => {
