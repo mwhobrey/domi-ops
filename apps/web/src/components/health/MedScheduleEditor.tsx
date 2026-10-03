@@ -8,6 +8,7 @@ export type ScheduleSource = {
   scheduleKind?: "scheduled" | "prn" | "otc" | "interval";
   schedule?: {
     times?: string[];
+    daysOfWeek?: number[];
     everyMinutes?: number;
     anchor?: string;
     fixedStartTime?: string;
@@ -19,6 +20,8 @@ export type ScheduleSource = {
 export type MedScheduleDraft = {
   scheduleKind: "scheduled" | "prn" | "otc" | "interval";
   times: string[];
+  /** 0 = Sunday .. 6 = Saturday. Empty = every day. */
+  daysOfWeek: number[];
   everyAmount: string;
   everyUnit: "minutes" | "hours" | "days";
   intervalAnchor: "first_taken" | "fixed_start";
@@ -51,6 +54,7 @@ export function medicationToScheduleDraft(source: ScheduleSource): MedScheduleDr
   return {
     scheduleKind: source?.scheduleKind ?? "scheduled",
     times: source?.schedule?.times?.length ? source.schedule.times : ["08:00"],
+    daysOfWeek: source?.schedule?.daysOfWeek ?? [],
     everyAmount,
     everyUnit,
     intervalAnchor: source?.schedule?.anchor === "fixed_start" ? "fixed_start" : "first_taken",
@@ -78,7 +82,13 @@ export function scheduleDraftToRequestBody(
       .map((t) => t.trim())
       .filter(Boolean)
       .map((t) => (t.length >= 5 ? t.slice(0, 5) : t));
-    return { ok: true, scheduleKind: "scheduled", schedule: { times } };
+    // Only sent when some days are picked, so a schedule without them stays "every day".
+    const daysOfWeek = [...new Set(draft.daysOfWeek)].sort((a, b) => a - b);
+    return {
+      ok: true,
+      scheduleKind: "scheduled",
+      schedule: daysOfWeek.length > 0 && daysOfWeek.length < 7 ? { times, daysOfWeek } : { times },
+    };
   }
   if (draft.scheduleKind === "interval") {
     const everyMinutes = amountUnitToMinutes(draft.everyAmount, draft.everyUnit);
@@ -106,6 +116,48 @@ export function scheduleDraftToRequestBody(
     return { ok: true, scheduleKind: "otc", schedule: undefined };
   }
   return { ok: true, scheduleKind: "prn", schedule: undefined };
+}
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+
+/** Which days a scheduled list of times applies on. None picked means every day. */
+export function WeekdayPicker({
+  days,
+  onChange,
+}: {
+  days: number[];
+  onChange: (days: number[]) => void;
+}) {
+  const selected = new Set(days);
+  return (
+    <div className="space-y-2">
+      <span className="text-sm font-medium text-[var(--color-text)]">
+        Days <span className="font-normal text-[var(--color-text-muted)]">(none picked = every day)</span>
+      </span>
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Days of the week">
+        {WEEKDAYS.map((label, day) => (
+          <button
+            key={label}
+            type="button"
+            aria-pressed={selected.has(day)}
+            className={`inline-flex min-h-8 items-center rounded-full border px-3 py-1 text-xs font-medium transition-colors max-md:min-h-11 max-md:px-4 ${
+              selected.has(day)
+                ? "border-[var(--color-accent)] bg-[var(--color-accent)] text-white"
+                : "border-[var(--color-border)] bg-transparent text-[var(--color-text-muted)]"
+            }`}
+            onClick={() => {
+              const next = new Set(selected);
+              if (next.has(day)) next.delete(day);
+              else next.add(day);
+              onChange([...next].sort((a, b) => a - b));
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export function MedTimesEditor({
@@ -172,11 +224,21 @@ export function MedScheduleEditor({
   draft,
   onChange,
   allowPrn = true,
+  allowDays = false,
+  subject = "dose",
 }: {
   draft: MedScheduleDraft;
   onChange: (next: MedScheduleDraft) => void;
   allowPrn?: boolean;
+  /** Show a weekday picker for scheduled times (checks use it; medications do not yet). */
+  allowDays?: boolean;
+  /** What the schedule repeats: the interval wording follows ("dose" for medications). */
+  subject?: "dose" | "check";
 }) {
+  const words =
+    subject === "check"
+      ? { first: "When the first check is logged", from: "Last logged + interval", max: "Max checks", maxDay: "Max checks / day" }
+      : { first: "When first dose is Taken", from: "Last Taken + interval", max: "Max doses", maxDay: "Max doses / day" };
   return (
     <>
       <label className="block space-y-1 text-sm">
@@ -195,6 +257,9 @@ export function MedScheduleEditor({
       </label>
       {draft.scheduleKind === "scheduled" ? (
         <MedTimesEditor times={draft.times} onChange={(times) => onChange({ ...draft, times })} />
+      ) : null}
+      {allowDays && draft.scheduleKind === "scheduled" ? (
+        <WeekdayPicker days={draft.daysOfWeek} onChange={(daysOfWeek) => onChange({ ...draft, daysOfWeek })} />
       ) : null}
       {draft.scheduleKind === "interval" ? (
         <div className="space-y-3 rounded-lg border border-[var(--color-border)] p-3">
@@ -234,7 +299,7 @@ export function MedScheduleEditor({
                 })
               }
             >
-              <option value="first_taken">When first dose is Taken</option>
+              <option value="first_taken">{words.first}</option>
               <option value="fixed_start">At a set morning time</option>
             </Select>
           </label>
@@ -256,7 +321,7 @@ export function MedScheduleEditor({
                 onChange({ ...draft, intervalFrom: e.target.value as MedScheduleDraft["intervalFrom"] })
               }
             >
-              <option value="last_taken">Last Taken + interval</option>
+              <option value="last_taken">{words.from}</option>
               <option value="schedule_grid">Fixed grid from start (even if late)</option>
             </Select>
           </label>
@@ -268,14 +333,14 @@ export function MedScheduleEditor({
                 onChange({ ...draft, stopMode: e.target.value as MedScheduleDraft["stopMode"] })
               }
             >
-              <option value="max_doses">Max doses</option>
+              <option value="max_doses">{words.max}</option>
               <option value="end_time">After an end time</option>
               <option value="midnight">Local midnight</option>
             </Select>
           </label>
           {draft.stopMode === "max_doses" ? (
             <label className="block space-y-1 text-sm">
-              <span>Max doses / day</span>
+              <span>{words.maxDay}</span>
               <Input
                 type="number"
                 min={1}

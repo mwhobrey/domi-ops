@@ -370,7 +370,22 @@ export interface HealthCheck {
   eventType: HealthEventType;
   template: HealthCheckTemplate;
   scheduleKind: "scheduled" | "interval" | string;
+  schedule?: {
+    times?: string[];
+    daysOfWeek?: number[];
+    everyMinutes?: number;
+    anchor?: string;
+    fixedStartTime?: string;
+    intervalFrom?: string;
+    stop?: { mode?: string; maxDoses?: number; endTime?: string };
+  };
+  reminderOffsets?: number[];
+  startDate?: string | null;
+  endDate?: string | null;
   enabled: boolean;
+  visibility?: "household" | "private";
+  sharedMemberIds?: string[];
+  isOwnedByMe?: boolean;
   /** `events: write` on the person: may log, skip and undo. */
   canLog?: boolean;
   canEdit?: boolean;
