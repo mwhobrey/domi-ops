@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { and, count, eq, inArray, like } from "drizzle-orm";
 import type { Env } from "@domi-ops/config";
@@ -127,6 +127,19 @@ maybeDescribe("scanHealthMedReminders (integration)", () => {
       ]),
     );
   }, 30_000);
+
+  // The scan reads the clock and the tests schedule doses relative to it, so pin it to midday UTC.
+  // Otherwise a run in the last minutes of the day schedules "now + 3 minutes" onto tomorrow while
+  // the fixture log lands on today, and the test fails only at that time of day. Only Date is faked.
+  beforeEach(() => {
+    const noon = new Date();
+    noon.setUTCHours(12, 0, 0, 0);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(noon);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   afterAll(async () => {
     if (!db) return;

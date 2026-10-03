@@ -178,10 +178,17 @@ maybeDescribe("health reminder fan-out (integration)", () => {
   it("keeps enqueuing the other households when one enqueue fails, then reports the failure", async () => {
     // Make two households due so there is something after the failing one.
     await check("meds");
-    const { calls, result } = await tick(fanOutCheckReminderScans, { failFor: hh.checks });
-    expect(forHousehold(calls, "meds")).toHaveLength(1);
-    expect(forHousehold(calls, "checks")).toHaveLength(0);
-    expect(result).toBeInstanceOf(AggregateError);
-    expect((result as AggregateError).errors).toHaveLength(1);
+    try {
+      const { calls, result } = await tick(fanOutCheckReminderScans, { failFor: hh.checks });
+      expect(forHousehold(calls, "meds")).toHaveLength(1);
+      expect(forHousehold(calls, "checks")).toHaveLength(0);
+      expect(result).toBeInstanceOf(AggregateError);
+      expect((result as AggregateError).errors).toHaveLength(1);
+    } finally {
+      // Don't leak the extra check into other tests.
+      await withHouseholdContext(db, hh.meds!, (tx) =>
+        tx.delete(healthChecks).where(eq(healthChecks.householdId, hh.meds!)),
+      );
+    }
   });
 });
