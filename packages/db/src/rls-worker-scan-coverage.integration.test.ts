@@ -11,8 +11,12 @@ const maybeDescribe = TEST_URL ? describe : describe.skip;
  *
  * - school_assignment_materials / school_hours_log / school_instruction_days: only ever read in the
  *   context of one household's request; no reminder or sync scan touches them.
+ * - health_member_acl: read by the health reminder jobs, but those run per household under
+ *   withHouseholdContext (see health-reminder-fanout.ts), so they never need cross-tenant access to
+ *   who may see someone's health data. Keep it that way: do not give the worker a policy here.
  */
 const NOT_READ_BY_WORKER_SCANS = new Set([
+  "health_member_acl",
   "school_assignment_materials",
   "school_hours_log",
   "school_instruction_days",
@@ -57,13 +61,5 @@ maybeDescribe("worker_scan policy coverage (integration)", () => {
     `);
     const have = new Set([...rows].map((r) => r.tablename));
     expect([...NOT_READ_BY_WORKER_SCANS].filter((name) => have.has(name))).toEqual([]);
-  });
-
-  it("the worker policy on health_member_acl can read but not write", async () => {
-    const rows = await db.execute<{ cmd: string }>(sql`
-      select cmd from pg_policies
-      where schemaname = 'public' and tablename = 'health_member_acl' and policyname = 'worker_scan'
-    `);
-    expect([...rows].map((r) => r.cmd)).toEqual(["SELECT"]);
   });
 });

@@ -51,7 +51,8 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 - **Caregivers now get medication reminders on hosted Domi Ops** (WHO-403). The reminder worker could not
   read who has been given permission to log doses for someone, so on the hosted service only the person
   themselves was reminded and their caregivers silently were not. Self-hosted installs were not
-  affected. **Migration `0086`** (requires `npm run db:migrate`; no manual steps).
+  affected. Medication and health check reminders now run as one job per household, so one household's
+  problem can no longer stop everyone else's reminders, and each job can only see its own household's data.
 - **Health records can no longer be attached to a person in another household** (WHO-402). An
   owner or admin could create a medication, health event, medication group or MyAllyFile link
   for a member id belonging to a different household, or move an existing medication or event

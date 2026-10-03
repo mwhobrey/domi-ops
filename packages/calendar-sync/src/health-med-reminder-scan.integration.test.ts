@@ -49,11 +49,11 @@ maybeDescribe("scanHealthMedReminders (integration)", () => {
       return row!.n;
     });
 
-  // The scan is cross-tenant and returns a global count, which other suites running against the
-  // same database at the same time would change, so report what it did in this household only.
+  // Runs the way the worker does: the per-household job, inside that household's own context. Report
+  // what it recorded for this household only, since other suites share the database.
   const runScan = async () => {
     const before = await remindersRecorded();
-    await withWorkerScanContext(db, (tx) => scanHealthMedReminders(tx, env));
+    await withHouseholdContext(db, householdId, (tx) => scanHealthMedReminders(tx, env, { householdId }));
     return (await remindersRecorded()) - before;
   };
 

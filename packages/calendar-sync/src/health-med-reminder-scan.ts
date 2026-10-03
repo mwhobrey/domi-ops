@@ -470,7 +470,12 @@ async function deliverOneMedGroupReminder(
   return true;
 }
 
-export async function scanHealthMedReminders(db: Database, env: Env): Promise<number> {
+/** `householdId` limits the scan to one household (the per-household job; see health-reminder-fanout.ts). */
+export async function scanHealthMedReminders(
+  db: Database,
+  env: Env,
+  opts: { householdId?: string } = {},
+): Promise<number> {
   const now = new Date();
   const windowEnd = new Date(now.getTime() + WINDOW_MS);
   const lookbackStart = new Date(now.getTime() - LOOKBACK_MS);
@@ -481,7 +486,8 @@ export async function scanHealthMedReminders(db: Database, env: Env): Promise<nu
       modulesEnabled: households.modulesEnabled,
       timezone: households.timezone,
     })
-    .from(households);
+    .from(households)
+    .where(opts.householdId ? eq(households.id, opts.householdId) : undefined);
 
   const enabled = householdRows.filter((h) => householdHasHealthModule(h.modulesEnabled));
   if (enabled.length === 0) return 0;

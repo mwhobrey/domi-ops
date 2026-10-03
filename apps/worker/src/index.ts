@@ -70,7 +70,11 @@ worker.on("failed", (job, err) => {
   // for triage than console.error's free text would be); this line stays for local log
   // visibility only.
   console.log(`Job ${job?.id} failed:`, err);
-  Sentry.captureException(err, { tags: { jobName: job?.data.name } });
+  // Per-household jobs (health reminders) carry their household so a failure is attributable.
+  Sentry.captureException(err, {
+    tags: { jobName: job?.data.name },
+    extra: { householdId: job?.data.payload.householdId },
+  });
 });
 
 void ensureCalendarReminderScheduler(redisUrl).catch((err) => {

@@ -18,7 +18,9 @@ export type SyncJobName =
   | "chore.digest.scan"
   | "drive.quota.scan"
   | "health.med.reminder.scan"
+  | "health.med.reminder.household"
   | "health.check.reminder.scan"
+  | "health.check.reminder.household"
   | "myallyfile.sync.scan";
 
 export interface SyncJobPayload {
@@ -41,6 +43,7 @@ export {
   ensureHealthMedReminderScheduler,
   ensureHealthCheckReminderScheduler,
   ensureMyallyfileSyncScheduler,
+  householdReminderEnqueuer,
 } from "./queue.js";
 export { runCalendarSyncJob, syncConnection, pullLinkedCalendar } from "./sync.js";
 export { eventToFields, eventToGoogleBody, inferSourceCategory } from "./mapper.js";
@@ -95,6 +98,14 @@ export {
 } from "./health-schedule.js";
 export { scanSchoolReminders } from "./school-reminder-scan.js";
 export { scanHealthMedReminders } from "./health-med-reminder-scan.js";
+export {
+  REMINDER_SCAN_INTERVAL_MS,
+  fanOutCheckReminderScans,
+  fanOutMedReminderScans,
+  householdReminderJobId,
+  type EnqueueHouseholdReminderScan,
+  type HouseholdReminderJob,
+} from "./health-reminder-fanout.js";
 export {
   OVERDUE_NUDGE_AFTER_MINUTES,
   buildCheckReminderCopy,

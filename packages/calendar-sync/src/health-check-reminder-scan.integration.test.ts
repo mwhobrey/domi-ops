@@ -67,7 +67,7 @@ maybeDescribe("scanHealthCheckReminders (integration)", () => {
    */
   async function scan(iso: string): Promise<number> {
     const before = await remindersRecorded();
-    await withWorkerScanContext(db, (tx) => scanHealthCheckReminders(tx, env, { now: at(iso), householdId }));
+    await withHouseholdContext(db, householdId, (tx) => scanHealthCheckReminders(tx, env, { now: at(iso), householdId }));
     return (await remindersRecorded()) - before;
   }
 
@@ -230,12 +230,12 @@ maybeDescribe("scanHealthCheckReminders (integration)", () => {
 
     it("recipients come from the events segment for checks and the doses segment for medications", async () => {
       const subject = { householdId, subjectMemberId: memberIds.ally! };
-      const checks = await withWorkerScanContext(db, (tx) => listHealthCheckReminderRecipients(tx, subject));
+      const checks = await withHouseholdContext(db, householdId, (tx) => listHealthCheckReminderRecipients(tx, subject));
       expect(checks.subjectLabel).toBe("Ally");
       expect(checks.recipients.map((r) => [r.userId, r.isSubject]).sort()).toEqual(
         [[userIds.ally, true], [userIds.mom, false]].sort(),
       );
-      const meds = await withWorkerScanContext(db, (tx) => listHealthMedReminderRecipients(tx, subject));
+      const meds = await withHouseholdContext(db, householdId, (tx) => listHealthMedReminderRecipients(tx, subject));
       expect(meds.recipients.map((r) => r.userId).sort()).toEqual([userIds.ally, userIds.sitter].sort());
     });
 
