@@ -6,10 +6,11 @@ import { ApiError, apiClient } from "../../lib/client-api";
 import type { NoteShareMember } from "../NoteSharePicker";
 import type { HealthAclGrants } from "../HealthPeopleAccessPanel";
 import { Alert, Badge, Button, Card, CardBody, ConfirmDialog, EmptyState, ListItem, SectionHeader } from "../ui";
+import { HealthCheckGroupSheet } from "./HealthCheckGroupSheet";
 import { HealthCheckSheet } from "./HealthCheckSheet";
 import { checkDateRangeSummary, checkErrorMessage, checkScheduleSummary, checkTypeLabel } from "./health-check-form";
 import { memberLabel } from "./health-helpers";
-import type { HealthCheck } from "./health-types";
+import type { HealthCheck, HealthCheckGroup } from "./health-types";
 
 /**
  * The Checks tab (WHO-389): every scheduled check the viewer can see, grouped by person, with
@@ -29,6 +30,10 @@ export function ChecksManagerClient({
   onChanged?: () => void;
 }) {
   const [checks, setChecks] = useState<HealthCheck[]>([]);
+  const [groups, setGroups] = useState<HealthCheckGroup[]>([]);
+  const [groupSheetOpen, setGroupSheetOpen] = useState(false);
+  const [editingGroup, setEditingGroup] = useState<HealthCheckGroup | null>(null);
+  const [deletingGroup, setDeletingGroup] = useState<HealthCheckGroup | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -46,8 +51,12 @@ export function ChecksManagerClient({
     setLoading(true);
     setError(null);
     try {
-      const res = await apiClient.get<{ checks: HealthCheck[] }>("/api/health/checks");
+      const [res, groupsRes] = await Promise.all([
+        apiClient.get<{ checks: HealthCheck[] }>("/api/health/checks"),
+        apiClient.get<{ groups: HealthCheckGroup[] }>("/api/health/check-groups").catch(() => ({ groups: [] as HealthCheckGroup[] })),
+      ]);
       setChecks(res.checks);
+      setGroups(groupsRes.groups);
     } catch (e) {
       setError(e instanceof ApiError ? checkErrorMessage(e, "Failed to load checks") : "Failed to load checks");
     } finally {
@@ -72,6 +81,33 @@ export function ChecksManagerClient({
       changed();
     } catch (e) {
       setError(checkErrorMessage(e, enabled ? "Could not resume" : "Could not pause"));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function setGroupEnabled(group: HealthCheckGroup, enabled: boolean) {
+    setBusyId(group.id);
+    setError(null);
+    try {
+      await apiClient.patch(`/api/health/check-groups/${group.id}`, { enabled });
+      changed();
+    } catch (e) {
+      setError(checkErrorMessage(e, enabled ? "Could not resume" : "Could not pause"));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function removeGroup(group: HealthCheckGroup) {
+    setDeletingGroup(null);
+    setBusyId(group.id);
+    setError(null);
+    try {
+      await apiClient.delete(`/api/health/check-groups/${group.id}`);
+      changed();
+    } catch (e) {
+      setError(checkErrorMessage(e, "Could not delete"));
     } finally {
       setBusyId(null);
     }
@@ -200,6 +236,126 @@ export function ChecksManagerClient({
           </Card>
         ))
       )}
+
+      {checks.length > 0 || groups.length > 0 ? (
+        <Card className="overflow-hidden">
+          <CardBody className="space-y-3">
+            <SectionHeader
+              title="Groups"
+              action={
+                canCreate && checks.length > 0 ? (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      setEditingGroup(null);
+                      setGroupSheetOpen(true);
+                    }}
+                  >
+                    New group
+                  </Button>
+                ) : undefined
+              }
+            />
+            <p className="text-sm text-[var(--color-text-muted)]">
+              A group sends one reminder for the checks that share its times, and shows them together on
+              the Today tab.
+            </p>
+            {groups.length === 0 ? (
+              <p className="text-sm text-[var(--color-text-muted)]">No groups yet.</p>
+            ) : (
+              <ul className="space-y-2">
+                {groups.map((group) => {
+                  const busy = busyId === group.id;
+                  const range = checkDateRangeSummary(group);
+                  return (
+                    <ListItem key={group.id} as="div">
+                      <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-3">
+                        <div className="min-w-0 text-left">
+                          <p className="flex flex-wrap items-center gap-2 font-medium text-[var(--color-text)]">
+                            <span className="truncate">{group.name}</span>
+                            {group.enabled ? null : <Badge tone="warning">Paused</Badge>}
+                            {group.visibility === "private" ? <Badge tone="default">Private</Badge> : null}
+                          </p>
+                          <p className="text-sm text-[var(--color-text-muted)]">
+                            {[
+                              memberLabel(members, group.memberId),
+                              checkScheduleSummary(group),
+                              range,
+                              group.checks.length > 0
+                                ? group.checks.map((c) => c.name).join(", ")
+                                : "No checks yet",
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </p>
+                        </div>
+                        {group.canEdit ? (
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              disabled={busy}
+                              onClick={() => {
+                                setEditingGroup(group);
+                                setGroupSheetOpen(true);
+                              }}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              disabled={busy}
+                              onClick={() => void setGroupEnabled(group, !group.enabled)}
+                            >
+                              {group.enabled ? "Pause" : "Resume"}
+                            </Button>
+                            <Button size="sm" variant="secondary" disabled={busy} onClick={() => setDeletingGroup(group)}>
+                              Delete
+                            </Button>
+                          </div>
+                        ) : null}
+                      </div>
+                    </ListItem>
+                  );
+                })}
+              </ul>
+            )}
+          </CardBody>
+        </Card>
+      ) : null}
+
+      <HealthCheckGroupSheet
+        open={groupSheetOpen}
+        group={editingGroup}
+        checks={checks}
+        members={members}
+        currentMemberId={currentMemberId}
+        writableMemberIds={writableMemberIds}
+        onClose={() => {
+          setGroupSheetOpen(false);
+          setEditingGroup(null);
+        }}
+        onSaved={() => {
+          setGroupSheetOpen(false);
+          setEditingGroup(null);
+          changed();
+        }}
+      />
+
+      <ConfirmDialog
+        open={deletingGroup !== null}
+        title="Delete this group?"
+        message={
+          deletingGroup
+            ? `"${deletingGroup.name}" stops sending its combined reminder. The checks in it are kept and go back to reminding on their own.`
+            : ""
+        }
+        confirmLabel="Delete"
+        onConfirm={() => deletingGroup && void removeGroup(deletingGroup)}
+        onCancel={() => setDeletingGroup(null)}
+      />
 
       <HealthCheckSheet
         open={sheetOpen}

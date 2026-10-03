@@ -26,6 +26,7 @@ import {
   groupHighlightKeys,
   isCheckSlotPending,
   slotLookupRange,
+  splitCheckRowsByGroup,
   type CheckLogContext,
 } from "./health/health-check-helpers";
 import { PrnQuickLog } from "./health/PrnQuickLog";
@@ -59,6 +60,7 @@ import {
   type CheckSlotRow,
   type DoseLogEntry,
   type HealthCheck,
+  type HealthCheckGroup,
   type HealthEvent,
   type HealthEventType,
   type HealthMedication,
@@ -146,6 +148,9 @@ export function HealthPageClient({
   const [checks, setChecks] = useState<HealthCheck[]>([]);
   /** The checks request itself failed, so an empty list means "unknown", not "none". */
   const [checksLoadFailed, setChecksLoadFailed] = useState(false);
+  const [checkGroups, setCheckGroups] = useState<HealthCheckGroup[]>([]);
+  /** Slots still to log after the one whose sheet is open (a group's "Log next"). */
+  const [logQueue, setLogQueue] = useState<CheckSlotRow[]>([]);
   const [checkSlots, setCheckSlots] = useState<Record<string, CheckSlot[]>>({});
   const [checkBusyKey, setCheckBusyKey] = useState<string | null>(null);
   const [checkHighlight, setCheckHighlight] = useState<Set<string>>(new Set());
@@ -167,7 +172,7 @@ export function HealthPageClient({
     setError(null);
     try {
       let checksFailed = false;
-      const [eventsRes, glanceRes, capsRes, doseLogsRes, checksRes, slotsRes] = await Promise.all([
+      const [eventsRes, glanceRes, capsRes, doseLogsRes, checksRes, slotsRes, groupsRes] = await Promise.all([
         apiClient.get<{ events: HealthEvent[] }>("/api/health/events"),
         apiClient.get<{
           pendingDoses: PendingDose[];
@@ -187,6 +192,9 @@ export function HealthPageClient({
         apiClient
           .get<{ checks: { checkId: string; slots: CheckSlot[] }[] }>("/api/health/checks/slots")
           .catch(() => ({ checks: [] as { checkId: string; slots: CheckSlot[] }[] })),
+        apiClient
+          .get<{ groups: HealthCheckGroup[] }>("/api/health/check-groups")
+          .catch(() => ({ groups: [] as HealthCheckGroup[] })),
       ]);
       setEvents(eventsRes.events);
       setDoseLogs(doseLogsRes.logs);
@@ -197,6 +205,7 @@ export function HealthPageClient({
       setCapabilities(capsRes.bySubject ?? {});
       setChecks(checksRes.checks);
       setChecksLoadFailed(checksFailed);
+      setCheckGroups(groupsRes.groups);
       setCheckSlots(Object.fromEntries(slotsRes.checks.map((c) => [c.checkId, c.slots])));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load health data");
@@ -496,6 +505,20 @@ export function HealthPageClient({
       }
     }
     await load();
+    // "Log next" on a group: carry straight on to the next one still waiting.
+    if (active && logQueue.length > 0) {
+      const [next, ...rest] = logQueue;
+      setLogQueue(rest);
+      if (next) startCheckLog(next);
+    }
+  }
+
+  /** A group's "Log next": open the first waiting check's sheet, and the rest as each is saved. */
+  function startGroupLog(rows: CheckSlotRow[]) {
+    const [first, ...rest] = rows;
+    if (!first) return;
+    setLogQueue(rest);
+    startCheckLog(first);
   }
 
   async function skipCheckSlot(row: CheckSlotRow) {
@@ -593,6 +616,14 @@ export function HealthPageClient({
   const todayCheckRows = useMemo(
     () => checkSlotRowsForMember(checks, new Map(Object.entries(checkSlots)), todayMemberId),
     [checks, checkSlots, todayMemberId],
+  );
+  const { cards: todayGroupCards, loose: todayLooseCheckRows } = useMemo(
+    () =>
+      splitCheckRowsByGroup(
+        todayCheckRows,
+        checkGroups.filter((g) => g.memberId === todayMemberId),
+      ),
+    [todayCheckRows, checkGroups, todayMemberId],
   );
   const todayMemberStyle = avatarStyle(todayMemberId);
   const todayMemberName = memberLabel(members, todayMemberId);
@@ -709,7 +740,8 @@ export function HealthPageClient({
           />
           <TodayChecksCard
             title={todayMemberId === currentMemberId ? "My checks" : `${todayMemberName}'s checks`}
-            rows={todayCheckRows}
+            rows={todayLooseCheckRows}
+            groupCards={todayGroupCards}
             events={events}
             loading={loading}
             borderColor={todayMemberStyle.background}
@@ -720,6 +752,8 @@ export function HealthPageClient({
             onLog={startCheckLog}
             onSkip={(row) => void skipCheckSlot(row)}
             onUndo={(row) => void undoCheckSlot(row)}
+            onLogNext={startGroupLog}
+            loggingNext={activeCheckLog !== null}
           />
           <Card
             className="overflow-hidden border-l-4"
@@ -1200,6 +1234,7 @@ export function HealthPageClient({
           setEventSheetOpen(false);
           setEditingEvent(null);
           setActiveCheckLog(null);
+          setLogQueue([]);
           router.replace("/health");
         }}
         onSaved={(eventId) => {
@@ -1232,6 +1267,7 @@ export function HealthPageClient({
         onClose={() => {
           setVitalsSheetOpen(false);
           setActiveCheckLog(null);
+          setLogQueue([]);
         }}
         onSaved={(eventId) => {
           setVitalsSheetOpen(false);
@@ -1252,6 +1288,7 @@ export function HealthPageClient({
         onClose={() => {
           setExerciseSheetOpen(false);
           setActiveCheckLog(null);
+          setLogQueue([]);
         }}
         onSaved={(eventId) => {
           setExerciseSheetOpen(false);
@@ -1272,6 +1309,7 @@ export function HealthPageClient({
         onClose={() => {
           setPainSheetOpen(false);
           setActiveCheckLog(null);
+          setLogQueue([]);
         }}
         onSaved={(eventId) => {
           setPainSheetOpen(false);
@@ -1292,6 +1330,7 @@ export function HealthPageClient({
         onClose={() => {
           setMealSheetOpen(false);
           setActiveCheckLog(null);
+          setLogQueue([]);
         }}
         onSaved={(eventId) => {
           setMealSheetOpen(false);

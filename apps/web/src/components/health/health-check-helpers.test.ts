@@ -6,13 +6,16 @@ import {
   checkSlotBadge,
   checkSlotRowsForMember,
   findDeepLinkedRow,
+  groupCoversSlot,
   groupHighlightKeys,
   isCheckSlotPending,
   parseSlotInstant,
+  pendingRows,
   slotLookupRange,
+  splitCheckRowsByGroup,
   summarizeCheckRows,
 } from "./health-check-helpers";
-import type { CheckSlot, CheckSlotStatus, HealthCheck, HealthEvent } from "./health-types";
+import type { CheckSlot, CheckSlotStatus, HealthCheck, HealthCheckGroup, HealthEvent } from "./health-types";
 
 const check = (over: Partial<HealthCheck> = {}): HealthCheck => ({
   id: "c1",
@@ -219,5 +222,101 @@ describe("groupHighlightKeys", () => {
   it("marks nothing without a usable time", () => {
     expect(groupHighlightKeys(["a"], undefined).size).toBe(0);
     expect(groupHighlightKeys(["a"], "nope").size).toBe(0);
+  });
+});
+
+describe("check groups on the Today tab", () => {
+  // Built from local time, the zone the helpers read slots in, so these hold in any zone.
+  const at = (hours: number, minutes = 0) => new Date(2026, 9, 5, hours, minutes).toISOString(); // Mon 5 Oct 2026
+  const localSlot = (h: number, status: CheckSlotStatus = "upcoming", over: Partial<CheckSlot> = {}): CheckSlot => ({
+    scheduledAt: at(h),
+    status,
+    source: null,
+    logId: null,
+    eventId: null,
+    ...over,
+  });
+  const bp = check({ id: "bp", name: "BP" });
+  const weight = check({ id: "wt", name: "Weight" });
+  const pain = check({ id: "pn", name: "Pain" });
+  const group = (over: Partial<HealthCheckGroup> = {}): HealthCheckGroup => ({
+    id: "g1",
+    memberId: "ally",
+    name: "Morning",
+    scheduleKind: "scheduled",
+    schedule: { times: ["08:00"] },
+    enabled: true,
+    checks: [bp, weight],
+    ...over,
+  });
+
+  describe("groupCoversSlot", () => {
+    it("covers a member's slot at one of the group's times", () => {
+      expect(groupCoversSlot(group(), bp, at(8))).toBe(true);
+      expect(groupCoversSlot(group(), bp, at(8, 1))).toBe(false);
+      expect(groupCoversSlot(group({ schedule: { times: ["08:00:30"] } }), bp, at(8))).toBe(true);
+    });
+
+    it("needs the check to be in the group, scheduled, and the group to be on and scheduled", () => {
+      expect(groupCoversSlot(group(), pain, at(8))).toBe(false);
+      expect(groupCoversSlot(group(), { ...bp, scheduleKind: "interval" }, at(8))).toBe(false);
+      expect(groupCoversSlot(group({ enabled: false }), bp, at(8))).toBe(false);
+      expect(groupCoversSlot(group({ scheduleKind: "interval" }), bp, at(8))).toBe(false);
+    });
+
+    it("respects the group's days and dates, so an off day isn't swallowed", () => {
+      expect(groupCoversSlot(group({ schedule: { times: ["08:00"], daysOfWeek: [1] } }), bp, at(8))).toBe(true); // Monday
+      expect(groupCoversSlot(group({ schedule: { times: ["08:00"], daysOfWeek: [2, 3] } }), bp, at(8))).toBe(false);
+      expect(groupCoversSlot(group({ startDate: "2026-10-06" }), bp, at(8))).toBe(false);
+      expect(groupCoversSlot(group({ endDate: "2026-10-04" }), bp, at(8))).toBe(false);
+      expect(groupCoversSlot(group({ startDate: "2026-10-05", endDate: "2026-10-05" }), bp, at(8))).toBe(true);
+    });
+  });
+
+  describe("splitCheckRowsByGroup", () => {
+    it("shows the members at the group's time under the group and leaves other times loose", () => {
+      const rows = [
+        { check: bp, slot: localSlot(8, "done") },
+        { check: weight, slot: localSlot(8) },
+        { check: bp, slot: localSlot(12) },
+        { check: pain, slot: localSlot(8) },
+      ];
+      const { cards, loose } = splitCheckRowsByGroup(rows, [group()]);
+      expect(cards).toHaveLength(1);
+      expect(cards[0]!.group.name).toBe("Morning");
+      expect(cards[0]!.rows.map((r) => r.check.name)).toEqual(["BP", "Weight"]);
+      expect(loose.map((r) => `${r.check.name} ${new Date(r.slot.scheduledAt).getHours()}`)).toEqual(["BP 12", "Pain 8"]);
+    });
+
+    it("keeps answered members in the card, so a partly done group still shows what is left", () => {
+      const rows = [
+        { check: bp, slot: localSlot(8, "done") },
+        { check: weight, slot: localSlot(8, "upcoming") },
+      ];
+      const { cards } = splitCheckRowsByGroup(rows, [group()]);
+      expect(pendingRows(cards[0]!.rows).map((r) => r.check.name)).toEqual(["Weight"]);
+    });
+
+    it("gives each group time its own card, in clock order", () => {
+      const evening = group({ id: "g2", name: "Evening", schedule: { times: ["20:00"] } });
+      const rows = [
+        { check: bp, slot: localSlot(20) },
+        { check: bp, slot: localSlot(8) },
+      ];
+      const { cards } = splitCheckRowsByGroup(rows, [evening, group()]);
+      expect(cards.map((c) => c.group.name)).toEqual(["Morning", "Evening"]);
+    });
+
+    it("puts a slot in one group only, even if two cover it", () => {
+      const other = group({ id: "g0", name: "Other" });
+      const { cards } = splitCheckRowsByGroup([{ check: bp, slot: localSlot(8) }], [group(), other]);
+      expect(cards).toHaveLength(1);
+      expect(cards[0]!.group.id).toBe("g0"); // lowest id wins, so the choice doesn't depend on load order
+    });
+
+    it("leaves everything loose without groups", () => {
+      const rows = [{ check: bp, slot: localSlot(8) }];
+      expect(splitCheckRowsByGroup(rows, [])).toEqual({ cards: [], loose: rows });
+    });
   });
 });
