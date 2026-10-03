@@ -25,7 +25,15 @@ import { scanDriveQuotaWarnings } from "./drive-quota-scan.js";
 import { scanHealthCheckReminders } from "./health-check-reminder-scan.js";
 import { scanHealthMedReminders } from "./health-med-reminder-scan.js";
 import { fanOutCheckReminderScans, fanOutMedReminderScans } from "./health-reminder-fanout.js";
-import { householdReminderEnqueuer } from "./queue.js";
+import {
+  fanOutBudgetAlertScans,
+  fanOutCalendarReminderScans,
+  fanOutChoreDigestScans,
+  fanOutChoreReminderScans,
+  fanOutDriveQuotaScans,
+  fanOutSchoolReminderScans,
+} from "./scan-fanout.js";
+import { householdScanEnqueuer } from "./queue.js";
 import { scanMyallyfileSync } from "./myallyfile-sync.js";
 import { scanSchoolReminders } from "./school-reminder-scan.js";
 import { setSyncRun } from "./sync-run.js";
@@ -370,29 +378,47 @@ export async function runCalendarSyncJob(
       await materializeRecurringForHousehold(db, payload.householdId);
       break;
     case "calendar.reminder.scan":
-      await scanCalendarReminders(db, env);
+      await fanOutCalendarReminderScans(db, { enqueue: householdScanEnqueuer(redisUrlOf(env)) });
       break;
     case "chore.reminder.scan":
-      await scanChoreReminders(db, env);
+      await fanOutChoreReminderScans(db, { enqueue: householdScanEnqueuer(redisUrlOf(env)) });
       break;
     case "expense.budget.scan":
-      await scanBudgetAlerts(db, env);
+      await fanOutBudgetAlertScans(db, { enqueue: householdScanEnqueuer(redisUrlOf(env)) });
       break;
     case "school.reminder.scan":
-      await scanSchoolReminders(db, env);
+      await fanOutSchoolReminderScans(db, { enqueue: householdScanEnqueuer(redisUrlOf(env)) });
       break;
     case "chore.digest.scan":
-      await scanChoreDigest(db, env);
+      await fanOutChoreDigestScans(db, { enqueue: householdScanEnqueuer(redisUrlOf(env)) });
       break;
     case "drive.quota.scan":
-      await scanDriveQuotaWarnings(db, env);
+      await fanOutDriveQuotaScans(db, { enqueue: householdScanEnqueuer(redisUrlOf(env)) });
+      break;
+    case "calendar.reminder.household":
+      await scanCalendarReminders(db, env, { householdId: payload.householdId });
+      break;
+    case "chore.reminder.household":
+      await scanChoreReminders(db, env, { householdId: payload.householdId });
+      break;
+    case "expense.budget.household":
+      await scanBudgetAlerts(db, env, { householdId: payload.householdId });
+      break;
+    case "school.reminder.household":
+      await scanSchoolReminders(db, env, { householdId: payload.householdId });
+      break;
+    case "chore.digest.household":
+      await scanChoreDigest(db, env, { householdId: payload.householdId });
+      break;
+    case "drive.quota.household":
+      await scanDriveQuotaWarnings(db, env, { householdId: payload.householdId });
       break;
     // The 5-minute ticks only enqueue; the work runs per household in that household's own context.
     case "health.med.reminder.scan":
-      await fanOutMedReminderScans(db, { enqueue: householdReminderEnqueuer(redisUrlOf(env)) });
+      await fanOutMedReminderScans(db, { enqueue: householdScanEnqueuer(redisUrlOf(env)) });
       break;
     case "health.check.reminder.scan":
-      await fanOutCheckReminderScans(db, { enqueue: householdReminderEnqueuer(redisUrlOf(env)) });
+      await fanOutCheckReminderScans(db, { enqueue: householdScanEnqueuer(redisUrlOf(env)) });
       break;
     case "health.med.reminder.household":
       await scanHealthMedReminders(db, env, { householdId: payload.householdId });

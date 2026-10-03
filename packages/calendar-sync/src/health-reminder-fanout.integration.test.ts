@@ -15,19 +15,20 @@ import {
   withWorkerScanContext,
   type Database,
 } from "@domi-ops/db";
+import { fanOutCheckReminderScans, fanOutMedReminderScans } from "./health-reminder-fanout.js";
 import {
-  REMINDER_SCAN_INTERVAL_MS,
-  fanOutCheckReminderScans,
-  fanOutMedReminderScans,
-  householdReminderJobId,
-  type EnqueueHouseholdReminderScan,
-  type HouseholdReminderJob,
-} from "./health-reminder-fanout.js";
+  HOUSEHOLD_SCAN_INTERVAL_MS,
+  householdScanJobId,
+  type EnqueueHouseholdScan,
+  type HouseholdScanJob,
+} from "./household-scan-fanout.js";
+
+const WINDOW_MS = HOUSEHOLD_SCAN_INTERVAL_MS["health.check.reminder.household"];
 
 const TEST_URL = process.env.HOSTED_TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const maybeDescribe = TEST_URL ? describe : describe.skip;
 
-type Call = { job: HouseholdReminderJob; householdId: string; jobId: string };
+type Call = { job: HouseholdScanJob; householdId: string; jobId: string };
 
 /**
  * The tick decides which households get a reminder job (WHO-403). Other suites share the database,
@@ -47,7 +48,7 @@ maybeDescribe("health reminder fan-out (integration)", () => {
     opts: { now?: Date; failFor?: string } = {},
   ): Promise<{ calls: Call[]; result: number | Error }> {
     const calls: Call[] = [];
-    const enqueue: EnqueueHouseholdReminderScan = async (job, householdId, jobId) => {
+    const enqueue: EnqueueHouseholdScan = async (job, householdId, jobId) => {
       if (householdId === opts.failFor) throw new Error("redis down");
       calls.push({ job, householdId, jobId });
     };
@@ -164,13 +165,13 @@ maybeDescribe("health reminder fan-out (integration)", () => {
   });
 
   it("gives a household the same job id for the whole 5 minute window and a new one in the next", async () => {
-    const t0 = new Date(Math.floor(Date.now() / REMINDER_SCAN_INTERVAL_MS) * REMINDER_SCAN_INTERVAL_MS);
+    const t0 = new Date(Math.floor(Date.now() / WINDOW_MS) * WINDOW_MS);
     const a = await tick(fanOutCheckReminderScans, { now: new Date(t0.getTime() + 1_000) });
-    const b = await tick(fanOutCheckReminderScans, { now: new Date(t0.getTime() + REMINDER_SCAN_INTERVAL_MS - 1_000) });
-    const c = await tick(fanOutCheckReminderScans, { now: new Date(t0.getTime() + REMINDER_SCAN_INTERVAL_MS + 1_000) });
+    const b = await tick(fanOutCheckReminderScans, { now: new Date(t0.getTime() + WINDOW_MS - 1_000) });
+    const c = await tick(fanOutCheckReminderScans, { now: new Date(t0.getTime() + WINDOW_MS + 1_000) });
     expect(a.calls[0]!.jobId).toBe(b.calls[0]!.jobId);
     expect(c.calls[0]!.jobId).not.toBe(a.calls[0]!.jobId);
-    expect(a.calls[0]!.jobId).toBe(householdReminderJobId("health.check.reminder.household", hh.checks!, t0));
+    expect(a.calls[0]!.jobId).toBe(householdScanJobId("health.check.reminder.household", hh.checks!, t0));
     // BullMQ rejects custom ids containing ":".
     expect(a.calls[0]!.jobId).not.toContain(":");
   });

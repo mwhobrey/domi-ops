@@ -228,10 +228,16 @@ export async function checkHouseholdBudgetAlerts(
   return sent;
 }
 
-export async function scanBudgetAlerts(db: Database, env: Env): Promise<number> {
+/** `householdId` limits the scan to one household (the per-household job; see household-scan-fanout.ts). */
+export async function scanBudgetAlerts(
+  db: Database,
+  env: Env,
+  opts: { householdId?: string } = {},
+): Promise<number> {
   const households = await db
     .selectDistinct({ householdId: expenseBudgets.householdId })
-    .from(expenseBudgets);
+    .from(expenseBudgets)
+    .where(opts.householdId ? eq(expenseBudgets.householdId, opts.householdId) : undefined);
 
   let total = 0;
   for (const row of households) {

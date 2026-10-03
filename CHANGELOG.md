@@ -48,6 +48,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Fixed
 
+- **One household's problem can no longer stop everyone else's reminders** (WHO-404). Calendar, chore,
+  chore digest, school, budget and drive storage reminders now run as one job per household instead of
+  one sweep across all of them, the same way medication and health check reminders already do. Each job
+  can only see its own household's data. No action needed.
 - **Caregivers now get medication reminders on hosted Domi Ops** (WHO-403). The reminder worker could not
   read who has been given permission to log doses for someone, so on the hosted service only the person
   themselves was reminded and their caregivers silently were not. Self-hosted installs were not

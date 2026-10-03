@@ -118,14 +118,20 @@ async function notifySchoolAssignmentReminder(
   });
 }
 
-export async function scanSchoolReminders(db: Database, env: Env): Promise<number> {
+/** `householdId` limits the scan to one household (the per-household job; see household-scan-fanout.ts). */
+export async function scanSchoolReminders(
+  db: Database,
+  env: Env,
+  opts: { householdId?: string } = {},
+): Promise<number> {
   const schoolHouseholds = await db
     .select({
       id: households.id,
       modulesEnabled: households.modulesEnabled,
       timezone: households.timezone,
     })
-    .from(households);
+    .from(households)
+    .where(opts.householdId ? eq(households.id, opts.householdId) : undefined);
 
   const enabledHouseholds = schoolHouseholds.filter((h) =>
     householdHasSchoolModule(h.modulesEnabled),

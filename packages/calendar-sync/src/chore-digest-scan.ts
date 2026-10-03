@@ -15,11 +15,17 @@ function digestBody(descriptions: string[]): string {
   return extra > 0 ? `${preview} +${extra} more` : preview;
 }
 
-export async function scanChoreDigest(db: Database, env: Env): Promise<number> {
+/** `householdId` limits the scan to one household (the per-household job; see household-scan-fanout.ts). */
+export async function scanChoreDigest(
+  db: Database,
+  env: Env,
+  opts: { householdId?: string } = {},
+): Promise<number> {
   const now = new Date();
   const householdRows = await db
     .select({ id: households.id, timezone: households.timezone })
-    .from(households);
+    .from(households)
+    .where(opts.householdId ? eq(households.id, opts.householdId) : undefined);
 
   let sent = 0;
 
