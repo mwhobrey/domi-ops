@@ -428,7 +428,7 @@ function CalendarOverlaySettings({
             }}
           />
           <Checkbox
-            label="Scheduled medication doses"
+            label="Scheduled medication doses and health checks"
             checked={healthMeds}
             onChange={async (e) => {
               const next = e.target.checked;

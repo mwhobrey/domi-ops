@@ -93,6 +93,31 @@ export function claimedByGroups(
   return { all: false, instants };
 }
 
+/**
+ * Does a scheduled group's reminder cover this scheduled check's slot at `scheduledAt`? The same
+ * rule as `claimedByGroups`, but for any day rather than the three around now, so the calendar can
+ * ask about a whole month. Group times, weekdays and dates apply; the caller has already checked
+ * that the check is a member and the group is on.
+ */
+export function groupCoversCheckSlot(
+  group: Pick<GroupRow, "scheduleKind" | "scheduleJson" | "startDate" | "endDate">,
+  check: Pick<CheckRow, "scheduleKind">,
+  scheduledAt: Date,
+  tz: string,
+): boolean {
+  if (group.scheduleKind !== "scheduled" || check.scheduleKind !== "scheduled") return false;
+  const schedule = parseFixedTimeSchedule(group.scheduleJson);
+  const minute = minuteMs(scheduledAt);
+  return expandScheduledSlots({
+    times: schedule.times,
+    daysOfWeek: schedule.daysOfWeek,
+    startDate: group.startDate,
+    endDate: group.endDate,
+    dates: [localDateOfInstant(scheduledAt, tz)],
+    timeZone: tz,
+  }).some((s) => minuteMs(s.scheduledAt) === minute);
+}
+
 export function buildCheckGroupReminderCopy(input: {
   groupName: string;
   checkNames: string[];

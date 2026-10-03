@@ -7,11 +7,11 @@ import {
   formatWallClock,
 } from "../lib/calendar-utils";
 import { formatChoreDueMeta, formatSchoolDueMeta } from "../lib/glance-meta";
+import { buildHealthTile, type GlanceTileModel, type GlanceTone, type HealthGlance } from "../lib/health-glance-tile";
 import type { GlancePreviewItem } from "./ui";
 import { Card, CardBody, CardHeader, GlanceTile, SectionHeader, Skeleton } from "./ui";
 import { useHouseholdToday } from "./HouseholdTimeProvider";
 
-type GlanceTone = "default" | "warning" | "success";
 
 type ChoresGlance = {
   summary: { headline: string; tone: GlanceTone };
@@ -31,34 +31,6 @@ type ShoppingGlance = {
   items: { id: string; item: string; meta?: string }[];
   overflow: number;
 };
-
-type HealthGlance = {
-  enabled?: boolean;
-  pendingDoses?: {
-    medicationId: string;
-    name: string;
-    dosage: string | null;
-    scheduledAt: string;
-    scheduledTimeLabel: string;
-    awaitingFirst?: boolean;
-    memberLabel?: string | null;
-    isSelf?: boolean;
-  }[];
-  pendingGroupDoses?: {
-    groupId: string;
-    name: string;
-    scheduledAt: string;
-    scheduledTimeLabel: string;
-    memberLabel?: string | null;
-    isSelf?: boolean;
-  }[];
-};
-
-/** "Lunch Meds · Ally" for someone else's dose; just the name for your own. */
-function doseLabel(d: { name: string; memberLabel?: string | null; isSelf?: boolean }): string {
-  if (d.isSelf !== false || !d.memberLabel) return d.name;
-  return `${d.name} · ${d.memberLabel.split(" ")[0]}`;
-}
 
 type DriveGlance = {
   summary: { headline: string; tone: GlanceTone };
@@ -96,96 +68,11 @@ type CalendarEvent = {
 };
 type CalendarEventsResponse = { events: CalendarEvent[] };
 
-type GlanceTileModel = {
-  key: string;
-  label: string;
-  href: string;
-  headline: string;
-  tone: GlanceTone;
-  items: GlancePreviewItem[];
-  overflowCount: number;
-  emptyHint?: string;
-};
-
 const toneRank: Record<GlanceTone, number> = {
   warning: 0,
   default: 1,
   success: 2,
 };
-
-type HealthGlanceItem = {
-  key: string;
-  label: string;
-  scheduledAt: string;
-  scheduledTimeLabel: string;
-  metaExtra?: string | null;
-  awaitingFirst?: boolean;
-  href: string;
-};
-
-function buildHealthTile(glance: HealthGlance | null): GlanceTileModel | null {
-  if (!glance) return null;
-  const pending: HealthGlanceItem[] = [
-    ...(glance.pendingGroupDoses ?? []).map((d) => ({
-      key: `group:${d.groupId}-${d.scheduledAt}`,
-      label: doseLabel(d),
-      scheduledAt: d.scheduledAt,
-      scheduledTimeLabel: d.scheduledTimeLabel,
-      href: `/health?takeGroup=${encodeURIComponent(d.groupId)}&scheduledAt=${encodeURIComponent(d.scheduledAt)}`,
-    })),
-    ...(glance.pendingDoses ?? []).map((d) => ({
-      key: `${d.medicationId}-${d.scheduledAt}`,
-      label: doseLabel(d),
-      scheduledAt: d.scheduledAt,
-      scheduledTimeLabel: d.scheduledTimeLabel,
-      metaExtra: d.dosage,
-      awaitingFirst: d.awaitingFirst,
-      href: `/health?take=${encodeURIComponent(d.medicationId)}&scheduledAt=${encodeURIComponent(d.scheduledAt)}`,
-    })),
-  ].sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
-
-  const now = Date.now();
-  const overdueCount = pending.filter((d) => {
-    if (d.awaitingFirst) return false;
-    const at = Date.parse(d.scheduledAt);
-    return Number.isFinite(at) && at < now;
-  }).length;
-
-  let headline: string;
-  let tone: GlanceTone;
-  if (pending.length === 0) {
-    headline = "All clear";
-    tone = "success";
-  } else if (overdueCount > 0) {
-    headline = `${overdueCount} overdue`;
-    tone = "warning";
-  } else {
-    headline = `${pending.length} dose${pending.length === 1 ? "" : "s"}`;
-    tone = "default";
-  }
-
-  return {
-    key: "health",
-    label: "Health",
-    href: "/health",
-    headline,
-    tone,
-    items: pending.slice(0, 3).map((d) => {
-      const at = Date.parse(d.scheduledAt);
-      const late = !d.awaitingFirst && Number.isFinite(at) && at < now;
-      return {
-        key: d.key,
-        label: d.label,
-        meta: [late ? "Overdue" : d.scheduledTimeLabel, d.metaExtra, d.awaitingFirst ? "Start" : null]
-          .filter(Boolean)
-          .join(" · "),
-        href: d.href,
-      };
-    }),
-    overflowCount: Math.max(0, pending.length - 3),
-    emptyHint: tone === "success" ? "No doses pending today." : undefined,
-  };
-}
 
 function buildDriveTile(glance: DriveGlance | null): GlanceTileModel | null {
   if (!glance) return null;

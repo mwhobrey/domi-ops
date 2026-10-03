@@ -204,6 +204,7 @@ export const OVERLAY_FILTER_META: OverlayFilterMeta[] = [
   { id: "school", label: "School", color: "#d97706" },
   { id: "health_event", label: "Health events", color: "#e11d48" },
   { id: "health_med", label: "Medications", color: "#0d9488" },
+  { id: "health_check", label: "Health checks", color: "#7c3aed" },
 ];
 
 export function readHiddenOverlayKinds(): Set<string> {
