@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react";
 import { ApiError, apiClient } from "../../lib/client-api";
 import type { NoteShareMember } from "../NoteSharePicker";
+import type { CheckLogContext } from "./health-check-helpers";
 import { NoteSharePicker } from "../NoteSharePicker";
 import { Alert, Button, Select, Sheet, Textarea } from "../ui";
 import { VitalsReadingsEditor } from "./VitalsReadingsEditor";
 import {
   draftsToReadings,
-  readingsToDrafts,
+  readingDraftsForMetrics,
   resolveDefaultMemberId,
 } from "./health-helpers";
 import type { VitalsReadingDraft } from "./health-types";
@@ -25,6 +26,7 @@ export function LogVitalsSheet({
   initialMemberId,
   lockMember,
   writableMemberIds,
+  checkContext,
   onClose,
   onSaved,
 }: {
@@ -36,8 +38,11 @@ export function LogVitalsSheet({
   /** Fixes the member to `initialMemberId` (Today has already confirmed who is being managed). */
   lockMember?: boolean;
   writableMemberIds: string[];
+  /** Set when this log is for a slot of a scheduled check: prefills from its template. */
+  checkContext?: CheckLogContext;
   onClose: () => void;
-  onSaved: () => void;
+  /** The id of the event just created, so a check's slot can be linked to it. */
+  onSaved: (eventId?: string) => void;
 }) {
   const memberChoices = members.filter((m) => writableMemberIds.includes(m.memberId));
   const defaultMemberId = resolveDefaultMemberId(
@@ -45,7 +50,9 @@ export function LogVitalsSheet({
     memberChoices.length > 0 ? memberChoices : members,
   );
   const [memberId, setMemberId] = useState(defaultMemberId);
-  const [readingDrafts, setReadingDrafts] = useState<VitalsReadingDraft[]>(() => readingsToDrafts(undefined));
+  const [readingDrafts, setReadingDrafts] = useState<VitalsReadingDraft[]>(() =>
+    readingDraftsForMetrics(checkContext?.metrics),
+  );
   const [notes, setNotes] = useState("");
   const [visibility, setVisibility] = useState<"household" | "private">("private");
   const [sharedMemberIds, setSharedMemberIds] = useState<string[]>([]);
@@ -55,7 +62,7 @@ export function LogVitalsSheet({
   useEffect(() => {
     if (!open) return;
     setMemberId(defaultMemberId);
-    setReadingDrafts(readingsToDrafts(undefined));
+    setReadingDrafts(readingDraftsForMetrics(checkContext?.metrics));
     setNotes("");
     setVisibility("private");
     setSharedMemberIds([]);
@@ -73,10 +80,10 @@ export function LogVitalsSheet({
     setBusy(true);
     setErr(null);
     try {
-      await apiClient.post("/api/health/events", {
+      const res = await apiClient.post<{ event?: { id: string } }>("/api/health/events", {
         memberId,
         type: "vitals",
-        title: "Vitals",
+        title: checkContext?.title ?? "Vitals",
         notes: notes.trim() || undefined,
         startedAt: new Date().toISOString(),
         durationKind: "single_day",
@@ -84,7 +91,7 @@ export function LogVitalsSheet({
         sharedMemberIds: visibility === "private" ? sharedMemberIds : undefined,
         readings,
       });
-      onSaved();
+      onSaved(res.event?.id);
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "Save failed");
     } finally {
@@ -96,6 +103,9 @@ export function LogVitalsSheet({
     <Sheet open={open} onClose={onClose} title="Log vitals">
       <fieldset className="space-y-4 px-6 py-4">
         {err ? <Alert variant="error">{err}</Alert> : null}
+        {checkContext ? (
+          <p className="text-sm text-[var(--color-text-muted)]">For {checkContext.heading}</p>
+        ) : null}
         <label className="block space-y-1 text-sm">
           <span>Member</span>
           <Select value={memberId} onChange={(e) => setMemberId(e.target.value)} disabled={lockMember}>

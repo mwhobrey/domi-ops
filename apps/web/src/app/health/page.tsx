@@ -13,6 +13,8 @@ export default async function HealthPage({
     medication?: string;
     take?: string;
     takeGroup?: string;
+    check?: string;
+    checkGroup?: string;
     action?: string;
     scheduledAt?: string;
     token?: string;
@@ -48,6 +50,9 @@ export default async function HealthPage({
         initialTakeMedicationId={params.take}
         initialTakeGroupId={params.takeGroup}
         initialTakeScheduledAt={params.scheduledAt}
+        initialCheckId={params.check}
+        initialCheckGroupId={params.checkGroup}
+        initialCheckScheduledAt={params.scheduledAt}
         pushAction={
           params.token && params.action && params.scheduledAt && params.medication
             ? {

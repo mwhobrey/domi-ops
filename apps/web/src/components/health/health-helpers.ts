@@ -15,6 +15,7 @@ import {
   type FoodLogEntry,
   type FoodLogEntryDraft,
   type HealthEvent,
+  type HealthPainBodyRegion,
   type HealthMedication,
   type LoggedDose,
   type PainLog,
@@ -249,6 +250,28 @@ export function readingsToDrafts(readings: VitalsReading[] | undefined): VitalsR
     value: String(r.value),
     unit: r.unit,
   }));
+}
+
+/**
+ * Reading rows for a check's log sheet: exactly the metrics the check names, in its order. A check
+ * with none named (or only names this app does not know) gets the sheet's usual default rows.
+ */
+export function readingDraftsForMetrics(metrics: readonly string[] | undefined): VitalsReadingDraft[] {
+  const known = (metrics ?? []).filter((m): m is VitalsMetric => VITALS_METRICS.some((v) => v.value === m));
+  if (known.length === 0) return readingsToDrafts(undefined);
+  return known.map((metric) => ({
+    key: nextVitalsDraftKey(),
+    metric,
+    value: "",
+    unit: defaultUnitFor(metric),
+  }));
+}
+
+/** Body-map entries for a pain check's default regions, at the severity a tap on the map starts with. */
+export function painDraftsForRegions(regions: readonly string[] | undefined): PainLogDraft[] {
+  return (regions ?? [])
+    .filter((r): r is HealthPainBodyRegion => r in PAIN_BODY_REGION_LABELS)
+    .map((region) => ({ key: nextPainDraftKey(), region, severity: 5 }));
 }
 
 export function exerciseDetailToDraft(detail: ExerciseDetail | undefined): ExerciseDetailDraft {
