@@ -3,6 +3,7 @@ import type { Env } from "@domi-ops/config";
 import { isModuleEnabled } from "@domi-ops/config";
 import {
   healthMedPushActionSecret,
+  verifyHealthCheckPushActionToken,
   verifyHealthMedPushActionToken,
   type HealthMedPushActionStatus,
 } from "@domi-ops/crypto";
@@ -25,6 +26,7 @@ import {
   requireHouseholdModule,
 } from "../lib/household-modules.js";
 import { HealthEncryptionError } from "../lib/health-crypto.js";
+import { skipCheckSlotFromPushAction } from "../lib/health-check-push-action.js";
 import {
   canManageMemberHealth,
   hasHealthSegmentAccess,
@@ -340,6 +342,41 @@ export function householdHealthRoutes(db: Database, env: Env) {
       if (resp) return resp;
       throw e;
     }
+  });
+
+  /**
+   * Skip a health check slot from a Web Push action button (WHO-388). Token-authenticated like the
+   * medication one, registered before requireAuth. Only a skip: logging a check needs values, so
+   * "Log now" is a plain deep link into the app. See `skipCheckSlotFromPushAction`.
+   */
+  app.post("/checks/push-action", async (c) => {
+    if (!isModuleEnabled(env, "health")) {
+      return c.json({ error: "module_disabled" }, 403);
+    }
+    const secret = healthMedPushActionSecret(env);
+    if (!secret) {
+      return c.json({ error: "token_unavailable" }, 503);
+    }
+
+    const body = await c.req
+      .json<{ token?: unknown; action?: unknown; timeZone?: unknown }>()
+      .catch(() => ({}) as { token?: unknown; action?: unknown; timeZone?: unknown });
+    const token = typeof body.token === "string" ? body.token : "";
+    if (!token || (body.action !== "skip" && body.action !== "skipped")) {
+      return c.json({ error: "invalid_request" }, 400);
+    }
+    const claims = verifyHealthCheckPushActionToken(token, secret);
+    if (!claims) {
+      return c.json({ error: "invalid_token" }, 401);
+    }
+    if (Number.isNaN(Date.parse(claims.scheduledAt))) {
+      return c.json({ error: "invalid_token" }, 401);
+    }
+
+    const result = await skipCheckSlotFromPushAction(db, env, claims, {
+      timeZone: typeof body.timeZone === "string" ? body.timeZone : undefined,
+    });
+    return c.json(result.body, result.status);
   });
 
   app.use("/*", requireAuth(env));
