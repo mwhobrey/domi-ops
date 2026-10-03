@@ -71,7 +71,15 @@ type SlotData = {
  */
 async function gatherSlotData(
   db: Database,
-  input: { checks: HealthCheckRow[]; from: string; to: string; timeZone: string; now: Date },
+  input: {
+    checks: HealthCheckRow[];
+    from: string;
+    to: string;
+    timeZone: string;
+    now: Date;
+    /** Look this much further back for readings (see `loadCheckIntervalLogs`). */
+    lookbackMinutes?: number;
+  },
 ): Promise<SlotData> {
   const { checks, timeZone, now } = input;
   const dates = datesBetween(input.from, input.to);
@@ -79,7 +87,16 @@ async function gatherSlotData(
   // but a reading just outside the range can still complete a slot on its edge.
   const rangeStart = zonedLocalToUtc(input.from, "00:00", timeZone);
   const rangeEnd = zonedLocalToUtc(addDaysIso(input.to, 1), "00:00", timeZone);
-  const windowStart = new Date(rangeStart.getTime() - CHECK_SLOT_TOLERANCE_MS);
+  // An interval counts from the last reading, which for "every 3 days" is older than the days asked
+  // for: look back one full interval so the clock does not lose its anchor and offer a "first" slot.
+  const intervalLookbackMs =
+    Math.max(
+      input.lookbackMinutes ?? 0,
+      ...checks
+        .filter((c) => c.scheduleKind === "interval")
+        .map((c) => parseIntervalSchedule(c.scheduleJson)?.everyMinutes ?? 0),
+    ) * 60_000;
+  const windowStart = new Date(rangeStart.getTime() - CHECK_SLOT_TOLERANCE_MS - intervalLookbackMs);
   const windowEnd = new Date(rangeEnd.getTime() + CHECK_SLOT_TOLERANCE_MS);
   const checkIds = checks.map((c) => c.id);
   const householdId = checks[0]!.householdId;
@@ -294,7 +311,15 @@ export async function loadCheckSlotStatuses(
 export async function loadCheckIntervalLogs(
   db: Database,
   env: Env,
-  input: { checks: HealthCheckRow[]; from: string; to: string; timeZone: string; now: Date },
+  input: {
+    checks: HealthCheckRow[];
+    from: string;
+    to: string;
+    timeZone: string;
+    now: Date;
+    /** The group's own interval, which may be longer than any member's. */
+    lookbackMinutes?: number;
+  },
 ): Promise<Map<string, IntervalLog[]>> {
   const result = new Map<string, IntervalLog[]>();
   if (input.checks.length === 0) return result;

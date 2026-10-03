@@ -347,12 +347,51 @@ maybeDescribe("check group reminders (integration)", () => {
       expect(await checkNotes("ally")).toHaveLength(0);
     });
 
+    it.each([
+      ["ended", { endDate: "2026-10-01" }],
+      ["not started", { startDate: "2026-10-03" }],
+    ])("while %s it takes nothing over, so its members remind on their own", async (_label, dates) => {
+      const a = await bpCheck({ scheduleKind: "interval", scheduleJson: grid });
+      await makeGroup([a], { scheduleKind: "interval", scheduleJson: grid, ...dates });
+      expect(await scan(SLOT)).toBe(2);
+      expect(await groupNotes("ally")).toHaveLength(0);
+      expect(await checkNotes("ally")).toHaveLength(1);
+    });
+
     it("an interval group that can't be read does not swallow its members' reminders", async () => {
       const a = await bpCheck({ scheduleKind: "interval", scheduleJson: grid });
       await makeGroup([a], { scheduleKind: "interval", scheduleJson: "{}" });
       expect(await scan(SLOT)).toBe(2);
       expect(await groupNotes("ally")).toHaveLength(0);
       expect(await checkNotes("ally")).toHaveLength(1);
+    });
+  });
+
+  describe("an interval of several days", () => {
+    // Every 2 days from the last reading. The last reading is two days back, older than the
+    // yesterday..tomorrow the scan looks at, but it is what the next slot counts from.
+    const everyTwoDays = JSON.stringify({
+      everyMinutes: 2 * 24 * 60,
+      anchor: "first_taken",
+      intervalFrom: "last_taken",
+      stop: { mode: "midnight" },
+    });
+
+    it("a check still reminds, counting from a reading older than the days looked at", async () => {
+      await makeEvent("2026-09-30T17:05:00.000Z", "vitals", BP);
+      await bpCheck({ scheduleKind: "interval", scheduleJson: everyTwoDays });
+      expect(await scan(SLOT)).toBe(2);
+      expect((await checkNotes("ally"))[0]!.body).toBe("BP at 12:05 PM");
+    });
+
+    it("a group counts from it too, even when its members are not interval checks themselves", async () => {
+      await makeEvent("2026-09-30T17:05:00.000Z", "vitals", ["weight"]);
+      // Scheduled members at another time of day, so they have no say in the group's clock window.
+      const bp = await bpCheck({ scheduleJson: JSON.stringify({ times: ["09:00"] }) });
+      const weight = await weightCheck({ scheduleJson: JSON.stringify({ times: ["09:00"] }) });
+      await makeGroup([bp, weight], { scheduleKind: "interval", scheduleJson: everyTwoDays });
+      await scan(SLOT);
+      expect((await groupNotes("ally")).map((n) => n.body)).toEqual(["Morning: BP, Weight at 12:05 PM"]);
     });
   });
 

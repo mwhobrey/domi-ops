@@ -75,7 +75,15 @@ export function claimedByGroups(
   if (check.scheduleKind === "interval") {
     // Only a group that can actually remind takes the schedule over; an unreadable one must not
     // leave its members with no reminders at all.
-    const delegated = groups.some((g) => g.scheduleKind === "interval" && parseIntervalSchedule(g.scheduleJson));
+    // ... and only on days the group is running, otherwise nobody would remind on the others.
+    const today = localDateOfInstant(now, tz);
+    const delegated = groups.some(
+      (g) =>
+        g.scheduleKind === "interval" &&
+        parseIntervalSchedule(g.scheduleJson) &&
+        !(g.startDate && today < g.startDate) &&
+        !(g.endDate && today > g.endDate),
+    );
     return { all: delegated, instants: new Set() };
   }
   const instants = new Set<number>();
@@ -306,6 +314,8 @@ export async function sendCheckGroupReminders(
             to: addDaysIso(today, 1),
             timeZone: tz,
             now,
+            // "Every N days" counts from a reading that may be older than the days looked at.
+            lookbackMinutes: interval.everyMinutes,
           });
           const pending = nextIntervalPending({
             schedule: interval,
