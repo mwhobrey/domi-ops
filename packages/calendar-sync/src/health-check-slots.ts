@@ -222,8 +222,19 @@ export type SlotResult = {
   eventId: string | null;
 };
 
-function minuteMs(at: Date): number {
+export function minuteMs(at: Date): number {
   return Math.floor(at.getTime() / 60_000) * 60_000;
+}
+
+/** Where an unanswered slot stands by the clock alone. */
+export function clockSlotStatus(
+  scheduledAt: Date,
+  now: Date,
+  toleranceMs: number = CHECK_SLOT_TOLERANCE_MS,
+): "upcoming" | "due" | "overdue" {
+  const t = minuteMs(scheduledAt);
+  const nowMs = now.getTime();
+  return nowMs < t ? "upcoming" : nowMs < t + toleranceMs ? "due" : "overdue";
 }
 
 /**
@@ -249,7 +260,6 @@ export function computeSlotStatuses(input: {
   toleranceMs?: number;
 }): SlotResult[] {
   const tolerance = input.toleranceMs ?? CHECK_SLOT_TOLERANCE_MS;
-  const nowMs = input.now.getTime();
 
   const slotTimes = [...new Set(input.slots.map(minuteMs))].sort((a, b) => a - b);
   const logBySlot = new Map<number, CheckSlotLog>();
@@ -273,7 +283,6 @@ export function computeSlotStatuses(input: {
     const event = inferred.get(t);
     if (event) return { scheduledAt, status: "done", source: "event", logId: null, eventId: event.id };
 
-    const status: SlotStatus = nowMs < t ? "upcoming" : nowMs < t + tolerance ? "due" : "overdue";
-    return { scheduledAt, status, source: null, logId: null, eventId: null };
+    return { scheduledAt, status: clockSlotStatus(scheduledAt, input.now, tolerance), source: null, logId: null, eventId: null };
   });
 }

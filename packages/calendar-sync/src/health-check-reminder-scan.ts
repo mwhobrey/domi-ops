@@ -1,8 +1,20 @@
 import type { Env } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
-import { healthCheckReminderSent, healthChecks, households } from "@domi-ops/db";
+import {
+  healthCheckGroupMembers,
+  healthCheckGroups,
+  healthCheckReminderSent,
+  healthChecks,
+  households,
+} from "@domi-ops/db";
 import { and, eq, inArray, isNull } from "drizzle-orm";
-import { CHECK_SLOT_TOLERANCE_MINUTES, type SlotResult } from "./health-check-slots.js";
+import { minuteMs, type SlotResult } from "./health-check-slots.js";
+import {
+  buildCheckReminderCopy,
+  planCheckReminders,
+  type CheckReminderKind,
+} from "./health-check-reminder-plan.js";
+import { claimedByGroups, sendCheckGroupReminders } from "./health-check-group-reminders.js";
 import { loadCheckSlotStatuses } from "./health-check-status.js";
 import {
   listHealthCheckReminderRecipients,
@@ -19,8 +31,15 @@ import {
   targetsForRecipient,
   type DeliveryTarget,
 } from "./health-reminder-shared.js";
-import { addDaysIso, formatTimeLabelInTz, localDateOfInstant } from "./household-time.js";
+import { addDaysIso, localDateOfInstant } from "./household-time.js";
 import { deliverUserNotificationToSubscriptions, persistUserNotificationOnce } from "./user-notify.js";
+
+export {
+  OVERDUE_NUDGE_AFTER_MINUTES,
+  buildCheckReminderCopy,
+  planCheckReminders,
+  type CheckReminderKind,
+} from "./health-check-reminder-plan.js";
 
 /**
  * Reminders for scheduled health checks ("log Ally's BP at 8, 12, 4 and 8"), WHO-386. Modelled on
@@ -29,75 +48,6 @@ import { deliverUserNotificationToSubscriptions, persistUserNotificationOnce } f
  * already answered gets no reminder**. A reading logged from the Log tab at 12:10 completes the
  * 12:00 slot, so nobody is told to take it.
  */
-
-/**
- * A slot that is still unanswered this long after it was due gets one gentle nudge. It is the same
- * 30 minutes as the matching tolerance, i.e. the moment the slot turns `overdue`. The nudge is
- * stored in the dedupe table with a negative offset, which a person-chosen offset (always >= 0)
- * can never collide with.
- */
-export const OVERDUE_NUDGE_AFTER_MINUTES = CHECK_SLOT_TOLERANCE_MINUTES;
-const OVERDUE_NUDGE_OFFSET = -OVERDUE_NUDGE_AFTER_MINUTES;
-
-export type CheckReminderKind = "upcoming" | "due" | "overdue";
-
-/**
- * Which reminders are due for one slot right now. Pure.
- *
- * - `upcoming` / `due` slots: one reminder per configured offset (minutes before the slot) whose
- *   fire time falls inside the scan's window, so a scan that ran late still sends it.
- * - an `overdue` slot: the single nudge, if its fire time is inside the window.
- * - anything answered (`done`, `skipped`, `missed`): nothing.
- */
-export function planCheckReminders(input: {
-  slot: Pick<SlotResult, "scheduledAt" | "status">;
-  offsets: readonly number[];
-  now: Date;
-}): { offsetMinutes: number; kind: CheckReminderKind }[] {
-  const nowMs = input.now.getTime();
-  const windowEnd = nowMs + WINDOW_MS;
-  const lookbackStart = nowMs - LOOKBACK_MS;
-  const slotMs = input.slot.scheduledAt.getTime();
-  const inWindow = (fireAt: number) => fireAt <= windowEnd && fireAt >= lookbackStart;
-
-  if (input.slot.status === "upcoming" || input.slot.status === "due") {
-    const minutesUntil = Math.max(0, Math.round((slotMs - nowMs) / 60_000));
-    const kind: CheckReminderKind = minutesUntil <= 0 ? "due" : "upcoming";
-    return [...new Set(input.offsets)]
-      .filter((offset) => inWindow(slotMs - offset * 60_000))
-      .map((offsetMinutes) => ({ offsetMinutes, kind }));
-  }
-
-  if (input.slot.status === "overdue" && inWindow(slotMs + OVERDUE_NUDGE_AFTER_MINUTES * 60_000)) {
-    return [{ offsetMinutes: OVERDUE_NUDGE_OFFSET, kind: "overdue" }];
-  }
-  return [];
-}
-
-export function buildCheckReminderCopy(input: {
-  checkName: string;
-  kind: CheckReminderKind;
-  scheduledAt: Date;
-  timeZone: string;
-  isSubject: boolean;
-  subjectLabel: string;
-  now?: Date;
-}): { title: string; body: string } {
-  const timeLabel = formatTimeLabelInTz(input.scheduledAt, input.timeZone);
-  const when = reminderWhenLabel(input.scheduledAt, input.timeZone, input.now);
-  const core =
-    input.kind === "overdue"
-      ? `${input.checkName} at ${when} hasn't been logged yet`
-      : input.kind === "due"
-        ? `Time to check ${input.checkName} at ${when}`
-        : `${input.checkName} at ${when}`;
-  return {
-    title: input.kind === "overdue" ? `Health check overdue • ${timeLabel}` : `Health check • ${timeLabel}`,
-    // The notification title carries only the time; the body has the full context. A caregiver is
-    // told whose check it is.
-    body: input.isSubject ? core : `${input.subjectLabel} — ${core}`,
-  };
-}
 
 export function buildCheckReminderDeepLink(input: { checkId: string; scheduledAt: Date }): string {
   const params = new URLSearchParams({ check: input.checkId, scheduledAt: input.scheduledAt.toISOString() });
@@ -251,51 +201,92 @@ export async function scanHealthCheckReminders(
       );
     if (checks.length === 0) continue;
 
+    // Groups bundle several checks into one reminder (WHO-387). Only live checks count as members:
+    // a paused or deleted one drops out of its group's reminder.
+    const groups = await db
+      .select()
+      .from(healthCheckGroups)
+      .where(
+        and(
+          eq(healthCheckGroups.householdId, household.id),
+          eq(healthCheckGroups.enabled, true),
+          inArray(healthCheckGroups.scheduleKind, ["scheduled", "interval"]),
+        ),
+      );
+    const checkById = new Map(checks.map((c) => [c.id, c]));
+    const membersByGroup = new Map<string, (typeof checks)[number][]>();
+    const groupsByCheck = new Map<string, (typeof groups)[number][]>();
+    if (groups.length > 0) {
+      const groupById = new Map(groups.map((g) => [g.id, g]));
+      const memberships = await db
+        .select({ groupId: healthCheckGroupMembers.groupId, checkId: healthCheckGroupMembers.checkId })
+        .from(healthCheckGroupMembers)
+        .where(inArray(healthCheckGroupMembers.groupId, groups.map((g) => g.id)));
+      for (const { groupId, checkId } of memberships) {
+        const check = checkById.get(checkId);
+        const group = groupById.get(groupId);
+        if (!check || !group) continue;
+        membersByGroup.set(groupId, [...(membersByGroup.get(groupId) ?? []), check]);
+        groupsByCheck.set(checkId, [...(groupsByCheck.get(checkId) ?? []), group]);
+      }
+    }
+
     const bundles = new Map<string, HealthMedReminderRecipientBundle>();
     const targetsByUser = new Map<string, DeliveryTarget[]>();
     const statusCache = new Map<string, Promise<SlotResult[]>>();
+
+    const recipientsFor = async (memberId: string) => {
+      let bundle = bundles.get(memberId);
+      if (!bundle) {
+        bundle = await listHealthCheckReminderRecipients(db, { householdId: household.id, subjectMemberId: memberId });
+        bundles.set(memberId, bundle);
+      }
+      return bundle;
+    };
+    const targetsFor = async (recipient: HealthMedReminderRecipient) => {
+      let targets = targetsByUser.get(recipient.userId);
+      if (!targets) {
+        targets = await targetsForRecipient(db, recipient, householdTz);
+        targetsByUser.set(recipient.userId, targets);
+      }
+      return targets;
+    };
+    // Where each slot stands, in the device's time zone: yesterday .. tomorrow, so a slot just
+    // after midnight can still be reminded about the evening before.
+    const statusesFor = (check: (typeof checks)[number], tz: string): Promise<SlotResult[]> => {
+      const cacheKey = `${check.id}|${tz}`;
+      let pending = statusCache.get(cacheKey);
+      if (!pending) {
+        const today = localDateOfInstant(now, tz);
+        pending = loadCheckSlotStatuses(db, env, {
+          checks: [check],
+          from: addDaysIso(today, -1),
+          to: addDaysIso(today, 1),
+          timeZone: tz,
+          now,
+          includeAwaitingFirst: false,
+        }).then((m) => m.get(check.id) ?? []);
+        statusCache.set(cacheKey, pending);
+      }
+      return pending;
+    };
 
     for (const check of checks) {
       const offsets = parseReminderOffsets(check.reminderOffsetsJson);
       const checkName = decryptReminderName(check.name, env, "Health check");
 
-      let bundle = bundles.get(check.memberId);
-      if (!bundle) {
-        bundle = await listHealthCheckReminderRecipients(db, {
-          householdId: household.id,
-          subjectMemberId: check.memberId,
-        });
-        bundles.set(check.memberId, bundle);
-      }
+      const bundle = await recipientsFor(check.memberId);
       if (bundle.recipients.length === 0) continue;
 
       for (const recipient of bundle.recipients) {
-        let targets = targetsByUser.get(recipient.userId);
-        if (!targets) {
-          targets = await targetsForRecipient(db, recipient, householdTz);
-          targetsByUser.set(recipient.userId, targets);
-        }
-
-        for (const target of targets) {
+        for (const target of await targetsFor(recipient)) {
           const tz = target.timezone;
-          // Where each slot stands, in this device's time zone: yesterday .. tomorrow, so a slot
-          // just after midnight can still be reminded about the evening before.
-          const cacheKey = `${check.id}|${tz}`;
-          let pending = statusCache.get(cacheKey);
-          if (!pending) {
-            const today = localDateOfInstant(now, tz);
-            pending = loadCheckSlotStatuses(db, env, {
-              checks: [check],
-              from: addDaysIso(today, -1),
-              to: addDaysIso(today, 1),
-              timeZone: tz,
-              now,
-              includeAwaitingFirst: false,
-            }).then((m) => m.get(check.id) ?? []);
-            statusCache.set(cacheKey, pending);
-          }
+          // What a group takes over: its covered slots, or an interval check's whole schedule.
+          const claimed = claimedByGroups(check, groupsByCheck.get(check.id) ?? [], tz, now);
+          if (claimed.all) continue;
 
-          for (const slot of await pending) {
+          for (const slot of await statusesFor(check, tz)) {
+            if (claimed.instants.has(minuteMs(slot.scheduledAt))) continue;
             for (const { offsetMinutes, kind } of planCheckReminders({ slot, offsets, now })) {
               if (
                 await deliverOneCheckReminder(db, env, {
@@ -318,6 +309,12 @@ export async function scanHealthCheckReminders(
         }
       }
     }
+
+    sent += await sendCheckGroupReminders(
+      { db, env, now, householdId: household.id, recipientsFor, targetsFor, statusesFor },
+      groups,
+      membersByGroup,
+    );
   }
 
   return sent;

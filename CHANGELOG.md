@@ -10,6 +10,13 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Added
 
+- **One reminder for a group of health checks** (WHO-387, no screen yet). A check group sends a single
+  notification like "Morning: BP, Pain, Weight" instead of one per check, at the group's times. Only the
+  checks still waiting are listed, so if the blood pressure is already logged the reminder is about the
+  rest, and the group stays quiet once everything is answered. A check covered by its group no longer
+  sends its own reminder for that time, but keeps its other times; a paused check drops out of the group,
+  and a paused group hands its checks back to their own reminders. A group with an interval schedule keeps
+  one clock for all its checks. The notification opens `/health?checkGroup=…`, which has no screen yet.
 - **Reminders for scheduled health checks** (WHO-386, no screen yet). Every five minutes Domi Ops checks
   each person's health checks and sends a notification to them and to any caregiver who can log for
   them, at the time you set (or earlier, if you chose to be reminded in advance), on each device in
