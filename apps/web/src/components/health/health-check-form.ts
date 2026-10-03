@@ -132,6 +132,8 @@ const CHECK_ERROR_TEXT: Record<string, string> = {
   member_not_found: "That person is not in this household.",
   forbidden: "You can't change checks for this person.",
   not_found: "That check no longer exists.",
+  check_not_found: "One of the checks is gone or not visible to you.",
+  member_mismatch: "A group can only hold checks for one person.",
 };
 
 /** A readable message for a failed save: the API's error code in words, else a generic line. */

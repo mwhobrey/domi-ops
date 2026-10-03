@@ -407,3 +407,22 @@ export interface CheckSlotRow {
   check: HealthCheck;
   slot: CheckSlot;
 }
+
+/** The API's SerializedHealthCheckGroup: a bundle of one person's checks that share reminders. */
+export interface HealthCheckGroup {
+  id: string;
+  memberId: string;
+  name: string;
+  scheduleKind: "scheduled" | "interval" | string;
+  schedule?: HealthCheck["schedule"];
+  reminderOffsets?: number[];
+  startDate?: string | null;
+  endDate?: string | null;
+  enabled: boolean;
+  visibility?: "household" | "private";
+  sharedMemberIds?: string[];
+  isOwnedByMe?: boolean;
+  canEdit?: boolean;
+  /** Only the member checks the viewer is allowed to see. */
+  checks: HealthCheck[];
+}

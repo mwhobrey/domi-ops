@@ -9,6 +9,7 @@ import type {
   CheckSlotRow,
   CheckSlotStatus,
   HealthCheck,
+  HealthCheckGroup,
   HealthCheckTemplate,
   HealthEvent,
 } from "./health-types";
@@ -180,4 +181,75 @@ export function groupHighlightKeys(checkIds: readonly string[], scheduledAt: str
   const minute = parseSlotInstant(scheduledAt);
   if (minute == null) return new Set();
   return new Set(checkIds.map((id) => `${id}|${minute / 60_000}`));
+}
+
+// ---------------------------------------------------------------------------------------------
+// Check groups on the Today tab (WHO-390)
+// ---------------------------------------------------------------------------------------------
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+/**
+ * Does this group's reminder cover that slot? Mirrors the worker's claiming rule: a scheduled
+ * group covers a *scheduled* member check's slot at one of the group's times, on a day the group
+ * runs. Read in the browser's zone, which is the zone the slots were asked for in.
+ */
+export function groupCoversSlot(group: HealthCheckGroup, check: HealthCheck, slotIso: string): boolean {
+  if (!group.enabled || group.scheduleKind !== "scheduled" || check.scheduleKind !== "scheduled") return false;
+  if (!group.checks.some((c) => c.id === check.id)) return false;
+  const at = new Date(slotIso);
+  if (Number.isNaN(at.getTime())) return false;
+  const localDate = `${at.getFullYear()}-${pad2(at.getMonth() + 1)}-${pad2(at.getDate())}`;
+  if (group.startDate && localDate < group.startDate) return false;
+  if (group.endDate && localDate > group.endDate) return false;
+  const days = group.schedule?.daysOfWeek ?? [];
+  if (days.length > 0 && !days.includes(at.getDay())) return false;
+  const hhmm = `${pad2(at.getHours())}:${pad2(at.getMinutes())}`;
+  return (group.schedule?.times ?? []).some((t) => t.slice(0, 5) === hhmm);
+}
+
+/** One group's slot: the member checks it covers at one time. */
+export interface CheckGroupCard {
+  key: string;
+  group: HealthCheckGroup;
+  /** The instant of the group's time (the earliest of its members' slots, which are all the same minute). */
+  scheduledAt: string;
+  rows: CheckSlotRow[];
+}
+
+/**
+ * Split a person's slots into the ones a group takes over (shown together under the group) and the
+ * rest (shown on their own). A slot belongs to at most one group, the first that covers it, so a
+ * check in two groups still shows each time once.
+ */
+export function splitCheckRowsByGroup(
+  rows: readonly CheckSlotRow[],
+  groups: readonly HealthCheckGroup[],
+): { cards: CheckGroupCard[]; loose: CheckSlotRow[] } {
+  const ordered = [...groups].sort((a, b) => a.id.localeCompare(b.id));
+  const cards = new Map<string, CheckGroupCard>();
+  const loose: CheckSlotRow[] = [];
+  for (const row of rows) {
+    const group = ordered.find((g) => groupCoversSlot(g, row.check, row.slot.scheduledAt));
+    if (!group) {
+      loose.push(row);
+      continue;
+    }
+    const minute = Math.floor(Date.parse(row.slot.scheduledAt) / 60_000);
+    const key = `${group.id}|${minute}`;
+    const card = cards.get(key) ?? { key, group, scheduledAt: row.slot.scheduledAt, rows: [] };
+    card.rows.push(row);
+    cards.set(key, card);
+  }
+  const sorted = [...cards.values()].sort(
+    (a, b) => a.scheduledAt.localeCompare(b.scheduledAt) || a.group.name.localeCompare(b.group.name),
+  );
+  return { cards: sorted, loose };
+}
+
+/** The members of a group slot still waiting for an answer, in the order they are shown. */
+export function pendingRows(rows: readonly CheckSlotRow[]): CheckSlotRow[] {
+  return rows.filter((r) => isCheckSlotPending(r.slot.status));
 }
