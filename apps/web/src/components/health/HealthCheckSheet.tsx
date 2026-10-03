@@ -150,6 +150,11 @@ export function HealthCheckSheet({
       setErr("Add at least one time.");
       return;
     }
+    const offsetsResult = parseReminderOffsets(offsetsText);
+    if (!offsetsResult.ok) {
+      setErr(offsetsResult.error);
+      return;
+    }
     const rangeError = dateRangeError(startDate, endDate);
     if (rangeError) {
       setErr(rangeError);
@@ -163,7 +168,7 @@ export function HealthCheckSheet({
       template: templateResult.template,
       scheduleKind: scheduleResult.scheduleKind,
       schedule: scheduleResult.schedule,
-      reminderOffsets: parseReminderOffsets(offsetsText),
+      reminderOffsets: offsetsResult.offsets,
       startDate: startDate || null,
       endDate: endDate || null,
       enabled,

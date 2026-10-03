@@ -76,13 +76,32 @@ describe("templateToDraft / orderedMetrics", () => {
 });
 
 describe("parseReminderOffsets", () => {
+  const ok = (offsets: number[]) => ({ ok: true, offsets });
+
   it("reads minutes before each time, ascending and without repeats", () => {
-    expect(parseReminderOffsets("15, 0, 15, 60")).toEqual([0, 15, 60]);
+    expect(parseReminderOffsets("15, 0, 15, 60")).toEqual(ok([0, 15, 60]));
   });
 
-  it("falls back to at the time itself when nothing usable is typed", () => {
-    expect(parseReminderOffsets("")).toEqual([0]);
-    expect(parseReminderOffsets("abc, -5, 1.5")).toEqual([0]);
+  it("accepts spaces as well as commas, so \"15 30\" is two reminders and not one bad number", () => {
+    expect(parseReminderOffsets("15 30")).toEqual(ok([15, 30]));
+    expect(parseReminderOffsets("0,15 , 30")).toEqual(ok([0, 15, 30]));
+  });
+
+  it("means at the time itself when it is left blank", () => {
+    expect(parseReminderOffsets("")).toEqual(ok([0]));
+    expect(parseReminderOffsets("  ,  ")).toEqual(ok([0]));
+  });
+
+  it("refuses anything that is not a whole number of minutes, and names it", () => {
+    for (const bad of ["15m", "-5", "1.5", "abc", "10, soon"]) {
+      const result = parseReminderOffsets(bad);
+      expect(result.ok, bad).toBe(false);
+    }
+    expect(parseReminderOffsets("15m")).toEqual({
+      ok: false,
+      error: "\"15m\" isn't a number of minutes. Use whole numbers like 0, 15.",
+    });
+    expect(parseReminderOffsets("10, soon")).toMatchObject({ ok: false, error: expect.stringContaining('"soon"') });
   });
 });
 

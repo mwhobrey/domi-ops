@@ -86,17 +86,26 @@ export function templateDraftToRequest(
 }
 
 /**
- * "0, 15" -> [0, 15]: minutes before each time, whole numbers, no repeats, ascending. Nothing
- * usable means a single reminder at the time itself.
+ * "0, 15" or "0 15" -> [0, 15]: minutes before each time, whole numbers, no repeats, ascending.
+ * Blank means a single reminder at the time itself. Anything that isn't a whole number of minutes
+ * ("15m", "-5", "1.5") is an error to show, not something to quietly replace with 0.
  */
-export function parseReminderOffsets(text: string): number[] {
-  const offsets = text
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .map(Number)
-    .filter((n) => Number.isInteger(n) && n >= 0);
-  return offsets.length > 0 ? [...new Set(offsets)].sort((a, b) => a - b) : [0];
+export function parseReminderOffsets(
+  text: string,
+): { ok: true; offsets: number[] } | { ok: false; error: string } {
+  const tokens = text.split(/[\s,]+/).filter(Boolean);
+  if (tokens.length === 0) return { ok: true, offsets: [0] };
+  const offsets: number[] = [];
+  for (const token of tokens) {
+    if (!/^\d+$/.test(token)) {
+      return {
+        ok: false,
+        error: `"${token}" isn't a number of minutes. Use whole numbers like 0, 15.`,
+      };
+    }
+    offsets.push(Number(token));
+  }
+  return { ok: true, offsets: [...new Set(offsets)].sort((a, b) => a - b) };
 }
 
 /** Gentle nudge shown while there is no end date; it never blocks saving. */
