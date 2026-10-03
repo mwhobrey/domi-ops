@@ -114,6 +114,8 @@ function overlayEvent(params: {
   source: CalendarListEvent["source"];
   overlayKind: CalendarOverlayKind;
   deepLink: string;
+  /** Who it is for, so the calendar's person filter keeps it. */
+  attendeeMemberIds?: string[];
 }): CalendarListEvent {
   return {
     id: params.id,
@@ -137,6 +139,7 @@ function overlayEvent(params: {
     syncStatus: "synced",
     recurringRuleId: null,
     reminderOffsets: [],
+    ...(params.attendeeMemberIds ? { attendeeMemberIds: params.attendeeMemberIds } : {}),
   };
 }
 
@@ -355,6 +358,7 @@ function checkOverlay(params: {
   date: string;
   hhmm: string;
   deepLink: string;
+  memberId: string;
 }): CalendarListEvent {
   return overlayEvent({
     id: params.id,
@@ -368,6 +372,7 @@ function checkOverlay(params: {
     source: "health_check",
     overlayKind: "health_check",
     deepLink: params.deepLink,
+    attendeeMemberIds: [params.memberId],
   });
 }
 
@@ -464,6 +469,7 @@ export async function buildCheckSlotOverlays(
             date,
             hhmm,
             deepLink: `/health?checkGroup=${encodeURIComponent(group.id)}&scheduledAt=${encodeURIComponent(iso)}`,
+            memberId: group.memberId,
           }),
         );
         continue;
@@ -475,6 +481,7 @@ export async function buildCheckSlotOverlays(
           date,
           hhmm,
           deepLink: `/health?check=${encodeURIComponent(check.id)}&scheduledAt=${encodeURIComponent(iso)}`,
+          memberId: check.memberId,
         }),
       );
     }

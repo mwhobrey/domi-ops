@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull, like } from "drizzle-orm";
 import { Hono } from "hono";
@@ -1498,9 +1498,14 @@ maybeDescribe("health checks routes (integration)", () => {
   });
 
   describe("glance and calendar overlays for checks (WHO-392)", () => {
-    // The household is on UTC and the test runs against the real clock, so use the two times of
-    // day that can never both be answered by the clock alone: just after midnight (past, or due)
-    // and one minute before the day ends (ahead, or due).
+    // The household is on UTC. Date is frozen at noon UTC on the day the run started, so "today"
+    // cannot change under a test (crossing midnight mid-run would move the dates the helpers and the
+    // server compute) and 00:00 is always past while 23:59 is always ahead.
+    beforeEach(() => {
+      const day = new Date().toISOString().slice(0, 10);
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(`${day}T12:00:00.000Z`));
+    });
     const today = () => new Date().toISOString().slice(0, 10);
     const EARLY = () => `${today()}T00:00:00.000Z`;
     const LATE = () => `${today()}T23:59:00.000Z`;
@@ -1551,6 +1556,7 @@ maybeDescribe("health checks routes (integration)", () => {
 
     // A reading left behind would answer the next test's 00:00 slot by matching.
     afterEach(async () => {
+      vi.useRealTimers();
       await withHouseholdContext(baseDb, people.mom!.householdId, (tx) =>
         tx.delete(healthEvents).where(like(healthEvents.title, "who392 reading")),
       );
@@ -1604,6 +1610,8 @@ maybeDescribe("health checks routes (integration)", () => {
         expect(chips.map((c) => c.startTime)).toEqual(["00:00:00", "23:59:00"]);
         expect(chips[0]).toMatchObject({
           title: "392 BP",
+          // Who it is for, or the calendar's person filter would hide every check chip.
+          attendeeMemberIds: [people.ally!.memberId],
           overlayKind: "health_check",
           source: "health_check",
           startDate: today(),
@@ -1629,6 +1637,7 @@ maybeDescribe("health checks routes (integration)", () => {
         expect(groupChips).toHaveLength(1);
         expect(groupChips[0]).toMatchObject({
           title: "392 Night",
+          attendeeMemberIds: [people.ally!.memberId],
           startTime: "23:59:00",
           deepLink: `/health?checkGroup=${group.id}&scheduledAt=${encodeURIComponent(LATE())}`,
         });
