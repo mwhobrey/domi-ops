@@ -1,6 +1,6 @@
 /* Minimal service worker — installable PWA; network-first for app routes.
  * Bump CACHE when shell assets change so activate purges stale caches. */
-const CACHE = "domi-ops-shell-v3";
+const CACHE = "domi-ops-shell-v4";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -78,6 +78,18 @@ async function postMedPushAction(data, action) {
   return res.ok;
 }
 
+// Health check reminders (WHO-388): "Skip" is the only thing a button can do for a check, since
+// logging one needs values. "Log now" is not handled here: it falls through to opening data.url.
+async function postCheckSkip(data) {
+  const res = await fetch("/api/health/checks/push-action", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: data.token, action: "skip", timeZone: data.timeZone }),
+  });
+  return res.ok;
+}
+
 self.addEventListener("push", (event) => {
   let raw = { title: "Domi Ops", body: "", tag: "notice", data: { url: "/dashboard?notices=1" } };
   try {
@@ -110,6 +122,28 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const data = event.notification.data ?? {};
   const action = event.action;
+
+  // Checked before the medication branch below: a check reminder also carries a token and "skip".
+  if (action === "skip" && data.checkId && data.token) {
+    event.waitUntil(
+      (async () => {
+        try {
+          if (await postCheckSkip(data)) {
+            const clientList = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+            for (const client of clientList) {
+              client.postMessage({ type: "domi-ops:check-logged", checkId: data.checkId, action });
+            }
+            return;
+          }
+        } catch {
+          /* fall through to the deep link */
+        }
+        // Could not skip from here (offline, signed out, slot changed): open the slot instead.
+        return openAppPath(data.url ?? "/health");
+      })(),
+    );
+    return;
+  }
 
   if ((action === "taken" || action === "skip") && data.token) {
     event.waitUntil(

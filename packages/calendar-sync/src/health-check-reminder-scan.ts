@@ -15,6 +15,7 @@ import {
   type CheckReminderKind,
 } from "./health-check-reminder-plan.js";
 import { claimedByGroups, sendCheckGroupReminders } from "./health-check-group-reminders.js";
+import { checkReminderPushExtras } from "./health-check-push-actions.js";
 import { loadCheckSlotStatuses } from "./health-check-status.js";
 import {
   listHealthCheckReminderRecipients,
@@ -133,6 +134,13 @@ async function deliverOneCheckReminder(
       url,
       tag,
       subscriptions: [{ ...input.target.push, userId: input.recipient.userId }],
+      ...checkReminderPushExtras(env, {
+        householdId: input.householdId,
+        userId: input.recipient.userId,
+        checkId: input.checkId,
+        scheduledAt: input.scheduledAt,
+        timeZone: input.target.timezone,
+      }),
     });
   } else {
     await persistUserNotificationOnce(db, {

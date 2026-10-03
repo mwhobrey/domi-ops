@@ -279,6 +279,60 @@ export function verifyHealthMedGroupPushActionToken(
   );
 }
 
+/**
+ * Claims for a health *check* reminder's Skip action (WHO-388). Logging a check needs values, so
+ * the only thing a notification button can do on its own is skip the slot: `actions` is always
+ * `["skipped"]`. The subject field is `checkId`, which medication tokens do not have (and they have
+ * `medicationId`, which these do not), so a token minted for one kind never verifies as another.
+ */
+export type HealthCheckPushActionClaims = {
+  v: 1;
+  householdId: string;
+  userId: string;
+  checkId: string;
+  /** ISO scheduled instant of the slot. */
+  scheduledAt: string;
+  actions: HealthMedPushActionStatus[];
+  /** Unix seconds. */
+  exp: number;
+};
+
+export function mintHealthCheckPushActionToken(
+  input: {
+    householdId: string;
+    userId: string;
+    checkId: string;
+    scheduledAt: string;
+    ttlSeconds?: number;
+  },
+  secret: string,
+  nowMs = Date.now(),
+): string {
+  const claims: HealthCheckPushActionClaims = {
+    v: 1,
+    householdId: input.householdId,
+    userId: input.userId,
+    checkId: input.checkId,
+    scheduledAt: input.scheduledAt,
+    actions: ["skipped"],
+    exp: Math.floor(nowMs / 1000) + (input.ttlSeconds ?? HEALTH_MED_PUSH_TOKEN_TTL_SEC),
+  };
+  return mintHealthMedHmacToken(claims, secret);
+}
+
+/** Verify signature + expiry for a check reminder token; returns claims or null. */
+export function verifyHealthCheckPushActionToken(
+  token: string,
+  secret: string,
+  nowMs = Date.now(),
+): HealthCheckPushActionClaims | null {
+  const claims = verifyHealthMedHmacToken<HealthCheckPushActionClaims>(token, secret, nowMs, (raw) =>
+    typeof raw.checkId === "string" && raw.medicationId === undefined && raw.medicationGroupId === undefined,
+  );
+  // Only ever a skip, whatever a (validly signed) token claims.
+  return claims && claims.actions.every((a) => a === "skipped") ? claims : null;
+}
+
 /** Resolve signing secret for med push tokens. */
 export function healthMedPushActionSecret(env: {
   ENCRYPTION_KEY?: string;

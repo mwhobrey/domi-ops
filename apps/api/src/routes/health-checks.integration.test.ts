@@ -1,8 +1,9 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull, like } from "drizzle-orm";
 import { Hono } from "hono";
 import type { Env } from "@domi-ops/config";
+import { mintHealthCheckPushActionToken, mintHealthMedPushActionToken } from "@domi-ops/crypto";
 import {
   closeDb,
   createDb,
@@ -1316,6 +1317,182 @@ maybeDescribe("health checks routes (integration)", () => {
         await call("mom", "DELETE", `/health/events/${eventId}`);
         expect((await rawLogs(check.id)).map((l) => l.status)).toEqual(["skipped"]);
       });
+    });
+  });
+
+  describe("skipping a slot from a push notification (WHO-388)", () => {
+    const DAYX = "2026-10-02";
+    const BP = ["blood_pressure_systolic", "blood_pressure_diastolic"];
+    const at = (hhmm: string) => `${DAYX}T${hhmm}:00.000Z`;
+    const secret = env.ENCRYPTION_KEY as string;
+
+    const pushCheck = (over: Record<string, unknown> = {}) =>
+      makeCheck("mom", {
+        name: "388 BP",
+        startDate: null,
+        endDate: null,
+        template: { metrics: BP },
+        schedule: { times: ["08:00", "12:00"] },
+        ...over,
+      });
+    const tokenFor = (userKey: string, checkId: string, hhmm = "12:00", nowMs?: number) =>
+      mintHealthCheckPushActionToken(
+        { householdId: people[userKey]!.householdId, userId: people[userKey]!.userId, checkId, scheduledAt: at(hhmm) },
+        secret,
+        nowMs,
+      );
+    /** No x-as header: like the service worker with no usable session. */
+    const push = async (body: unknown) => {
+      const res = await app.request("/health/checks/push-action", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const text = await res.text();
+      return { status: res.status, json: (text ? JSON.parse(text) : null) as Json };
+    };
+    const skip = (token: string, extra: Record<string, unknown> = {}) => push({ token, action: "skip", ...extra });
+    const rows = (checkId: string) =>
+      withWorkerScanContext(baseDb, (tx) => tx.select().from(healthCheckLogs).where(eq(healthCheckLogs.checkId, checkId)));
+    // A reading left behind would answer the next test's slot.
+    afterEach(async () => {
+      await withHouseholdContext(baseDb, people.mom!.householdId, (tx) =>
+        tx.delete(healthEvents).where(like(healthEvents.title, "who388 reading")),
+      );
+    });
+    const reading = async (iso: string) => {
+      const [row] = await withHouseholdContext(baseDb, people.mom!.householdId, async (tx) => {
+        const [ev] = await tx
+          .insert(healthEvents)
+          .values({
+            householdId: people.mom!.householdId,
+            memberId: people.ally!.memberId,
+            type: "vitals",
+            title: "who388 reading",
+            startedAt: new Date(iso),
+            createdByUserId: people.mom!.userId,
+          })
+          .returning({ id: healthEvents.id });
+        for (const metric of BP) {
+          await tx.insert(healthVitalsReadings).values({ eventId: ev!.id, metric: metric as never, value: "1", unit: "x" });
+        }
+        return [ev!];
+      });
+      return row!.id;
+    };
+
+    it("skips the slot, as the person the token was sent to, with no session", async () => {
+      const check = await pushCheck();
+      const res = await skip(tokenFor("mom", check.id));
+      expect(res.status, JSON.stringify(res.json)).toBe(201);
+      expect(res.json).toMatchObject({ ok: true, alreadyLogged: false, log: { status: "skipped", scheduledAt: at("12:00") } });
+      const [row] = await rows(check.id);
+      expect(row).toMatchObject({ status: "skipped", healthEventId: null, loggedByUserId: people.mom!.userId });
+    });
+
+    it("tapping twice, or on the other device too, changes nothing", async () => {
+      const check = await pushCheck();
+      const token = tokenFor("mom", check.id);
+      expect((await skip(token)).status).toBe(201);
+      const again = await skip(token);
+      expect(again.status).toBe(200);
+      expect(again.json).toMatchObject({ ok: true, alreadyLogged: true, slotStatus: "skipped" });
+      expect(await rows(check.id)).toHaveLength(1);
+    });
+
+    it("never overwrites a slot that was logged since the reminder", async () => {
+      const check = await pushCheck();
+      const eventId = await reading(at("12:03"));
+      await call("mom", "POST", `/checks/${check.id}/log`, { scheduledAt: at("12:00"), eventId });
+      const res = await skip(tokenFor("mom", check.id));
+      expect(res.status).toBe(200);
+      expect(res.json).toMatchObject({ alreadyLogged: true, slotStatus: "done" });
+      const [row] = await rows(check.id);
+      expect(row).toMatchObject({ status: "done", healthEventId: eventId });
+    });
+
+    it("never overrides a slot a reading already answered, even without a log row", async () => {
+      const check = await pushCheck();
+      await reading(at("12:10"));
+      const res = await skip(tokenFor("mom", check.id));
+      expect(res.status).toBe(200);
+      expect(res.json).toMatchObject({ alreadyLogged: true, slotStatus: "done" });
+      expect(await rows(check.id)).toHaveLength(0);
+    });
+
+    it("uses the device time zone to find the slot the reminder was for", async () => {
+      const check = await pushCheck();
+      // 08:00 Chicago (CDT, UTC-5) is 13:00Z. Read in the household's UTC it is not a slot.
+      const token = tokenFor("mom", check.id, "13:00");
+      expect((await skip(token)).json).toMatchObject({ error: "slot_not_found" });
+      const res = await skip(token, { timeZone: "America/Chicago" });
+      expect(res.status, JSON.stringify(res.json)).toBe(201);
+      expect((await rows(check.id))[0]!.scheduledAt.toISOString()).toBe(at("13:00"));
+    });
+
+    it("an instant that is not a slot of the check is not found", async () => {
+      const check = await pushCheck();
+      const res = await skip(tokenFor("mom", check.id, "10:00"));
+      expect(res.status).toBe(404);
+      expect(res.json.error).toBe("slot_not_found");
+      expect(await rows(check.id)).toHaveLength(0);
+    });
+
+    it("rechecks access every time: write is needed, read is not enough, and strangers see nothing", async () => {
+      const check = await pushCheck();
+      expect((await skip(tokenFor("reader", check.id))).status).toBe(403); // events: read only
+      const stranger = await skip(tokenFor("stranger", check.id));
+      expect(stranger.status).toBe(404); // cannot even see it
+      expect(stranger.json.error).toBe("not_found");
+      expect(await rows(check.id)).toHaveLength(0);
+      const sitter = await skip(tokenFor("sitter", check.id)); // events: write on Ally
+      expect(sitter.status, JSON.stringify(sitter.json)).toBe(201);
+      expect((await rows(check.id))[0]!.loggedByUserId).toBe(people.sitter!.userId);
+    });
+
+    it("a token for someone in another household cannot reach this household's check", async () => {
+      const check = await pushCheck();
+      const forged = mintHealthCheckPushActionToken(
+        { householdId: people.mom!.householdId, userId: people.outsider!.userId, checkId: check.id, scheduledAt: at("12:00") },
+        secret,
+      );
+      expect((await skip(forged)).status).toBe(403);
+      expect(await rows(check.id)).toHaveLength(0);
+    });
+
+    it("a deleted check is not found", async () => {
+      const check = await pushCheck();
+      await call("mom", "DELETE", `/checks/${check.id}`);
+      expect((await skip(tokenFor("mom", check.id))).status).toBe(404);
+    });
+
+    it("a household without the health module is refused", async () => {
+      const res = await skip(
+        mintHealthCheckPushActionToken(
+          { householdId: people.nohealth!.householdId, userId: people.nohealth!.userId, checkId: randomUUID(), scheduledAt: at("12:00") },
+          secret,
+        ),
+      );
+      expect(res.status).toBe(403);
+      expect(res.json.error).toBe("module_disabled");
+    });
+
+    it("rejects bad requests and bad tokens", async () => {
+      const check = await pushCheck();
+      const good = tokenFor("mom", check.id);
+      expect((await push({})).status).toBe(400);
+      expect((await push({ token: good })).status).toBe(400); // no action
+      expect((await push({ token: good, action: "taken" })).status).toBe(400); // a check can only be skipped
+      expect((await skip("not.a-token")).status).toBe(401);
+      expect((await skip(`${good.split(".")[0]}.AAAA`)).status).toBe(401); // bad signature
+      expect((await skip(tokenFor("mom", check.id, "12:00", Date.now() - 5 * 60 * 60 * 1000))).status).toBe(401); // expired
+      // A medication token must not work here.
+      const med = mintHealthMedPushActionToken(
+        { householdId: people.mom!.householdId, userId: people.mom!.userId, medicationId: randomUUID(), scheduledAt: at("12:00") },
+        secret,
+      );
+      expect((await skip(med)).status).toBe(401);
+      expect(await rows(check.id)).toHaveLength(0);
     });
   });
 });

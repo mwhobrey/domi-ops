@@ -10,6 +10,7 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Added
 
+- **Skip a health check from its reminder** (WHO-388, no screen yet). A health check reminder now has "Log now" and "Skip" buttons on devices that show them. Skip marks that time as skipped without opening the app. It never replaces a time that has since been logged, answered by a reading, or skipped, it only works for people who can still log for that person, and it reads the schedule in the device's own time zone. "Log now", or tapping the notification, opens the health page at that time (iPhone web apps have no buttons and use that). Logging a check from the notification still needs the log screen.
 - **One reminder for a group of health checks** (WHO-387, no screen yet). A check group sends a single
   notification like "Morning: BP, Pain, Weight" instead of one per check, at the group's times. Only the
   checks still waiting are listed, so if the blood pressure is already logged the reminder is about the
