@@ -52,35 +52,28 @@ export function datesBetween(from: string, to: string): string[] {
   return out;
 }
 
-/**
- * Status of every slot of `checks` over the local dates `from`..`to` in `timeZone`.
- *
- * This is the one place that gathers what the pure slot logic needs (logs, nearby entries, the
- * vitals metrics they hold, pauses) so the dashboard, the Today tab and the reminder worker all get
- * the same answer. It deliberately looks at *all* of the person's entries, not only the ones the
- * caller may open: whether a slot was done is part of the check, and a viewer a private check was
- * shared with would otherwise see it "overdue" forever. What it must not do is hand out the
- * entries themselves, so callers decide which `eventId`s they may reveal.
- *
- * All `checks` must belong to one household.
- */
-export async function loadCheckSlotStatuses(
-  db: Database,
-  env: Env,
-  input: {
-    checks: HealthCheckRow[];
-    from: string;
-    to: string;
-    timeZone: string;
-    now: Date;
-    /** See `intervalCheckSlots`. Reminders pass false. */
-    includeAwaitingFirst?: boolean;
-  },
-): Promise<Map<string, SlotResult[]>> {
-  const result = new Map<string, SlotResult[]>();
-  const { checks, timeZone, now } = input;
-  if (checks.length === 0) return result;
+/** Everything the pure slot logic needs about a set of checks, gathered once. */
+type SlotData = {
+  dates: string[];
+  rangeStart: Date;
+  rangeEnd: Date;
+  today: string;
+  pausesByCheck: Map<string, PausePeriod[]>;
+  allLogs: (typeof healthCheckLogs.$inferSelect)[];
+  slotEvents: CheckSlotEvent[];
+  eventTime: Map<string, Date | null>;
+};
 
+/**
+ * The queries behind `loadCheckSlotStatuses` and `loadCheckIntervalLogs`: pauses, logs (and every
+ * link to the entries considered), the nearby entries and the vitals metrics they hold. Five
+ * queries however many checks there are. All `checks` must belong to one household.
+ */
+async function gatherSlotData(
+  db: Database,
+  input: { checks: HealthCheckRow[]; from: string; to: string; timeZone: string; now: Date },
+): Promise<SlotData> {
+  const { checks, timeZone, now } = input;
   const dates = datesBetween(input.from, input.to);
   // The days asked for, and that range padded by the tolerance: slots only come from the first,
   // but a reading just outside the range can still complete a slot on its edge.
@@ -162,13 +155,76 @@ export async function loadCheckSlotStatuses(
   }));
   const eventTime = new Map(eventRows.map((e) => [e.id, e.startedAt] as const));
 
+  return { dates, rangeStart, rangeEnd, today, pausesByCheck, allLogs, slotEvents, eventTime };
+}
+
+/**
+ * What the interval engine sees for one check: when readings were actually taken. Linked ones come
+ * through their log, and unlinked ones that would qualify count too (so an ad-hoc reading starts /
+ * advances it). "Every N hours from the last one" runs off the reading, not off the tap.
+ */
+function intervalLogsFor(
+  check: HealthCheckRow,
+  data: SlotData,
+  forCheck: { eventType: string; memberId: string; requiredMetrics?: readonly string[] },
+): IntervalLog[] {
+  const own = data.allLogs.filter((l) => l.checkId === check.id);
+  const linkedIds = new Set(own.map((l) => l.healthEventId).filter((id): id is string => id != null));
+  return [
+    ...own.map((l) => ({
+      scheduledAt: l.scheduledAt,
+      loggedAt: (l.healthEventId ? data.eventTime.get(l.healthEventId) : null) ?? l.loggedAt,
+      status: l.status === "done" ? "taken" : l.status,
+    })),
+    ...data.slotEvents
+      .filter((e) => !linkedIds.has(e.id) && e.startedAt && eventQualifiesForCheck(e, forCheck))
+      .map((e) => ({ scheduledAt: null, loggedAt: e.startedAt!, status: "taken" })),
+  ];
+}
+
+function slotCheckFor(check: HealthCheckRow, env: Env) {
+  const template = parseCheckTemplate(readTemplateText(check.templateJson, env));
+  return {
+    eventType: check.eventType,
+    memberId: check.memberId,
+    requiredMetrics: check.eventType === "vitals" ? template.metrics : undefined,
+  };
+}
+
+/**
+ * Status of every slot of `checks` over the local dates `from`..`to` in `timeZone`.
+ *
+ * This is the one place that gathers what the pure slot logic needs (logs, nearby entries, the
+ * vitals metrics they hold, pauses) so the dashboard, the Today tab and the reminder worker all get
+ * the same answer. It deliberately looks at *all* of the person's entries, not only the ones the
+ * caller may open: whether a slot was done is part of the check, and a viewer a private check was
+ * shared with would otherwise see it "overdue" forever. What it must not do is hand out the
+ * entries themselves, so callers decide which `eventId`s they may reveal.
+ *
+ * All `checks` must belong to one household.
+ */
+export async function loadCheckSlotStatuses(
+  db: Database,
+  env: Env,
+  input: {
+    checks: HealthCheckRow[];
+    from: string;
+    to: string;
+    timeZone: string;
+    now: Date;
+    /** See `intervalCheckSlots`. Reminders pass false. */
+    includeAwaitingFirst?: boolean;
+  },
+): Promise<Map<string, SlotResult[]>> {
+  const result = new Map<string, SlotResult[]>();
+  const { checks, timeZone, now } = input;
+  if (checks.length === 0) return result;
+
+  const data = await gatherSlotData(db, input);
+  const { dates, rangeStart, rangeEnd, today, pausesByCheck, allLogs, slotEvents } = data;
+
   for (const check of checks) {
-    const template = parseCheckTemplate(readTemplateText(check.templateJson, env));
-    const forCheck = {
-      eventType: check.eventType,
-      memberId: check.memberId,
-      requiredMetrics: check.eventType === "vitals" ? template.metrics : undefined,
-    };
+    const forCheck = slotCheckFor(check, env);
     const logs: CheckSlotLog[] = allLogs
       .filter((l) => l.checkId === check.id)
       .map((l) => ({ id: l.id, scheduledAt: l.scheduledAt, status: l.status, healthEventId: l.healthEventId }));
@@ -181,28 +237,13 @@ export async function loadCheckSlotStatuses(
         result.set(check.id, []);
         continue;
       }
-      // The interval engine runs off when readings were actually taken: linked ones through their
-      // log, and unlinked ones that would qualify (so an ad-hoc reading starts / advances it too).
-      const linkedIds = new Set(logs.map((l) => l.healthEventId).filter((id): id is string => id != null));
-      const intervalLogs: IntervalLog[] = [
-        ...allLogs
-          .filter((l) => l.checkId === check.id)
-          .map((l) => ({
-            scheduledAt: l.scheduledAt,
-            loggedAt: (l.healthEventId ? eventTime.get(l.healthEventId) : null) ?? l.loggedAt,
-            status: l.status === "done" ? "taken" : l.status,
-          })),
-        ...slotEvents
-          .filter((e) => !linkedIds.has(e.id) && e.startedAt && eventQualifiesForCheck(e, forCheck))
-          .map((e) => ({ scheduledAt: null, loggedAt: e.startedAt!, status: "taken" })),
-      ];
       const pending = intervalCheckSlots({
         schedule,
         dates,
         today,
         now,
         timeZone,
-        logs: intervalLogs,
+        logs: intervalLogsFor(check, data, forCheck),
         startDate: check.startDate,
         endDate: check.endDate,
         pauses,
@@ -241,6 +282,25 @@ export async function loadCheckSlotStatuses(
         now,
       }),
     );
+  }
+  return result;
+}
+
+/**
+ * What the interval engine sees for each of `checks` (see `intervalLogsFor`), for the group
+ * reminder: an interval group's clock runs off the readings of all its member checks together.
+ * All `checks` must belong to one household.
+ */
+export async function loadCheckIntervalLogs(
+  db: Database,
+  env: Env,
+  input: { checks: HealthCheckRow[]; from: string; to: string; timeZone: string; now: Date },
+): Promise<Map<string, IntervalLog[]>> {
+  const result = new Map<string, IntervalLog[]>();
+  if (input.checks.length === 0) return result;
+  const data = await gatherSlotData(db, input);
+  for (const check of input.checks) {
+    result.set(check.id, intervalLogsFor(check, data, slotCheckFor(check, env)));
   }
   return result;
 }
