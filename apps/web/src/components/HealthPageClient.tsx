@@ -11,6 +11,7 @@ import { HealthEventSheet } from "./health/HealthEventSheet";
 import { EditDoseSheet, type EditableDose } from "./health/EditDoseSheet";
 import { MedicationManagerClient } from "./health/MedicationManagerClient";
 import { HealthTrendsTab } from "./health/HealthTrendsTab";
+import { ChecksManagerClient } from "./health/ChecksManagerClient";
 import { LogVitalsSheet } from "./health/LogVitalsSheet";
 import { LogExerciseSheet } from "./health/LogExerciseSheet";
 import { LogPainSheet } from "./health/LogPainSheet";
@@ -117,7 +118,7 @@ export function HealthPageClient({
   // The page's zone comes from household settings, which 403s for non-admins and falls back to
   // UTC; the session's zone (via AppShell) is right for every member.
   const householdTimezone = useHouseholdTimeZone() ?? householdTimezoneProp;
-  const [tab, setTab] = useState<"today" | "log" | "medications" | "trends">("today");
+  const [tab, setTab] = useState<"today" | "log" | "medications" | "checks" | "trends">("today");
   const [eventTypeFilter, setEventTypeFilter] = useState<HealthEventType | "all">("all");
   const [events, setEvents] = useState<HealthEvent[]>([]);
   const [doseLogs, setDoseLogs] = useState<DoseLogEntry[]>([]);
@@ -613,7 +614,7 @@ export function HealthPageClient({
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-2">
-        {(["today", "log", "medications", "trends"] as const).map((key) => (
+        {(["today", "log", "medications", "checks", "trends"] as const).map((key) => (
           <Button
             key={key}
             size="sm"
@@ -626,7 +627,9 @@ export function HealthPageClient({
                 ? "Log"
                 : key === "medications"
                   ? "Medications"
-                  : "Trends"}
+                  : key === "checks"
+                    ? "Checks"
+                    : "Trends"}
           </Button>
         ))}
         </div>
@@ -1164,6 +1167,15 @@ export function HealthPageClient({
           members={members}
           currentMemberId={currentMemberId}
           initialMedicationId={managerInitialMedicationId}
+        />
+      ) : null}
+
+      {tab === "checks" ? (
+        <ChecksManagerClient
+          members={members}
+          currentMemberId={currentMemberId}
+          capabilities={capabilities}
+          onChanged={() => void load()}
         />
       ) : null}
 
