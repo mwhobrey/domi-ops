@@ -1,6 +1,6 @@
-export type CalendarEventSource = "local" | "google" | "school" | "health_event" | "health_med";
+export type CalendarEventSource = "local" | "google" | "school" | "health_event" | "health_med" | "health_check";
 
-export type CalendarOverlayKind = "school" | "health_event" | "health_med";
+export type CalendarOverlayKind = "school" | "health_event" | "health_med" | "health_check";
 
 export type CalendarEventSyncStatus = "synced" | "pending" | "conflict" | "error";
 
@@ -106,6 +106,55 @@ export function isHealthMedOverlay(ev: {
   );
 }
 
+/** A scheduled health check's chip (or its group's). */
+export function isHealthCheckOverlay(ev: {
+  source?: string | null;
+  overlayKind?: string | null;
+  id: string;
+}): boolean {
+  return (
+    ev.source === "health_check" || ev.overlayKind === "health_check" || ev.id.startsWith("overlay:health:check")
+  );
+}
+
+/** Things to do at a time rather than things that happen: doses and checks. */
+function isHealthTaskOverlay(ev: { source?: string | null; overlayKind?: string | null; id: string }): boolean {
+  return isHealthMedOverlay(ev) || isHealthCheckOverlay(ev);
+}
+
+const CHECK_OVERLAY_KEY = /^(overlay:health:check(?:group)?:[^:]+):/;
+
+/**
+ * Month cells are small, and a check taken four times a day would take four of the few lines a day
+ * gets. Collapse each check's (or group's) chips for one day into a single "BP ×3", dated at the
+ * earliest one and opening it. The week and day views keep every slot.
+ */
+export function collapseCheckOverlaysForMonth<T extends CalendarEventView>(events: T[]): T[] {
+  const buckets = new Map<string, T[]>();
+  const out: T[] = [];
+  for (const ev of events) {
+    const key = isHealthCheckOverlay(ev) ? CHECK_OVERLAY_KEY.exec(ev.id)?.[1] : undefined;
+    if (!key) {
+      out.push(ev);
+      continue;
+    }
+    const bucket = `${ev.startDate}|${key}`;
+    const list = buckets.get(bucket);
+    if (list) list.push(ev);
+    else buckets.set(bucket, [ev]);
+  }
+  for (const [bucket, list] of buckets) {
+    const sorted = [...list].sort((a, b) => (a.startTime ?? "").localeCompare(b.startTime ?? ""));
+    const first = sorted[0]!;
+    out.push(
+      sorted.length === 1
+        ? first
+        : { ...first, id: `${bucket.split("|")[1]}:${first.startDate}:collapsed`, title: `${first.title} ×${sorted.length}` },
+    );
+  }
+  return out;
+}
+
 /** Local wall-clock end (or start) of a timed event, for "already passed today" filtering. */
 export function eventLocalEndMs(ev: {
   startDate: string;
@@ -143,7 +192,7 @@ export function filterPastTimedEvents<
 >(events: T[], now: Date = new Date()): T[] {
   const nowMs = now.getTime();
   return events.filter((ev) => {
-    if (isHealthMedOverlay(ev)) return true;
+    if (isHealthTaskOverlay(ev)) return true;
     if (ev.allDay || !ev.startTime) return true;
     const endMs = eventLocalEndMs(ev);
     if (endMs == null) return true;
@@ -166,7 +215,7 @@ export function filterGlanceCalendarTileEvents<
   },
 >(events: T[], now: Date = new Date()): T[] {
   return filterPastTimedEvents(
-    events.filter((ev) => !isHealthMedOverlay(ev)),
+    events.filter((ev) => !isHealthTaskOverlay(ev)),
     now,
   );
 }

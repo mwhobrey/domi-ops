@@ -1,6 +1,8 @@
 import type { Env } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
 import {
+  healthCheckGroups,
+  healthChecks,
   healthEvents,
   healthMedicationGroups,
   healthMedications,
@@ -12,6 +14,8 @@ import {
 } from "@domi-ops/db";
 import {
   expandScheduledSlots,
+  groupCoversCheckSlot,
+  loadCheckSlotStatuses,
   localDateOfInstant,
   localHourInTz,
   nextIntervalPending,
@@ -19,7 +23,7 @@ import {
   todayIsoDateInTz,
   zonedLocalToUtc,
 } from "@domi-ops/calendar-sync";
-import { and, eq, gte, inArray, isNotNull, lte } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, isNull, lte } from "drizzle-orm";
 import type { CalendarListEvent, CalendarOverlayKind } from "./calendar-event-policy.js";
 import { loadVitalsReadingsForEvents, parseMedSchedule } from "./health-serialize.js";
 import { summarizeVitals } from "./vitals-summary.js";
@@ -37,6 +41,11 @@ import {
   loadDoseLogMap,
   type DoseLogEntry,
 } from "./health-med-logging.js";
+import {
+  healthCheckGroupVisibleWhere,
+  healthCheckVisibleWhere,
+  loadGroupCheckIdsMap,
+} from "./health-check-access.js";
 import { memberEnrollmentsForHousehold } from "./school-auth-context.js";
 import { visibleClassIdsForMember } from "./school-access.js";
 import { publishedAssignmentVisibilities } from "./school-assignment-visibility.js";
@@ -44,10 +53,12 @@ import { publishedAssignmentVisibilities } from "./school-assignment-visibility.
 export const OVERLAY_CALENDAR_SCHOOL = "__overlay_school__";
 export const OVERLAY_CALENDAR_HEALTH_EVENT = "__overlay_health_event__";
 export const OVERLAY_CALENDAR_HEALTH_MED = "__overlay_health_med__";
+export const OVERLAY_CALENDAR_HEALTH_CHECK = "__overlay_health_check__";
 
 export const OVERLAY_COLOR_SCHOOL = "#d97706";
 export const OVERLAY_COLOR_HEALTH_EVENT = "#e11d48";
 export const OVERLAY_COLOR_HEALTH_MED = "#0d9488";
+export const OVERLAY_COLOR_HEALTH_CHECK = "#7c3aed";
 
 export type CalendarOverlayPrefs = {
   school: boolean;
@@ -103,6 +114,8 @@ function overlayEvent(params: {
   source: CalendarListEvent["source"];
   overlayKind: CalendarOverlayKind;
   deepLink: string;
+  /** Who it is for, so the calendar's person filter keeps it. */
+  attendeeMemberIds?: string[];
 }): CalendarListEvent {
   return {
     id: params.id,
@@ -126,6 +139,7 @@ function overlayEvent(params: {
     syncStatus: "synced",
     recurringRuleId: null,
     reminderOffsets: [],
+    ...(params.attendeeMemberIds ? { attendeeMemberIds: params.attendeeMemberIds } : {}),
   };
 }
 
@@ -336,6 +350,143 @@ function medOverlay(params: {
     overlayKind: "health_med",
     deepLink: params.deepLink,
   });
+}
+
+function checkOverlay(params: {
+  id: string;
+  title: string;
+  date: string;
+  hhmm: string;
+  deepLink: string;
+  memberId: string;
+}): CalendarListEvent {
+  return overlayEvent({
+    id: params.id,
+    title: params.title,
+    startDate: params.date,
+    startTime: `${params.hhmm}:00`,
+    endTime: addMinutesToTime(params.hhmm, HEALTH_OVERLAY_SPAN_MIN),
+    allDay: false,
+    color: OVERLAY_COLOR_HEALTH_CHECK,
+    calendarId: OVERLAY_CALENDAR_HEALTH_CHECK,
+    source: "health_check",
+    overlayKind: "health_check",
+    deepLink: params.deepLink,
+    attendeeMemberIds: [params.memberId],
+  });
+}
+
+/**
+ * Scheduled health check overlays for calendar views (WHO-392).
+ * - One chip per slot still waiting for an answer; answered slots (done, skipped, missed) are
+ *   hidden, past unanswered ones stay.
+ * - Slots a check group covers collapse into one chip for the group, as its reminder does.
+ * - Days are in the household's time zone, like medication overlays. Read-only: the chip opens the
+ *   health page at that slot.
+ */
+export async function buildCheckSlotOverlays(
+  db: Database,
+  env: Env,
+  auth: { householdId: string; userId: string; memberId: string; role: string },
+  from: string,
+  to: string,
+): Promise<CalendarListEvent[]> {
+  const [household] = await db
+    .select({ timezone: households.timezone })
+    .from(households)
+    .where(eq(households.id, auth.householdId))
+    .limit(1);
+  const timeZone = household?.timezone ?? "UTC";
+
+  const checks = await db
+    .select()
+    .from(healthChecks)
+    .where(
+      and(
+        healthCheckVisibleWhere(db, auth),
+        eq(healthChecks.enabled, true),
+        isNull(healthChecks.deletedAt),
+      ),
+    );
+  if (checks.length === 0) return [];
+
+  const groups = await db
+    .select()
+    .from(healthCheckGroups)
+    .where(
+      and(
+        healthCheckGroupVisibleWhere(db, auth),
+        eq(healthCheckGroups.enabled, true),
+        eq(healthCheckGroups.scheduleKind, "scheduled"),
+      ),
+    );
+  const membersByGroup = await loadGroupCheckIdsMap(
+    db,
+    groups.map((g) => g.id),
+  );
+  // Lowest id first, so a slot two groups cover always goes to the same one.
+  const groupsByCheck = new Map<string, (typeof groups)[number][]>();
+  for (const group of [...groups].sort((a, b) => a.id.localeCompare(b.id))) {
+    for (const checkId of membersByGroup.get(group.id) ?? []) {
+      groupsByCheck.set(checkId, [...(groupsByCheck.get(checkId) ?? []), group]);
+    }
+  }
+
+  const statuses = await loadCheckSlotStatuses(db, env, {
+    checks,
+    from,
+    to,
+    timeZone,
+    now: new Date(),
+    includeAwaitingFirst: false,
+  });
+
+  const overlays: CalendarListEvent[] = [];
+  const emittedGroupSlots = new Set<string>();
+  for (const check of checks) {
+    const name = decryptHealthFieldOrPassthrough(check.name, env) ?? "Health check";
+    // A check has no past before the day it was set up, so it must not paint "unanswered" chips on
+    // earlier days of the calendar. (Slots earlier on its first day still show, as on the Today tab.)
+    const firstDay = localDateOfInstant(check.createdAt, timeZone);
+    for (const slot of statuses.get(check.id) ?? []) {
+      if (slot.status !== "upcoming" && slot.status !== "due" && slot.status !== "overdue") continue;
+      const iso = slot.scheduledAt.toISOString();
+      const date = localDateOfInstant(slot.scheduledAt, timeZone);
+      if (date < firstDay) continue;
+      const hhmm = localTimeString(slot.scheduledAt, timeZone).slice(0, 5);
+
+      const group = (groupsByCheck.get(check.id) ?? []).find((g) =>
+        groupCoversCheckSlot(g, check, slot.scheduledAt, timeZone),
+      );
+      if (group) {
+        const key = `${group.id}|${iso}`;
+        if (emittedGroupSlots.has(key)) continue;
+        emittedGroupSlots.add(key);
+        overlays.push(
+          checkOverlay({
+            id: `overlay:health:checkgroup:${group.id}:${iso}`,
+            title: decryptHealthFieldOrPassthrough(group.name, env) ?? "Health checks",
+            date,
+            hhmm,
+            deepLink: `/health?checkGroup=${encodeURIComponent(group.id)}&scheduledAt=${encodeURIComponent(iso)}`,
+            memberId: group.memberId,
+          }),
+        );
+        continue;
+      }
+      overlays.push(
+        checkOverlay({
+          id: `overlay:health:check:${check.id}:${iso}`,
+          title: name,
+          date,
+          hhmm,
+          deepLink: `/health?check=${encodeURIComponent(check.id)}&scheduledAt=${encodeURIComponent(iso)}`,
+          memberId: check.memberId,
+        }),
+      );
+    }
+  }
+  return overlays;
 }
 
 /**
@@ -635,6 +786,9 @@ export async function buildAllCalendarOverlays(
   }
   if (modules.health && prefs.healthMeds) {
     overlays.push(...(await buildMedicationDoseOverlays(db, env, auth, from, to)));
+    // Scheduled checks are the same kind of "something to do at this time" as doses, so they follow
+    // the same preference rather than adding a setting.
+    overlays.push(...(await buildCheckSlotOverlays(db, env, auth, from, to)));
   }
   return overlays;
 }

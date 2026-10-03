@@ -88,7 +88,7 @@ export function computeEventPolicy(
   };
 }
 
-export type CalendarOverlayKind = "school" | "health_event" | "health_med";
+export type CalendarOverlayKind = "school" | "health_event" | "health_med" | "health_check";
 
 export type CalendarEventDto = {
   id: string;
@@ -139,7 +139,7 @@ export type CalendarListEvent = {
   attendeeMemberIds?: string[];
   driveBufferBeforeMinutes?: number | null;
   driveBufferAfterMinutes?: number | null;
-  source?: "local" | "google" | "school" | "health_event" | "health_med";
+  source?: "local" | "google" | "school" | "health_event" | "health_med" | "health_check";
   syncStatus?: "synced" | "pending" | "conflict" | "error";
   googleEventId?: string | null;
   recurringRuleId?: string | null;

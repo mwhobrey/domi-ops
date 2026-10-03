@@ -27,6 +27,7 @@ import {
 } from "../lib/household-modules.js";
 import { HealthEncryptionError } from "../lib/health-crypto.js";
 import { skipCheckSlotFromPushAction } from "../lib/health-check-push-action.js";
+import { loadCheckGlance } from "../lib/health-check-glance.js";
 import {
   canManageMemberHealth,
   hasHealthSegmentAccess,
@@ -810,6 +811,12 @@ export function householdHealthRoutes(db: Database, env: Env) {
       isSelf: d.memberId === auth.memberId,
     });
 
+    // Scheduled checks are additive: a problem reading them must not take the doses down with it.
+    const checkGlance = await loadCheckGlance(db, env, auth, today, tz).catch((e) => {
+      console.error("health glance: could not load scheduled checks", e);
+      return { pendingChecks: [], checkProgress: { done: 0, total: 0 } };
+    });
+
     return c.json({
       enabled: true,
       today,
@@ -820,6 +827,8 @@ export function householdHealthRoutes(db: Database, env: Env) {
       pendingGroupDoses: pendingGroupDoses.map(withMember),
       prnMedications: prnList,
       loggedToday,
+      pendingChecks: checkGlance.pendingChecks.map(withMember),
+      checkProgress: checkGlance.checkProgress,
     });
   });
 

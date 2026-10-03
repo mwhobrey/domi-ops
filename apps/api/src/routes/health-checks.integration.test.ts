@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull, like } from "drizzle-orm";
 import { Hono } from "hono";
@@ -26,6 +26,7 @@ import {
 } from "@domi-ops/db";
 import type { AppVariables } from "../middleware/auth.js";
 import { createTenantMiddleware } from "../middleware/tenant.js";
+import { buildCheckSlotOverlays } from "../lib/calendar-overlays.js";
 import { healthCheckGroupRoutes } from "./health-check-groups.js";
 import { householdHealthRoutes } from "./household-health.js";
 import { healthCheckRoutes } from "./health-checks.js";
@@ -1493,6 +1494,198 @@ maybeDescribe("health checks routes (integration)", () => {
       );
       expect((await skip(med)).status).toBe(401);
       expect(await rows(check.id)).toHaveLength(0);
+    });
+  });
+
+  describe("glance and calendar overlays for checks (WHO-392)", () => {
+    // The household is on UTC. Date is frozen at noon UTC on the day the run started, so "today"
+    // cannot change under a test (crossing midnight mid-run would move the dates the helpers and the
+    // server compute) and 00:00 is always past while 23:59 is always ahead.
+    beforeEach(() => {
+      const day = new Date().toISOString().slice(0, 10);
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(`${day}T12:00:00.000Z`));
+    });
+    const today = () => new Date().toISOString().slice(0, 10);
+    const EARLY = () => `${today()}T00:00:00.000Z`;
+    const LATE = () => `${today()}T23:59:00.000Z`;
+    const BPM = ["blood_pressure_systolic", "blood_pressure_diastolic"];
+
+    const dayCheck = (over: Record<string, unknown> = {}) =>
+      makeCheck("mom", {
+        name: "392 BP",
+        startDate: null,
+        endDate: null,
+        template: { metrics: BPM },
+        schedule: { times: ["00:00", "23:59"] },
+        ...over,
+      });
+    const glance = async (as: string) => (await call(as, "GET", "/health/glance")).json as Json;
+    const overlays = (as: string, from = today(), to = today()) => {
+      const p = people[as]!;
+      return withHouseholdContext(baseDb, p.householdId, (tx) =>
+        buildCheckSlotOverlays(tx, env, { householdId: p.householdId, userId: p.userId, memberId: p.memberId, role: p.role }, from, to),
+      );
+    };
+    const reading = async (iso: string) => {
+      const [row] = await withHouseholdContext(baseDb, people.mom!.householdId, async (tx) => {
+        const [ev] = await tx
+          .insert(healthEvents)
+          .values({
+            householdId: people.mom!.householdId,
+            memberId: people.ally!.memberId,
+            type: "vitals",
+            title: "who392 reading",
+            startedAt: new Date(iso),
+            createdByUserId: people.mom!.userId,
+          })
+          .returning({ id: healthEvents.id });
+        for (const metric of BPM) {
+          await tx.insert(healthVitalsReadings).values({ eventId: ev!.id, metric: metric as never, value: "1", unit: "x" });
+        }
+        return [ev!];
+      });
+      return row!.id;
+    };
+    const mine = (list: Json[], checkId: string) => list.filter((x) => x.checkId === checkId);
+    /** Deleted but still switched on: the delete route also switches it off, so only a direct write isolates the deleted rule. */
+    const softDeleteStillEnabled = async (checkId: string) =>
+      withHouseholdContext(baseDb, people.mom!.householdId, (tx) =>
+        tx.update(healthChecks).set({ deletedAt: new Date(), enabled: true }).where(eq(healthChecks.id, checkId)),
+      );
+
+    // A reading left behind would answer the next test's 00:00 slot by matching.
+    afterEach(async () => {
+      vi.useRealTimers();
+      await withHouseholdContext(baseDb, people.mom!.householdId, (tx) =>
+        tx.delete(healthEvents).where(like(healthEvents.title, "who392 reading")),
+      );
+    });
+
+    describe("the health glance", () => {
+      it("lists today's waiting slots and counts the answered ones", async () => {
+        const check = await dayCheck();
+        const before = await glance("mom");
+        const waiting = mine(before.pendingChecks, check.id);
+        expect(waiting.map((w: Json) => w.scheduledAt)).toEqual([EARLY(), LATE()]);
+        expect(waiting[0]).toMatchObject({ name: "392 BP", memberId: people.ally!.memberId, status: expect.stringMatching(/due|overdue/) });
+        expect(waiting[1]).toMatchObject({ status: expect.stringMatching(/upcoming|due/), scheduledTimeLabel: expect.any(String), memberLabel: expect.anything() });
+
+        const eventId = await reading(EARLY());
+        await call("mom", "POST", `/checks/${check.id}/log`, { scheduledAt: EARLY(), eventId });
+        const after = await glance("mom");
+        expect(mine(after.pendingChecks, check.id).map((w: Json) => w.scheduledAt)).toEqual([LATE()]);
+        // Progress is across everything the viewer can see, so compare with what it was.
+        expect(after.checkProgress.done).toBe(before.checkProgress.done + 1);
+        expect(after.checkProgress.total).toBe(before.checkProgress.total);
+      });
+
+      it("leaves out paused and deleted checks, and ones the viewer cannot see", async () => {
+        const paused = await dayCheck({ name: "392 paused" });
+        await call("mom", "PATCH", `/checks/${paused.id}`, { enabled: false });
+        const gone = await dayCheck({ name: "392 gone" });
+        await call("mom", "DELETE", `/checks/${gone.id}`);
+        const hidden = await dayCheck({ name: "392 hidden" });
+        const deletedOnly = await dayCheck({ name: "392 deleted only" });
+        await softDeleteStillEnabled(deletedOnly.id);
+        const g = await glance("mom");
+        for (const c of [paused, gone, deletedOnly]) expect(mine(g.pendingChecks, c.id)).toHaveLength(0);
+        expect(mine(g.pendingChecks, hidden.id)).toHaveLength(2);
+        // A member with no access to Ally's private check sees none of it.
+        const other = await glance("stranger");
+        expect(mine(other.pendingChecks, hidden.id)).toHaveLength(0);
+      });
+
+      it("still returns the doses when there are no checks at all", async () => {
+        const g = await glance("outsider");
+        expect(g).toMatchObject({ enabled: true, pendingChecks: [], checkProgress: { done: 0, total: 0 } });
+        expect(g.pendingDoses).toEqual([]);
+      });
+    });
+
+    describe("calendar overlays", () => {
+      it("shows a chip for each waiting slot, opening that slot, and hides answered ones", async () => {
+        const check = await dayCheck();
+        const chips = (await overlays("mom")).filter((o) => o.id.includes(check.id));
+        expect(chips.map((c) => c.startTime)).toEqual(["00:00:00", "23:59:00"]);
+        expect(chips[0]).toMatchObject({
+          title: "392 BP",
+          // Who it is for, or the calendar's person filter would hide every check chip.
+          attendeeMemberIds: [people.ally!.memberId],
+          overlayKind: "health_check",
+          source: "health_check",
+          startDate: today(),
+          deepLink: `/health?check=${check.id}&scheduledAt=${encodeURIComponent(EARLY())}`,
+        });
+
+        const eventId = await reading(EARLY());
+        await call("mom", "POST", `/checks/${check.id}/log`, { scheduledAt: EARLY(), eventId });
+        const after = (await overlays("mom")).filter((o) => o.id.includes(check.id));
+        expect(after.map((c) => c.startTime)).toEqual(["23:59:00"]);
+
+        await call("mom", "POST", `/checks/${check.id}/log`, { scheduledAt: LATE(), status: "skipped" });
+        expect((await overlays("mom")).filter((o) => o.id.includes(check.id))).toHaveLength(0);
+      });
+
+      it("collapses the slots a group covers into one chip for the group, and leaves the others", async () => {
+        const a = await dayCheck({ name: "392 A" });
+        const b = await dayCheck({ name: "392 B" });
+        const group = await makeGroup("mom", { name: "392 Night", schedule: { times: ["23:59"] }, checkIds: [a.id, b.id] });
+        const chips = (await overlays("mom")).filter((o) => o.id.includes(a.id) || o.id.includes(b.id) || o.id.includes(group.id));
+        // 23:59 is one chip for the group; 00:00 is each check's own.
+        const groupChips = chips.filter((c) => c.id.includes("checkgroup"));
+        expect(groupChips).toHaveLength(1);
+        expect(groupChips[0]).toMatchObject({
+          title: "392 Night",
+          attendeeMemberIds: [people.ally!.memberId],
+          startTime: "23:59:00",
+          deepLink: `/health?checkGroup=${group.id}&scheduledAt=${encodeURIComponent(LATE())}`,
+        });
+        expect(chips.filter((c) => c.startTime === "00:00:00").map((c) => c.title).sort()).toEqual(["392 A", "392 B"]);
+      });
+
+      it("keeps a group's chip until every member is answered", async () => {
+        const a = await dayCheck({ name: "392 A2" });
+        const b = await dayCheck({ name: "392 B2" });
+        const group = await makeGroup("mom", { name: "392 Late", schedule: { times: ["23:59"] }, checkIds: [a.id, b.id] });
+        const chipFor = async () => (await overlays("mom")).filter((o) => o.id.includes(`checkgroup:${group.id}`));
+        await call("mom", "POST", `/checks/${a.id}/log`, { scheduledAt: LATE(), status: "skipped" });
+        expect(await chipFor()).toHaveLength(1);
+        await call("mom", "POST", `/checks/${b.id}/log`, { scheduledAt: LATE(), status: "skipped" });
+        expect(await chipFor()).toHaveLength(0);
+      });
+
+      it("spans a range of days, one chip per day for a daily check", async () => {
+        const check = await dayCheck({ name: "392 range", schedule: { times: ["23:59"] } });
+        const start = today();
+        const end = new Date(Date.parse(`${start}T12:00:00Z`) + 2 * 86_400_000).toISOString().slice(0, 10);
+        const chips = (await overlays("mom", start, end)).filter((o) => o.id.includes(check.id));
+        expect(chips).toHaveLength(3);
+        expect(new Set(chips.map((c) => c.startDate)).size).toBe(3);
+      });
+
+      it("starts on the day the check was set up, so a new check does not paint earlier days as unanswered", async () => {
+        const check = await dayCheck({ name: "392 new", schedule: { times: ["23:59"] } });
+        const weekAgo = new Date(Date.parse(`${today()}T12:00:00Z`) - 7 * 86_400_000).toISOString().slice(0, 10);
+        const chips = (await overlays("mom", weekAgo, today())).filter((o) => o.id.includes(check.id));
+        expect(chips.map((c) => c.startDate)).toEqual([today()]);
+      });
+
+      it("shows nothing for paused or deleted checks, or to someone who cannot see them", async () => {
+        const paused = await dayCheck({ name: "392 paused" });
+        await call("mom", "PATCH", `/checks/${paused.id}`, { enabled: false });
+        const gone = await dayCheck({ name: "392 gone" });
+        await call("mom", "DELETE", `/checks/${gone.id}`);
+        const hidden = await dayCheck({ name: "392 hidden" });
+        const deletedOnly = await dayCheck({ name: "392 deleted only" });
+        await softDeleteStillEnabled(deletedOnly.id);
+        const own = await overlays("mom");
+        expect(
+          own.filter((o) => o.id.includes(paused.id) || o.id.includes(gone.id) || o.id.includes(deletedOnly.id)),
+        ).toHaveLength(0);
+        expect(own.filter((o) => o.id.includes(hidden.id)).length).toBeGreaterThan(0);
+        expect((await overlays("stranger")).filter((o) => o.id.includes(hidden.id))).toHaveLength(0);
+      });
     });
   });
 });

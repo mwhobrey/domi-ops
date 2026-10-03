@@ -58,7 +58,7 @@ import {
   type EventCategoryMeta,
   type OverlayFilterMeta,
 } from "../lib/calendar-filters";
-import { isOverlayEvent } from "../lib/calendar-utils";
+import { collapseCheckOverlaysForMonth, isOverlayEvent } from "../lib/calendar-utils";
 import {
   RecurringScopeSheet,
   type RecurringScope,
@@ -808,7 +808,7 @@ export function CalendarPageClient({
       {effectiveView === "month" && (
         <CalendarMonthView
           monthStart={monthStart}
-          events={visibleEvents}
+          events={collapseCheckOverlaysForMonth(visibleEvents)}
           compact={!isDesktop}
           showTitles={isDesktop}
           categoryColorByKey={categoryColorByKey}
