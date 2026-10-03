@@ -270,7 +270,8 @@ export function readingDraftsForMetrics(metrics: readonly string[] | undefined):
 /** Body-map entries for a pain check's default regions, at the severity a tap on the map starts with. */
 export function painDraftsForRegions(regions: readonly string[] | undefined): PainLogDraft[] {
   return (regions ?? [])
-    .filter((r): r is HealthPainBodyRegion => r in PAIN_BODY_REGION_LABELS)
+    // Own keys only: region names come from the server, and "toString" is `in` every object.
+    .filter((r): r is HealthPainBodyRegion => Object.hasOwn(PAIN_BODY_REGION_LABELS, r))
     .map((region) => ({ key: nextPainDraftKey(), region, severity: 5 }));
 }
 

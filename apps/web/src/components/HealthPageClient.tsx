@@ -143,6 +143,8 @@ export function HealthPageClient({
   const [highlightTakeKey, setHighlightTakeKey] = useState<string | null>(null);
   const [prnLoggingId, setPrnLoggingId] = useState<string | null>(null);
   const [checks, setChecks] = useState<HealthCheck[]>([]);
+  /** The checks request itself failed, so an empty list means "unknown", not "none". */
+  const [checksLoadFailed, setChecksLoadFailed] = useState(false);
   const [checkSlots, setCheckSlots] = useState<Record<string, CheckSlot[]>>({});
   const [checkBusyKey, setCheckBusyKey] = useState<string | null>(null);
   const [checkHighlight, setCheckHighlight] = useState<Set<string>>(new Set());
@@ -163,6 +165,7 @@ export function HealthPageClient({
     setLoading(true);
     setError(null);
     try {
+      let checksFailed = false;
       const [eventsRes, glanceRes, capsRes, doseLogsRes, checksRes, slotsRes] = await Promise.all([
         apiClient.get<{ events: HealthEvent[] }>("/api/health/events"),
         apiClient.get<{
@@ -176,7 +179,10 @@ export function HealthPageClient({
           .get<{ logs: DoseLogEntry[] }>("/api/health/dose-logs")
           .catch(() => ({ logs: [] as DoseLogEntry[] })),
         // Scheduled checks are additive: if they fail to load the rest of the page still works.
-        apiClient.get<{ checks: HealthCheck[] }>("/api/health/checks").catch(() => ({ checks: [] as HealthCheck[] })),
+        apiClient.get<{ checks: HealthCheck[] }>("/api/health/checks").catch(() => {
+          checksFailed = true;
+          return { checks: [] as HealthCheck[] };
+        }),
         apiClient
           .get<{ checks: { checkId: string; slots: CheckSlot[] }[] }>("/api/health/checks/slots")
           .catch(() => ({ checks: [] as { checkId: string; slots: CheckSlot[] }[] })),
@@ -189,6 +195,7 @@ export function HealthPageClient({
       setLoggedToday(glanceRes.loggedToday ?? []);
       setCapabilities(capsRes.bySubject ?? {});
       setChecks(checksRes.checks);
+      setChecksLoadFailed(checksFailed);
       setCheckSlots(Object.fromEntries(slotsRes.checks.map((c) => [c.checkId, c.slots])));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load health data");
@@ -295,7 +302,9 @@ export function HealthPageClient({
       try {
         const check = checks.find((c) => c.id === initialCheckId);
         if (!check) {
-          setError("That health check is no longer available.");
+          setError(
+            checksLoadFailed ? "Could not open that health check." : "That health check is no longer available.",
+          );
           return;
         }
         const { from, to } = slotLookupRange(initialCheckScheduledAt);
@@ -333,7 +342,7 @@ export function HealthPageClient({
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialCheckId, initialCheckScheduledAt, loading, checks]);
+  }, [initialCheckId, initialCheckScheduledAt, loading, checks, checksLoadFailed]);
 
   // A check group reminder's link: show that person's checks and mark the group's at that time.
   useEffect(() => {
@@ -458,8 +467,8 @@ export function HealthPageClient({
         setExerciseSheetOpen(true);
         break;
       default:
-        // Types without a quick sheet use the full editor. It cannot hand back the new entry's id,
-        // so the slot completes by matching the entry that gets added, not by a link.
+        // Types without a quick sheet use the full editor, which hands back the new entry's id
+        // like the quick sheets do, so the slot is linked rather than left to time matching.
         setEditingEvent(null);
         setEventSheetOpen(true);
     }
@@ -1172,17 +1181,19 @@ export function HealthPageClient({
           .filter((m) => capabilities[m.memberId]?.events === "write")
           .map((m) => m.memberId)}
         readOnly={Boolean(editingEvent && editingEvent.canEdit === false)}
+        initialMemberId={activeCheckLog?.row.check.memberId}
+        initialType={activeCheckLog?.row.check.eventType}
+        initialTitle={activeCheckLog ? activeCheckLog.context.title ?? activeCheckLog.row.check.name : undefined}
         onClose={() => {
           setEventSheetOpen(false);
           setEditingEvent(null);
           setActiveCheckLog(null);
           router.replace("/health");
         }}
-        onSaved={() => {
+        onSaved={(eventId) => {
           setEventSheetOpen(false);
           setEditingEvent(null);
-          setActiveCheckLog(null);
-          void load();
+          void afterLogSheetSaved(eventId);
         }}
       />
 
