@@ -83,7 +83,12 @@ async function notifyChoreReminder(
   });
 }
 
-export async function scanChoreReminders(db: Database, env: Env): Promise<number> {
+/** `householdId` limits the scan to one household (the per-household job; see household-scan-fanout.ts). */
+export async function scanChoreReminders(
+  db: Database,
+  env: Env,
+  opts: { householdId?: string } = {},
+): Promise<number> {
   const now = new Date();
   const rows = await db
     .select({
@@ -97,7 +102,13 @@ export async function scanChoreReminders(db: Database, env: Env): Promise<number
     })
     .from(chores)
     .innerJoin(households, eq(chores.householdId, households.id))
-    .where(and(eq(chores.done, false), isNotNull(chores.dueDate)));
+    .where(
+      and(
+        eq(chores.done, false),
+        isNotNull(chores.dueDate),
+        opts.householdId ? eq(chores.householdId, opts.householdId) : undefined,
+      ),
+    );
 
   let sent = 0;
 

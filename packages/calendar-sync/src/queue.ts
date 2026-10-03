@@ -1,5 +1,5 @@
 import { Queue } from "bullmq";
-import type { EnqueueHouseholdReminderScan } from "./health-reminder-fanout.js";
+import type { EnqueueHouseholdScan } from "./household-scan-fanout.js";
 import type { SyncJobName, SyncJobPayload } from "./index.js";
 
 /** BullMQ disallows ':' in queue names */
@@ -24,11 +24,11 @@ export async function enqueueSyncJob(
 }
 
 /**
- * Enqueue one household's reminder job (see health-reminder-fanout.ts). `jobId` is unique per
+ * Enqueue one household's scan job (see household-scan-fanout.ts). `jobId` is unique per
  * household per scan window, so a tick that fires twice cannot run a household twice. No retries:
  * a reminder is time-sensitive and the next tick covers a miss.
  */
-export function householdReminderEnqueuer(redisUrl: string): EnqueueHouseholdReminderScan {
+export function householdScanEnqueuer(redisUrl: string): EnqueueHouseholdScan {
   return async (job, householdId, jobId) => {
     const q = getSyncQueue(redisUrl);
     await q.add(

@@ -21,6 +21,12 @@ export type SyncJobName =
   | "health.med.reminder.household"
   | "health.check.reminder.scan"
   | "health.check.reminder.household"
+  | "calendar.reminder.household"
+  | "chore.reminder.household"
+  | "chore.digest.household"
+  | "expense.budget.household"
+  | "school.reminder.household"
+  | "drive.quota.household"
   | "myallyfile.sync.scan";
 
 export interface SyncJobPayload {
@@ -43,7 +49,7 @@ export {
   ensureHealthMedReminderScheduler,
   ensureHealthCheckReminderScheduler,
   ensureMyallyfileSyncScheduler,
-  householdReminderEnqueuer,
+  householdScanEnqueuer,
 } from "./queue.js";
 export { runCalendarSyncJob, syncConnection, pullLinkedCalendar } from "./sync.js";
 export { eventToFields, eventToGoogleBody, inferSourceCategory } from "./mapper.js";
@@ -98,14 +104,22 @@ export {
 } from "./health-schedule.js";
 export { scanSchoolReminders } from "./school-reminder-scan.js";
 export { scanHealthMedReminders } from "./health-med-reminder-scan.js";
+export { fanOutCheckReminderScans, fanOutMedReminderScans } from "./health-reminder-fanout.js";
 export {
-  REMINDER_SCAN_INTERVAL_MS,
-  fanOutCheckReminderScans,
-  fanOutMedReminderScans,
-  householdReminderJobId,
-  type EnqueueHouseholdReminderScan,
-  type HouseholdReminderJob,
-} from "./health-reminder-fanout.js";
+  HOUSEHOLD_SCAN_INTERVAL_MS,
+  enqueueForHouseholds,
+  householdScanJobId,
+  type EnqueueHouseholdScan,
+  type HouseholdScanJob,
+} from "./household-scan-fanout.js";
+export {
+  fanOutBudgetAlertScans,
+  fanOutCalendarReminderScans,
+  fanOutChoreDigestScans,
+  fanOutChoreReminderScans,
+  fanOutDriveQuotaScans,
+  fanOutSchoolReminderScans,
+} from "./scan-fanout.js";
 export {
   OVERDUE_NUDGE_AFTER_MINUTES,
   buildCheckReminderCopy,

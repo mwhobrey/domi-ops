@@ -11,7 +11,12 @@ function formatStorageBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-export async function scanDriveQuotaWarnings(db: Database, env: Env): Promise<number> {
+/** `householdId` limits the scan to one household (the per-household job; see household-scan-fanout.ts). */
+export async function scanDriveQuotaWarnings(
+  db: Database,
+  env: Env,
+  opts: { householdId?: string } = {},
+): Promise<number> {
   const warnPercent = env.DRIVE_QUOTA_WARN_PERCENT;
   const rows = await db
     .select({
@@ -21,7 +26,12 @@ export async function scanDriveQuotaWarnings(db: Database, env: Env): Promise<nu
       driveQuotaWarnSentAt: households.driveQuotaWarnSentAt,
     })
     .from(households)
-    .where(isNotNull(households.storageQuotaBytes));
+    .where(
+      and(
+        isNotNull(households.storageQuotaBytes),
+        opts.householdId ? eq(households.id, opts.householdId) : undefined,
+      ),
+    );
 
   let sent = 0;
 

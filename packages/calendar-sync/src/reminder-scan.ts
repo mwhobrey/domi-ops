@@ -8,7 +8,12 @@ import { notifyHouseholdOfCalendarReminder } from "./push-calendar.js";
 const LOOKBACK_MS = 30 * 60 * 1000;
 const WINDOW_MS = 6 * 60 * 1000;
 
-export async function scanCalendarReminders(db: Database, env: Env): Promise<number> {
+/** `householdId` limits the scan to one household (the per-household job; see household-scan-fanout.ts). */
+export async function scanCalendarReminders(
+  db: Database,
+  env: Env,
+  opts: { householdId?: string } = {},
+): Promise<number> {
   const now = new Date();
   const windowEnd = new Date(now.getTime() + WINDOW_MS);
   const lookbackStart = new Date(now.getTime() - LOOKBACK_MS);
@@ -35,6 +40,7 @@ export async function scanCalendarReminders(db: Database, env: Env): Promise<num
       and(
         eq(calendarEventReminders.enabled, true),
         isNull(calendarEventReminders.lastSentAt),
+        opts.householdId ? eq(calendarEvents.householdId, opts.householdId) : undefined,
       ),
     );
 
