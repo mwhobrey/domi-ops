@@ -17,6 +17,8 @@ npm run db:create-app-role
 HOSTED_TEST_DATABASE_URL=postgresql://domi_ops_app:domi_ops_app@localhost:5432/domi_ops npm run test:hosted
 ```
 
+`test:hosted` runs `vitest.hosted.config.ts`, which picks up every `*.integration.test.ts` under `packages/` and `apps/`. **A new test needs no registration**: name it `*.integration.test.ts`, have it skip itself without a database URL, and CI runs it as the app role. Use the app role, not a superuser, because a superuser bypasses RLS and would hide a missing policy.
+
 ## Automated matrix (`packages/db/src/tenant-isolation.integration.test.ts`)
 
 | Case | Expectation |
