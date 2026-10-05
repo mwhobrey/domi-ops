@@ -24,6 +24,7 @@ import {
   removeCheckFromGroup,
   replaceHealthCheckGroupShares,
 } from "../lib/health-check-access.js";
+import { lockCheckQuota } from "../lib/health-check-quota.js";
 import { CheckScheduleError, normalizeCheckSchedule, normalizeReminderOffsets } from "../lib/health-check-schedule.js";
 import {
   enrichHealthChecks,
@@ -214,6 +215,7 @@ export function healthCheckGroupRoutes(db: Database, env: Env) {
     if (!(await hasHealthSegmentAccess(db, auth, body.memberId, "events", "write"))) {
       return c.json({ error: "forbidden" }, 403);
     }
+    await lockCheckQuota(db, "check-groups", body.memberId);
     const [{ n: existingGroups }] = await db
       .select({ n: count() })
       .from(healthCheckGroups)

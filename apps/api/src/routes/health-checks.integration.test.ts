@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
-import { and, eq, isNull, like } from "drizzle-orm";
+import { and, eq, isNull, like, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import type { Env } from "@domi-ops/config";
 import { mintHealthCheckPushActionToken, mintHealthMedPushActionToken } from "@domi-ops/crypto";
@@ -2001,6 +2001,45 @@ maybeDescribe("health checks routes (integration)", () => {
         );
         expect((await call("mom", "DELETE", `/checks/${one!.id}`)).status).toBe(200);
         expect((await create("dad")).status).toBe(201);
+      });
+
+      it("holds the limit when several creates arrive at once", async () => {
+        // Two below the limit, then six at the same moment: only two may get in.
+        await withHouseholdContext(baseDb, people.mom!.householdId, (tx) =>
+          tx.insert(healthChecks).values(capped(98, "dad")),
+        );
+        const results = await Promise.all(Array.from({ length: 6 }, () => create("dad")));
+        expect(results.filter((r) => r.status === 201)).toHaveLength(2);
+        expect(results.filter((r) => r.status === 409)).toHaveLength(4);
+        const [{ n }] = await withHouseholdContext(baseDb, people.mom!.householdId, (tx) =>
+          tx.select({ n: sql<number>`count(*)::int` }).from(healthChecks).where(eq(healthChecks.memberId, people.dad!.memberId)),
+        );
+        expect(n).toBe(100);
+      });
+
+      it("holds the group limit when several creates arrive at once", async () => {
+        await withHouseholdContext(baseDb, people.mom!.householdId, (tx) =>
+          tx.insert(healthCheckGroups).values(
+            Array.from({ length: 48 }, (_, i) => ({
+              householdId: people.mom!.householdId,
+              memberId: people.dad!.memberId,
+              name: `race group ${i}`,
+              visibility: "household" as const,
+              scheduleJson: JSON.stringify({ times: ["08:00"] }),
+            })),
+          ),
+        );
+        const results = await Promise.all(
+          Array.from({ length: 6 }, (_, i) =>
+            call("mom", "POST", "/check-groups", {
+              memberId: people.dad!.memberId,
+              name: `racer ${i}`,
+              schedule: { times: ["09:00"] },
+            }),
+          ),
+        );
+        expect(results.filter((r) => r.status === 201)).toHaveLength(2);
+        expect(results.filter((r) => r.status === 409)).toHaveLength(4);
       });
 
       it("refuses a group past the limit", async () => {

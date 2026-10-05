@@ -32,6 +32,7 @@ import {
   type RecordCheckErrorCode,
 } from "../lib/health-check-logging.js";
 import { recordCheckEnabledChange } from "../lib/health-check-pauses.js";
+import { lockCheckQuota } from "../lib/health-check-quota.js";
 import { CheckScheduleError, normalizeCheckSchedule, normalizeReminderOffsets } from "../lib/health-check-schedule.js";
 import { enrichHealthChecks } from "../lib/health-check-serialize.js";
 import {
@@ -278,6 +279,8 @@ export function healthCheckRoutes(db: Database, env: Env) {
     if (!(await hasHealthSegmentAccess(db, auth, body.memberId, "events", "write"))) {
       return c.json({ error: "forbidden" }, 403);
     }
+    // Without this, two requests at once can both see 99 and both add one.
+    await lockCheckQuota(db, "checks", body.memberId);
     const [{ n: existingChecks }] = await db
       .select({ n: count() })
       .from(healthChecks)
