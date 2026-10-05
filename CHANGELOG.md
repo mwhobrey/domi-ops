@@ -15,6 +15,7 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 ### Changed
 
 - **Lint works again** (WHO-409). `next lint` was removed in Next 16, so lint had silently stopped running. `apps/web` and `apps/www` now run ESLint directly (`npm run lint`, also a CI step). It reports 0 errors; the React Compiler advisories it raises about existing code are warnings for now.
+- **Deleted checks are labelled in the adherence report** (WHO-412). A check you deleted keeps the history it earned before it was deleted, and now shows as "Ally BP (deleted)" in the By check table, the list of skipped and missed times, and the exports, so a report for the doctor does not leave anyone wondering about a check that no longer exists.
 
 ### Fixed
 

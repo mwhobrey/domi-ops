@@ -241,7 +241,8 @@ export async function scanHealthCheckReminders(
 
     const bundles = new Map<string, HealthMedReminderRecipientBundle>();
     const targetsByUser = new Map<string, DeliveryTarget[]>();
-    const statusCache = new Map<string, Promise<SlotResult[]>>();
+    // One load per time zone covering every check, not one per check per zone.
+    const statusesByZone = new Map<string, Promise<Map<string, SlotResult[]>>>();
 
     const recipientsFor = async (memberId: string) => {
       let bundle = bundles.get(memberId);
@@ -260,23 +261,23 @@ export async function scanHealthCheckReminders(
       return targets;
     };
     // Where each slot stands, in the device's time zone: yesterday .. tomorrow, so a slot just
-    // after midnight can still be reminded about the evening before.
-    const statusesFor = (check: (typeof checks)[number], tz: string): Promise<SlotResult[]> => {
-      const cacheKey = `${check.id}|${tz}`;
-      let pending = statusCache.get(cacheKey);
+    // after midnight can still be reminded about the evening before. The loader answers for any
+    // number of checks in a fixed handful of queries, so ask once per zone for all of them.
+    const statusesFor = async (check: (typeof checks)[number], tz: string): Promise<SlotResult[]> => {
+      let pending = statusesByZone.get(tz);
       if (!pending) {
         const today = localDateOfInstant(now, tz);
         pending = loadCheckSlotStatuses(db, env, {
-          checks: [check],
+          checks,
           from: addDaysIso(today, -1),
           to: addDaysIso(today, 1),
           timeZone: tz,
           now,
           includeAwaitingFirst: false,
-        }).then((m) => m.get(check.id) ?? []);
-        statusCache.set(cacheKey, pending);
+        });
+        statusesByZone.set(tz, pending);
       }
-      return pending;
+      return (await pending).get(check.id) ?? [];
     };
 
     for (const check of checks) {
