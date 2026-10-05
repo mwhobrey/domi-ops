@@ -179,7 +179,9 @@ export function healthRefillRoutes(db: Database, env: Env) {
       const [claimed] = await db
         .update(healthMedicationSupply)
         .set({
-          requestedAt: new Date(),
+          // The database clock at the moment the row is written. A request that waited behind a receipt
+          // must not be stamped with the time it was received, which is before that receipt.
+          requestedAt: sql`clock_timestamp()`,
           requestedByUserId: auth.userId,
           version: sql`${healthMedicationSupply.version} + 1`,
           updatedAt: new Date(),
@@ -262,7 +264,7 @@ export function healthRefillRoutes(db: Database, env: Env) {
           version: sql`${healthMedicationSupply.version} + 1`,
           requestedAt: null,
           requestedByUserId: null,
-          receivedAt: new Date(),
+          receivedAt: sql`clock_timestamp()`,
           lastWriteKey: body.idempotencyKey ?? null,
           updatedAt: new Date(),
         })

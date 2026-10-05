@@ -421,6 +421,34 @@ maybeDescribe("refill workflow (integration)", () => {
       }
     });
 
+    it("stamps a request that waited behind a receipt with a time after that receipt", async () => {
+      const id = await makeMed();
+      await withEstimate(id, 2);
+      let locked!: () => void;
+      let release!: () => void;
+      const hasLock = new Promise<void>((r) => (locked = r));
+      const go = new Promise<void>((r) => (release = r));
+      // A receipt holds the row while our request is already waiting for it.
+      const holder = withHouseholdContext(baseDb, hhId, async (tx) => {
+        await tx.execute(sql`select 1 from health_medication_supply where medication_id = ${id} for update`);
+        locked();
+        await go;
+        await tx
+          .update(healthMedicationSupply)
+          .set({ receivedAt: sql`clock_timestamp()`, requestedAt: null, version: sql`${healthMedicationSupply.version} + 1` })
+          .where(eq(healthMedicationSupply.medicationId, id));
+      });
+      await hasLock;
+      const pending = request("mom", id);
+      await new Promise((r) => setTimeout(r, 400));
+      release();
+      await holder;
+      expect((await pending).status).toBe(200);
+      const row = (await stored(id))!;
+      expect(row.requestedAt).not.toBeNull();
+      expect(row.requestedAt!.getTime()).toBeGreaterThanOrEqual(row.receivedAt!.getTime());
+    });
+
     it("applies two concurrent receipts one after the other", async () => {
       const id = await makeMed();
       await withEstimate(id, 2);
