@@ -12,3 +12,6 @@ coverage
 fixtures/homehub/
 data/
 packages/import-homehub/fixtures/*.db
+
+# Share-card build cache (scripts/og)
+.og-cache/

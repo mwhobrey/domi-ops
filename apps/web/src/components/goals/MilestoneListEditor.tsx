@@ -56,6 +56,8 @@ export function MilestoneListEditor({
   }
   if (rowIdsRef.current.length < milestones.length) {
     for (let i = rowIdsRef.current.length; i < milestones.length; i++) {
+      // Ids only need to be unique per row and stable across renders; they live in a ref.
+      // eslint-disable-next-line react-hooks/purity
       rowIdsRef.current.push(`milestone-${i}-${Math.random().toString(36).slice(2, 9)}`);
     }
   } else if (rowIdsRef.current.length > milestones.length) {

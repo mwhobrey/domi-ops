@@ -6,6 +6,7 @@ import type { Env } from "@domi-ops/config";
 import {
   closeDb,
   createDb,
+  createScopedDb,
   householdMembers,
   households,
   schoolAssignmentCategories,
@@ -15,10 +16,12 @@ import {
   schoolGrades,
   schoolSubmissions,
   users,
+  withHouseholdContext,
   withSystemContext,
   type Database,
 } from "@domi-ops/db";
 import type { AppVariables } from "../middleware/auth.js";
+import { createTenantMiddleware } from "../middleware/tenant.js";
 import { schoolRecordsRoutes } from "./school-records.js";
 
 /**
@@ -84,7 +87,9 @@ maybeDescribe("school records routes (integration)", () => {
     ]);
     await seedHousehold("who347-other", [{ key: "stranger", role: "owner" }]);
 
-    await withSystemContext(db, async (tx) => {
+    // School tables are household-scoped by RLS even for seeding; the system context is only for
+    // the households and users themselves.
+    await withHouseholdContext(db, hh, async (tx) => {
       const [cls] = await tx
         .insert(schoolClasses)
         .values({
@@ -140,7 +145,8 @@ maybeDescribe("school records routes (integration)", () => {
       }
     });
 
-    const inner = schoolRecordsRoutes(db, env);
+    const scoped = createScopedDb(db);
+    const inner = schoolRecordsRoutes(scoped, env);
     app = new Hono<{ Variables: AppVariables }>();
     app.use("*", async (c, next) => {
       const who = people[c.req.header("x-as") ?? ""];
@@ -161,6 +167,8 @@ maybeDescribe("school records routes (integration)", () => {
       );
       return next();
     });
+    // Each request runs in a household-scoped RLS transaction, as in production.
+    app.use("*", createTenantMiddleware(scoped, env));
     app.route("/", inner);
   }, 60_000);
 
