@@ -83,6 +83,28 @@ CREATE TABLE IF NOT EXISTS "health_medication_supply_revisions" (
   CONSTRAINT "health_medication_supply_revisions_unique" UNIQUE ("medication_id", "revision")
 );
 
+-- Append-only: a revision is never edited or removed directly, so past estimates stay as they were
+-- even if application code has a bug. Row level security alone cannot say this (its policies are
+-- FOR ALL, and an UPDATE or DELETE with no matching policy fails silently). Foreign key actions are
+-- let through: deleting the medication, a user (created_by_user_id -> NULL) or a session (session_id
+-- -> NULL) runs this table's UPDATE or DELETE from inside the foreign key's own trigger, one level
+-- deeper than a statement an application sent.
+CREATE OR REPLACE FUNCTION health_medication_supply_revisions_append_only() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF pg_trigger_depth() > 1 THEN
+    IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+    RETURN NEW;
+  END IF;
+  RAISE EXCEPTION 'health_medication_supply_revisions is append-only' USING ERRCODE = 'restrict_violation';
+END;
+$$;
+
+DROP TRIGGER IF EXISTS health_medication_supply_revisions_append_only ON "health_medication_supply_revisions";
+CREATE TRIGGER health_medication_supply_revisions_append_only
+  BEFORE UPDATE OR DELETE ON "health_medication_supply_revisions"
+  FOR EACH ROW EXECUTE FUNCTION health_medication_supply_revisions_append_only();
+
 -- What was asked of a pharmacy and when: backs "Requested" with its request date and the overdue list.
 CREATE TABLE IF NOT EXISTS "health_medication_refill_events" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
