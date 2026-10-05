@@ -17,7 +17,9 @@ export type SupplyValidationCode =
   | "quantities_need_scheduled_medication"
   | "quantity_time_not_scheduled"
   | "invalid_website"
-  | "invalid_phone";
+  | "invalid_phone"
+  | "invalid_pharmacy_name"
+  | "invalid_pharmacy_text";
 
 export class SupplyValidationError extends Error {
   constructor(public readonly code: SupplyValidationCode) {
