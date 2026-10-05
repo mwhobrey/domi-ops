@@ -610,6 +610,13 @@
       "when": 1790800000000,
       "tag": "0086_health_events_member_type_time_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1790900000000,
+      "tag": "0087_health_supply",
+      "breakpoints": true
     }
   ]
 }

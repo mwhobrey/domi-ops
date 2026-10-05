@@ -10,6 +10,7 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Added
 
+- **Groundwork for medication supply and pharmacies** (WHO-413, no screen yet). New tables for a shared pharmacy directory, a per-medication supply estimate (the first date it runs out, which you confirm; dose logs never change it), the history of every estimate, refill requests, and a per-person default for how many days before running out to be reminded. All household-scoped and encrypted like the rest of the health data. **Migration `0087`** (requires `npm run db:migrate`; no manual steps).
 - **Share cards for links** (WHO-405). The marketing site and the app now carry a 1200x630 share card (logo, headline and current screens) and Open Graph and Twitter tags, with per-page titles and URLs. The Health page has its own card. The app builds its absolute image URL from the request, so it is right behind any proxy or custom domain. Cards live in `public/og` and can be rebuilt with `scripts/og`.
 
 ### Changed
