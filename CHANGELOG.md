@@ -8,6 +8,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+### Changed
+
+- **Deleted checks are labelled in the adherence report** (WHO-412). A check you deleted keeps the history it earned before it was deleted, and now shows as "Ally BP (deleted)" in the By check table, the list of skipped and missed times, and the exports, so a report for the doctor does not leave anyone wondering about a check that no longer exists.
+
 ## [0.7.0] - 2026-10-05
 
 Scheduled health checks: recurring prompts to log blood pressure, weight, pain, meals or exercise, with reminders, groups, a Checks tab, dashboard and calendar presence, and reports. **Includes two migrations, `0085` and `0086`** (requires `npm run db:migrate`; no manual steps). The hosted deploy applies them automatically. See [docs/HEALTH_CHECKS.md](docs/HEALTH_CHECKS.md).
