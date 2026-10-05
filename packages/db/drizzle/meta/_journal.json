@@ -617,6 +617,13 @@
       "when": 1790900000000,
       "tag": "0087_health_supply",
       "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1791000000000,
+      "tag": "0088_health_organizers",
+      "breakpoints": true
     }
   ]
 }
