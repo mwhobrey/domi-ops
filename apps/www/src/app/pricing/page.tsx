@@ -7,10 +7,16 @@ import {
   resolveMarketingUrls,
 } from "@domi-ops/marketing-ui";
 import { getPricingDisplay, type PricingTier } from "@/lib/pricing-display";
+import { pageSocial } from "@/lib/og";
+
+const TITLE = "Pricing | Domi Ops";
+const DESCRIPTION =
+  "Self-host free or choose a Domi Ops cloud plan.";
 
 export const metadata = {
-  title: "Pricing | Domi Ops",
-  description: "Self-host free or choose a Domi Ops cloud plan.",
+  title: TITLE,
+  description: DESCRIPTION,
+  ...pageSocial({ title: TITLE, description: DESCRIPTION, path: "/pricing" }),
 };
 
 // Reads NEXT_PUBLIC_* env vars (hostedCheckoutEnabled, ossRepoPublic) at render time — see

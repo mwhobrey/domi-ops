@@ -8,6 +8,14 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+### Added
+
+- **Share cards for links** (WHO-405). The marketing site and the app now carry a 1200x630 share card (logo, headline and current screens) and Open Graph and Twitter tags, with per-page titles and URLs. The Health page has its own card. The app builds its absolute image URL from the request, so it is right behind any proxy or custom domain. Cards live in `public/og` and can be rebuilt with `scripts/og`.
+
+### Fixed
+
+- **Calendar person filter keeps medication doses and health events** (WHO-411). Filtering the calendar by a person ("For Sofia") could hide that person's own medication doses, medication group doses and health events, because those chips did not say who they were for. They do now, matching scheduled health checks.
+
 ## [0.7.0] - 2026-10-05
 
 Scheduled health checks: recurring prompts to log blood pressure, weight, pain, meals or exercise, with reminders, groups, a Checks tab, dashboard and calendar presence, and reports. **Includes two migrations, `0085` and `0086`** (requires `npm run db:migrate`; no manual steps). The hosted deploy applies them automatically. See [docs/HEALTH_CHECKS.md](docs/HEALTH_CHECKS.md).

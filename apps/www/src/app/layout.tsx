@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Inter, Space_Grotesk } from "next/font/google";
 import "./globals.css";
+import { SITE_URL } from "@/lib/faq";
+import { pageSocial } from "@/lib/og";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -22,12 +24,13 @@ export const metadata: Metadata = {
   description:
     "Homeschool classes, gradebook, school days, hours, and transcripts alongside the family calendar, chores, and medication tracking. One household, one login. Self-host free or run on Domi Ops cloud.",
   applicationName: "Domi Ops",
-  openGraph: {
+  metadataBase: new URL(SITE_URL),
+  ...pageSocial({
     title: "Domi Ops | The household hub for homeschool families",
     description:
       "Homeschool gradebook, family calendar, chores, and encrypted health tracking in one app. Self-host free or hosted.",
-    type: "website",
-  },
+    path: "/",
+  }),
   icons: {
     icon: [
       { url: "/favicon.png", sizes: "32x32", type: "image/png" },
