@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { and, count, eq, inArray, like } from "drizzle-orm";
 import type { Env } from "@domi-ops/config";
@@ -23,10 +23,17 @@ import {
   type Database,
 } from "@domi-ops/db";
 import { scanHealthCheckReminders } from "./health-check-reminder-scan.js";
+import * as checkStatus from "./health-check-status.js";
 import {
   listHealthCheckReminderRecipients,
   listHealthMedReminderRecipients,
 } from "./health-med-reminder-recipients.js";
+
+// Pass-through wrapper so a test can count how often the scan asks where slots stand.
+vi.mock("./health-check-status.js", async (importOriginal) => {
+  const real = await importOriginal<typeof import("./health-check-status.js")>();
+  return { ...real, loadCheckSlotStatuses: vi.fn(real.loadCheckSlotStatuses) };
+});
 
 const TEST_URL = process.env.HOSTED_TEST_DATABASE_URL ?? process.env.DATABASE_URL;
 const maybeDescribe = TEST_URL ? describe : describe.skip;
@@ -396,6 +403,32 @@ maybeDescribe("scanHealthCheckReminders (integration)", () => {
       expect(rows.filter((r) => r.userId === userIds.ally).map((r) => r.subscriptionId).sort()).toEqual([phone, tablet].sort());
       // And nothing is repeated.
       expect(await scan("2026-10-02T17:02:00.000Z")).toBe(0);
+    });
+  });
+
+  describe("batching (WHO-407)", () => {
+    const loads = () => vi.mocked(checkStatus.loadCheckSlotStatuses);
+
+    it("asks where slots stand once per time zone, not once per check per time zone", async () => {
+      await makeCheck({ name: "Ally BP" });
+      await makeCheck({ name: "Ally weight", templateJson: JSON.stringify({ metrics: ["weight"] }) });
+      await makeCheck({ name: "Ally pulse", templateJson: JSON.stringify({ metrics: ["heart_rate"] }) });
+      await addDevice("ally", "America/New_York"); // Ally on New York time; Mom has no device, so Chicago
+      loads().mockClear();
+      await scan("2026-10-02T16:00:00.000Z");
+      const zones = loads().mock.calls.map(([, , input]) => input.timeZone).sort();
+      expect(zones).toEqual(["America/Chicago", "America/New_York"]);
+      // ...and each call carried every check, so nothing was left to load one at a time.
+      for (const [, , input] of loads().mock.calls) expect(input.checks).toHaveLength(3);
+    });
+
+    it("keeps checks of the same kind apart: a reading answers only the check it matches", async () => {
+      const bp = await makeCheck({ name: "Ally BP" });
+      const weight = await makeCheck({ name: "Ally weight", templateJson: JSON.stringify({ metrics: ["weight"] }) });
+      await makeReading("2026-10-02T17:03:00.000Z"); // blood pressure only
+      expect(await scan("2026-10-02T17:06:00.000Z")).toBeGreaterThan(0);
+      expect(await sentRows(bp.id)).toHaveLength(0); // answered: nothing to remind about
+      expect((await sentRows(weight.id)).length).toBeGreaterThan(0); // still waiting
     });
   });
 
