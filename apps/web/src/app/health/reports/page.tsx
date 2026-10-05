@@ -6,7 +6,7 @@ export default function HealthReportsPage() {
   return (
     <AppShell
       title="Health reports"
-      description="Pick a report: events, today's doses, dose history, or a medication list for clinicians."
+      description="Pick a report: events, doses and medications, exercise, pain, nutrition, scheduled check adherence, or blood pressure readings for clinicians."
       breadcrumb={[
         { label: "Health", href: "/health" },
         { label: "Reports" },

@@ -11,6 +11,8 @@ import {
   isCheckSlotPending,
   parseSlotInstant,
   pendingRows,
+  slotCountsByEvent,
+  slotEditableEvent,
   slotLookupRange,
   splitCheckRowsByGroup,
   summarizeCheckRows,
@@ -36,6 +38,45 @@ const slot = (at: string, status: CheckSlotStatus = "upcoming", over: Partial<Ch
   logId: null,
   eventId: null,
   ...over,
+});
+
+describe("slotCountsByEvent", () => {
+  const fmt = (iso: string) => iso.slice(11, 16);
+
+  it("names the check and time each entry answers", () => {
+    const checks = [check({ id: "c1", name: "Ally BP" }), check({ id: "c2", name: "Weight" })];
+    const slots = new Map([
+      ["c1", [slot("12:00", "done", { eventId: "e1" }), slot("16:00", "upcoming")]],
+      ["c2", [slot("12:00", "done", { eventId: "e1" }), slot("20:00", "skipped")]],
+    ]);
+    expect(slotCountsByEvent(checks, slots, fmt)).toEqual(new Map([["e1", ["Ally BP · 12:00", "Weight · 12:00"]]]));
+  });
+
+  it("ignores slots with no entry, and checks it does not know", () => {
+    const slots = new Map([["gone", [slot("12:00", "done", { eventId: "e9" })]]]);
+    expect(slotCountsByEvent([check()], slots, fmt).size).toBe(0);
+  });
+});
+
+describe("slotEditableEvent", () => {
+  const ev = (over: Partial<HealthEvent> = {}) => ({ id: "e1", type: "vitals", title: "BP", ...over }) as HealthEvent;
+  const row = (s: CheckSlot) => ({ check: check(), slot: s });
+
+  it("is the entry that answered a done slot, when the viewer may edit it", () => {
+    const e = ev();
+    expect(slotEditableEvent(row(slot("12:00", "done", { eventId: "e1" })), [ev({ id: "other" }), e])).toBe(e);
+    expect(slotEditableEvent(row(slot("12:00", "done", { eventId: "e1" })), [ev({ canEdit: true })])?.id).toBe("e1");
+  });
+
+  it("is nothing when the entry is read-only, missing from the list, or the slot has none", () => {
+    expect(slotEditableEvent(row(slot("12:00", "done", { eventId: "e1" })), [ev({ canEdit: false })])).toBeUndefined();
+    expect(slotEditableEvent(row(slot("12:00", "done", { eventId: "e1" })), [])).toBeUndefined();
+    expect(slotEditableEvent(row(slot("12:00", "skipped")), [ev()])).toBeUndefined();
+  });
+
+  it("is nothing while the slot is still waiting", () => {
+    expect(slotEditableEvent(row(slot("12:00", "due", { eventId: "e1" })), [ev()])).toBeUndefined();
+  });
 });
 
 describe("isCheckSlotPending", () => {

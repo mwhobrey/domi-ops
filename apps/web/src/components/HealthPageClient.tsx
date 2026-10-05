@@ -25,6 +25,7 @@ import {
   findDeepLinkedRow,
   groupHighlightKeys,
   isCheckSlotPending,
+  slotCountsByEvent,
   slotLookupRange,
   splitCheckRowsByGroup,
   type CheckLogContext,
@@ -613,6 +614,24 @@ export function HealthPageClient({
     return canLogForMember(memberId) && canActOnTodayMember(memberId);
   }
 
+  const countsForByEvent = useMemo(
+    () => slotCountsByEvent(checks, new Map(Object.entries(checkSlots)), formatSlotTime),
+    [checks, checkSlots],
+  );
+  /** "Counts for Ally BP · 12:00 PM" on an entry that answers a scheduled check. */
+  function countsForLabel(eventId: string): string | null {
+    const labels = countsForByEvent.get(eventId);
+    return labels ? `Counts for ${labels.join(", ")}` : null;
+  }
+
+  /**
+   * A log sheet starts from a clean form every time it opens and for every slot in a Log next walk:
+   * a new key remounts it, so it never paints the last slot's values for a moment first.
+   */
+  function logSheetKey(sheet: string, open: boolean): string {
+    return `${sheet}:${open ? (activeCheckLog ? checkSlotKey(activeCheckLog.row) : "adhoc") : "closed"}`;
+  }
+
   const todayCheckRows = useMemo(
     () => checkSlotRowsForMember(checks, new Map(Object.entries(checkSlots)), todayMemberId),
     [checks, checkSlots, todayMemberId],
@@ -752,6 +771,10 @@ export function HealthPageClient({
             onLog={startCheckLog}
             onSkip={(row) => void skipCheckSlot(row)}
             onUndo={(row) => void undoCheckSlot(row)}
+            onEdit={(ev) => {
+              setEditingEvent(ev);
+              setEventSheetOpen(true);
+            }}
             onLogNext={startGroupLog}
             loggingNext={activeCheckLog !== null}
           />
@@ -1041,6 +1064,7 @@ export function HealthPageClient({
                             ev.type === "exercise" ? formatExerciseSummary(ev.exerciseDetails) : null,
                             ev.type === "pain" ? formatPainSummary(ev.painLogs) : null,
                             ev.type === "food_intake" ? formatFoodLogSummary(ev.foodLogEntries) : null,
+                            countsForLabel(ev.id),
                           ]
                             .filter(Boolean)
                             .join(" · ")}
@@ -1179,6 +1203,7 @@ export function HealthPageClient({
                   ev.type === "exercise" ? formatExerciseSummary(ev.exerciseDetails) : null,
                   ev.type === "pain" ? formatPainSummary(ev.painLogs) : null,
                   ev.type === "food_intake" ? formatFoodLogSummary(ev.foodLogEntries) : null,
+                  countsForLabel(ev.id),
                 ]
                   .filter(Boolean)
                   .join(" · ")}
@@ -1255,6 +1280,7 @@ export function HealthPageClient({
       />
 
       <LogVitalsSheet
+        key={logSheetKey("vitals", vitalsSheetOpen)}
         initialMemberId={todayMemberId}
         lockMember
         open={vitalsSheetOpen}
@@ -1276,6 +1302,7 @@ export function HealthPageClient({
       />
 
       <LogExerciseSheet
+        key={logSheetKey("exercise", exerciseSheetOpen)}
         initialMemberId={todayMemberId}
         lockMember
         open={exerciseSheetOpen}
@@ -1297,6 +1324,7 @@ export function HealthPageClient({
       />
 
       <LogPainSheet
+        key={logSheetKey("pain", painSheetOpen)}
         initialMemberId={todayMemberId}
         lockMember
         open={painSheetOpen}
@@ -1318,6 +1346,7 @@ export function HealthPageClient({
       />
 
       <LogMealSheet
+        key={logSheetKey("meal", mealSheetOpen)}
         initialMemberId={todayMemberId}
         lockMember
         open={mealSheetOpen}
