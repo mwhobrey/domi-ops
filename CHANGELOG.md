@@ -8,6 +8,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+### Changed
+
+- **Health check limits and a faster lookup** (WHO-394). Times on a check or group must be real clock times ("25:00" and "noon" are refused with a clear message instead of being half-accepted), repeats are folded away, and a day can have at most 48 of them. Reminder lead times are whole minutes from 0 to a week, at most 10 per time. A person can have up to 100 checks and 50 groups, far more than anyone needs, so one person's setup can't slow down everyone's reminders. Looking up one person's entries of one kind in a date range, which the reminders, the Today tab, the calendar, the dashboard and the new reports all do, now uses an index instead of reading the household's whole health history (**migration `0086`**, requires `npm run db:migrate`; no manual steps).
+
 ### Added
 
 - **Reports for scheduled health checks** (WHO-393). Two new reports on the Health reports page, each with a date range and a person filter, and the same Export (preview, download as CSV, JSON or YAML, print, Drive or Google Docs) as the others. **Check adherence** shows how many scheduled times were done, skipped or missed, as a percentage done out of due, with a row per check and a list of every skipped or missed time. A time only counts once it has an outcome (one still ahead isn't held against anyone), days before a check was set up aren't counted, and paused stretches don't produce times. **Blood pressure** lists every reading in the range per person, whether it came from a scheduled check or was logged by hand, with the average, lowest and highest, and averages for morning, afternoon and evening, to hand to a doctor. It only reports the numbers.

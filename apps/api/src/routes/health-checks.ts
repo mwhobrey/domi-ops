@@ -8,7 +8,7 @@ import {
 } from "@domi-ops/calendar-sync";
 import type { Database } from "@domi-ops/db";
 import { healthCheckLogs, healthChecks, healthEvents, householdMembers } from "@domi-ops/db";
-import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireHouseholdModule } from "../lib/household-modules.js";
@@ -32,7 +32,8 @@ import {
   type RecordCheckErrorCode,
 } from "../lib/health-check-logging.js";
 import { recordCheckEnabledChange } from "../lib/health-check-pauses.js";
-import { CheckScheduleError, normalizeCheckSchedule } from "../lib/health-check-schedule.js";
+import { lockCheckQuota } from "../lib/health-check-quota.js";
+import { CheckScheduleError, normalizeCheckSchedule, normalizeReminderOffsets } from "../lib/health-check-schedule.js";
 import { enrichHealthChecks } from "../lib/health-check-serialize.js";
 import {
   CheckTemplateError,
@@ -48,6 +49,8 @@ import { isUuid, isUuidList } from "../lib/uuid.js";
 type Auth = NonNullable<AppVariables["auth"]>;
 
 const MAX_NAME_LENGTH = 200;
+/** Far above any real use (a handful per person); here so one person cannot grow the worker's load without limit. */
+export const MAX_CHECKS_PER_MEMBER = 100;
 /** Most local days one `/slots` request may cover. */
 const MAX_SLOT_RANGE_DAYS = 35;
 const MAX_LOG_NOTES_LENGTH = 2000;
@@ -70,10 +73,6 @@ function encryptionErrorResponse(c: { json: (body: unknown, status?: number) => 
   return null;
 }
 
-function cleanOffsets(value: unknown): number[] {
-  if (!Array.isArray(value)) return [0];
-  return value.filter((n): n is number => typeof n === "number" && Number.isFinite(n) && n >= 0);
-}
 
 type ScheduleBody = {
   scheduleKind?: string;
@@ -280,6 +279,13 @@ export function healthCheckRoutes(db: Database, env: Env) {
     if (!(await hasHealthSegmentAccess(db, auth, body.memberId, "events", "write"))) {
       return c.json({ error: "forbidden" }, 403);
     }
+    // Without this, two requests at once can both see 99 and both add one.
+    await lockCheckQuota(db, "checks", body.memberId);
+    const [{ n: existingChecks }] = await db
+      .select({ n: count() })
+      .from(healthChecks)
+      .where(and(eq(healthChecks.memberId, body.memberId), isNull(healthChecks.deletedAt)));
+    if (existingChecks >= MAX_CHECKS_PER_MEMBER) return c.json({ error: "too_many_checks" }, 409);
 
     let template;
     let scheduleMeta;
@@ -307,7 +313,7 @@ export function healthCheckRoutes(db: Database, env: Env) {
           templateJson: encryptHealthField(JSON.stringify(template), env) ?? "{}",
           scheduleKind: scheduleMeta.scheduleKind,
           scheduleJson: scheduleMeta.scheduleJson,
-          reminderOffsetsJson: JSON.stringify(cleanOffsets(body.reminderOffsets)),
+          reminderOffsetsJson: JSON.stringify(normalizeReminderOffsets(body.reminderOffsets)),
           startDate: body.startDate ?? null,
           endDate: body.endDate ?? null,
           enabled: body.enabled ?? true,
@@ -411,7 +417,7 @@ export function healthCheckRoutes(db: Database, env: Env) {
     try {
       if (body.name !== undefined) patch.name = encryptHealthField(body.name.trim(), env) ?? "";
       if (body.reminderOffsets !== undefined) {
-        patch.reminderOffsetsJson = JSON.stringify(cleanOffsets(body.reminderOffsets));
+        patch.reminderOffsetsJson = JSON.stringify(normalizeReminderOffsets(body.reminderOffsets));
       }
       if (body.enabled !== undefined) patch.enabled = body.enabled;
       if (body.visibility !== undefined) patch.visibility = normalizeHealthVisibility(body.visibility);

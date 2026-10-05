@@ -122,7 +122,11 @@ export const healthEvents = pgTable("health_events", {
   }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [
+  // "This person's entries of this kind between two instants": slot status, reports, calendar,
+  // dashboard and the reminder worker all ask it (migration 0086).
+  index("health_events_household_member_type_started_idx").on(t.householdId, t.memberId, t.type, t.startedAt),
+]);
 
 /**
  * One row per numeric reading on a `type: "vitals"` health_events row — a single vitals
