@@ -22,6 +22,10 @@ export const FAQ_ITEMS: FaqItem[] = [
     a: "Yes, on Domi Ops Cloud. MyAllyFile is a separate emergency medical profile that first responders open with a QR code and PIN. Link a household member to their MyAllyFile profile and all of their current medications are copied across whenever they change, so the emergency profile doesn't go stale. It only goes one way, from Domi Ops to MyAllyFile, and nothing is read back. Unlinking removes the synced medications from the profile. Linking needs a MyAllyFile Plus or Pro plan.",
   },
   {
+    q: "Can it remind someone to take blood pressure or weight readings?",
+    a: "Yes. Scheduled health checks work like medication reminders, but for measurements: set a check for a person (say, blood pressure four times a day), and Domi Ops sends a push reminder at each time. If the reading is already logged, no reminder goes out. You can bundle several checks into one reminder, skip a check right from the notification, and see adherence and blood pressure reports for date ranges of up to a year.",
+  },
+  {
     q: "Who can see and edit a family member's health records?",
     a: "You choose. Each record is private or shared with the household, and sharing is read-only by default. Editing needs the creator, the person the record is about, an owner or admin, or someone you've explicitly granted write access.",
   },
