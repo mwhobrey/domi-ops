@@ -27,6 +27,11 @@ import {
 import type { AppVariables } from "../middleware/auth.js";
 import { createTenantMiddleware } from "../middleware/tenant.js";
 import { buildCheckSlotOverlays } from "../lib/calendar-overlays.js";
+import {
+  CheckReportRangeError,
+  buildBloodPressureReport,
+  buildCheckAdherenceReport,
+} from "../lib/health-check-reports.js";
 import { healthCheckGroupRoutes } from "./health-check-groups.js";
 import { householdHealthRoutes } from "./household-health.js";
 import { healthCheckRoutes } from "./health-checks.js";
@@ -1685,6 +1690,207 @@ maybeDescribe("health checks routes (integration)", () => {
         ).toHaveLength(0);
         expect(own.filter((o) => o.id.includes(hidden.id)).length).toBeGreaterThan(0);
         expect((await overlays("stranger")).filter((o) => o.id.includes(hidden.id))).toHaveLength(0);
+      });
+    });
+  });
+
+  describe("reports for checks (WHO-393)", () => {
+    // Date is frozen at noon UTC on the day the run started (the household is UTC), so 00:00, 04:00
+    // and 08:00 are past, and 23:59 is ahead, whatever time the suite really runs.
+    beforeEach(() => {
+      const day = new Date().toISOString().slice(0, 10);
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(`${day}T12:00:00.000Z`));
+    });
+    afterEach(async () => {
+      vi.useRealTimers();
+      await withHouseholdContext(baseDb, people.mom!.householdId, (tx) =>
+        tx.delete(healthEvents).where(like(healthEvents.title, "who393 reading")),
+      );
+    });
+
+    const today = () => new Date().toISOString().slice(0, 10);
+    const at = (hhmm: string) => `${today()}T${hhmm}:00.000Z`;
+    const authOf = (key: string) => {
+      const p = people[key]!;
+      return { householdId: p.householdId, userId: p.userId, memberId: p.memberId, role: p.role };
+    };
+    const adherence = (as: string, from: string, to: string, memberId?: string) =>
+      withHouseholdContext(baseDb, people.mom!.householdId, (tx) =>
+        buildCheckAdherenceReport(tx, env, authOf(as), from, to, { memberId }),
+      );
+    const bp = (as: string, from: string, to: string, memberId?: string) =>
+      withHouseholdContext(baseDb, people.mom!.householdId, (tx) =>
+        buildBloodPressureReport(tx, env, authOf(as), from, to, { memberId }),
+      );
+
+    async function reading(iso: string, values: Record<string, number>, memberKey = "ally") {
+      const [row] = await withHouseholdContext(baseDb, people.mom!.householdId, async (tx) => {
+        const [ev] = await tx
+          .insert(healthEvents)
+          .values({
+            householdId: people.mom!.householdId,
+            memberId: people[memberKey]!.memberId,
+            type: "vitals",
+            title: "who393 reading",
+            startedAt: new Date(iso),
+            createdByUserId: people.mom!.userId,
+          })
+          .returning({ id: healthEvents.id });
+        for (const [metric, value] of Object.entries(values)) {
+          await tx
+            .insert(healthVitalsReadings)
+            .values({ eventId: ev!.id, metric: metric as never, value: String(value), unit: metric === "heart_rate" ? "bpm" : "mmHg" });
+        }
+        return [ev!];
+      });
+      return row!.id;
+    }
+
+    describe("check adherence", () => {
+      const keptCheck = async (name = "393 adherence") => {
+        const check = await makeCheck("mom", {
+          name,
+          startDate: null,
+          endDate: null,
+          template: { metrics: ["blood_pressure_systolic", "blood_pressure_diastolic"] },
+          schedule: { times: ["00:00", "04:00", "08:00", "23:59"] },
+        });
+        const eventId = await reading(at("00:05"), { blood_pressure_systolic: 120, blood_pressure_diastolic: 80 });
+        await call("mom", "POST", `/checks/${check.id}/log`, { scheduledAt: at("00:00"), eventId });
+        await call("mom", "POST", `/checks/${check.id}/log`, { scheduledAt: at("04:00"), status: "skipped" });
+        return check;
+      };
+      const rowFor = (report: Awaited<ReturnType<typeof adherence>>, checkId: string) =>
+        report.byCheck.find((r) => r.checkId === checkId);
+
+      it("counts what was done, skipped and missed, and leaves out the time that is still ahead", async () => {
+        const check = await keptCheck();
+        const report = await adherence("mom", today(), today());
+        expect(rowFor(report, check.id)).toMatchObject({
+          name: "393 adherence",
+          memberId: people.ally!.memberId,
+          memberLabel: "ally",
+          due: 3,
+          done: 1,
+          skipped: 1,
+          missed: 1,
+          completionPercent: 33,
+        });
+        // Whatever else is in the household, the totals are the rows added up.
+        const sum = (k: "due" | "done" | "skipped" | "missed") => report.byCheck.reduce((n, r) => n + r[k], 0);
+        expect(report.totals).toMatchObject({ due: sum("due"), done: sum("done"), skipped: sum("skipped"), missed: sum("missed") });
+        expect(report.timezone).toBe("UTC");
+      });
+
+      it("lists the skipped and missed times, oldest first", async () => {
+        const check = await keptCheck("393 gaps");
+        const report = await adherence("mom", today(), today());
+        const gaps = report.gaps.filter((g) => g.checkName === "393 gaps");
+        expect(gaps.map((g) => [g.timeLabel, g.status])).toEqual([
+          ["4:00 AM", "skipped"],
+          ["8:00 AM", "missed"],
+        ]);
+        expect(gaps[0]).toMatchObject({ date: today(), scheduledAt: at("04:00"), memberLabel: "ally" });
+        expect(rowFor(report, check.id)).toBeDefined();
+      });
+
+      it("does not count days before the check was set up, however far back the range reaches", async () => {
+        const check = await keptCheck("393 new");
+        const weekAgo = new Date(Date.parse(`${today()}T12:00:00Z`) - 7 * 86_400_000).toISOString().slice(0, 10);
+        const report = await adherence("mom", weekAgo, today());
+        expect(rowFor(report, check.id)).toMatchObject({ due: 3, done: 1, skipped: 1, missed: 1 });
+      });
+
+      it("keeps a paused check's history, and a deleted check's", async () => {
+        const paused = await keptCheck("393 paused");
+        await call("mom", "PATCH", `/checks/${paused.id}`, { enabled: false });
+        const gone = await keptCheck("393 gone");
+        await call("mom", "DELETE", `/checks/${gone.id}`);
+        const report = await adherence("mom", today(), today());
+        expect(rowFor(report, paused.id)).toMatchObject({ done: 1, skipped: 1, missed: 1 });
+        expect(rowFor(report, gone.id)).toMatchObject({ done: 1, skipped: 1, missed: 1 });
+      });
+
+      it("only reports checks the viewer can see, and can be narrowed to one person", async () => {
+        const check = await keptCheck("393 private");
+        expect(rowFor(await adherence("stranger", today(), today()), check.id)).toBeUndefined();
+        expect(rowFor(await adherence("mom", today(), today(), people.ally!.memberId), check.id)).toBeDefined();
+        expect((await adherence("mom", today(), today(), people.dad!.memberId)).byCheck.filter((r) => r.checkId === check.id)).toEqual([]);
+      });
+
+      it("is empty for a range entirely in the future, and refuses a bad range", async () => {
+        const future = new Date(Date.parse(`${today()}T12:00:00Z`) + 3 * 86_400_000).toISOString().slice(0, 10);
+        const report = await adherence("mom", future, future);
+        expect(report).toMatchObject({ byCheck: [], gaps: [], totals: { due: 0, completionPercent: null } });
+        await expect(adherence("mom", "2026-13-40", today())).rejects.toMatchObject({ code: "invalid_date" });
+        await expect(adherence("mom", today(), "2020-01-01")).rejects.toMatchObject({ code: "end_before_start" });
+        await expect(adherence("mom", "2024-01-01", today())).rejects.toMatchObject({ code: "range_too_large" });
+      });
+    });
+
+    describe("blood pressure", () => {
+      const DAY = "2026-08-15";
+      const on = (hhmm: string) => `${DAY}T${hhmm}:00.000Z`;
+      const BPV = (sys: number, dia: number, hr?: number) => ({
+        blood_pressure_systolic: sys,
+        blood_pressure_diastolic: dia,
+        ...(hr != null ? { heart_rate: hr } : {}),
+      });
+      const seedDay = async () => {
+        await reading(on("08:00"), BPV(120, 80, 70));
+        await reading(on("14:00"), BPV(130, 85, 74));
+        await reading(on("21:00"), BPV(110, 70));
+      };
+
+      it("gathers the readings with averages, the lowest and highest, and a split by time of day", async () => {
+        await seedDay();
+        const report = await bp("mom", DAY, DAY);
+        expect(report.people).toHaveLength(1);
+        const [ally] = report.people;
+        expect(ally).toMatchObject({ memberId: people.ally!.memberId, memberLabel: "ally" });
+        expect(ally!.readings.map((r) => [r.timeLabel, `${r.systolic}/${r.diastolic}`, r.heartRate])).toEqual([
+          ["8:00 AM", "120/80", 70],
+          ["2:00 PM", "130/85", 74],
+          ["9:00 PM", "110/70", null],
+        ]);
+        expect(ally!.summary).toMatchObject({ count: 3, avgSystolic: 120, avgDiastolic: 78, avgHeartRate: 72 });
+        expect(ally!.summary.lowest).toMatchObject({ systolic: 110, diastolic: 70 });
+        expect(ally!.summary.highest).toMatchObject({ systolic: 130, diastolic: 85 });
+        expect(ally!.summary.byPeriod.map((p) => [p.period, p.count])).toEqual([
+          ["Morning", 1],
+          ["Afternoon", 1],
+          ["Evening", 1],
+        ]);
+      });
+
+      it("leaves out vitals that are not a full blood pressure, and anything outside the range", async () => {
+        await seedDay();
+        await reading(on("09:00"), { weight: 150 });
+        await reading(on("10:00"), { blood_pressure_systolic: 125 });
+        await reading(`2026-08-16T09:00:00.000Z`, BPV(140, 90));
+        await reading(`2026-08-14T23:59:00.000Z`, BPV(100, 60));
+        const report = await bp("mom", DAY, DAY);
+        expect(report.people[0]!.summary.count).toBe(3);
+      });
+
+      it("includes the days at both ends of the range", async () => {
+        await reading(`2026-08-15T00:00:00.000Z`, BPV(121, 81));
+        await reading(`2026-08-16T23:59:00.000Z`, BPV(122, 82));
+        const report = await bp("mom", "2026-08-15", "2026-08-16");
+        expect(report.people[0]!.readings.map((r) => r.systolic)).toEqual([121, 122]);
+      });
+
+      it("only includes entries the viewer can see in reports, and can be narrowed to one person", async () => {
+        await seedDay();
+        expect((await bp("stranger", DAY, DAY)).people).toEqual([]);
+        expect((await bp("mom", DAY, DAY, people.ally!.memberId)).people).toHaveLength(1);
+        expect((await bp("mom", DAY, DAY, people.dad!.memberId)).people).toEqual([]);
+      });
+
+      it("is empty when nothing was logged, and refuses a bad range", async () => {
+        expect((await bp("mom", "2026-01-01", "2026-01-02")).people).toEqual([]);
+        await expect(bp("mom", "nope", DAY)).rejects.toBeInstanceOf(CheckReportRangeError);
       });
     });
   });

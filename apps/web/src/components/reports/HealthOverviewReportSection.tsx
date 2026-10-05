@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, apiClient } from "../../lib/client-api";
 import { ReportExportSheet } from "./ReportExportSheet";
+import { HealthCheckReportPanel } from "./HealthCheckReportPanel";
 import {
   defaultHealthReportRange,
   HealthOverviewReportBody,
@@ -101,7 +102,12 @@ export function HealthOverviewReportSection({
       .catch(() => setMedOptions([]));
   }, []);
 
+  // The scheduled-check reports load and render themselves (below); this section's own data is
+  // for the other focuses.
+  const checkReportFocus = focus === "check-adherence" || focus === "blood-pressure" ? focus : null;
+
   const load = useCallback(async () => {
+    if (checkReportFocus) return;
     setLoading(true);
     setError(null);
     try {
@@ -120,7 +126,7 @@ export function HealthOverviewReportSection({
     } finally {
       setLoading(false);
     }
-  }, [from, to, memberId, eventType, groupBy, medicationId, scheduleKind, focus, today, usesMedFilters]);
+  }, [from, to, memberId, eventType, groupBy, medicationId, scheduleKind, focus, today, usesMedFilters, checkReportFocus]);
 
   useEffect(() => {
     void load();
@@ -192,7 +198,16 @@ export function HealthOverviewReportSection({
         </nav>
       ) : null}
 
-      <div className="no-print flex flex-wrap items-end gap-3">
+      {checkReportFocus ? (
+        <HealthCheckReportPanel
+          key={checkReportFocus}
+          kind={checkReportFocus}
+          members={membersProp}
+          driveEnabled={driveEnabled}
+        />
+      ) : null}
+
+      <div className={checkReportFocus ? "hidden" : "no-print flex flex-wrap items-end gap-3"}>
         {usesRange ? (
           <>
             <label className="space-y-1 text-sm">
@@ -278,14 +293,14 @@ export function HealthOverviewReportSection({
         ) : null}
       </div>
 
-      {error ? <Alert variant="error">{error}</Alert> : null}
-      {loading && !report ? (
+      {error && !checkReportFocus ? <Alert variant="error">{error}</Alert> : null}
+      {loading && !report && !checkReportFocus ? (
         <div className="flex justify-center py-12">
           <Spinner />
         </div>
       ) : null}
 
-      {report ? <HealthOverviewReportBody report={report} focus={focus} /> : null}
+      {report && !checkReportFocus ? <HealthOverviewReportBody report={report} focus={focus} /> : null}
 
       <ReportExportSheet
         open={exportOpen}

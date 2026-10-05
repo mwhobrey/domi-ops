@@ -7,7 +7,9 @@ export type HealthReportFocus =
   | "medication-list"
   | "exercise"
   | "pain"
-  | "nutrition";
+  | "nutrition"
+  | "check-adherence"
+  | "blood-pressure";
 
 export interface HealthReportEventItem {
   id: string;
@@ -188,4 +190,6 @@ export const HEALTH_REPORT_FOCUS_OPTIONS: { id: HealthReportFocus; label: string
   { id: "exercise", label: "Exercise" },
   { id: "pain", label: "Pain" },
   { id: "nutrition", label: "Nutrition" },
+  { id: "check-adherence", label: "Check adherence" },
+  { id: "blood-pressure", label: "Blood pressure" },
 ];
