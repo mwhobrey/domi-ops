@@ -298,6 +298,7 @@ export async function buildHealthEventOverlays(
         source: "health_event",
         overlayKind: "health_event",
         deepLink: `/health?event=${row.id}`,
+        attendeeMemberIds: [row.memberId],
       }),
     );
   }
@@ -336,6 +337,8 @@ function medOverlay(params: {
   date: string;
   hhmm: string;
   deepLink: string;
+  /** Whose dose it is, so the calendar's person filter keeps it. */
+  memberId: string;
 }): CalendarListEvent {
   return overlayEvent({
     id: params.id,
@@ -349,6 +352,7 @@ function medOverlay(params: {
     source: "health_med",
     overlayKind: "health_med",
     deepLink: params.deepLink,
+    attendeeMemberIds: [params.memberId],
   });
 }
 
@@ -621,6 +625,7 @@ export async function buildMedicationDoseOverlays(
             date,
             hhmm,
             deepLink: `/health?takeGroup=${encodeURIComponent(group.id)}&scheduledAt=${encodeURIComponent(iso)}`,
+            memberId: group.memberId,
           }),
         );
       }
@@ -657,6 +662,7 @@ export async function buildMedicationDoseOverlays(
             date,
             hhmm,
             deepLink: `/health?takeGroup=${encodeURIComponent(group.id)}&scheduledAt=${encodeURIComponent(iso)}`,
+            memberId: group.memberId,
           }),
         );
       }
@@ -692,6 +698,7 @@ export async function buildMedicationDoseOverlays(
             date,
             hhmm,
             deepLink: `/health?take=${encodeURIComponent(med.id)}&scheduledAt=${encodeURIComponent(iso)}`,
+            memberId: med.memberId,
           }),
         );
       }
@@ -726,6 +733,7 @@ export async function buildMedicationDoseOverlays(
             date,
             hhmm,
             deepLink: `/health?take=${encodeURIComponent(med.id)}&scheduledAt=${encodeURIComponent(iso)}`,
+            memberId: med.memberId,
           }),
         );
       }
