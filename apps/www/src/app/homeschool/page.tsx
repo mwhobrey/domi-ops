@@ -1,12 +1,17 @@
 import { MARKETING_SCREENSHOTS } from "@domi-ops/marketing-ui";
 import { AudiencePage } from "@/components/AudiencePage";
 import { FAQ_ITEMS } from "@/lib/faq";
+import { pageSocial } from "@/lib/og";
+
+const TITLE = "Homeschool gradebook and family planner | Domi Ops";
+const DESCRIPTION =
+  "Classes, weighted gradebook, school days and hours logs, printable transcripts with your own grade scale, alongside your family calendar and chores. Self-host free or hosted.";
 
 export const metadata = {
-  title: "Homeschool gradebook and family planner | Domi Ops",
-  description:
-    "Classes, weighted gradebook, school days and hours logs, printable transcripts with your own grade scale, alongside your family calendar and chores. Self-host free or hosted.",
+  title: TITLE,
+  description: DESCRIPTION,
   alternates: { canonical: "/homeschool" },
+  ...pageSocial({ title: TITLE, description: DESCRIPTION, path: "/homeschool" }),
 };
 
 // Reads NEXT_PUBLIC_* env vars at render time; see app/page.tsx.

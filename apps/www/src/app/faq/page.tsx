@@ -1,10 +1,15 @@
 import { MarketingShell, resolveMarketingUrls } from "@domi-ops/marketing-ui";
 import { FAQ_ITEMS, faqJsonLd } from "@/lib/faq";
+import { pageSocial } from "@/lib/og";
+
+const TITLE = "FAQ | Domi Ops";
+const DESCRIPTION =
+  "Common questions about homeschool tracking, health data, self-hosting, Domi Ops Cloud, privacy, and pricing.";
 
 export const metadata = {
-  title: "FAQ | Domi Ops",
-  description:
-    "Common questions about homeschool tracking, health data, self-hosting, Domi Ops Cloud, privacy, and pricing.",
+  title: TITLE,
+  description: DESCRIPTION,
+  ...pageSocial({ title: TITLE, description: DESCRIPTION, path: "/faq" }),
 };
 
 // Reads NEXT_PUBLIC_* env vars at render time — see app/page.tsx for why this has to be forced
