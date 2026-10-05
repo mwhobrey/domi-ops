@@ -34,7 +34,7 @@ A group bundles one person's checks so they share one reminder ("Morning: BP, we
 - A member check's slot is **claimed per instant**, not per clock time: if a group covers a check
   at 08:00, the check's own 08:00 reminder is suppressed, but a 09:00 group does not swallow an
   08:00 check.
-- Interval groups share one clock.
+- An interval group takes over the reminders of its interval checks (on the days the group runs). It never suppresses a scheduled check's own reminders.
 - Group reminders carry no action buttons. They deep link to `/health?checkGroup=<id>`.
 
 ## Reminders
@@ -79,7 +79,7 @@ also have explicit share tables (`health_check_shares`, `health_check_group_shar
 | Reports | `check-adherence` and `blood-pressure` kinds, date range and person filter, same exports as other reports |
 
 Report notes: adherence counts from a check's creation day, so history before that is not
-scored. Ranges are capped (`assertCheckReportRange`); an over-long range returns 400.
+scored. Ranges are capped at 366 days (`assertCheckReportRange`); a longer one returns 400.
 
 ## Limits
 

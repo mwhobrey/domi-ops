@@ -23,7 +23,7 @@ export const FAQ_ITEMS: FaqItem[] = [
   },
   {
     q: "Can it remind someone to take blood pressure or weight readings?",
-    a: "Yes. Scheduled health checks work like medication reminders, but for measurements: set a check for a person (say, blood pressure four times a day), and Domi Ops sends a push reminder at each time. If the reading is already logged, no reminder goes out. You can bundle several checks into one reminder, skip a check right from the notification, and see adherence and blood pressure reports over any date range.",
+    a: "Yes. Scheduled health checks work like medication reminders, but for measurements: set a check for a person (say, blood pressure four times a day), and Domi Ops sends a push reminder at each time. If the reading is already logged, no reminder goes out. You can bundle several checks into one reminder, skip a check right from the notification, and see adherence and blood pressure reports for date ranges of up to a year.",
   },
   {
     q: "Who can see and edit a family member's health records?",
