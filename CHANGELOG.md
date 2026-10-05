@@ -8,6 +8,14 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+### Fixed
+
+- **Calendar filter bar could crash when calendars load late** (WHO-409). The filter bar returned early before one of its hooks ran, so if the calendar list arrived after the first render React would throw "rendered more hooks than during the previous render". The hook now runs first. Found by turning lint back on.
+
+### Changed
+
+- **Lint works again** (WHO-409). `next lint` was removed in Next 16, so lint had silently stopped running. `apps/web` and `apps/www` now run ESLint directly (`npm run lint`, also a CI step). It reports 0 errors; the React Compiler advisories it raises about existing code are warnings for now.
+
 ## [0.7.0] - 2026-10-05
 
 Scheduled health checks: recurring prompts to log blood pressure, weight, pain, meals or exercise, with reminders, groups, a Checks tab, dashboard and calendar presence, and reports. **Includes two migrations, `0085` and `0086`** (requires `npm run db:migrate`; no manual steps). The hosted deploy applies them automatically. See [docs/HEALTH_CHECKS.md](docs/HEALTH_CHECKS.md).

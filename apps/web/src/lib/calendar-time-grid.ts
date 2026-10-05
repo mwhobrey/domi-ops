@@ -120,7 +120,7 @@ export function minutesToTimeString(minutes: number): string {
 
 export function eventDurationMinutes(ev: CalendarEventView): number {
   const start = parseTimeToMinutes(ev.startTime) ?? GRID_START_HOUR * 60;
-  let end = parseTimeToMinutes(ev.endTime);
+  const end = parseTimeToMinutes(ev.endTime);
   if (end == null || end <= start) {
     return DEFAULT_EVENT_DURATION_MIN;
   }
