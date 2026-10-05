@@ -68,6 +68,8 @@ export function SchoolClassAssignmentsCard({
   }, [classId]);
 
   const visibleAssignments = useMemo(() => {
+    // Recomputed whenever the list or filter changes; "now" only needs to be right at that moment.
+    // eslint-disable-next-line react-hooks/purity
     const now = Date.now();
     let list = [...assignments];
     switch (assignmentFilter) {

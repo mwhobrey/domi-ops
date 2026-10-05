@@ -1813,6 +1813,19 @@ maybeDescribe("health checks routes (integration)", () => {
         expect(rowFor(report, gone.id)).toMatchObject({ done: 1, skipped: 1, missed: 1 });
       });
 
+      it("labels a deleted check so the report explains a check that no longer exists", async () => {
+        const live = await keptCheck("393 live label");
+        const gone = await keptCheck("393 gone label");
+        await call("mom", "DELETE", `/checks/${gone.id}`);
+        const report = await adherence("mom", today(), today());
+        expect(rowFor(report, gone.id)!.name).toBe("393 gone label (deleted)");
+        expect(rowFor(report, live.id)!.name).toBe("393 live label");
+        // The label follows the check into the list of skipped and missed times too.
+        const goneGaps = report.gaps.filter((g) => g.checkName.startsWith("393 gone label"));
+        expect(goneGaps.length).toBeGreaterThan(0);
+        for (const g of goneGaps) expect(g.checkName).toBe("393 gone label (deleted)");
+      });
+
       it("only reports checks the viewer can see, and can be narrowed to one person", async () => {
         const check = await keptCheck("393 private");
         expect(rowFor(await adherence("stranger", today(), today()), check.id)).toBeUndefined();

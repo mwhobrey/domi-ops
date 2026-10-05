@@ -84,6 +84,14 @@ export function CalendarFilterBar({
   const [sheetOpen, setSheetOpen] = useState(false);
   const [categorySearch, setCategorySearch] = useState("");
 
+  // Hooks first: returning before this would change the hook count when the calendar list arrives.
+  const filteredCategories = useMemo(() => {
+    if (!categoryGroups) return [];
+    const q = categorySearch.trim().toLowerCase();
+    if (!q) return categoryGroups;
+    return categoryGroups.filter((c) => c.label.toLowerCase().includes(q));
+  }, [categoryGroups, categorySearch]);
+
   if (writeLaneGroups.length === 0) return null;
 
   const defaultOptions = writeLaneGroups.flatMap((g) =>
@@ -111,13 +119,6 @@ export function CalendarFilterBar({
   );
   const inlineLanes = visibleLaneGroups.slice(0, 2);
   const overflowLaneCount = Math.max(0, visibleLaneGroups.length - inlineLanes.length);
-
-  const filteredCategories = useMemo(() => {
-    if (!categoryGroups) return [];
-    const q = categorySearch.trim().toLowerCase();
-    if (!q) return categoryGroups;
-    return categoryGroups.filter((c) => c.label.toLowerCase().includes(q));
-  }, [categoryGroups, categorySearch]);
 
   function closeSheet() {
     setSheetOpen(false);
