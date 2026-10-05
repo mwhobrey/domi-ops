@@ -6,8 +6,9 @@ on:
     paths-ignore:
       - "**/*.md"
       - ".cursor/**"
+  # Any base branch, not just main: a stack of dependent PRs has each one based on the one below, and
+  # those must be checked too (they were silently skipped before).
   pull_request:
-    branches: [main]
 
 jobs:
   docker-build:

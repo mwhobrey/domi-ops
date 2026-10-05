@@ -14,6 +14,9 @@ reviews:
   auto_review:
     enabled: true
     drafts: false
+    # Also review PRs based on another branch (stacked PRs), not only those aimed at the default one.
+    base_branches:
+      - ".*"
   path_filters:
     - "!**/*.lock"
     - "!package-lock.json"
