@@ -70,7 +70,7 @@ export function SchoolAssignmentMaterialsCard({
 
   async function startTest(materialId: string) {
     if (googleConnected === false) {
-      window.location.href = connectUrl;
+      window.location.assign(connectUrl);
       return;
     }
     setStartingMaterialId(materialId);

@@ -171,6 +171,8 @@ export function MedTimesEditor({
   const rowIdsRef = useRef<string[]>([]);
   if (rowIdsRef.current.length < times.length) {
     for (let i = rowIdsRef.current.length; i < times.length; i++) {
+      // Ids only need to be unique per row and stable across renders; they live in a ref.
+      // eslint-disable-next-line react-hooks/purity
       rowIdsRef.current.push(`med-time-${i}-${Math.random().toString(36).slice(2, 9)}`);
     }
   } else if (rowIdsRef.current.length > times.length) {

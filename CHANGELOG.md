@@ -12,9 +12,14 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 - **Share cards for links** (WHO-405). The marketing site and the app now carry a 1200x630 share card (logo, headline and current screens) and Open Graph and Twitter tags, with per-page titles and URLs. The Health page has its own card. The app builds its absolute image URL from the request, so it is right behind any proxy or custom domain. Cards live in `public/og` and can be rebuilt with `scripts/og`.
 
+### Changed
+
+- **Lint works again** (WHO-409). `next lint` was removed in Next 16, so lint had silently stopped running. `apps/web` and `apps/www` now run ESLint directly (`npm run lint`, also a CI step). It reports 0 errors; the React Compiler advisories it raises about existing code are warnings for now.
+
 ### Fixed
 
 - **Calendar person filter keeps medication doses and health events** (WHO-411). Filtering the calendar by a person ("For Sofia") could hide that person's own medication doses, medication group doses and health events, because those chips did not say who they were for. They do now, matching scheduled health checks.
+- **Calendar filter bar could crash when calendars load late** (WHO-409). The filter bar returned early before one of its hooks ran, so if the calendar list arrived after the first render React would throw "rendered more hooks than during the previous render". The hook now runs first. Found by turning lint back on.
 
 ## [0.7.0] - 2026-10-05
 
