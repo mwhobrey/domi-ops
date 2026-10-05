@@ -8,6 +8,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+### Fixed
+
+- **Calendar person filter keeps medication doses and health events** (WHO-411). Filtering the calendar by a person ("For Sofia") could hide that person's own medication doses, medication group doses and health events, because those chips did not say who they were for. They do now, matching scheduled health checks.
+
 ## [0.7.0] - 2026-10-05
 
 Scheduled health checks: recurring prompts to log blood pressure, weight, pain, meals or exercise, with reminders, groups, a Checks tab, dashboard and calendar presence, and reports. **Includes two migrations, `0085` and `0086`** (requires `npm run db:migrate`; no manual steps). The hosted deploy applies them automatically. See [docs/HEALTH_CHECKS.md](docs/HEALTH_CHECKS.md).
