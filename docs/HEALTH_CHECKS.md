@@ -79,7 +79,8 @@ also have explicit share tables (`health_check_shares`, `health_check_group_shar
 | Reports | `check-adherence` and `blood-pressure` kinds, date range and person filter, same exports as other reports |
 
 Report notes: adherence counts from a check's creation day, so history before that is not
-scored. Ranges are capped at 366 days (`assertCheckReportRange`); a longer one returns 400.
+scored. A deleted check keeps the history it earned before it was deleted and is listed as
+"<name> (deleted)", including in the exports. Ranges are capped at 366 days (`assertCheckReportRange`); a longer one returns 400.
 
 ## Limits
 

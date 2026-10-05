@@ -122,7 +122,8 @@ const MAX_GAPS = 300;
  * - A check has no history before the day it was set up, so those days are not counted as missed.
  * - "Done" is out of everything that was due, so a skip lowers the figure just as a miss does; the
  *   two are listed separately because they mean different things to a doctor.
- * - Paused stretches never produce times, and deleted checks stay in the history they earned.
+ * - Paused stretches never produce times, and deleted checks stay in the history they earned,
+ *   labelled "(deleted)" so a reader can tell why a check that no longer exists is listed.
  */
 export async function buildCheckAdherenceReport(
   db: Database,
@@ -183,7 +184,8 @@ export async function buildCheckAdherenceReport(
   const byCheck: CheckAdherenceRow[] = [];
   const gaps: AdherenceGap[] = [];
   for (const check of checks) {
-    const name = decryptHealthFieldOrPassthrough(check.name, env) ?? "Health check";
+    // A deleted check keeps the history it earned; the label says why it is listed but gone.
+    const name = `${decryptHealthFieldOrPassthrough(check.name, env) ?? "Health check"}${check.deletedAt ? " (deleted)" : ""}`;
     const memberLabel = memberLabels.get(check.memberId) ?? "Member";
     const firstDay = localDateOfInstant(check.createdAt, timezone);
     const row: CheckAdherenceRow = {
