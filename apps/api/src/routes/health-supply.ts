@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { Env } from "@domi-ops/config";
-import { MAX_LEAD_DAYS, MAX_SUPPLY_DAYS, computeSupply } from "@domi-ops/calendar-sync";
+import { MAX_LEAD_DAYS, MAX_SUPPLY_DAYS } from "@domi-ops/calendar-sync";
 import type { Database } from "@domi-ops/db";
 import {
   healthMedicationSupply,
@@ -17,7 +17,7 @@ import { requireHouseholdModule } from "../lib/household-modules.js";
 import { HealthEncryptionError } from "../lib/health-crypto.js";
 import { hasHealthSegmentAccess, healthMedicationVisibleWhere } from "../lib/health-access.js";
 import { householdTodayIsoDate } from "../lib/household-time.js";
-import { loadOrganizerRanges, loadSupplyViews, type SupplyView } from "../lib/health-supply.js";
+import { computeEstimate, loadSupplyViews, type SupplyView } from "../lib/health-supply.js";
 
 /**
  * Medication supply (WHO-419): the estimate of when a medication runs out, which pharmacy fills it,
@@ -180,27 +180,14 @@ export function healthSupplyRoutes(db: Database, env: Env) {
         | { runsOutOn: string; outsideDays: number; organizerDays: number; totalDays: number; confirmed: boolean; source: "manual" | "confirm" }
         | null = null;
       if (body.outsideDays !== undefined) {
-        const ranges = await loadOrganizerRanges(db, med.id);
-        let result;
-        try {
-          result = computeSupply({ today, ranges, outsideDays: body.outsideDays, confirmedTotalDays: body.confirmedTotalDays });
-        } catch (e) {
-          if (e instanceof RangeError) return c.json({ error: "supply_too_large" }, 400);
-          throw e;
-        }
-        if (result.needsConfirmation) {
-          const info = { organizerDays: result.organizerDays, organizerEndsOn: result.organizerEndsOn };
+        const outcome = await computeEstimate(db, med.id, today, { outsideDays: body.outsideDays, confirmedTotalDays: body.confirmedTotalDays });
+        if (outcome.kind === "too_large") return c.json({ error: "supply_too_large" }, 400);
+        if (outcome.kind === "needs_confirmation") {
+          const info = { organizerDays: outcome.organizerDays, organizerEndsOn: outcome.organizerEndsOn };
           if (body.dryRun) return c.json({ dryRun: true, needsConfirmation: true, ...info });
           return c.json({ error: "confirmation_required", ...info }, 409);
         }
-        estimate = {
-          runsOutOn: result.runsOutOn,
-          outsideDays: result.outsideDays,
-          organizerDays: result.organizerDays,
-          totalDays: result.totalDays,
-          confirmed: result.confirmed,
-          source: "manual",
-        };
+        estimate = { ...outcome.estimate, source: "manual" };
         if (body.dryRun) {
           return c.json({ dryRun: true, needsConfirmation: false, ...estimate, estimatedOn: today });
         }

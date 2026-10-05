@@ -1,4 +1,5 @@
 import {
+  computeSupply,
   effectiveLeadDays,
   estimateNeedsConfirmation,
   daysRemaining,
@@ -161,6 +162,50 @@ export async function loadSupplyViews(
 /** The additive fields a medication response gains; empty when nothing about supply was ever set. */
 export function supplyExtras(view: SupplyView | undefined): { supply?: SupplySummary; pharmacy?: PharmacySummary | null } {
   return view ? { supply: view.supply, pharmacy: view.pharmacy } : {};
+}
+
+export type Estimate = {
+  runsOutOn: string;
+  outsideDays: number;
+  organizerDays: number;
+  totalDays: number;
+  confirmed: boolean;
+};
+
+export type EstimateOutcome =
+  | { kind: "ok"; estimate: Estimate }
+  /** A gap in the organizers: the caller must send the total they have in hand. */
+  | { kind: "needs_confirmation"; organizerDays: number; organizerEndsOn: string | null }
+  | { kind: "too_large" };
+
+/** What `outsideDays` (plus the organizers' unbroken coverage from `today`) comes to. Writes nothing. */
+export async function computeEstimate(
+  db: Database,
+  medicationId: string,
+  today: string,
+  input: { outsideDays: number; confirmedTotalDays?: number },
+): Promise<EstimateOutcome> {
+  const ranges = await loadOrganizerRanges(db, medicationId);
+  let result;
+  try {
+    result = computeSupply({ today, ranges, outsideDays: input.outsideDays, confirmedTotalDays: input.confirmedTotalDays });
+  } catch (e) {
+    if (e instanceof RangeError) return { kind: "too_large" };
+    throw e;
+  }
+  if (result.needsConfirmation) {
+    return { kind: "needs_confirmation", organizerDays: result.organizerDays, organizerEndsOn: result.organizerEndsOn };
+  }
+  return {
+    kind: "ok",
+    estimate: {
+      runsOutOn: result.runsOutOn,
+      outsideDays: result.outsideDays,
+      organizerDays: result.organizerDays,
+      totalDays: result.totalDays,
+      confirmed: result.confirmed,
+    },
+  };
 }
 
 /** The days an organizer was filled for this medication, across every session, undone fills left out. */
