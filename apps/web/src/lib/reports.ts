@@ -9,6 +9,8 @@ export type ReportKind =
   | "exercise"
   | "pain"
   | "nutrition"
+  | "check-adherence"
+  | "blood-pressure"
   | "school-grades"
   | "school-open-work"
   | "school-transcript";
@@ -55,6 +57,8 @@ export const REPORT_KIND_LABELS: Record<ReportKind, string> = {
   exercise: "Exercise",
   pain: "Pain",
   nutrition: "Nutrition",
+  "check-adherence": "Check adherence",
+  "blood-pressure": "Blood pressure",
   "school-grades": "Grade summary",
   "school-open-work": "Open work",
   "school-transcript": "Transcript",

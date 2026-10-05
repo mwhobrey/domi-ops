@@ -3,6 +3,7 @@ import type { ExpenseReport } from "../expenses.js";
 import type { GoalsReportData } from "../goals-report.js";
 import type { WeeklyReportData } from "../weekly-reports/types.js";
 import type { SchoolReportsData } from "../school-reports.js";
+import type { BloodPressureReport, CheckAdherenceReport } from "../health-check-reports.js";
 import type { CanonicalReport, CanonicalReportSection, ReportKind, ReportModule } from "./types.js";
 import { REPORT_KIND_LABELS, REPORT_MODULE_LABELS } from "./types.js";
 
@@ -467,6 +468,163 @@ export function healthPainToCanonical(data: HealthReportData): CanonicalReport {
     kind: "pain",
     generatedAt: new Date().toISOString(),
     timezone: data.timezone,
+    sections,
+  };
+}
+
+function percentLabel(p: number | null): string {
+  return p == null ? "—" : `${p}%`;
+}
+
+/** Scheduled check adherence as a canonical report: totals, a row per check, and the gaps. */
+export function checkAdherenceToCanonical(report: CheckAdherenceReport): CanonicalReport {
+  const { totals } = report;
+  const sections: CanonicalReportSection[] = [
+    {
+      key: "summary",
+      label: "Summary",
+      stats: [
+        { label: "Times due", value: String(totals.due) },
+        { label: "Done", value: String(totals.done) },
+        { label: "Skipped", value: String(totals.skipped) },
+        { label: "Missed", value: String(totals.missed) },
+        { label: "Done out of due", value: percentLabel(totals.completionPercent) },
+      ],
+      emptyMessage: "No scheduled checks were due in this range.",
+    },
+  ];
+
+  if (report.byCheck.length > 0) {
+    sections.push({
+      key: "by-check",
+      label: "By check",
+      tables: [
+        {
+          key: "by-check",
+          label: "By check",
+          columns: ["Person", "Check", "Due", "Done", "Skipped", "Missed", "Done out of due"],
+          rows: report.byCheck.map((r) => [
+            r.memberLabel,
+            r.name,
+            r.due,
+            r.done,
+            r.skipped,
+            r.missed,
+            percentLabel(r.completionPercent),
+          ]),
+        },
+      ],
+    });
+  }
+
+  if (report.gaps.length > 0) {
+    sections.push({
+      key: "gaps",
+      label: report.gapsTruncated ? `Skipped and missed (first ${report.gaps.length})` : "Skipped and missed",
+      tables: [
+        {
+          key: "gaps",
+          label: "Skipped and missed",
+          columns: ["Date", "Time", "Person", "Check", "Result"],
+          rows: report.gaps.map((g) => [
+            formatDateOnlyLabel(g.date),
+            g.timeLabel,
+            g.memberLabel,
+            g.checkName,
+            g.status === "skipped" ? "Skipped" : "Missed",
+          ]),
+        },
+      ],
+    });
+  }
+
+  return {
+    title: `Check adherence — ${report.from} to ${report.to}`,
+    module: "health",
+    kind: "check-adherence",
+    generatedAt: new Date().toISOString(),
+    timezone: report.timezone,
+    sections,
+  };
+}
+
+/** Blood pressure readings per person, laid out to hand to a doctor. */
+export function bloodPressureToCanonical(report: BloodPressureReport): CanonicalReport {
+  const sections: CanonicalReportSection[] = [];
+  const several = report.people.length > 1;
+  for (const person of report.people) {
+    const { summary } = person;
+    const prefix = several ? `${person.memberLabel} — ` : "";
+    const range = (r: typeof summary.lowest) =>
+      r ? `${r.systolic}/${r.diastolic} (${formatDateOnlyLabel(r.date)}, ${r.timeLabel})` : "—";
+    sections.push({
+      key: `summary-${person.memberId}`,
+      label: `${prefix}Summary`,
+      stats: [
+        ...(several ? [] : [{ label: "Person", value: person.memberLabel }]),
+        { label: "Readings", value: String(summary.count) },
+        {
+          label: "Average",
+          value:
+            summary.avgSystolic != null && summary.avgDiastolic != null
+              ? `${summary.avgSystolic}/${summary.avgDiastolic}`
+              : "—",
+        },
+        { label: "Lowest", value: range(summary.lowest) },
+        { label: "Highest", value: range(summary.highest) },
+        ...(summary.avgHeartRate != null ? [{ label: "Average heart rate", value: `${summary.avgHeartRate} bpm` }] : []),
+      ],
+    });
+    if (summary.byPeriod.length > 0) {
+      sections.push({
+        key: `period-${person.memberId}`,
+        label: `${prefix}By time of day`,
+        tables: [
+          {
+            key: `period-${person.memberId}`,
+            label: "By time of day",
+            columns: ["Time of day", "Readings", "Average"],
+            rows: summary.byPeriod.map((p) => [
+              p.period,
+              p.count,
+              p.avgSystolic != null && p.avgDiastolic != null ? `${p.avgSystolic}/${p.avgDiastolic}` : "—",
+            ]),
+          },
+        ],
+      });
+    }
+    sections.push({
+      key: `readings-${person.memberId}`,
+      label: `${prefix}Readings`,
+      tables: [
+        {
+          key: `readings-${person.memberId}`,
+          label: "Readings",
+          columns: ["Date", "Time", "Blood pressure", "Heart rate"],
+          rows: person.readings.map((r) => [
+            formatDateOnlyLabel(r.date),
+            r.timeLabel,
+            `${r.systolic}/${r.diastolic}`,
+            r.heartRate != null ? `${r.heartRate} bpm` : null,
+          ]),
+        },
+      ],
+    });
+  }
+  if (sections.length === 0) {
+    sections.push({
+      key: "summary",
+      label: "Summary",
+      stats: [{ label: "Readings", value: "0" }],
+      emptyMessage: "No blood pressure readings were logged in this range.",
+    });
+  }
+  return {
+    title: `Blood pressure — ${report.from} to ${report.to}`,
+    module: "health",
+    kind: "blood-pressure",
+    generatedAt: new Date().toISOString(),
+    timezone: report.timezone,
     sections,
   };
 }

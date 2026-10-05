@@ -1,3 +1,4 @@
+import { CheckReportRangeError } from "../lib/health-check-reports.js";
 import { Hono } from "hono";
 import type { Env } from "@domi-ops/config";
 import { googlePickerAppId } from "@domi-ops/config";
@@ -126,6 +127,7 @@ export function reportRoutes(db: Database, env: Env) {
       if (e instanceof Error && e.message === "range_too_many_weeks") {
         return c.json({ error: "range_too_many_weeks", maxWeeks: MAX_WEEKS_IN_RANGE }, 400);
       }
+      if (e instanceof CheckReportRangeError) return c.json({ error: e.code }, 400);
       throw e;
     }
   });
@@ -196,6 +198,7 @@ export function reportRoutes(db: Database, env: Env) {
       if (e instanceof Error && e.message === "invalid_variant") {
         return c.json({ error: "invalid_variant" }, 400);
       }
+      if (e instanceof CheckReportRangeError) return c.json({ error: e.code }, 400);
       throw e;
     }
 

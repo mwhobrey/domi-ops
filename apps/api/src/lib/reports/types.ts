@@ -11,6 +11,8 @@ export type ReportKind =
   | "exercise"
   | "pain"
   | "nutrition"
+  | "check-adherence"
+  | "blood-pressure"
   | "school-grades"
   | "school-open-work"
   | "school-transcript";
@@ -82,6 +84,8 @@ export const REPORT_KIND_LABELS: Record<ReportKind, string> = {
   exercise: "Exercise",
   pain: "Pain",
   nutrition: "Nutrition",
+  "check-adherence": "Check adherence",
+  "blood-pressure": "Blood pressure",
   "school-grades": "Grade summary",
   "school-open-work": "Open work",
   "school-transcript": "Transcript",
@@ -122,5 +126,15 @@ export const HEALTH_REPORT_KINDS: { id: ReportKind; label: string; description: 
     id: "nutrition",
     label: "Nutrition",
     description: "Daily calorie and macro totals",
+  },
+  {
+    id: "check-adherence",
+    label: "Check adherence",
+    description: "How many scheduled health checks were done, skipped or missed",
+  },
+  {
+    id: "blood-pressure",
+    label: "Blood pressure",
+    description: "Readings with averages, lowest and highest, and time of day",
   },
 ];

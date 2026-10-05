@@ -8,6 +8,7 @@ import { buildChoreReports } from "../chores-karma.js";
 import { buildExpenseReports } from "../expenses.js";
 import { buildGoalsReport } from "../goals-report.js";
 import { buildHealthReports } from "../health-reports.js";
+import { buildBloodPressureReport, buildCheckAdherenceReport } from "../health-check-reports.js";
 import { isHouseholdModuleEnabled } from "../household-modules.js";
 import { householdTodayIsoDate } from "../household-time.js";
 import { buildShoppingReports } from "../shopping.js";
@@ -31,6 +32,8 @@ import {
   healthExerciseToCanonical,
   healthPainToCanonical,
   healthNutritionToCanonical,
+  checkAdherenceToCanonical,
+  bloodPressureToCanonical,
   schoolGradesToCanonical,
   schoolOpenWorkToCanonical,
   schoolTranscriptToCanonical,
@@ -190,6 +193,24 @@ export async function buildCanonicalReport(
     return report ? weeklyToCanonical(report) : null;
   }
 
+  if (module === "health" && (kind === "check-adherence" || kind === "blood-pressure")) {
+    const to = params.to?.trim() || (await householdTodayIsoDate(db, auth.householdId));
+    const fromDefault = new Date(`${to}T12:00:00.000Z`);
+    fromDefault.setUTCDate(fromDefault.getUTCDate() - 30);
+    const from = params.from?.trim() || fromDefault.toISOString().slice(0, 10);
+    const reportAuth = {
+      householdId: auth.householdId,
+      userId: auth.userId,
+      memberId: auth.memberId ?? "",
+      role: auth.role ?? "member",
+    };
+    const memberId = params.memberId?.trim() || null;
+    // A bad range is the caller's mistake, not a missing report: let the route answer it.
+    return kind === "check-adherence"
+      ? checkAdherenceToCanonical(await buildCheckAdherenceReport(db, env, reportAuth, from, to, { memberId }))
+      : bloodPressureToCanonical(await buildBloodPressureReport(db, env, reportAuth, from, to, { memberId }));
+  }
+
   if (module === "health") {
     const isToday = kind === "medications-today";
     const isList = kind === "medication-list";
@@ -312,6 +333,8 @@ const MODULE_KINDS: Record<ReportModule, ReportKind[]> = {
     "exercise",
     "pain",
     "nutrition",
+    "check-adherence",
+    "blood-pressure",
   ],
 };
 
