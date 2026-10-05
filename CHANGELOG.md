@@ -8,6 +8,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+### Added
+
+- **Share cards for links** (WHO-405). Links to the marketing site and the app now unfurl with a proper 1200x630 card (logo, headline and current screens) in Slack, iMessage, Facebook and X, with per-page titles and URLs. The Health page has its own card. Cards live in `public/og` and can be rebuilt with `scripts/og`.
+
 ## [0.7.0] - 2026-10-05
 
 Scheduled health checks: recurring prompts to log blood pressure, weight, pain, meals or exercise, with reminders, groups, a Checks tab, dashboard and calendar presence, and reports. **Includes two migrations, `0085` and `0086`** (requires `npm run db:migrate`; no manual steps). The hosted deploy applies them automatically. See [docs/HEALTH_CHECKS.md](docs/HEALTH_CHECKS.md).

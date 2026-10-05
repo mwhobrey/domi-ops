@@ -1,12 +1,17 @@
 import { MARKETING_SCREENSHOTS } from "@domi-ops/marketing-ui";
 import { AudiencePage } from "@/components/AudiencePage";
 import { FAQ_ITEMS } from "@/lib/faq";
+import { pageSocial } from "@/lib/og";
+
+const TITLE = "Family medication and health tracker | Domi Ops";
+const DESCRIPTION =
+  "Grouped medication reminders, dose history, appointments, and vitals for everyone in your household. Encrypted at rest, shared only with who you choose.";
 
 export const metadata = {
-  title: "Family medication and health tracker | Domi Ops",
-  description:
-    "Grouped medication reminders, dose history, appointments, and vitals for everyone in your household. Encrypted at rest, shared only with who you choose.",
+  title: TITLE,
+  description: DESCRIPTION,
   alternates: { canonical: "/health" },
+  ...pageSocial({ title: TITLE, description: DESCRIPTION, path: "/health", image: "health" }),
 };
 
 // Reads NEXT_PUBLIC_* env vars at render time; see app/page.tsx.
