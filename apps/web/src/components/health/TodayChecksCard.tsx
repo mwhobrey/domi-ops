@@ -7,6 +7,7 @@ import {
   checkSlotBadge,
   isCheckSlotPending,
   pendingRows,
+  slotEditableEvent,
   summarizeCheckRows,
   type CheckGroupCard,
 } from "./health-check-helpers";
@@ -36,6 +37,7 @@ type Actions = {
   onLog: (row: CheckSlotRow) => void;
   onSkip: (row: CheckSlotRow) => void;
   onUndo: (row: CheckSlotRow) => void;
+  onEdit: (event: HealthEvent) => void;
 };
 
 /** One slot of one check: where it stands, what was recorded, and what can be done about it. */
@@ -48,6 +50,7 @@ function CheckSlotLine({ row, actions, nested = false }: { row: CheckSlotRow; ac
   const highlighted = actions.highlightKeys.has(key);
   const busy = actions.busyKey === key;
   const allowed = actions.canAct(row);
+  const editable = allowed ? slotEditableEvent(row, actions.events) : undefined;
   return (
     <HealthRow
       rowRef={highlighted ? actions.highlightRef : undefined}
@@ -74,6 +77,11 @@ function CheckSlotLine({ row, actions, nested = false }: { row: CheckSlotRow; ac
                 Skip
               </Button>
             </>
+          ) : null}
+          {editable ? (
+            <Button size="sm" variant="secondary" disabled={busy} onClick={() => actions.onEdit(editable)}>
+              Edit
+            </Button>
           ) : null}
           {allowed && !pending && row.slot.logId ? (
             <Button size="sm" variant="secondary" disabled={busy} onClick={() => actions.onUndo(row)}>
@@ -155,6 +163,7 @@ export function TodayChecksCard({
   onLog,
   onSkip,
   onUndo,
+  onEdit,
   onLogNext,
   loggingNext,
 }: {
@@ -172,6 +181,8 @@ export function TodayChecksCard({
   onLog: (row: CheckSlotRow) => void;
   onSkip: (row: CheckSlotRow) => void;
   onUndo: (row: CheckSlotRow) => void;
+  /** Open the entry that answered a slot, to correct what was recorded. */
+  onEdit: (event: HealthEvent) => void;
   /** Walk through these rows one log sheet after another. */
   onLogNext: (rows: CheckSlotRow[]) => void;
   loggingNext: boolean;
@@ -179,7 +190,7 @@ export function TodayChecksCard({
   const allRows = [...rows, ...groupCards.flatMap((c) => c.rows)];
   if (!loading && allRows.length === 0) return null;
   const summary = summarizeCheckRows(allRows);
-  const actions: Actions = { events, highlightKeys, highlightRef, busyKey, canAct, onLog, onSkip, onUndo };
+  const actions: Actions = { events, highlightKeys, highlightRef, busyKey, canAct, onLog, onSkip, onUndo, onEdit };
 
   const entries: Entry[] = [
     ...rows.map((row): Entry => ({ kind: "row", at: row.slot.scheduledAt, row })),

@@ -145,6 +145,34 @@ export function findDeepLinkedRow(
   return mine.find((r) => isCheckSlotPending(r.slot.status));
 }
 
+/**
+ * Which scheduled slots each entry answers, as "Ally BP · 12:00 PM" labels keyed by entry id, so the
+ * Log tab can say that an ad-hoc reading counted for a check. Only slots in `slotsByCheck` are known.
+ */
+export function slotCountsByEvent(
+  checks: readonly HealthCheck[],
+  slotsByCheck: ReadonlyMap<string, readonly CheckSlot[]>,
+  formatTime: (iso: string) => string,
+): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const c of checks) {
+    for (const s of slotsByCheck.get(c.id) ?? []) {
+      if (!s.eventId) continue;
+      const labels = out.get(s.eventId) ?? [];
+      labels.push(`${c.name} · ${formatTime(s.scheduledAt)}`);
+      out.set(s.eventId, labels);
+    }
+  }
+  return out;
+}
+
+/** The entry that answered a done slot, if the viewer can edit it (a skipped or waiting slot has none). */
+export function slotEditableEvent(row: CheckSlotRow, events: readonly HealthEvent[]): HealthEvent | undefined {
+  if (isCheckSlotPending(row.slot.status) || !row.slot.eventId) return undefined;
+  const event = events.find((e) => e.id === row.slot.eventId);
+  return event && event.canEdit !== false ? event : undefined;
+}
+
 /** "BP 128/82 · HR 72" style values for a done row, from the entry that completed it. */
 export function checkRowValues(event: HealthEvent | undefined): string | null {
   if (!event) return null;
