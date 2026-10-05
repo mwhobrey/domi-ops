@@ -764,6 +764,10 @@ export const healthCheckGroupReminderSent = pgTable(
 
 // ---------------------------------------------------------------------------------------------
 // Medication supply and pharmacies (WHO-413, migration 0087)
+//
+// The CHECK constraints, the append-only trigger on supply revisions and the row level security
+// policies live in the migration SQL, which is the source of truth: this repo's migrations are written
+// by hand (not generated from this file), and no table here declares checks. Keep them in step by hand.
 // ---------------------------------------------------------------------------------------------
 
 /**
