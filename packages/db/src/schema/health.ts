@@ -817,6 +817,8 @@ export const healthMedicationSupply = pgTable(
     requestedAt: timestamp("requested_at", { withTimezone: true }),
     requestedByUserId: uuid("requested_by_user_id").references(() => users.id, { onDelete: "set null" }),
     receivedAt: timestamp("received_at", { withTimezone: true }),
+    /** Client key of the latest change, so repeating that request returns its result (migration 0089). */
+    lastWriteKey: text("last_write_key"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
