@@ -19,8 +19,9 @@
     "@domi-ops/config": "*",
     "@domi-ops/crypto": "*",
     "@domi-ops/db": "*",
-    "bullmq": "^5.53.2",
+    "bullmq": "^6.3.11",
     "drizzle-orm": "^0.45.3",
+    "ioredis": "^5.11.1",
     "web-push": "^3.6.7"
   },
   "devDependencies": {
