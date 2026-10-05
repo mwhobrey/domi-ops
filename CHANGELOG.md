@@ -10,7 +10,7 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Added
 
-- **Share cards for links** (WHO-405). Links to the marketing site and the app now unfurl with a proper 1200x630 card (logo, headline and current screens) in Slack, iMessage, Facebook and X, with per-page titles and URLs. The Health page has its own card. Cards live in `public/og` and can be rebuilt with `scripts/og`.
+- **Share cards for links** (WHO-405). The marketing site and the app now carry a 1200x630 share card (logo, headline and current screens) and Open Graph and Twitter tags, with per-page titles and URLs. The Health page has its own card. The app builds its absolute image URL from the request, so it is right behind any proxy or custom domain. Cards live in `public/og` and can be rebuilt with `scripts/og`.
 
 ## [0.7.0] - 2026-10-05
 

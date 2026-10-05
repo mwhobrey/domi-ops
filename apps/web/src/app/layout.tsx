@@ -1,8 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
+import { headers } from "next/headers";
 import { NativeShellBoot } from "../components/NativeShellBoot";
 import { PwaRegister } from "../components/PwaRegister";
 import { SentryClientInit } from "../components/SentryClientInit";
+import { originFromHeaders } from "../lib/request-origin";
 import "./globals.css";
 
 const inter = Inter({
@@ -13,12 +15,22 @@ const inter = Inter({
 
 const OG_ALT = "Domi Ops, the household hub for homeschool families, with dashboard and calendar screens";
 
-export const metadata: Metadata = {
+// Resolved per request. Link unfurls (login, invites) need an absolute image URL, and the same
+// published image serves every deployment, so it cannot come from PUBLIC_APP_URL, which Next inlines
+// at build time. The page is already dynamic (it reads the session cookie).
+export async function generateMetadata(): Promise<Metadata> {
+  const h = await headers();
+  const origin = originFromHeaders((name) => h.get(name));
+  return {
+    ...baseMetadata,
+    ...(origin ? { metadataBase: new URL(origin) } : {}),
+  };
+}
+
+const baseMetadata: Metadata = {
   title: "Domi Ops",
   description: "Household operations — calendar, school, and daily life in one place.",
   applicationName: "Domi Ops",
-  // Link unfurls (login, invites) need an absolute image URL. Self-hosters set PUBLIC_APP_URL.
-  metadataBase: new URL(process.env.PUBLIC_APP_URL ?? "http://localhost:3000"),
   openGraph: {
     type: "website",
     siteName: "Domi Ops",
