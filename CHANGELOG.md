@@ -8,6 +8,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-05
+
+Scheduled health checks: recurring prompts to log blood pressure, weight, pain, meals or exercise, with reminders, groups, a Checks tab, dashboard and calendar presence, and reports. **Includes two migrations, `0085` and `0086`** (requires `npm run db:migrate`; no manual steps). The hosted deploy applies them automatically. See [docs/HEALTH_CHECKS.md](docs/HEALTH_CHECKS.md).
+
 ### Changed
 
 - **Log sheets start clean** (WHO-391). Opening a log sheet for a check, or moving to the next check in a Log next walk, no longer briefly shows the previous sheet's values or default rows before the check's template loads.
