@@ -33,6 +33,7 @@ import {
   loadHealthMedicationShareMap,
   managementGrantsForSubject,
 } from "./health-access.js";
+import { doseQuantityView, loadDoseQuantities, type DoseQuantityView } from "./health-dose-quantities.js";
 
 type HealthEventRow = typeof healthEvents.$inferSelect;
 type HealthMedicationRow = typeof healthMedications.$inferSelect;
@@ -473,6 +474,8 @@ export function serializeHealthMedication(
     canLog?: boolean;
     /** Groups this medication belongs to (many-to-many — see healthMedicationGroupMembers). */
     groupIds?: string[];
+    /** Pills per dose time for the pill organizer, and the gaps in them (WHO-417). Omitted when absent. */
+    doseQuantities?: DoseQuantityView;
   },
 ) {
   return {
@@ -497,6 +500,7 @@ export function serializeHealthMedication(
     sharedWithMe: extras?.sharedWithMe,
     canEdit: extras?.canEdit,
     canLog: extras?.canLog,
+    ...(extras?.doseQuantities ?? {}),
   };
 }
 
@@ -576,6 +580,7 @@ export async function enrichHealthMedications(
   const shareMap = await loadHealthMedicationShareMap(db, privateIds);
   const groupMembershipMap = await loadHealthMedicationGroupMembershipMap(db, rows.map((r) => r.id));
   const aclBySubject = await loadHealthAclBySubjectForGrantee(db, auth.householdId, auth.memberId);
+  const quantitiesByMed = await loadDoseQuantities(db, rows.map((r) => r.id));
   return rows.map((row) => {
     const sharedMemberIds = shareMap.get(row.id) ?? [];
     const isOwnedByMe = row.createdByUserId === auth.userId;
@@ -597,6 +602,7 @@ export async function enrichHealthMedications(
       canEdit,
       canLog,
       groupIds: groupMembershipMap.get(row.id) ?? [],
+      doseQuantities: doseQuantityView(quantitiesByMed.get(row.id), row.scheduleKind, row.scheduleJson),
     });
   });
 }

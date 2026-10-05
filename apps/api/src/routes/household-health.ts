@@ -90,6 +90,15 @@ import {
 import { recordMedicationEnabledChange } from "../lib/health-med-pauses.js";
 import { unlinkCheckLogsForEvent } from "../lib/health-check-logging.js";
 import { isUniqueViolationError } from "../lib/db-errors.js";
+import {
+  assertQuantitiesFitSchedule,
+  doseQuantityView,
+  loadDoseQuantities,
+  parseDoseQuantities,
+  replaceDoseQuantities,
+  type DoseQuantities,
+} from "../lib/health-dose-quantities.js";
+import { SupplyValidationError } from "../lib/health-supply-validation.js";
 
 function encryptionErrorResponse(c: { json: (body: unknown, status?: number) => Response }, e: unknown) {
   if (e instanceof HealthEncryptionError) {
@@ -1258,6 +1267,8 @@ export function householdHealthRoutes(db: Database, env: Env) {
       enabled?: boolean;
       visibility?: string;
       sharedMemberIds?: string[];
+      /** Pills per dose time, e.g. { "08:00": 1.5 }; whole quarters only (WHO-417). */
+      doseQuantities?: Record<string, number>;
     }>();
 
     if (!body.memberId || !body.name?.trim()) {
@@ -1270,6 +1281,16 @@ export function householdHealthRoutes(db: Database, env: Env) {
       return c.json({ error: "forbidden" }, 403);
     }
 
+    let doseQuantities: DoseQuantities | undefined;
+    if (body.doseQuantities !== undefined) {
+      try {
+        doseQuantities = parseDoseQuantities(body.doseQuantities);
+      } catch (e) {
+        if (e instanceof SupplyValidationError) return c.json({ error: e.code }, 400);
+        throw e;
+      }
+    }
+
     try {
       let scheduleMeta: { scheduleKind: "scheduled" | "prn" | "otc" | "interval"; scheduleJson: string };
       try {
@@ -1279,6 +1300,14 @@ export function householdHealthRoutes(db: Database, env: Env) {
           { error: e instanceof Error ? e.message : "invalid_schedule" },
           400,
         );
+      }
+      if (doseQuantities) {
+        try {
+          assertQuantitiesFitSchedule(doseQuantities, scheduleMeta.scheduleKind, scheduleMeta.scheduleJson);
+        } catch (e) {
+          if (e instanceof SupplyValidationError) return c.json({ error: e.code }, 400);
+          throw e;
+        }
       }
 
       const enc = encryptHealthTextFields(env, {
@@ -1310,6 +1339,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
         .returning();
       // Created paused: open a pause now so adherence doesn't count doses before it's resumed.
       await recordMedicationEnabledChange(db, row.id, true, row.enabled);
+      if (doseQuantities) await replaceDoseQuantities(db, row.id, doseQuantities);
 
       let sharedMemberIds: string[] = [];
       if (visibility === "private" && Array.isArray(body.sharedMemberIds)) {
@@ -1329,6 +1359,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
             isOwnedByMe: true,
             canEdit: true,
             canLog: true,
+            doseQuantities: doseQuantityView(doseQuantities, row.scheduleKind, row.scheduleJson),
           }),
         },
         201,
@@ -1380,7 +1411,19 @@ export function householdHealthRoutes(db: Database, env: Env) {
        *  health_medication_group_members). Leaving one specific group goes through
        *  DELETE /medication-groups/:id/members/:medicationId instead. */
       leaveAllGroups?: boolean;
+      /** Replaces ALL pills-per-dose-time (WHO-417); {} clears them, omitted leaves them alone. */
+      doseQuantities?: Record<string, number>;
     }>();
+
+    let doseQuantities: DoseQuantities | undefined;
+    if (body.doseQuantities !== undefined) {
+      try {
+        doseQuantities = parseDoseQuantities(body.doseQuantities);
+      } catch (e) {
+        if (e instanceof SupplyValidationError) return c.json({ error: e.code }, 400);
+        throw e;
+      }
+    }
 
     try {
       const patch: Partial<typeof healthMedications.$inferInsert> = { updatedAt: new Date() };
@@ -1422,6 +1465,18 @@ export function householdHealthRoutes(db: Database, env: Env) {
         }
         patch.memberId = body.memberId;
       }
+      if (doseQuantities) {
+        try {
+          assertQuantitiesFitSchedule(
+            doseQuantities,
+            patch.scheduleKind ?? existing.scheduleKind,
+            patch.scheduleJson ?? existing.scheduleJson,
+          );
+        } catch (e) {
+          if (e instanceof SupplyValidationError) return c.json({ error: e.code }, 400);
+          throw e;
+        }
+      }
 
       const [row] = await db
         .update(healthMedications)
@@ -1429,6 +1484,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
         .where(eq(healthMedications.id, id))
         .returning();
       await recordMedicationEnabledChange(db, row.id, existing.enabled, row.enabled);
+      if (doseQuantities) await replaceDoseQuantities(db, row.id, doseQuantities);
       // MyAllyFile med sync (ADR 006): flag the link(s); a no-op unless the member is linked.
       await markMyallyfileSyncNeeded(db, row.memberId);
       if (existing.memberId !== row.memberId) await markMyallyfileSyncNeeded(db, existing.memberId);
@@ -1454,12 +1510,14 @@ export function householdHealthRoutes(db: Database, env: Env) {
         row.visibility === "private" ? [row.id] : [],
       );
       const groupMembershipMap = await loadHealthMedicationGroupMembershipMap(db, [row.id]);
+      const quantities = doseQuantities ?? (await loadDoseQuantities(db, [row.id])).get(row.id);
       return c.json({
         medication: serializeHealthMedication(row, env, {
           sharedMemberIds: shareMap.get(row.id),
           isOwnedByMe: row.createdByUserId === auth.userId,
           canEdit: true,
           groupIds: groupMembershipMap.get(row.id) ?? [],
+          doseQuantities: doseQuantityView(quantities, row.scheduleKind, row.scheduleJson),
         }),
       });
     } catch (e) {

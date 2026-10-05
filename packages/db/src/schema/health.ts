@@ -8,6 +8,7 @@ import {
   pgTable,
   primaryKey,
   text,
+  time,
   timestamp,
   unique,
   uniqueIndex,
@@ -758,5 +759,354 @@ export const healthCheckGroupReminderSent = pgTable(
     uniqueIndex("health_check_group_reminder_sent_nosub_unique")
       .on(t.groupId, t.scheduledAt, t.offsetMinutes, t.userId)
       .where(sql`${t.subscriptionId} is null`),
+  ],
+);
+
+// ---------------------------------------------------------------------------------------------
+// Medication supply and pharmacies (WHO-413, migration 0087)
+//
+// The CHECK constraints, the append-only trigger on supply revisions and the row level security
+// policies live in the migration SQL, which is the source of truth: this repo's migrations are written
+// by hand (not generated from this file), and no table here declares checks. Keep them in step by hand.
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * A pharmacy in the household's shared directory. Sensitive text is stored encrypted by the app
+ * (health encryption helpers). Archived, never hard-deleted, so refill history keeps its reference.
+ */
+export const healthPharmacies = pgTable(
+  "health_pharmacies",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    householdId: uuid("household_id")
+      .notNull()
+      .references(() => households.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    address: text("address"),
+    phone: text("phone"),
+    website: text("website"),
+    notes: text("notes"),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("health_pharmacies_household_idx").on(t.householdId, t.archivedAt)],
+);
+
+/**
+ * One row per medication once anything about its supply is set. `runsOutOn` is the first date
+ * without supply (a user-confirmed estimate, never live inventory: dose logs do not touch it).
+ * `revision` counts estimates; `version` counts any change, for optimistic concurrency.
+ */
+export const healthMedicationSupply = pgTable(
+  "health_medication_supply",
+  {
+    medicationId: uuid("medication_id")
+      .primaryKey()
+      .references(() => healthMedications.id, { onDelete: "cascade" }),
+    pharmacyId: uuid("pharmacy_id").references(() => healthPharmacies.id, { onDelete: "set null" }),
+    /** Overrides health_supply_settings.default_lead_days for this medication; null = use the person's. */
+    leadDays: integer("lead_days"),
+    runsOutOn: date("runs_out_on"),
+    estimatedOn: date("estimated_on"),
+    outsideDays: integer("outside_days"),
+    organizerDaysCounted: integer("organizer_days_counted"),
+    revision: integer("revision").notNull().default(0),
+    version: integer("version").notNull().default(1),
+    requestedAt: timestamp("requested_at", { withTimezone: true }),
+    requestedByUserId: uuid("requested_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    receivedAt: timestamp("received_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("health_medication_supply_pharmacy_idx").on(t.pharmacyId).where(sql`${t.pharmacyId} is not null`),
+    index("health_medication_supply_runs_out_idx").on(t.runsOutOn).where(sql`${t.runsOutOn} is not null`),
+  ],
+);
+
+export const supplyRevisionSourceValues = ["fill", "manual", "receipt", "confirm"] as const;
+export type SupplyRevisionSource = (typeof supplyRevisionSourceValues)[number];
+
+/** Append-only history of every supply estimate. */
+export const healthMedicationSupplyRevisions = pgTable(
+  "health_medication_supply_revisions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    medicationId: uuid("medication_id")
+      .notNull()
+      .references(() => healthMedications.id, { onDelete: "cascade" }),
+    revision: integer("revision").notNull(),
+    source: text("source").$type<SupplyRevisionSource>().notNull(),
+    runsOutOn: date("runs_out_on").notNull(),
+    estimatedOn: date("estimated_on").notNull(),
+    outsideDays: integer("outside_days").notNull(),
+    organizerDaysCounted: integer("organizer_days_counted").notNull(),
+    /** The filling session that produced it (source = fill). The foreign key arrived with migration 0088. */
+    sessionId: uuid("session_id").references(() => healthOrganizerSessions.id, { onDelete: "set null" }),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique("health_medication_supply_revisions_unique").on(t.medicationId, t.revision)],
+);
+
+export const refillEventKindValues = ["requested", "received", "request_cleared"] as const;
+export type RefillEventKind = (typeof refillEventKindValues)[number];
+
+/** What was asked of a pharmacy and when; backs Requested, its request date and the overdue list. */
+export const healthMedicationRefillEvents = pgTable(
+  "health_medication_refill_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    medicationId: uuid("medication_id")
+      .notNull()
+      .references(() => healthMedications.id, { onDelete: "cascade" }),
+    kind: text("kind").$type<RefillEventKind>().notNull(),
+    pharmacyId: uuid("pharmacy_id").references(() => healthPharmacies.id, { onDelete: "set null" }),
+    /** The estimate revision a receipt produced; null for requests. */
+    supplyRevision: integer("supply_revision"),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("health_medication_refill_events_med_idx").on(t.medicationId, t.createdAt)],
+);
+
+/** Person-wide default refill lead time in days. Lives apart from the organizer plan on purpose. */
+export const healthSupplySettings = pgTable(
+  "health_supply_settings",
+  {
+    memberId: uuid("member_id")
+      .primaryKey()
+      .references(() => householdMembers.id, { onDelete: "cascade" }),
+    householdId: uuid("household_id")
+      .notNull()
+      .references(() => households.id, { onDelete: "cascade" }),
+    defaultLeadDays: integer("default_lead_days").notNull().default(7),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("health_supply_settings_household_idx").on(t.householdId)],
+);
+
+// ---------------------------------------------------------------------------------------------
+// Pill organizers and filling sessions (WHO-414, migration 0088)
+// ---------------------------------------------------------------------------------------------
+
+export const organizerScheduleKindValues = ["every_n_days", "monthly_date"] as const;
+export type OrganizerScheduleKind = (typeof organizerScheduleKindValues)[number];
+
+/**
+ * One live plan per person: how they fill an organizer, how often, and who is reminded. Archived,
+ * never deleted, so sessions and the supply they produced keep their history.
+ */
+export const healthOrganizerPlans = pgTable(
+  "health_organizer_plans",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    householdId: uuid("household_id")
+      .notNull()
+      .references(() => households.id, { onDelete: "cascade" }),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => householdMembers.id, { onDelete: "cascade" }),
+    scheduleKind: text("schedule_kind").$type<OrganizerScheduleKind>().notNull(),
+    everyN: integer("every_n"),
+    monthlyDay: integer("monthly_day"),
+    /** The household-local day "every N days" counts from. */
+    anchorDate: date("anchor_date").notNull(),
+    fillLengthDays: integer("fill_length_days").notNull().default(31),
+    /** Household-local time of day for the fill reminder. */
+    reminderTime: time("reminder_time").notNull().default("09:00"),
+    version: integer("version").notNull().default(1),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("health_organizer_plans_member_active_unique")
+      .on(t.memberId)
+      .where(sql`${t.archivedAt} is null`),
+    index("health_organizer_plans_household_idx").on(t.householdId),
+  ],
+);
+
+/** Who is reminded about a plan's fill appointments. */
+export const healthOrganizerPlanCaregivers = pgTable(
+  "health_organizer_plan_caregivers",
+  {
+    planId: uuid("plan_id")
+      .notNull()
+      .references(() => healthOrganizerPlans.id, { onDelete: "cascade" }),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => householdMembers.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.planId, t.memberId] })],
+);
+
+export const healthOrganizerCompartments = pgTable(
+  "health_organizer_compartments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    planId: uuid("plan_id")
+      .notNull()
+      .references(() => healthOrganizerPlans.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    position: integer("position").notNull(),
+  },
+  (t) => [
+    unique("health_organizer_compartments_order_unique").on(t.planId, t.position),
+    // Target of the composite FK from the time map: a time maps only to a compartment of its own plan.
+    unique("health_organizer_compartments_id_plan_unique").on(t.id, t.planId),
+  ],
+);
+
+/** Dose clock time ("08:00") to compartment. Groups are only a UI shortcut that assigns many times. */
+export const healthOrganizerTimeMap = pgTable(
+  "health_organizer_time_map",
+  {
+    planId: uuid("plan_id").notNull(),
+    doseTime: time("dose_time").notNull(),
+    compartmentId: uuid("compartment_id").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.planId, t.doseTime] }),
+    foreignKey({
+      name: "health_organizer_time_map_compartment_fk",
+      columns: [t.compartmentId, t.planId],
+      foreignColumns: [healthOrganizerCompartments.id, healthOrganizerCompartments.planId],
+    }).onDelete("cascade"),
+  ],
+);
+
+/**
+ * Pills per scheduled dose time, in integer QUARTERS (0.25 = 1, 1.5 = 6) so fractions sum exactly.
+ * Never inferred from the dosage text.
+ */
+export const healthMedicationDoseQuantities = pgTable(
+  "health_medication_dose_quantities",
+  {
+    medicationId: uuid("medication_id")
+      .notNull()
+      .references(() => healthMedications.id, { onDelete: "cascade" }),
+    doseTime: time("dose_time").notNull(),
+    quantityQuarters: integer("quantity_quarters").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.medicationId, t.doseTime] })],
+);
+
+export const organizerOutcomeValues = ["pending", "done", "skipped", "missed", "rescheduled"] as const;
+export type OrganizerOutcome = (typeof organizerOutcomeValues)[number];
+
+/** A fill appointment generated from the plan's schedule; created lazily, one per nominal date. */
+export const healthOrganizerOccurrences = pgTable(
+  "health_organizer_occurrences",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    planId: uuid("plan_id")
+      .notNull()
+      .references(() => healthOrganizerPlans.id, { onDelete: "cascade" }),
+    occurrenceDate: date("occurrence_date").notNull(),
+    outcome: text("outcome").$type<OrganizerOutcome>().notNull().default("pending"),
+    /** Moves this occurrence only; the plan's schedule is never shifted. */
+    rescheduledTo: date("rescheduled_to"),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    note: text("note"),
+    outcomeChangedAt: timestamp("outcome_changed_at", { withTimezone: true }),
+    outcomeChangedByUserId: uuid("outcome_changed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    version: integer("version").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique("health_organizer_occurrences_unique").on(t.planId, t.occurrenceDate)],
+);
+
+/** History of outcome changes. */
+export const healthOrganizerOccurrenceEvents = pgTable(
+  "health_organizer_occurrence_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    occurrenceId: uuid("occurrence_id")
+      .notNull()
+      .references(() => healthOrganizerOccurrences.id, { onDelete: "cascade" }),
+    fromOutcome: text("from_outcome").$type<OrganizerOutcome>().notNull(),
+    toOutcome: text("to_outcome").$type<OrganizerOutcome>().notNull(),
+    note: text("note"),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("health_organizer_occurrence_events_idx").on(t.occurrenceId, t.createdAt)],
+);
+
+export const organizerSessionStatusValues = ["open", "finished", "abandoned"] as const;
+export type OrganizerSessionStatus = (typeof organizerSessionStatusValues)[number];
+
+/**
+ * A filling session. `snapshotJson` (encrypted) freezes the instructions it started with and
+ * `snapshotHash` hashes the inputs behind them: when today's inputs differ, further filling needs a
+ * review first, and completed fills are never discarded or repeated.
+ */
+export const healthOrganizerSessions = pgTable(
+  "health_organizer_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    planId: uuid("plan_id")
+      .notNull()
+      .references(() => healthOrganizerPlans.id, { onDelete: "cascade" }),
+    occurrenceId: uuid("occurrence_id").references(() => healthOrganizerOccurrences.id, { onDelete: "set null" }),
+    coverageStart: date("coverage_start").notNull(),
+    fillLengthDays: integer("fill_length_days").notNull(),
+    status: text("status").$type<OrganizerSessionStatus>().notNull().default("open"),
+    version: integer("version").notNull().default(1),
+    snapshotJson: text("snapshot_json").notNull(),
+    snapshotHash: text("snapshot_hash").notNull(),
+    startedByUserId: uuid("started_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    abandonedAt: timestamp("abandoned_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("health_organizer_sessions_id_plan_unique").on(t.id, t.planId),
+    // One open session per plan, shared by everyone working on it.
+    uniqueIndex("health_organizer_sessions_open_unique")
+      .on(t.planId)
+      .where(sql`${t.status} = 'open'`),
+    index("health_organizer_sessions_plan_idx").on(t.planId, t.startedAt),
+  ],
+);
+
+/**
+ * The date range one save filled for one medication. Coverage is the union of the ranges that are
+ * not undone, across sessions; an abandoned session's pills are still in the box.
+ */
+export const healthOrganizerSessionFills = pgTable(
+  "health_organizer_session_fills",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => healthOrganizerSessions.id, { onDelete: "cascade" }),
+    medicationId: uuid("medication_id")
+      .notNull()
+      .references(() => healthMedications.id, { onDelete: "cascade" }),
+    coveredFrom: date("covered_from").notNull(),
+    coveredTo: date("covered_to").notNull(),
+    /** A repeated submission carries the same key and gets the first result back. */
+    idempotencyKey: text("idempotency_key").notNull(),
+    outsideDays: integer("outside_days"),
+    supplyRevision: integer("supply_revision"),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    undoneAt: timestamp("undone_at", { withTimezone: true }),
+  },
+  (t) => [
+    unique("health_organizer_session_fills_idempotency_unique").on(t.sessionId, t.idempotencyKey),
+    index("health_organizer_session_fills_session_med_idx").on(t.sessionId, t.medicationId),
+    index("health_organizer_session_fills_med_idx")
+      .on(t.medicationId)
+      .where(sql`${t.undoneAt} is null`),
   ],
 );

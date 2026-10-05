@@ -103,6 +103,43 @@ export {
   type FixedTimeSchedule,
   type ScheduledSlot,
 } from "./health-schedule.js";
+export {
+  MAX_ORGANIZER_DAYS,
+  addDaysUtc,
+  computePlacements,
+  formatQuarters,
+  type MedicationPlacementSummary,
+  type NotGuided,
+  type NotGuidedReason,
+  type OrganizerCompartment,
+  type OrganizerGroup,
+  type OrganizerMedication,
+  type Placement,
+  type PlacementInput,
+  type PlacementProblem,
+  type PlacementResult,
+} from "./health-organizer-placements.js";
+export {
+  DEFAULT_LEAD_DAYS,
+  MAX_LEAD_DAYS,
+  MAX_SUPPLY_DAYS,
+  REFILL_REMINDER_TIME,
+  computeSupply,
+  daysBetween,
+  daysRemaining,
+  effectiveLeadDays,
+  estimateNeedsConfirmation,
+  mergeRanges,
+  organizerCoverage,
+  refillDeadline,
+  refillReminderAt,
+  refillStatus,
+  type DateRange,
+  type OrganizerCoverage,
+  type RefillState,
+  type RefillStatus,
+  type SupplyEstimate,
+} from "./health-supply-arithmetic.js";
 export { scanSchoolReminders } from "./school-reminder-scan.js";
 export { scanHealthMedReminders } from "./health-med-reminder-scan.js";
 export { fanOutCheckReminderScans, fanOutMedReminderScans } from "./health-reminder-fanout.js";
