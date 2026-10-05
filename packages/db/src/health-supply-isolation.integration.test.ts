@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq, inArray, like } from "drizzle-orm";
-import { closeDb, createDb, withHouseholdContext, withWorkerScanContext } from "./index.js";
+import { closeDb, createDb, withHouseholdContext, withSystemContext, withWorkerScanContext } from "./index.js";
 import {
   healthMedicationRefillEvents,
   healthMedicationSupply,
@@ -10,6 +10,7 @@ import {
   healthSupplySettings,
   householdMembers,
   households,
+  users,
 } from "./schema/index.js";
 import type { Database } from "./client.js";
 
@@ -20,6 +21,7 @@ const maybeDescribe = TEST_URL ? describe : describe.skip;
 const RLS_VIOLATION = "42501";
 const UNIQUE_VIOLATION = "23505";
 const CHECK_VIOLATION = "23514";
+const RESTRICT_VIOLATION = "23001";
 
 /** SQLSTATE of the Postgres error behind a rejected write, or null when the write succeeded. */
 async function sqlState(write: Promise<unknown>): Promise<string | null> {
@@ -352,6 +354,61 @@ maybeDescribe("health supply tenant isolation (integration)", () => {
       expect(
         await sqlState(inAlpha((tx) => tx.insert(healthSupplySettings).values({ memberId: alpha.memberId, householdId: alpha.householdId }))),
       ).toBe(UNIQUE_VIOLATION);
+    });
+
+    describe("revisions are append-only", () => {
+      const revisionOutsideDays = async (medicationId: string) => {
+        const [row] = await inAlpha((tx) =>
+          tx.select({ n: healthMedicationSupplyRevisions.outsideDays }).from(healthMedicationSupplyRevisions).where(eq(healthMedicationSupplyRevisions.medicationId, medicationId)),
+        );
+        return row?.n;
+      };
+
+      it("refuses a direct update or delete, from a household or from the worker, and leaves the row as it was", async () => {
+        const where = eq(healthMedicationSupplyRevisions.medicationId, alpha.medicationId);
+        expect(await sqlState(inAlpha((tx) => tx.update(healthMedicationSupplyRevisions).set({ outsideDays: 99 }).where(where)))).toBe(RESTRICT_VIOLATION);
+        expect(await sqlState(inAlpha((tx) => tx.delete(healthMedicationSupplyRevisions).where(where)))).toBe(RESTRICT_VIOLATION);
+        expect(await sqlState(withWorkerScanContext(db, (tx) => tx.update(healthMedicationSupplyRevisions).set({ source: "manual" }).where(where)))).toBe(RESTRICT_VIOLATION);
+        expect(await sqlState(withWorkerScanContext(db, (tx) => tx.delete(healthMedicationSupplyRevisions).where(where)))).toBe(RESTRICT_VIOLATION);
+        expect(await revisionOutsideDays(alpha.medicationId)).toBe(10);
+      });
+
+      it("still lets new revisions in", async () => {
+        const med = await freshMedication();
+        const add = (revision: number) =>
+          inAlpha((tx) =>
+            tx.insert(healthMedicationSupplyRevisions).values({ medicationId: med, revision, source: "manual", runsOutOn: "2026-12-01", estimatedOn: "2026-10-05", outsideDays: 1, organizerDaysCounted: 0 }),
+          );
+        expect(await sqlState(add(1))).toBeNull();
+        expect(await sqlState(add(2))).toBeNull();
+      });
+
+      it("lets the foreign key actions through: deleting the medication removes its revisions", async () => {
+        const med = await freshMedication();
+        await inAlpha((tx) =>
+          tx.insert(healthMedicationSupplyRevisions).values({ medicationId: med, revision: 1, source: "manual", runsOutOn: "2026-12-01", estimatedOn: "2026-10-05", outsideDays: 1, organizerDaysCounted: 0 }),
+        );
+        expect(await sqlState(inAlpha((tx) => tx.delete(healthMedications).where(eq(healthMedications.id, med))))).toBeNull();
+        // Looked for from the worker, which sees every row: once the medication is gone, row level
+        // security (which joins to it) would hide a revision that had wrongly been left behind.
+        const left = await withWorkerScanContext(db, (tx) =>
+          tx.select({ id: healthMedicationSupplyRevisions.id }).from(healthMedicationSupplyRevisions).where(eq(healthMedicationSupplyRevisions.medicationId, med)),
+        );
+        expect(left).toHaveLength(0);
+      });
+
+      it("lets the foreign key actions through: deleting a user clears who made the estimate but keeps it", async () => {
+        const med = await freshMedication();
+        const [u] = await inAlpha((tx) => tx.insert(users).values({ username: `${marker}-estimator` }).returning({ id: users.id }));
+        await inAlpha((tx) =>
+          tx.insert(healthMedicationSupplyRevisions).values({ medicationId: med, revision: 1, source: "manual", runsOutOn: "2026-12-01", estimatedOn: "2026-10-05", outsideDays: 7, organizerDaysCounted: 0, createdByUserId: u!.id }),
+        );
+        expect(await sqlState(withSystemContext(db, (tx) => tx.delete(users).where(eq(users.id, u!.id))))).toBeNull();
+        const [row] = await inAlpha((tx) =>
+          tx.select({ who: healthMedicationSupplyRevisions.createdByUserId, n: healthMedicationSupplyRevisions.outsideDays }).from(healthMedicationSupplyRevisions).where(eq(healthMedicationSupplyRevisions.medicationId, med)),
+        );
+        expect(row).toEqual({ who: null, n: 7 });
+      });
     });
 
     it("cascades from the medication, and a deleted pharmacy only clears the references to it", async () => {
