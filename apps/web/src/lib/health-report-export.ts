@@ -1,5 +1,15 @@
 export type HealthReportGroupBy = "date" | "eventType" | "none";
 
+/**
+ * A date range of `days` days ending on `today` (an ISO date, the household's own today). Done on
+ * the calendar date itself rather than through a local Date, which can land on the wrong day near
+ * midnight in zones far from UTC.
+ */
+export function rangeEndingOn(today: string, days = 30): { from: string; to: string } {
+  const shifted = new Date(Date.parse(`${today}T12:00:00Z`) - days * 86_400_000);
+  return { from: shifted.toISOString().slice(0, 10), to: today };
+}
+
 export type HealthReportFocus =
   | "overview"
   | "medications"

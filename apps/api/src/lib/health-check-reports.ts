@@ -16,6 +16,7 @@ import { and, asc, eq, gte, lt } from "drizzle-orm";
 import { decryptHealthFieldOrPassthrough } from "./health-crypto.js";
 import { healthCheckVisibleWhere } from "./health-check-access.js";
 import { healthEventReportsVisibleWhere } from "./health-access.js";
+import { isUuid } from "./uuid.js";
 import { loadVitalsReadingsForEvents } from "./health-serialize.js";
 
 /** Longest range a check report covers; the slot logic walks every day in it. */
@@ -24,7 +25,7 @@ export const MAX_CHECK_REPORT_DAYS = 366;
 type Auth = { householdId: string; userId: string; memberId: string; role: string };
 
 export class CheckReportRangeError extends Error {
-  constructor(public readonly code: "invalid_date" | "end_before_start" | "range_too_large") {
+  constructor(public readonly code: "invalid_date" | "end_before_start" | "range_too_large" | "invalid_member") {
     super(code);
     this.name = "CheckReportRangeError";
   }
@@ -37,6 +38,14 @@ function isCalendarDate(value: string): boolean {
   if (!ISO_DATE.test(value)) return false;
   const d = new Date(`${value}T00:00:00Z`);
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
+}
+
+/**
+ * A person filter has to be a UUID before it reaches a query: Postgres rejects anything else, which
+ * would come back as a 500 instead of a 400.
+ */
+export function assertCheckReportMember(memberId: string | null | undefined): void {
+  if (memberId && !isUuid(memberId)) throw new CheckReportRangeError("invalid_member");
 }
 
 /** Validate a report range; the caller turns the error code into a 400. */
@@ -124,6 +133,7 @@ export async function buildCheckAdherenceReport(
   opts: { memberId?: string | null; now?: Date } = {},
 ): Promise<CheckAdherenceReport> {
   assertCheckReportRange(from, to);
+  assertCheckReportMember(opts.memberId);
   const [household] = await db
     .select({ timezone: households.timezone })
     .from(households)
@@ -330,6 +340,7 @@ export async function buildBloodPressureReport(
   opts: { memberId?: string | null } = {},
 ): Promise<BloodPressureReport> {
   assertCheckReportRange(from, to);
+  assertCheckReportMember(opts.memberId);
   const [household] = await db
     .select({ timezone: households.timezone })
     .from(households)

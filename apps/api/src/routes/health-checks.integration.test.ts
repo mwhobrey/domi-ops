@@ -1826,6 +1826,7 @@ maybeDescribe("health checks routes (integration)", () => {
         await expect(adherence("mom", "2026-13-40", today())).rejects.toMatchObject({ code: "invalid_date" });
         await expect(adherence("mom", today(), "2020-01-01")).rejects.toMatchObject({ code: "end_before_start" });
         await expect(adherence("mom", "2024-01-01", today())).rejects.toMatchObject({ code: "range_too_large" });
+        await expect(adherence("mom", today(), today(), "not-a-uuid")).rejects.toMatchObject({ code: "invalid_member" });
       });
     });
 
@@ -1891,6 +1892,7 @@ maybeDescribe("health checks routes (integration)", () => {
       it("is empty when nothing was logged, and refuses a bad range", async () => {
         expect((await bp("mom", "2026-01-01", "2026-01-02")).people).toEqual([]);
         await expect(bp("mom", "nope", DAY)).rejects.toBeInstanceOf(CheckReportRangeError);
+        await expect(bp("mom", DAY, DAY, "not-a-uuid")).rejects.toMatchObject({ code: "invalid_member" });
       });
     });
   });

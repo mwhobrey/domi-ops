@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   CheckReportRangeError,
   adherenceOutcome,
+  assertCheckReportMember,
   assertCheckReportRange,
   completionPercent,
   periodOfDay,
@@ -74,6 +75,18 @@ describe("assertCheckReportRange", () => {
     expect(code("2026-10-31", "2026-10-01")).toBe("end_before_start");
     expect(code("2025-01-01", "2026-10-01")).toBe("range_too_large");
     expect(code("2025-10-01", "2026-10-01")).toBeNull(); // 366 days inclusive
+  });
+});
+
+describe("assertCheckReportMember", () => {
+  it("lets a UUID or no filter through, and refuses anything else before it reaches a query", () => {
+    expect(() => assertCheckReportMember(undefined)).not.toThrow();
+    expect(() => assertCheckReportMember(null)).not.toThrow();
+    expect(() => assertCheckReportMember("")).not.toThrow();
+    expect(() => assertCheckReportMember("0b3c6f1e-5d2a-4f3b-9c1d-2e4f6a8b0c1d")).not.toThrow();
+    for (const bad of ["not-a-uuid", "123", "0b3c6f1e-5d2a-4f3b-9c1d-2e4f6a8b0c1dX"]) {
+      expect(() => assertCheckReportMember(bad), bad).toThrow(CheckReportRangeError);
+    }
   });
 });
 
