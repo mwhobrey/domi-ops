@@ -9,6 +9,7 @@ import {
   createDb,
   createScopedDb,
   healthCheckGroupMembers,
+  healthCheckGroups,
   healthCheckLogs,
   healthCheckPauses,
   healthCheckShares,
@@ -1893,6 +1894,140 @@ maybeDescribe("health checks routes (integration)", () => {
         expect((await bp("mom", "2026-01-01", "2026-01-02")).people).toEqual([]);
         await expect(bp("mom", "nope", DAY)).rejects.toBeInstanceOf(CheckReportRangeError);
         await expect(bp("mom", DAY, DAY, "not-a-uuid")).rejects.toMatchObject({ code: "invalid_member" });
+      });
+    });
+  });
+
+  describe("limits (WHO-394)", () => {
+    const capped = (n: number, memberKey: string) =>
+      Array.from({ length: n }, (_, i) => ({
+        householdId: people.mom!.householdId,
+        memberId: people[memberKey]!.memberId,
+        name: `cap ${i}`,
+        visibility: "household" as const,
+        eventType: "vitals" as const,
+        templateJson: JSON.stringify({ metrics: ["weight"] }),
+        scheduleJson: JSON.stringify({ times: ["08:00"] }),
+      }));
+    const clearCapped = async (memberKey: string) =>
+      withHouseholdContext(baseDb, people.mom!.householdId, async (tx) => {
+        await tx.delete(healthCheckGroups).where(eq(healthCheckGroups.memberId, people[memberKey]!.memberId));
+        await tx.delete(healthChecks).where(eq(healthChecks.memberId, people[memberKey]!.memberId));
+      });
+    afterEach(() => clearCapped("dad"));
+
+    const create = (memberKey: string, over: Record<string, unknown> = {}) =>
+      call("mom", "POST", "/checks", {
+        memberId: people[memberKey]!.memberId,
+        name: "limits",
+        eventType: "vitals",
+        template: { metrics: ["weight"] },
+        schedule: { times: ["08:00"] },
+        ...over,
+      });
+
+    describe("what a schedule may contain", () => {
+      it("refuses a time that is not a clock time", async () => {
+        for (const bad of ["25:00", "8:00", "noon", "08:61"]) {
+          const res = await create("ally", { schedule: { times: ["08:00", bad] } });
+          expect(res.status, bad).toBe(400);
+          expect(res.json.error, bad).toBe("invalid_time");
+        }
+      });
+
+      it("refuses more than a day's worth of times, but not repeats of one", async () => {
+        // 49 different valid times, one more than a day may have.
+        const many = Array.from({ length: 49 }, (_, i) => {
+          const minutes = i * 20;
+          return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+        });
+        const res = await create("ally", { schedule: { times: many } });
+        expect(res.status).toBe(400);
+        expect(res.json.error).toBe("too_many_times");
+
+        const repeats = await create("ally", { schedule: { times: Array.from({ length: 300 }, () => "08:00") } });
+        expect(repeats.status, JSON.stringify(repeats.json)).toBe(201);
+        expect(repeats.json.check.schedule.times).toEqual(["08:00"]);
+      });
+
+      it("stores times in order and without repeats", async () => {
+        const res = await create("ally", { schedule: { times: ["20:00", "08:00:30", "08:00", "12:15"] } });
+        expect(res.status).toBe(201);
+        expect(res.json.check.schedule.times).toEqual(["08:00", "12:15", "20:00"]);
+      });
+
+      it("applies the same rules to a group and to an edit", async () => {
+        const check = await makeCheck("mom");
+        const badGroup = await call("mom", "POST", "/check-groups", {
+          memberId: people.ally!.memberId,
+          name: "limits group",
+          schedule: { times: ["25:00"] },
+        });
+        expect(badGroup.json.error).toBe("invalid_time");
+        const badEdit = await call("mom", "PATCH", `/checks/${check.id}`, { schedule: { times: ["nope"] } });
+        expect(badEdit.status).toBe(400);
+        expect(badEdit.json.error).toBe("invalid_time");
+      });
+    });
+
+    describe("reminder offsets", () => {
+      it("keeps whole minutes up to a week, in order, and drops the rest", async () => {
+        const res = await create("ally", { reminderOffsets: [15, 1.5, -1, 15, 0, 99999999, "5"] });
+        expect(res.status).toBe(201);
+        expect(res.json.check.reminderOffsets).toEqual([0, 15]);
+      });
+
+      it("limits how many reminders one time can have", async () => {
+        const res = await create("ally", { reminderOffsets: Array.from({ length: 50 }, (_, i) => i * 5) });
+        expect(res.json.check.reminderOffsets).toHaveLength(10);
+      });
+    });
+
+    describe("how many a person can have", () => {
+      it("refuses a check past the limit, counting only checks that still exist", async () => {
+        await withHouseholdContext(baseDb, people.mom!.householdId, (tx) =>
+          tx.insert(healthChecks).values(capped(100, "dad")),
+        );
+        const refused = await create("dad");
+        expect(refused.status).toBe(409);
+        expect(refused.json.error).toBe("too_many_checks");
+
+        // Someone else is not held back by it.
+        expect((await create("ally")).status).toBe(201);
+
+        // A deleted one frees its place.
+        const [one] = await withHouseholdContext(baseDb, people.mom!.householdId, (tx) =>
+          tx.select({ id: healthChecks.id }).from(healthChecks).where(eq(healthChecks.memberId, people.dad!.memberId)).limit(1),
+        );
+        expect((await call("mom", "DELETE", `/checks/${one!.id}`)).status).toBe(200);
+        expect((await create("dad")).status).toBe(201);
+      });
+
+      it("refuses a group past the limit", async () => {
+        await withHouseholdContext(baseDb, people.mom!.householdId, (tx) =>
+          tx.insert(healthCheckGroups).values(
+            Array.from({ length: 50 }, (_, i) => ({
+              householdId: people.mom!.householdId,
+              memberId: people.dad!.memberId,
+              name: `cap group ${i}`,
+              visibility: "household" as const,
+              scheduleJson: JSON.stringify({ times: ["08:00"] }),
+            })),
+          ),
+        );
+        const refused = await call("mom", "POST", "/check-groups", {
+          memberId: people.dad!.memberId,
+          name: "one too many",
+          schedule: { times: ["09:00"] },
+        });
+        expect(refused.status).toBe(409);
+        expect(refused.json.error).toBe("too_many_groups");
+        const other = await call("mom", "POST", "/check-groups", {
+          memberId: people.ally!.memberId,
+          name: "ally group",
+          schedule: { times: ["09:00"] },
+        });
+        expect(other.status).toBe(201);
       });
     });
   });

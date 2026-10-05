@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { Env } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
 import { healthCheckGroupMembers, healthCheckGroups, healthChecks, householdMembers } from "@domi-ops/db";
-import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireHouseholdModule } from "../lib/household-modules.js";
@@ -24,7 +24,7 @@ import {
   removeCheckFromGroup,
   replaceHealthCheckGroupShares,
 } from "../lib/health-check-access.js";
-import { CheckScheduleError, normalizeCheckSchedule } from "../lib/health-check-schedule.js";
+import { CheckScheduleError, normalizeCheckSchedule, normalizeReminderOffsets } from "../lib/health-check-schedule.js";
 import {
   enrichHealthChecks,
   serializeHealthCheckGroup,
@@ -46,10 +46,6 @@ function encryptionErrorResponse(c: { json: (body: unknown, status?: number) => 
   return null;
 }
 
-function cleanOffsets(value: unknown): number[] {
-  if (!Array.isArray(value)) return [0];
-  return value.filter((n): n is number => typeof n === "number" && Number.isFinite(n) && n >= 0);
-}
 
 /**
  * Check groups (WHO-382): one consolidated reminder for several checks of the same member
@@ -57,6 +53,9 @@ function cleanOffsets(value: unknown): number[] {
  * `events`-segment permissions as checks. A group only holds checks of its own member: validated
  * here, and enforced by composite foreign keys in the database.
  */
+/** Same idea as the per-person check limit: far above real use, there to bound the worker's load. */
+export const MAX_CHECK_GROUPS_PER_MEMBER = 50;
+
 export function healthCheckGroupRoutes(db: Database, env: Env) {
   const app = new Hono<{ Variables: AppVariables }>();
 
@@ -215,6 +214,11 @@ export function healthCheckGroupRoutes(db: Database, env: Env) {
     if (!(await hasHealthSegmentAccess(db, auth, body.memberId, "events", "write"))) {
       return c.json({ error: "forbidden" }, 403);
     }
+    const [{ n: existingGroups }] = await db
+      .select({ n: count() })
+      .from(healthCheckGroups)
+      .where(eq(healthCheckGroups.memberId, body.memberId));
+    if (existingGroups >= MAX_CHECK_GROUPS_PER_MEMBER) return c.json({ error: "too_many_groups" }, 409);
 
     let scheduleMeta;
     try {
@@ -254,7 +258,7 @@ export function healthCheckGroupRoutes(db: Database, env: Env) {
           name: encryptHealthField(body.name.trim(), env) ?? "",
           scheduleKind: scheduleMeta.scheduleKind,
           scheduleJson: scheduleMeta.scheduleJson,
-          reminderOffsetsJson: JSON.stringify(cleanOffsets(body.reminderOffsets)),
+          reminderOffsetsJson: JSON.stringify(normalizeReminderOffsets(body.reminderOffsets)),
           startDate: body.startDate ?? null,
           endDate: body.endDate ?? null,
           enabled: body.enabled ?? true,
@@ -343,7 +347,7 @@ export function healthCheckGroupRoutes(db: Database, env: Env) {
     try {
       if (body.name !== undefined) patch.name = encryptHealthField(body.name.trim(), env) ?? "";
       if (body.reminderOffsets !== undefined) {
-        patch.reminderOffsetsJson = JSON.stringify(cleanOffsets(body.reminderOffsets));
+        patch.reminderOffsetsJson = JSON.stringify(normalizeReminderOffsets(body.reminderOffsets));
       }
       if (body.enabled !== undefined) patch.enabled = body.enabled;
       if (body.visibility !== undefined) patch.visibility = normalizeHealthVisibility(body.visibility);

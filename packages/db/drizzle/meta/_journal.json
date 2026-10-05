@@ -603,6 +603,13 @@
       "when": 1790700000000,
       "tag": "0085_health_checks",
       "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1790800000000,
+      "tag": "0086_health_events_member_type_time_idx",
+      "breakpoints": true
     }
   ]
 }
