@@ -17,6 +17,23 @@ const maybeDescribe = TEST_URL ? describe : describe.skip;
  */
 const NOT_READ_BY_WORKER_SCANS = new Set([
   "health_member_acl",
+  // WHO-434: pharmacies, supply history, refill events, organizers and their reminders are read by the API and by the
+  // per-household reminder job, both under withHouseholdContext. The scheduler's tick only needs to know which households
+  // have a plan (health_organizer_plans) or a supply estimate (health_medication_supply), so those two keep a policy.
+  "health_medication_dose_quantities",
+  "health_medication_refill_events",
+  "health_medication_supply_revisions",
+  "health_organizer_compartments",
+  "health_organizer_occurrence_events",
+  "health_organizer_occurrences",
+  "health_organizer_plan_caregivers",
+  "health_organizer_session_fills",
+  "health_organizer_sessions",
+  "health_organizer_time_map",
+  "health_pharmacies",
+  "health_supply_fill_reminder_sent",
+  "health_supply_refill_reminder_sent",
+  "health_supply_settings",
   "school_assignment_materials",
   "school_hours_log",
   "school_instruction_days",
