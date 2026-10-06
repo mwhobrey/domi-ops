@@ -14,6 +14,7 @@ import {
   healthMedicationSupplyRevisions,
   healthMedications,
   healthMemberAcl,
+  healthOrganizerOccurrences,
   healthOrganizerSessionFills,
   healthOrganizerSessions,
   householdMembers,
@@ -415,6 +416,36 @@ maybeDescribe("filling sessions (integration)", () => {
       await fillOk(plan, s, medIds[0]!);
       await act("mom", plan, (await getSession("mom", plan, s.id)).json.session, "finish");
       expect((await call("mom", "GET", `/${plan.id}/appointments/${today()}`)).json.appointment).toMatchObject({ status: "done", doneBy: "session" });
+    });
+
+    it("leaves no trace on the appointment when the start is refused", async () => {
+      const { plan } = await setup([{ times: ["08:00", "21:00"], q: { "08:00": 4 } }]);
+      const refused = await start("mom", plan, { occurrenceDate: today() });
+      expect(refused.status).toBe(409);
+      expect(await inDb((tx) => tx.select().from(healthOrganizerOccurrences).where(eq(healthOrganizerOccurrences.planId, plan.id)))).toHaveLength(0);
+      const [appt] = (await call("mom", "GET", `/${plan.id}/appointments?from=${today()}&to=${today()}`)).json.appointments;
+      expect(appt.version).toBe(0);
+
+      const capped = await setup();
+      await inDb((tx) =>
+        tx.insert(healthOrganizerSessions).values(
+          Array.from({ length: 60 }, (_, i) => ({
+            planId: capped.plan.id,
+            coverageStart: plus(-100 - i),
+            fillLengthDays: 31,
+            snapshotJson: "{}",
+            snapshotHash: "h",
+            status: "abandoned" as const,
+            abandonedAt: new Date(),
+          })),
+        ),
+      );
+      expect((await start("mom", capped.plan, { occurrenceDate: today() })).status).toBe(409);
+      expect(await inDb((tx) => tx.select().from(healthOrganizerOccurrences).where(eq(healthOrganizerOccurrences.planId, capped.plan.id)))).toHaveLength(0);
+
+      const empty = await setup([{ times: ["08:00"], q: { "08:00": 4 }, over: { scheduleKind: "prn", scheduleJson: "{}" } }]);
+      expect((await start("mom", empty.plan, { occurrenceDate: today() })).json.error).toBe("nothing_to_fill");
+      expect(await inDb((tx) => tx.select().from(healthOrganizerOccurrences).where(eq(healthOrganizerOccurrences.planId, empty.plan.id)))).toHaveLength(0);
     });
 
     it("refuses an appointment day the schedule does not have", async () => {
@@ -879,6 +910,39 @@ maybeDescribe("filling sessions (integration)", () => {
       expect(undone.json.supplyRestored).toBe(false);
       expect(await supplyRow(medIds[0]!)).toMatchObject({ runsOutOn: plus(50), revision: 2 });
       expect(med(undone.json.session, medIds[0]!).status).toBe("pending");
+    });
+
+    it("leaves an estimate alone that is changed while the undo is under way", async () => {
+      const { plan, medIds } = await setup();
+      const s = await begin(plan);
+      const done = await fillOk(plan, s, medIds[0]!);
+      let locked!: () => void;
+      let release!: () => void;
+      const hasLock = new Promise<void>((r) => (locked = r));
+      const go = new Promise<void>((r) => (release = r));
+      // Someone else is changing the estimate (a manual update, a receipt): they hold the supply row and have not committed.
+      const holder = inDb(async (tx) => {
+        await tx.execute(sql`select 1 from health_medication_supply where medication_id = ${medIds[0]!} for update`);
+        locked();
+        await go;
+        await tx.update(healthMedicationSupply).set({ runsOutOn: plus(77), revision: 2 }).where(eq(healthMedicationSupply.medicationId, medIds[0]!));
+        await tx.insert(healthMedicationSupplyRevisions).values({ medicationId: medIds[0]!, revision: 2, source: "manual", runsOutOn: plus(77), estimatedOn: today(), outsideDays: 46, organizerDaysCounted: 31 });
+      });
+      await hasLock;
+      const pending = act("mom", plan, done.session, `fills/${done.fill.id}/undo`);
+      // let the undo get as far as it can (it needs the supply row), then let the other change commit
+      for (let i = 0; i < 100; i++) {
+        const [row] = await baseDb.execute(sql`select count(*)::int as n from pg_locks where not granted`);
+        if (Number((row as { n: number }).n) > 0) break;
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      release();
+      await holder;
+      const res = await pending;
+      expect(res.status, JSON.stringify(res.json)).toBe(200);
+      expect(res.json.supplyRestored).toBe(false);
+      expect(await supplyRow(medIds[0]!)).toMatchObject({ runsOutOn: plus(77), revision: 2 });
+      expect(await revisions(medIds[0]!)).toHaveLength(2);
     });
 
     it("only takes back a medication's latest fill, one at a time", async () => {

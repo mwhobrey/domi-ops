@@ -365,7 +365,14 @@ export async function restoreEstimateBefore(
   db: Database,
   input: { medicationId: string; fillRevision: number; sessionId: string; userId: string },
 ): Promise<boolean> {
-  const [supply] = await db.select().from(healthMedicationSupply).where(eq(healthMedicationSupply.medicationId, input.medicationId)).limit(1);
+  // Lock the row while checking it: a change to the estimate that commits between this read and the write below
+  // (a manual update, a receipt) would otherwise be overwritten.
+  const [supply] = await db
+    .select()
+    .from(healthMedicationSupply)
+    .where(eq(healthMedicationSupply.medicationId, input.medicationId))
+    .for("update")
+    .limit(1);
   if (!supply || supply.revision !== input.fillRevision) return false;
 
   const [prior] = await db

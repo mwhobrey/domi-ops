@@ -94,6 +94,7 @@ export async function loadPlacements(
     .from(healthMedications)
     .where(
       and(
+        eq(healthMedications.householdId, plan.householdId),
         eq(healthMedications.memberId, plan.memberId),
         isNull(healthMedications.deletedAt),
         opts.auth ? healthMedicationVisibleWhere(db, opts.auth) : undefined,
@@ -104,7 +105,13 @@ export async function loadPlacements(
   const groups = await db
     .select()
     .from(healthMedicationGroups)
-    .where(and(eq(healthMedicationGroups.memberId, plan.memberId), opts.auth ? healthMedicationGroupVisibleWhere(db, opts.auth) : undefined));
+    .where(
+      and(
+        eq(healthMedicationGroups.householdId, plan.householdId),
+        eq(healthMedicationGroups.memberId, plan.memberId),
+        opts.auth ? healthMedicationGroupVisibleWhere(db, opts.auth) : undefined,
+      ),
+    );
   const memberships = groups.length
     ? await db
         .select()

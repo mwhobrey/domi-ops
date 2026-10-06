@@ -158,7 +158,7 @@ export function healthOrganizerSessionRoutes(db: Database, env: Env) {
     const meds = await db
       .select({ id: healthMedications.id })
       .from(healthMedications)
-      .where(and(eq(healthMedications.memberId, plan.memberId), isNull(healthMedications.deletedAt)));
+      .where(and(eq(healthMedications.householdId, plan.householdId), eq(healthMedications.memberId, plan.memberId), isNull(healthMedications.deletedAt)));
     const byMed = await loadCoverage(db, meds.map((m) => m.id));
     return [...byMed.values()].flat();
   }
@@ -268,7 +268,7 @@ export function healthOrganizerSessionRoutes(db: Database, env: Env) {
         throw new BadInput("invalid_fill_length");
       }
 
-      let occurrenceId: string | null = null;
+      let occurrenceDate: string | null = null;
       if (body.occurrenceDate !== undefined && body.occurrenceDate !== null) {
         let date: string;
         try {
@@ -279,21 +279,7 @@ export function healthOrganizerSessionRoutes(db: Database, env: Env) {
         if (!isOrganizerOccurrenceDate(planSchedule(plan), plan.anchorDate, date) || date > lastSettableDate(plan, today)) {
           throw new BadInput("appointment_not_found", 404);
         }
-        const [existing] = await db
-          .select({ id: healthOrganizerOccurrences.id })
-          .from(healthOrganizerOccurrences)
-          .where(and(eq(healthOrganizerOccurrences.planId, plan.id), eq(healthOrganizerOccurrences.occurrenceDate, date)))
-          .limit(1);
-        if (existing) {
-          occurrenceId = existing.id;
-        } else {
-          const [created] = await db
-            .insert(healthOrganizerOccurrences)
-            .values({ planId: plan.id, occurrenceDate: date, version: 1 })
-            .onConflictDoNothing()
-            .returning({ id: healthOrganizerOccurrences.id });
-          occurrenceId = created?.id ?? null;
-        }
+        occurrenceDate = date;
       }
 
       await lockQuota(db, `sessions:${plan.memberId}`);
@@ -316,6 +302,27 @@ export function healthOrganizerSessionRoutes(db: Database, env: Env) {
         return c.json({ error: "setup_incomplete", problems }, 409);
       }
       if (built.placements.length === 0) return c.json({ error: "nothing_to_fill" }, 409);
+
+      // Only now that the start is accepted: a refused start (these are answers, not errors, so nothing is rolled back)
+      // must not leave a row behind for the appointment, which would make a version the person loaded stale.
+      let occurrenceId: string | null = null;
+      if (occurrenceDate) {
+        const [existing] = await db
+          .select({ id: healthOrganizerOccurrences.id })
+          .from(healthOrganizerOccurrences)
+          .where(and(eq(healthOrganizerOccurrences.planId, plan.id), eq(healthOrganizerOccurrences.occurrenceDate, occurrenceDate)))
+          .limit(1);
+        if (existing) {
+          occurrenceId = existing.id;
+        } else {
+          const [made] = await db
+            .insert(healthOrganizerOccurrences)
+            .values({ planId: plan.id, occurrenceDate, version: 1 })
+            .onConflictDoNothing()
+            .returning({ id: healthOrganizerOccurrences.id });
+          occurrenceId = made?.id ?? null;
+        }
+      }
 
       const [created] = await db
         .insert(healthOrganizerSessions)
