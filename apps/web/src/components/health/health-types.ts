@@ -138,6 +138,10 @@ export interface HealthMedication {
   sharedWithMe?: boolean;
   canEdit?: boolean;
   canLog?: boolean;
+  /** Pills per dose time ("08:00": 1.5), for the pill organizer (WHO-417). */
+  doseQuantities?: Record<string, number>;
+  /** Scheduled times with no amount yet, and amounts left over from times the medication no longer takes. */
+  doseQuantityIssues?: { missing: string[]; orphaned: string[] };
   /** Supply estimate and pharmacy (WHO-419). Both are absent until something about supply is set. */
   supply?: SupplySummary;
   pharmacy?: PharmacySummary | null;
