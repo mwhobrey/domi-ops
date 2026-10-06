@@ -118,6 +118,47 @@ export function groupBySupply(medications: readonly HealthMedication[]): SupplyG
   });
 }
 
+/** Active medications with no run-out estimate yet: what the first-run setup walks through. A paused one is left alone. */
+export function medsNeedingSetup(medications: readonly HealthMedication[]): HealthMedication[] {
+  return medications
+    .filter((m) => m.enabled && !m.supply?.runsOutOn)
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Active medications whose estimate predates a pause and resume, so it has to be confirmed or replaced. */
+export function medsNeedingConfirmation(medications: readonly HealthMedication[]): HealthMedication[] {
+  return medications.filter((m) => m.enabled && m.supply?.needsConfirmation === true);
+}
+
+export type SetupRowPlan =
+  | { kind: "skip" }
+  | { kind: "invalid" }
+  | { kind: "save"; body: { outsideDays?: number; pharmacyId?: string | null } };
+
+/**
+ * What to send for one row of the first-run setup: nothing when it was left alone, an error when the
+ * days are not a number, otherwise the days and/or the pharmacy if it changed.
+ */
+export function planSetupRow(input: { daysText: string; pharmacyId: string; originalPharmacyId: string }): SetupRowPlan {
+  const hasDays = input.daysText.trim() !== "";
+  const days = hasDays ? parseDays(input.daysText, 3650) : null;
+  if (hasDays && days === null) return { kind: "invalid" };
+  const pharmacyChanged = input.pharmacyId !== input.originalPharmacyId;
+  if (days === null && !pharmacyChanged) return { kind: "skip" };
+  return {
+    kind: "save",
+    body: {
+      ...(days !== null ? { outsideDays: days } : {}),
+      ...(pharmacyChanged ? { pharmacyId: input.pharmacyId || null } : {}),
+    },
+  };
+}
+
+/** The local-storage key that remembers "not now" for one person's setup prompt. */
+export function setupDismissKey(memberId: string): string {
+  return `domi:supply-setup-dismissed:${memberId}`;
+}
+
 /** What the dry run said, ready to show. */
 export type SupplyPreview =
   | { kind: "ok"; runsOutOn: string; totalDays: number; organizerDays: number; outsideDays: number }

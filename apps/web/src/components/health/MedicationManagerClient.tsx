@@ -386,9 +386,12 @@ export function MedicationManagerClient({
   const initialMedHandled = useRef(false);
   /** Bumped after every reload of the medications, so the pharmacy card's counts follow them. */
   const [pharmacyRefresh, setPharmacyRefresh] = useState(0);
+  /** A medication just resumed whose supply estimate now needs confirming; the Supplies card asks about it. */
+  const [promptMedicationId, setPromptMedicationId] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  // `silent` reloads in place (no "Loading…" flash), for changes made from sheets that must stay open.
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     setError(null);
     try {
       const [medsRes, groupsRes, capsRes] = await Promise.all([
@@ -501,7 +504,9 @@ export function MedicationManagerClient({
   // records the pause period so adherence doesn't count those days as missed.
   async function toggleMedicationActive(med: HealthMedication) {
     try {
-      await apiClient.patch(`/api/health/medications/${med.id}`, { enabled: !med.enabled });
+      const res = await apiClient.patch<{ medication?: HealthMedication }>(`/api/health/medications/${med.id}`, { enabled: !med.enabled });
+      // Back from a pause with an estimate that predates it: ask whether it is still right (WHO-423).
+      if (!med.enabled && res.medication?.supply?.needsConfirmation) setPromptMedicationId(med.id);
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not update medication");
@@ -725,12 +730,14 @@ export function MedicationManagerClient({
             memberLabelText={memberLabel(members, selectedMemberId)}
             medications={memberMeds}
             canWrite={canWriteSelected}
-            onChanged={() => void load()}
+            onChanged={() => void load(true)}
+            autoPromptMedicationId={promptMedicationId}
+            onPromptHandled={() => setPromptMedicationId(null)}
           />
         </>
       )}
 
-      <PharmaciesSection refreshKey={pharmacyRefresh} onChanged={() => void load()} />
+      <PharmaciesSection refreshKey={pharmacyRefresh} onChanged={() => void load(true)} />
 
       <HealthMedicationSheet
         open={medSheetOpen}
