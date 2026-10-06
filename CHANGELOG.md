@@ -8,6 +8,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-06
+
+Fill a pill organizer, keep track of when each medication runs out, and ask for refills in time: pharmacies, a supply estimate you confirm, a Requested and Received refill workflow, pill organizers with a guided filling session, fill appointments, calendar and dashboard presence, and reminders. Supply is an estimate, never a live pill count. **Includes five migrations, `0087` to `0091`** (requires `npm run db:migrate`; no other manual steps: no new environment variables, and reminders use the existing health reminders setting). The hosted deploy applies them automatically. `0091` also narrows what the worker can read across households. See [docs/MEDICATION_SUPPLY.md](docs/MEDICATION_SUPPLY.md).
+
 ### Added
 
 - **Groundwork for medication supply, pharmacies and pill organizers** (WHO-413, WHO-414, no screen yet). New tables for a shared pharmacy directory, a per-medication supply estimate (the first date it runs out, which you confirm; dose logs never change it), the history of every estimate, refill requests, and a per-person default for how many days before running out to be reminded. All household-scoped and encrypted like the rest of the health data. It also adds the tables behind pill organizers: a plan per person with named compartments, a map from each dose time to a compartment, pill quantities per dose (in exact quarters), the recurring fill appointment and what happened to each one, and filling sessions that record the date range filled for each medication. **Migrations `0087` and `0088`** (require `npm run db:migrate`; no manual steps).
