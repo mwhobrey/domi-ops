@@ -6,6 +6,9 @@ import {
   healthEvents,
   healthMedicationGroups,
   healthMedications,
+  healthOrganizerPlanCaregivers,
+  healthOrganizerPlans,
+  householdMembers,
   households,
   isAsNeededMedScheduleKind,
   schoolAssignments,
@@ -29,6 +32,11 @@ import { loadVitalsReadingsForEvents, parseMedSchedule } from "./health-serializ
 import { summarizeVitals } from "./vitals-summary.js";
 import { decryptHealthFieldOrPassthrough } from "./health-crypto.js";
 import {
+  canAccessHealthSegment,
+  canManageMemberHealth,
+  emptyHealthAclGrants,
+  filterVisibleMedicationIds,
+  loadHealthAclBySubjectForGrantee,
   healthEventVisibleWhere,
   healthMedicationGroupVisibleWhere,
   healthMedicationVisibleWhere,
@@ -46,6 +54,8 @@ import {
   healthCheckVisibleWhere,
   loadGroupCheckIdsMap,
 } from "./health-check-access.js";
+import { loadAppointmentContext, loadAppointments } from "./health-organizer-appointments.js";
+import { loadSupplyViews } from "./health-supply.js";
 import { memberEnrollmentsForHousehold } from "./school-auth-context.js";
 import { visibleClassIdsForMember } from "./school-access.js";
 import { publishedAssignmentVisibilities } from "./school-assignment-visibility.js";
@@ -54,11 +64,13 @@ export const OVERLAY_CALENDAR_SCHOOL = "__overlay_school__";
 export const OVERLAY_CALENDAR_HEALTH_EVENT = "__overlay_health_event__";
 export const OVERLAY_CALENDAR_HEALTH_MED = "__overlay_health_med__";
 export const OVERLAY_CALENDAR_HEALTH_CHECK = "__overlay_health_check__";
+export const OVERLAY_CALENDAR_HEALTH_SUPPLY = "__overlay_health_supply__";
 
 export const OVERLAY_COLOR_SCHOOL = "#d97706";
 export const OVERLAY_COLOR_HEALTH_EVENT = "#e11d48";
 export const OVERLAY_COLOR_HEALTH_MED = "#0d9488";
 export const OVERLAY_COLOR_HEALTH_CHECK = "#7c3aed";
+export const OVERLAY_COLOR_HEALTH_SUPPLY = "#0284c7";
 
 export type CalendarOverlayPrefs = {
   school: boolean;
@@ -494,6 +506,147 @@ export async function buildCheckSlotOverlays(
 }
 
 /**
+ * Pill organizer fill appointments and refill deadlines for calendar views (WHO-430).
+ * - Appointments: for each organizer the viewer may read, the ones still to do (coming up, today, or overdue and not
+ *   dealt with). Done, skipped and missed ones are gone; a moved one is on the day it moved to.
+ * - Refill deadlines: from the current supply estimate of each medication the viewer may see. A requested refill stays
+ *   until it is received (receiving changes the estimate and so the deadline). Paused or deleted medications and ones
+ *   whose supply outlasts their end date have no deadline.
+ * - Each chip lists the person and the plan's caregivers who may see the medications, so the person filter keeps it.
+ * Both are all-day chips and follow the medication overlay setting.
+ */
+export async function buildSupplyOverlays(
+  db: Database,
+  env: Env,
+  auth: { householdId: string; userId: string; memberId: string; role: string },
+  from: string,
+  to: string,
+): Promise<CalendarListEvent[]> {
+  const plans = await db
+    .select()
+    .from(healthOrganizerPlans)
+    .where(and(eq(healthOrganizerPlans.householdId, auth.householdId), isNull(healthOrganizerPlans.archivedAt)));
+
+  const caregiverRows = plans.length
+    ? await db
+        .select({
+          planId: healthOrganizerPlanCaregivers.planId,
+          memberId: healthOrganizerPlanCaregivers.memberId,
+          userId: householdMembers.userId,
+          role: householdMembers.role,
+        })
+        .from(healthOrganizerPlanCaregivers)
+        .innerJoin(householdMembers, eq(householdMembers.id, healthOrganizerPlanCaregivers.memberId))
+        .where(
+          inArray(
+            healthOrganizerPlanCaregivers.planId,
+            plans.map((p) => p.id),
+          ),
+        )
+    : [];
+  const caregiversOf = new Map<string, typeof caregiverRows>();
+  for (const row of caregiverRows) caregiversOf.set(row.planId, [...(caregiversOf.get(row.planId) ?? []), row]);
+  const planByMember = new Map(plans.map((p) => [p.memberId, p]));
+
+  // A caregiver is listed only when they may read the person's medications, however they came to be picked.
+  const aclCache = new Map<string, Awaited<ReturnType<typeof loadHealthAclBySubjectForGrantee>>>();
+  const grantsFor = async (granteeMemberId: string) => {
+    let map = aclCache.get(granteeMemberId);
+    if (!map) {
+      map = await loadHealthAclBySubjectForGrantee(db, auth.householdId, granteeMemberId);
+      aclCache.set(granteeMemberId, map);
+    }
+    return map;
+  };
+  const mayRead = async (viewer: { memberId: string; role: string }, subjectMemberId: string) =>
+    canManageMemberHealth(viewer.role, subjectMemberId, viewer.memberId) ||
+    canAccessHealthSegment((await grantsFor(viewer.memberId)).get(subjectMemberId) ?? emptyHealthAclGrants(), "medications", "read");
+
+  const overlays: CalendarListEvent[] = [];
+
+  for (const plan of plans) {
+    if (!(await mayRead(auth, plan.memberId))) continue;
+    const ctx = await loadAppointmentContext(db, plan, auth);
+    const { appointments } = await loadAppointments(db, env, auth, plan, from, to, ctx);
+    const attendees = [plan.memberId];
+    for (const c of caregiversOf.get(plan.id) ?? []) {
+      if (c.memberId !== plan.memberId && (await mayRead(c, plan.memberId))) attendees.push(c.memberId);
+    }
+    for (const a of appointments) {
+      const open = a.status === "upcoming" || a.status === "today" || (a.status === "overdue" && a.needsResolution);
+      if (!open || a.date < from || a.date > to) continue;
+      overlays.push(
+        overlayEvent({
+          id: `overlay:health:appointment:${plan.id}:${a.nominalDate}`,
+          title: a.date !== a.nominalDate ? "Fill pill organizer (moved)" : "Fill pill organizer",
+          startDate: a.date,
+          endDate: a.date,
+          startTime: null,
+          endTime: null,
+          allDay: true,
+          color: OVERLAY_COLOR_HEALTH_SUPPLY,
+          calendarId: OVERLAY_CALENDAR_HEALTH_SUPPLY,
+          source: "health_supply",
+          overlayKind: "health_supply",
+          deepLink: `/health?fill=${encodeURIComponent(plan.id)}&appointment=${a.nominalDate}`,
+          attendeeMemberIds: attendees,
+        }),
+      );
+    }
+  }
+
+  const meds = await db
+    .select()
+    .from(healthMedications)
+    .where(and(healthMedicationVisibleWhere(db, auth), eq(healthMedications.enabled, true), isNull(healthMedications.deletedAt)));
+  const views = await loadSupplyViews(db, env, auth.householdId, meds);
+  const caregiverVisible = new Map<string, Set<string>>();
+  const visibleTo = async (caregiver: { memberId: string; userId: string; role: string }) => {
+    let set = caregiverVisible.get(caregiver.memberId);
+    if (!set) {
+      set = await filterVisibleMedicationIds(
+        db,
+        { householdId: auth.householdId, userId: caregiver.userId, memberId: caregiver.memberId, role: caregiver.role },
+        meds.map((m) => m.id),
+      );
+      caregiverVisible.set(caregiver.memberId, set);
+    }
+    return set;
+  };
+
+  for (const med of meds) {
+    const supply = views.get(med.id)?.supply;
+    if (!supply?.deadline) continue;
+    if (supply.state !== "ok" && supply.state !== "needs_refill" && supply.state !== "requested") continue;
+    if (supply.deadline < from || supply.deadline > to) continue;
+    const attendees = [med.memberId];
+    const plan = planByMember.get(med.memberId);
+    for (const c of plan ? (caregiversOf.get(plan.id) ?? []) : []) {
+      if (!attendees.includes(c.memberId) && (await visibleTo(c)).has(med.id)) attendees.push(c.memberId);
+    }
+    const name = decryptHealthFieldOrPassthrough(med.name, env) ?? "Medication";
+    overlays.push(
+      overlayEvent({
+        id: `overlay:health:refill:${med.id}:${supply.deadline}`,
+        title: supply.state === "requested" ? `Refill ${name} (requested)` : `Refill ${name}`,
+        startDate: supply.deadline,
+        endDate: supply.deadline,
+        startTime: null,
+        endTime: null,
+        allDay: true,
+        color: OVERLAY_COLOR_HEALTH_SUPPLY,
+        calendarId: OVERLAY_CALENDAR_HEALTH_SUPPLY,
+        source: "health_supply",
+        overlayKind: "health_supply",
+        deepLink: `/health?supply=${encodeURIComponent(med.id)}`,
+        attendeeMemberIds: attendees,
+      }),
+    );
+  }
+  return overlays;
+}
+
+/**
  * Medication dose overlays for calendar views.
  * - Prefer **groups** over member meds (claimed times / interval membership stay off the grid).
  * - Hide doses already logged (taken/skipped/missed); keep past untaken doses visible.
@@ -797,6 +950,8 @@ export async function buildAllCalendarOverlays(
     // Scheduled checks are the same kind of "something to do at this time" as doses, so they follow
     // the same preference rather than adding a setting.
     overlays.push(...(await buildCheckSlotOverlays(db, env, auth, from, to)));
+    // Fill appointments and refill deadlines are the same kind of thing: something to do about medications.
+    overlays.push(...(await buildSupplyOverlays(db, env, auth, from, to)));
   }
   return overlays;
 }
