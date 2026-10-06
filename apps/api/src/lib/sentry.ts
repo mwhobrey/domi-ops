@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/node";
-import type { Env } from "@domi-ops/config";
+import { dropNodeProcessWarnings, type Env } from "@domi-ops/config";
 
 /**
  * WHO-253 — every real bug found this session (the event_categories race, the silent
@@ -21,5 +21,7 @@ export function initSentry(env: Env): void {
     dsn: env.SENTRY_DSN,
     environment: env.NODE_ENV,
     integrations: [Sentry.captureConsoleIntegration({ levels: ["error"] })],
+    // Node process warnings are not errors (WHO-438); they stay in the logs.
+    beforeSend: dropNodeProcessWarnings,
   });
 }

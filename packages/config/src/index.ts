@@ -15,6 +15,7 @@ export {
 } from "./dev-url.js";
 
 export { googlePickerAppId } from "./google-picker-app-id.js";
+export { dropNodeProcessWarnings, isNodeProcessWarning } from "./sentry-filters.js";
 
 const deploymentMode = z.enum(["single", "shared", "dedicated"]);
 const hostedTier = z.enum(["starter", "family", "family_school", "dedicated"]);

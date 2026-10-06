@@ -32,6 +32,14 @@ const publicAppUrl = process.env.PUBLIC_APP_URL ?? "http://localhost:3000";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  /**
+   * Off: Caddy (deploy/Caddyfile*.example, `encode gzip zstd`) already compresses every response.
+   * Next's own compression wraps the response so that each proxied /api rewrite stacks "close"
+   * listeners on it and Node warns "11 close listeners added to [ServerResponse]" on every request
+   * (WHO-438: 5000 Sentry events a day). If you serve this app with no proxy in front, put one in
+   * (or set this back to true and accept the warning).
+   */
+  compress: false,
   transpilePackages: ["@domi-ops/marketing-ui"],
   /** Suppress Next dev cross-origin warnings when browsing via 127.0.0.1 before redirect. */
   allowedDevOrigins: ["127.0.0.1", "[::1]"],
