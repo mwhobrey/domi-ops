@@ -152,6 +152,15 @@ export {
   type OccurrenceWindow,
   type OrganizerSchedule,
 } from "./health-organizer-occurrences.js";
+export {
+  diffPlacements,
+  fillProgress,
+  nextUncoveredDay,
+  type ChangeKind,
+  type FillProgress,
+  type MedicationChange,
+  type PlacementDiff,
+} from "./health-organizer-session-logic.js";
 export { scanSchoolReminders } from "./school-reminder-scan.js";
 export { scanHealthMedReminders } from "./health-med-reminder-scan.js";
 export { fanOutCheckReminderScans, fanOutMedReminderScans } from "./health-reminder-fanout.js";

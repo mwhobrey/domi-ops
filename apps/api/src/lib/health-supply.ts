@@ -184,8 +184,10 @@ export async function computeEstimate(
   medicationId: string,
   today: string,
   input: { outsideDays: number; confirmedTotalDays?: number },
+  /** Stretches about to be recorded, counted as if they already were, so a refused change leaves nothing behind. */
+  extraRanges: readonly DateRange[] = [],
 ): Promise<EstimateOutcome> {
-  const ranges = await loadOrganizerRanges(db, medicationId);
+  const ranges = [...(await loadOrganizerRanges(db, medicationId)), ...extraRanges];
   let result;
   try {
     result = computeSupply({ today, ranges, outsideDays: input.outsideDays, confirmedTotalDays: input.confirmedTotalDays });

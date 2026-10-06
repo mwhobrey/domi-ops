@@ -57,22 +57,47 @@ export type PlanView = {
 
 const hhmm = (t: string) => t.slice(0, 5);
 
-/** Setup problems and dose times for a person's medications over the plan's fill length, as `auth` may see them. */
-async function computeSetup(
+type Compartment = { id: string; name: string; position: number };
+
+/** A plan's compartments, in order. */
+export async function loadCompartments(db: Database, planId: string): Promise<Compartment[]> {
+  return db
+    .select({ id: healthOrganizerCompartments.id, name: healthOrganizerCompartments.name, position: healthOrganizerCompartments.position })
+    .from(healthOrganizerCompartments)
+    .where(eq(healthOrganizerCompartments.planId, planId))
+    .orderBy(asc(healthOrganizerCompartments.position));
+}
+
+/** A plan's dose time ("HH:MM") to compartment id map. */
+export async function loadTimeMap(db: Database, planId: string): Promise<Map<string, string>> {
+  const rows = await db
+    .select({ doseTime: healthOrganizerTimeMap.doseTime, compartmentId: healthOrganizerTimeMap.compartmentId })
+    .from(healthOrganizerTimeMap)
+    .where(eq(healthOrganizerTimeMap.planId, planId));
+  return new Map(rows.map((r) => [hhmm(r.doseTime), r.compartmentId]));
+}
+
+/**
+ * Where each pill goes, for a person's medications over `days` days from `from`. With `auth`, only the medications
+ * and groups that person may see are used (what a setup screen shows); without it, all of them (what a filling session
+ * is computed from, so every caregiver is told the same thing).
+ */
+export async function loadPlacements(
   db: Database,
-  auth: Auth,
   plan: PlanRow,
-  compartments: Array<{ id: string; name: string; position: number }>,
-  timeMap: Map<string, string>,
-): Promise<PlanView["setup"]> {
+  opts: { from: string; days: number; auth?: Auth; compartments?: Compartment[]; timeMap?: Map<string, string> },
+) {
+  const compartments = opts.compartments ?? (await loadCompartments(db, plan.id));
+  const timeMap = opts.timeMap ?? (await loadTimeMap(db, plan.id));
   const meds = await db
     .select()
     .from(healthMedications)
     .where(
       and(
+        eq(healthMedications.householdId, plan.householdId),
         eq(healthMedications.memberId, plan.memberId),
         isNull(healthMedications.deletedAt),
-        healthMedicationVisibleWhere(db, auth),
+        opts.auth ? healthMedicationVisibleWhere(db, opts.auth) : undefined,
       ),
     );
   // Groups the viewer cannot see are left out too: a private group can claim a time or clash with another,
@@ -80,7 +105,13 @@ async function computeSetup(
   const groups = await db
     .select()
     .from(healthMedicationGroups)
-    .where(and(eq(healthMedicationGroups.memberId, plan.memberId), healthMedicationGroupVisibleWhere(db, auth)));
+    .where(
+      and(
+        eq(healthMedicationGroups.householdId, plan.householdId),
+        eq(healthMedicationGroups.memberId, plan.memberId),
+        opts.auth ? healthMedicationGroupVisibleWhere(db, opts.auth) : undefined,
+      ),
+    );
   const memberships = groups.length
     ? await db
         .select()
@@ -88,7 +119,6 @@ async function computeSetup(
         .where(inArray(healthMedicationGroupMembers.groupId, groups.map((g) => g.id)))
     : [];
   const quantities = await loadDoseQuantities(db, meds.map((m) => m.id));
-  const today = await householdTodayIsoDate(db, auth.householdId);
 
   const organizerMeds: OrganizerMedication[] = meds.map((m) => ({
     id: m.id,
@@ -112,14 +142,21 @@ async function computeSetup(
     }));
 
   const result = computePlacements({
-    from: today,
-    days: plan.fillLengthDays,
+    from: opts.from,
+    days: opts.days,
     medications: organizerMeds,
     groups: organizerGroups,
     compartments,
     timeMap,
     quantities,
   });
+  return { result, compartments, timeMap, medications: meds };
+}
+
+/** Setup problems and dose times for a person's medications over the plan's fill length, as `auth` may see them. */
+async function computeSetup(db: Database, auth: Auth, plan: PlanRow, compartments: Compartment[], timeMap: Map<string, string>): Promise<PlanView["setup"]> {
+  const today = await householdTodayIsoDate(db, auth.householdId);
+  const { result } = await loadPlacements(db, plan, { from: today, days: plan.fillLengthDays, auth, compartments, timeMap });
 
   const times = new Set<string>();
   for (const p of result.placements) times.add(p.time);
@@ -146,21 +183,13 @@ async function computeSetup(
 }
 
 export async function loadPlanView(db: Database, auth: Auth, plan: PlanRow, canEdit: boolean): Promise<PlanView> {
-  const compartmentRows = await db
-    .select({ id: healthOrganizerCompartments.id, name: healthOrganizerCompartments.name, position: healthOrganizerCompartments.position })
-    .from(healthOrganizerCompartments)
-    .where(eq(healthOrganizerCompartments.planId, plan.id))
-    .orderBy(asc(healthOrganizerCompartments.position));
-  const mapRows = await db
-    .select({ doseTime: healthOrganizerTimeMap.doseTime, compartmentId: healthOrganizerTimeMap.compartmentId })
-    .from(healthOrganizerTimeMap)
-    .where(eq(healthOrganizerTimeMap.planId, plan.id));
+  const compartmentRows = await loadCompartments(db, plan.id);
+  const timeMap = await loadTimeMap(db, plan.id);
   const caregiverRows = await db
     .select({ memberId: healthOrganizerPlanCaregivers.memberId })
     .from(healthOrganizerPlanCaregivers)
     .where(eq(healthOrganizerPlanCaregivers.planId, plan.id));
 
-  const timeMap = new Map(mapRows.map((r) => [hhmm(r.doseTime), r.compartmentId]));
   return {
     id: plan.id,
     memberId: plan.memberId,
