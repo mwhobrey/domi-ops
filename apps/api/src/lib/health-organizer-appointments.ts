@@ -63,6 +63,8 @@ export type AppointmentView = {
   changedAt: string | null;
 };
 
+export type AppointmentContext = Awaited<ReturnType<typeof loadAppointmentContext>>;
+
 export type AppointmentEvent = { fromOutcome: Outcome; toOutcome: Outcome; note: string | null; at: string };
 
 export function planSchedule(plan: PlanRow): OrganizerSchedule {
@@ -73,7 +75,7 @@ export function planSchedule(plan: PlanRow): OrganizerSchedule {
 
 /** The last day an appointment can be set on: the Nth one ahead of today, N being the cap. */
 export function lastSettableDate(plan: PlanRow, today: string): string {
-  const ahead = organizerOccurrenceDates(planSchedule(plan), plan.anchorDate, addDaysUtc(today, 1), addDaysUtc(today, 3700));
+  const ahead = organizerOccurrenceDates(planSchedule(plan), plan.anchorDate, addDaysUtc(today, 1), addDaysUtc(today, 4400));
   return ahead[Math.min(HEALTH_CAPS.occurrencesAhead.max, ahead.length) - 1] ?? today;
 }
 
@@ -114,7 +116,8 @@ function buildView(
   };
 }
 
-async function loadContext(db: Database, plan: PlanRow, auth: Auth) {
+/** What every appointment on a plan is judged against: the household's zone, today, and when sessions were finished. Load once per request. */
+export async function loadAppointmentContext(db: Database, plan: PlanRow, auth: Auth) {
   const timeZone = await householdTimezone(db, auth.householdId);
   const sessions = await db
     .select({ id: healthOrganizerSessions.id, occurrenceId: healthOrganizerSessions.occurrenceId, finishedAt: healthOrganizerSessions.finishedAt })
@@ -139,8 +142,15 @@ export async function loadOccurrenceRow(db: Database, planId: string, nominalDat
 }
 
 /** One appointment as it stands, whether or not anything has been said about it. */
-export async function loadAppointment(db: Database, env: Env, auth: Auth, plan: PlanRow, nominalDate: string): Promise<AppointmentView> {
-  const ctx = await loadContext(db, plan, auth);
+export async function loadAppointment(
+  db: Database,
+  env: Env,
+  auth: Auth,
+  plan: PlanRow,
+  nominalDate: string,
+  context?: AppointmentContext,
+): Promise<AppointmentView> {
+  const ctx = context ?? (await loadAppointmentContext(db, plan, auth));
   return buildView(plan, env, nominalDate, await loadOccurrenceRow(db, plan.id, nominalDate), ctx);
 }
 
@@ -156,8 +166,9 @@ export async function loadAppointments(
   plan: PlanRow,
   from: string,
   to: string,
+  context?: AppointmentContext,
 ): Promise<{ today: string; appointments: AppointmentView[] }> {
-  const ctx = await loadContext(db, plan, auth);
+  const ctx = context ?? (await loadAppointmentContext(db, plan, auth));
   // Something can be moved at most a year either way, so rows that far outside the range can still land in it.
   const rows = await db
     .select()
@@ -224,8 +235,15 @@ export type AppointmentEffects = {
  * which medications would go without before the next fill, and when their refills fall due. Written from
  * what `auth` can see, like everything else about a person's medications.
  */
-export async function computeEffects(db: Database, env: Env, auth: Auth, plan: PlanRow, appointment: AppointmentView): Promise<AppointmentEffects> {
-  const ctx = await loadContext(db, plan, auth);
+export async function computeEffects(
+  db: Database,
+  env: Env,
+  auth: Auth,
+  plan: PlanRow,
+  appointment: AppointmentView,
+  context?: AppointmentContext,
+): Promise<AppointmentEffects> {
+  const ctx = context ?? (await loadAppointmentContext(db, plan, auth));
   const nextFillDate =
     appointment.outcome === "rescheduled" ? appointment.date : nextOrganizerOccurrenceAfter(planSchedule(plan), plan.anchorDate, appointment.nominalDate);
 

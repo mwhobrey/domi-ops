@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { Env } from "@domi-ops/config";
-import { addDaysUtc, daysBetween, isOrganizerOccurrenceDate, todayIsoDateInTz } from "@domi-ops/calendar-sync";
+import { addDaysUtc, daysBetween, isOrganizerOccurrenceDate } from "@domi-ops/calendar-sync";
 import type { Database } from "@domi-ops/db";
 import { healthOrganizerOccurrenceEvents, healthOrganizerOccurrences, healthOrganizerPlans } from "@domi-ops/db";
 import { and, eq, isNull, ne, sql } from "drizzle-orm";
@@ -9,18 +9,19 @@ import { requireAuth } from "../middleware/auth.js";
 import { requireHouseholdModule } from "../lib/household-modules.js";
 import { encryptHealthField, HealthEncryptionError } from "../lib/health-crypto.js";
 import { hasHealthSegmentAccess } from "../lib/health-access.js";
-import { householdTimezone } from "../lib/household-time.js";
 import { isUuid, parseAnchorDate } from "../lib/health-organizer-validation.js";
 import type { PlanRow } from "../lib/health-organizer-plan.js";
 import {
   computeEffects,
   hasEffects,
+  loadAppointmentContext,
   lastSettableDate,
   loadAppointment,
   loadAppointments,
   loadEvents,
   loadOccurrenceRow,
   planSchedule,
+  type AppointmentContext,
   type AppointmentView,
   type Outcome,
 } from "../lib/health-organizer-appointments.js";
@@ -114,8 +115,8 @@ export function healthOrganizerAppointmentRoutes(db: Database, env: Env) {
     return plan;
   }
 
-  async function bodyWithEffects(auth: Auth, plan: PlanRow, appointment: AppointmentView) {
-    return hasEffects(appointment) ? { appointment, effects: await computeEffects(db, env, auth, plan, appointment) } : { appointment, effects: null };
+  async function bodyWithEffects(auth: Auth, plan: PlanRow, appointment: AppointmentView, ctx: AppointmentContext) {
+    return hasEffects(appointment) ? { appointment, effects: await computeEffects(db, env, auth, plan, appointment, ctx) } : { appointment, effects: null };
   }
 
   app.get("/:planId/appointments", async (c) => {
@@ -123,8 +124,8 @@ export function healthOrganizerAppointmentRoutes(db: Database, env: Env) {
     const plan = await planFor(c, auth, c.req.param("planId"), "read");
     if (plan instanceof Response) return plan;
     try {
-      const tz = await householdTimezone(db, auth.householdId);
-      const today = todayIsoDateInTz(tz);
+      const ctx = await loadAppointmentContext(db, plan, auth);
+      const today = ctx.today;
       const fromQ = c.req.query("from");
       const toQ = c.req.query("to");
       let from: string;
@@ -135,8 +136,10 @@ export function healthOrganizerAppointmentRoutes(db: Database, env: Env) {
       } catch {
         throw new BadInput("invalid_range");
       }
-      if (to < from || daysBetween(from, to) > MAX_RANGE_DAYS) throw new BadInput("invalid_range");
-      const result = await loadAppointments(db, env, auth, plan, from, to);
+      // Only a range the caller sends is limited. The default one ends at the twelfth appointment ahead, which for a
+      // schedule like "every 31 days" is more than a year out, and it holds a dozen appointments however long it is.
+      if (to < from || ((fromQ || toQ) && daysBetween(from, to) > MAX_RANGE_DAYS)) throw new BadInput("invalid_range");
+      const result = await loadAppointments(db, env, auth, plan, from, to, ctx);
       return c.json({ ...result, from, to, canEdit: await hasHealthSegmentAccess(db, auth, plan.memberId, "medications", "write") });
     } catch (e) {
       const resp = failure(c, e);
@@ -150,11 +153,12 @@ export function healthOrganizerAppointmentRoutes(db: Database, env: Env) {
     const plan = await planFor(c, auth, c.req.param("planId"), "read");
     if (plan instanceof Response) return plan;
     try {
-      const date = await settableDate(plan, c.req.param("date"), auth);
-      const appointment = await loadAppointment(db, env, auth, plan, date);
+      const ctx = await loadAppointmentContext(db, plan, auth);
+      const date = settableDate(plan, c.req.param("date"), ctx.today);
+      const appointment = await loadAppointment(db, env, auth, plan, date, ctx);
       const row = await loadOccurrenceRow(db, plan.id, date);
       return c.json({
-        ...(await bodyWithEffects(auth, plan, appointment)),
+        ...(await bodyWithEffects(auth, plan, appointment, ctx)),
         events: row ? await loadEvents(db, env, row.id) : [],
       });
     } catch (e) {
@@ -165,14 +169,13 @@ export function healthOrganizerAppointmentRoutes(db: Database, env: Env) {
   });
 
   /** The appointment day, if the plan's schedule really puts one there (and not impossibly far ahead). */
-  async function settableDate(plan: PlanRow, raw: string, auth: Auth): Promise<string> {
+  function settableDate(plan: PlanRow, raw: string, today: string): string {
     let date: string;
     try {
       date = parseAnchorDate(raw);
     } catch {
       throw new BadInput("appointment_not_found", 404);
     }
-    const today = todayIsoDateInTz(await householdTimezone(db, auth.householdId));
     if (!isOrganizerOccurrenceDate(planSchedule(plan), plan.anchorDate, date) || date > lastSettableDate(plan, today)) {
       throw new BadInput("appointment_not_found", 404);
     }
@@ -185,7 +188,13 @@ export function healthOrganizerAppointmentRoutes(db: Database, env: Env) {
     if (plan instanceof Response) return plan;
     try {
       const body = parseOutcomeBody(await c.req.json().catch(() => null));
-      const date = await settableDate(plan, c.req.param("date"), auth);
+      const ctx = await loadAppointmentContext(db, plan, auth);
+      const date = settableDate(plan, c.req.param("date"), ctx.today);
+
+      // One change to a plan's appointments at a time. Which days are taken is read, then written, and two changes
+      // moving appointments onto the same day (or one coming home while another moves in) would each pass the check
+      // on what the other had not yet committed. Taking the plan's row first makes the second wait, then read it.
+      await db.select({ id: healthOrganizerPlans.id }).from(healthOrganizerPlans).where(eq(healthOrganizerPlans.id, plan.id)).for("update");
 
       if (body.rescheduledTo) {
         if (body.rescheduledTo === date) throw new BadInput("invalid_reschedule_date");
@@ -208,6 +217,15 @@ export function healthOrganizerAppointmentRoutes(db: Database, env: Env) {
       }
 
       const existing = await loadOccurrenceRow(db, plan.id, date);
+      // Coming home from a move: the appointment goes back to its own day, which another may have been moved onto since.
+      if (!body.rescheduledTo && existing?.outcome === "rescheduled") {
+        const [movedOnto] = await db
+          .select({ id: healthOrganizerOccurrences.id })
+          .from(healthOrganizerOccurrences)
+          .where(and(eq(healthOrganizerOccurrences.planId, plan.id), eq(healthOrganizerOccurrences.rescheduledTo, date)))
+          .limit(1);
+        if (movedOnto) throw new BadInput("date_taken", 409);
+      }
       const note = body.note ? encryptHealthField(body.note, env) : null;
       const currentOutcome = (existing?.outcome ?? "pending") as Outcome;
 
@@ -216,12 +234,12 @@ export function healthOrganizerAppointmentRoutes(db: Database, env: Env) {
         currentOutcome === body.outcome &&
         (existing?.rescheduledTo ?? null) === body.rescheduledTo &&
         // notes are stored encrypted, so compare what the person would read
-        (await loadAppointment(db, env, auth, plan, date)).note === body.note;
-      if (sameAsNow) return c.json({ ...(await bodyWithEffects(auth, plan, await loadAppointment(db, env, auth, plan, date))), unchanged: true });
+        (await loadAppointment(db, env, auth, plan, date, ctx)).note === body.note;
+      if (sameAsNow) return c.json({ ...(await bodyWithEffects(auth, plan, await loadAppointment(db, env, auth, plan, date, ctx), ctx)), unchanged: true });
 
       if ((existing?.version ?? 0) !== body.version) {
         return c.json(
-          { error: "version_conflict", ...(await bodyWithEffects(auth, plan, await loadAppointment(db, env, auth, plan, date))) },
+          { error: "version_conflict", ...(await bodyWithEffects(auth, plan, await loadAppointment(db, env, auth, plan, date, ctx), ctx)) },
           409,
         );
       }
@@ -254,7 +272,7 @@ export function healthOrganizerAppointmentRoutes(db: Database, env: Env) {
       }
       if (!rowId) {
         return c.json(
-          { error: "version_conflict", ...(await bodyWithEffects(auth, plan, await loadAppointment(db, env, auth, plan, date))) },
+          { error: "version_conflict", ...(await bodyWithEffects(auth, plan, await loadAppointment(db, env, auth, plan, date, ctx), ctx)) },
           409,
         );
       }
@@ -265,7 +283,7 @@ export function healthOrganizerAppointmentRoutes(db: Database, env: Env) {
         note,
         createdByUserId: auth.userId,
       });
-      return c.json(await bodyWithEffects(auth, plan, await loadAppointment(db, env, auth, plan, date)));
+      return c.json(await bodyWithEffects(auth, plan, await loadAppointment(db, env, auth, plan, date, ctx), ctx));
     } catch (e) {
       const resp = failure(c, e);
       if (resp) return resp;
@@ -279,9 +297,10 @@ export function healthOrganizerAppointmentRoutes(db: Database, env: Env) {
     const plan = await planFor(c, auth, c.req.param("planId"), "write");
     if (plan instanceof Response) return plan;
     try {
-      const date = await settableDate(plan, c.req.param("date"), auth);
-      const current = await loadAppointment(db, env, auth, plan, date);
-      if (current.resolvedAt) return c.json({ ...(await bodyWithEffects(auth, plan, current)), unchanged: true });
+      const ctx = await loadAppointmentContext(db, plan, auth);
+      const date = settableDate(plan, c.req.param("date"), ctx.today);
+      const current = await loadAppointment(db, env, auth, plan, date, ctx);
+      if (current.resolvedAt) return c.json({ ...(await bodyWithEffects(auth, plan, current, ctx)), unchanged: true });
       if (!current.needsResolution) throw new BadInput("nothing_to_resolve", 409);
 
       const existing = await loadOccurrenceRow(db, plan.id, date);
@@ -296,7 +315,7 @@ export function healthOrganizerAppointmentRoutes(db: Database, env: Env) {
           .set({ resolvedAt: sql`clock_timestamp()`, version: sql`${healthOrganizerOccurrences.version} + 1`, updatedAt: new Date() })
           .where(and(eq(healthOrganizerOccurrences.id, existing.id), isNull(healthOrganizerOccurrences.resolvedAt)));
       }
-      return c.json(await bodyWithEffects(auth, plan, await loadAppointment(db, env, auth, plan, date)));
+      return c.json(await bodyWithEffects(auth, plan, await loadAppointment(db, env, auth, plan, date, ctx), ctx));
     } catch (e) {
       const resp = failure(c, e);
       if (resp) return resp;

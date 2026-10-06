@@ -229,6 +229,25 @@ maybeDescribe("organizer appointments (integration)", () => {
       expect(dates.filter((d: string) => d > today())).toHaveLength(12);
     });
 
+    it("shows the default overview for any schedule, even when twelve appointments ahead is more than a year away", async () => {
+      for (const everyN of [31, 60, 365]) {
+        const { plan } = await newPlan({ everyN, anchorDate: plus(0) });
+        const res = await list("mom", plan);
+        expect(res.status, `every ${everyN}`).toBe(200);
+        const ahead = res.json.appointments.filter((a: Json) => a.date > today());
+        expect(ahead, `every ${everyN}`).toHaveLength(12);
+        expect(ahead[11].date, `every ${everyN}`).toBe(plus(12 * everyN));
+      }
+      const { plan: monthly } = await newPlan({ scheduleKind: "monthly_date", monthlyDay: 1, everyN: undefined, anchorDate: plus(-400) });
+      expect((await list("mom", monthly)).status).toBe(200);
+    });
+
+    it("still limits a range the caller asks for to 400 days", async () => {
+      const { plan } = await newPlan({ everyN: 31, anchorDate: plus(0) });
+      expect((await list("mom", plan, `?from=${plus(0)}&to=${plus(401)}`)).status).toBe(400);
+      expect((await list("mom", plan, `?from=${plus(0)}&to=${plus(400)}`)).status).toBe(200);
+    });
+
     it("stops at twelve appointments ahead however far it is asked to look", async () => {
       const { plan } = await newPlan();
       const res = await list("mom", plan, `?from=${plus(1)}&to=${plus(400)}`);
@@ -444,6 +463,50 @@ maybeDescribe("organizer appointments (integration)", () => {
       // a day whose appointment moved away is free again
       const free = await put("mom", plan, plus(60), { outcome: "rescheduled", rescheduledTo: plus(30) });
       expect(free.status, JSON.stringify(free.json)).toBe(200);
+    });
+
+    it("will not come back to its own day while another appointment has been moved onto it", async () => {
+      const { plan } = await newPlan();
+      // 30 days out moves away, 60 days out moves onto the day it left, then 30 days out tries to come home
+      const away = await put("mom", plan, plus(30), { outcome: "rescheduled", rescheduledTo: plus(33) });
+      const onto = await put("mom", plan, plus(60), { outcome: "rescheduled", rescheduledTo: plus(30) });
+      expect(onto.status, JSON.stringify(onto.json)).toBe(200);
+      for (const outcome of ["pending", "done", "skipped", "missed"]) {
+        const res = await call("mom", "PUT", `/${plan.id}/appointments/${plus(30)}`, { outcome, version: away.json.appointment.version });
+        expect(res.status, outcome).toBe(409);
+        expect(res.json.error, outcome).toBe("date_taken");
+      }
+      expect((await one("mom", plan, plus(30))).json.appointment).toMatchObject({ outcome: "rescheduled", date: plus(33) });
+      // once the other one has moved on, it is free to come back
+      await call("mom", "PUT", `/${plan.id}/appointments/${plus(60)}`, { outcome: "pending", version: onto.json.appointment.version });
+      const home = await call("mom", "PUT", `/${plan.id}/appointments/${plus(30)}`, { outcome: "pending", version: away.json.appointment.version });
+      expect(home.status, JSON.stringify(home.json)).toBe(200);
+      expect(home.json.appointment).toMatchObject({ outcome: "pending", date: plus(30) });
+    });
+
+    it("lets only one of two appointments being moved at the same moment take a day", async () => {
+      const { plan } = await newPlan();
+      let locked!: () => void;
+      let release!: () => void;
+      const hasLocked = new Promise<void>((r) => (locked = r));
+      const go = new Promise<void>((r) => (release = r));
+      // Another request is partway through moving the appointment 30 days out to a day: it holds the plan and has not committed.
+      const holder = inDb(async (tx) => {
+        await tx.execute(sql`select 1 from health_organizer_plans where id = ${plan.id} for update`);
+        await tx.insert(healthOrganizerOccurrences).values({ planId: plan.id, occurrenceDate: plus(30), outcome: "rescheduled", rescheduledTo: plus(40), version: 1 });
+        locked();
+        await go;
+      });
+      await hasLocked;
+      const pending = put("mom", plan, plus(60), { outcome: "rescheduled", rescheduledTo: plus(40) });
+      await new Promise((r) => setTimeout(r, 400));
+      release();
+      await holder;
+      const res = await pending;
+      expect(res.status).toBe(409);
+      expect(res.json.error).toBe("date_taken");
+      const moved = (await rows(plan)).filter((r) => r.rescheduledTo === plus(40));
+      expect(moved).toHaveLength(1);
     });
 
     it("can change its note without leaving the day it was moved to", async () => {
