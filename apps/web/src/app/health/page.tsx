@@ -18,6 +18,10 @@ export default async function HealthPage({
     action?: string;
     scheduledAt?: string;
     token?: string;
+    fill?: string;
+    appointment?: string;
+    member?: string;
+    supply?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -53,6 +57,10 @@ export default async function HealthPage({
         initialCheckId={params.check}
         initialCheckGroupId={params.checkGroup}
         initialCheckScheduledAt={params.scheduledAt}
+        initialFillPlanId={params.fill}
+        initialFillMemberId={params.member}
+        initialFillDate={params.appointment}
+        initialSupplyMedicationId={params.supply}
         pushAction={
           params.token && params.action && params.scheduledAt && params.medication
             ? {

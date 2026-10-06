@@ -1,6 +1,6 @@
-export type CalendarEventSource = "local" | "google" | "school" | "health_event" | "health_med" | "health_check";
+export type CalendarEventSource = "local" | "google" | "school" | "health_event" | "health_med" | "health_check" | "health_supply";
 
-export type CalendarOverlayKind = "school" | "health_event" | "health_med" | "health_check";
+export type CalendarOverlayKind = "school" | "health_event" | "health_med" | "health_check" | "health_supply";
 
 export type CalendarEventSyncStatus = "synced" | "pending" | "conflict" | "error";
 
@@ -117,23 +117,46 @@ export function isHealthCheckOverlay(ev: {
   );
 }
 
-/** Things to do at a time rather than things that happen: doses and checks. */
+/** A pill organizer fill appointment's chip, or a medication's refill deadline (WHO-430). */
+export function isHealthSupplyOverlay(ev: { source?: string | null; overlayKind?: string | null; id: string }): boolean {
+  return (
+    ev.source === "health_supply" ||
+    ev.overlayKind === "health_supply" ||
+    ev.id.startsWith("overlay:health:appointment:") ||
+    ev.id.startsWith("overlay:health:refill:")
+  );
+}
+
+/** Which of the two supply chips this is, or null for anything else. */
+export function supplyChipKind(ev: { id: string }): "appointment" | "refill" | null {
+  if (ev.id.startsWith("overlay:health:appointment:")) return "appointment";
+  if (ev.id.startsWith("overlay:health:refill:")) return "refill";
+  return null;
+}
+
+/** Things to do at a time rather than things that happen: doses, checks, fills and refills. */
 function isHealthTaskOverlay(ev: { source?: string | null; overlayKind?: string | null; id: string }): boolean {
-  return isHealthMedOverlay(ev) || isHealthCheckOverlay(ev);
+  return isHealthMedOverlay(ev) || isHealthCheckOverlay(ev) || isHealthSupplyOverlay(ev);
 }
 
 const CHECK_OVERLAY_KEY = /^(overlay:health:check(?:group)?:[^:]+):/;
+const REFILL_BUCKET = "overlay:health:refill";
 
 /**
  * Month cells are small, and a check taken four times a day would take four of the few lines a day
  * gets. Collapse each check's (or group's) chips for one day into a single "BP ×3", dated at the
- * earliest one and opening it. The week and day views keep every slot.
+ * earliest one and opening it. Refill deadlines falling on one day collapse the same way into
+ * "3 refills due", opening the first. The week and day views keep every slot.
  */
 export function collapseCheckOverlaysForMonth<T extends CalendarEventView>(events: T[]): T[] {
   const buckets = new Map<string, T[]>();
   const out: T[] = [];
   for (const ev of events) {
-    const key = isHealthCheckOverlay(ev) ? CHECK_OVERLAY_KEY.exec(ev.id)?.[1] : undefined;
+    const key = isHealthCheckOverlay(ev)
+      ? CHECK_OVERLAY_KEY.exec(ev.id)?.[1]
+      : supplyChipKind(ev) === "refill"
+        ? REFILL_BUCKET
+        : undefined;
     if (!key) {
       out.push(ev);
       continue;
@@ -144,12 +167,19 @@ export function collapseCheckOverlaysForMonth<T extends CalendarEventView>(event
     else buckets.set(bucket, [ev]);
   }
   for (const [bucket, list] of buckets) {
-    const sorted = [...list].sort((a, b) => (a.startTime ?? "").localeCompare(b.startTime ?? ""));
+    const sorted = [...list].sort((a, b) => (a.startTime ?? "").localeCompare(b.startTime ?? "") || a.title.localeCompare(b.title));
     const first = sorted[0]!;
+    const isRefills = supplyChipKind(first) === "refill";
     out.push(
       sorted.length === 1
         ? first
-        : { ...first, id: `${bucket.split("|")[1]}:${first.startDate}:collapsed`, title: `${first.title} ×${sorted.length}` },
+        : {
+            ...first,
+            id: `${bucket.split("|")[1]}:${first.startDate}:collapsed`,
+            title: isRefills ? `${sorted.length} refills due` : `${first.title} ×${sorted.length}`,
+            // The person filter ran before this, but a chip standing for several should still name everyone it covers.
+            ...(isRefills ? { attendeeMemberIds: [...new Set(sorted.flatMap((e) => e.attendeeMemberIds ?? []))] } : {}),
+          },
     );
   }
   return out;

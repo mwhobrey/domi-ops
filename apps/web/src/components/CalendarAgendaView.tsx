@@ -1,5 +1,6 @@
 "use client";
 
+import { EventKindIcon } from "./calendar/EventKindIcon";
 import { useMemo } from "react";
 import { MapPin, Users } from "lucide-react";
 import { cn } from "../lib/cn";
@@ -125,7 +126,10 @@ export function CalendarAgendaView({
                         style={{ background: colors.background }}
                       />
                       <span className="min-w-0 flex-1">
-                        <span className="block font-medium">{ev.title}</span>
+                        <span className="block font-medium">
+                          <EventKindIcon event={ev} className="mr-1.5" />
+                          {ev.title}
+                        </span>
                         {(ev.categoryLabel || ev.location || forNames.length > 0) && (
                           <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-[var(--color-text-muted)]">
                             {ev.categoryLabel && <span>{ev.categoryLabel}</span>}

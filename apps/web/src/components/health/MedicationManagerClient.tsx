@@ -364,9 +364,15 @@ export function MedicationManagerClient({
   members,
   currentMemberId,
   initialMedicationId,
+  initialFill,
+  initialSupplyMedicationId,
 }: {
   members: NoteShareMember[];
   currentMemberId: string;
+  /** A calendar chip or notice for a fill appointment: show that person's organizer and open the appointment (WHO-431). */
+  initialFill?: { memberId: string; planId: string; date: string };
+  /** A calendar chip or notice for a refill: show that medication's supply and mark it (WHO-431). */
+  initialSupplyMedicationId?: string;
   /** Deep-link (e.g. a push notification's `?medication=`) — opens that medication's edit sheet
    *  once it loads, switching to its owning member first if needed. */
   initialMedicationId?: string;
@@ -385,6 +391,10 @@ export function MedicationManagerClient({
   const [groupSheetOpen, setGroupSheetOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<MedicationGroup | null>(null);
   const initialMedHandled = useRef(false);
+  const fillLinkHandled = useRef(false);
+  const supplyLinkHandled = useRef(false);
+  const [appointmentLink, setAppointmentLink] = useState<{ planId: string; date: string } | null>(null);
+  const [supplyHighlight, setSupplyHighlight] = useState<string | null>(null);
   /** Bumped after every reload of the medications, so the pharmacy card's counts follow them. */
   const [pharmacyRefresh, setPharmacyRefresh] = useState(0);
   /** A medication just resumed whose supply estimate now needs confirming; the Supplies card asks about it. */
@@ -424,6 +434,31 @@ export function MedicationManagerClient({
     setEditingMed(med);
     setMedSheetOpen(true);
   }, [initialMedicationId, medications, loading]);
+
+  // A fill appointment's link: switch to that person, then the organizer card opens the appointment once its plan has loaded.
+  useEffect(() => {
+    if (!initialFill || fillLinkHandled.current || loading) return;
+    fillLinkHandled.current = true;
+    if (members.some((m) => m.memberId === initialFill.memberId)) setSelectedMemberId(initialFill.memberId);
+    setAppointmentLink({ planId: initialFill.planId, date: initialFill.date });
+    router.replace("/health");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialFill, loading]);
+
+  // A refill's link: switch to the medication's person and mark its supply. A medication that is gone or hidden says so.
+  useEffect(() => {
+    if (!initialSupplyMedicationId || supplyLinkHandled.current || loading) return;
+    supplyLinkHandled.current = true;
+    const med = medications.find((m) => m.id === initialSupplyMedicationId);
+    if (med) {
+      setSelectedMemberId(med.memberId);
+      setSupplyHighlight(med.id);
+    } else {
+      setError("That medication is no longer available to you.");
+    }
+    router.replace("/health");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSupplyMedicationId, medications, loading]);
 
   const writableMemberIds = members
     .filter((m) => capabilities[m.memberId]?.medications === "write")
@@ -736,6 +771,8 @@ export function MedicationManagerClient({
             canWrite={canWriteSelected}
             refreshKey={pharmacyRefresh}
             onMedicationsChanged={() => load(true)}
+            openAppointment={appointmentLink}
+            onAppointmentOpened={() => setAppointmentLink(null)}
           />
 
           <SuppliesSection
@@ -746,6 +783,8 @@ export function MedicationManagerClient({
             onChanged={() => void load(true)}
             autoPromptMedicationId={promptMedicationId}
             onPromptHandled={() => setPromptMedicationId(null)}
+            highlightMedicationId={supplyHighlight}
+            onHighlightHandled={() => setSupplyHighlight(null)}
           />
         </>
       )}

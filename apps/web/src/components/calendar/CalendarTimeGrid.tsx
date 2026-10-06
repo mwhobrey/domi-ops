@@ -2,6 +2,7 @@
 
 
 
+import { EventKindIcon } from "./EventKindIcon";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { cn } from "../../lib/cn";
@@ -897,7 +898,10 @@ export function CalendarTimeGrid({
                 >
 
                   {continued ? "… " : ""}
-                  <span className="block truncate">{ev.title}</span>
+                  <span className="block truncate">
+                    <EventKindIcon event={ev} className="mr-1" />
+                    {ev.title}
+                  </span>
                   {ev.categoryLabel && (
                     <span className="block truncate text-[10px] font-normal opacity-90">
                       {ev.categoryLabel}
@@ -1207,7 +1211,10 @@ export function CalendarTimeGrid({
 
                   >
 
-                    <span className="line-clamp-2 leading-tight">{event.title}</span>
+                    <span className="line-clamp-2 leading-tight">
+                      <EventKindIcon event={event} className="mr-1" />
+                      {event.title}
+                    </span>
                     {event.categoryLabel && displayHeight >= 36 && (
                       <span className="block truncate text-[10px] font-normal leading-tight opacity-90">
                         {event.categoryLabel}

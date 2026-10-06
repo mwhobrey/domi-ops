@@ -92,6 +92,10 @@ export function HealthPageClient({
   initialCheckId,
   initialCheckGroupId,
   initialCheckScheduledAt,
+  initialFillPlanId,
+  initialFillMemberId,
+  initialFillDate,
+  initialSupplyMedicationId,
   pushAction,
 }: {
   members: NoteShareMember[];
@@ -109,6 +113,12 @@ export function HealthPageClient({
   /** Check group reminder deep link: show the group's checks at that time. */
   initialCheckGroupId?: string;
   initialCheckScheduledAt?: string;
+  /** Fill appointment link from a calendar chip or notice: the plan, its person and the day the schedule put it on (WHO-431). */
+  initialFillPlanId?: string;
+  initialFillMemberId?: string;
+  initialFillDate?: string;
+  /** Refill link from a calendar chip or notice: that medication's supply. */
+  initialSupplyMedicationId?: string;
   /** iOS / no-actions deep-link auto-log (WHO-235). */
   pushAction?: {
     medicationId: string;
@@ -245,6 +255,15 @@ export function HealthPageClient({
     if (!initialMedicationId || pushAction || initialTakeMedicationId) return;
     setTab("medications");
   }, [initialMedicationId, pushAction, initialTakeMedicationId]);
+
+  useEffect(() => {
+    if ((initialFillPlanId && initialFillDate) || initialSupplyMedicationId) setTab("medications");
+  }, [initialFillPlanId, initialFillDate, initialSupplyMedicationId]);
+
+  const managerInitialFill =
+    initialFillPlanId && initialFillMemberId && initialFillDate
+      ? { memberId: initialFillMemberId, planId: initialFillPlanId, date: initialFillDate }
+      : undefined;
 
   const managerInitialMedicationId =
     initialMedicationId && !pushAction && !initialTakeMedicationId ? initialMedicationId : undefined;
@@ -1226,6 +1245,8 @@ export function HealthPageClient({
           members={members}
           currentMemberId={currentMemberId}
           initialMedicationId={managerInitialMedicationId}
+          initialFill={managerInitialFill}
+          initialSupplyMedicationId={initialSupplyMedicationId}
         />
       ) : null}
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { EventKindIcon } from "./calendar/EventKindIcon";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -204,7 +205,10 @@ export function DashboardMonthCalendar({ compact = false }: { compact?: boolean 
                         style={{ background: ev.color ?? "var(--color-accent)" }}
                       />
                       <div className="min-w-0 flex-1">
-                        <p className="font-medium">{ev.title}</p>
+                        <p className="font-medium">
+                          <EventKindIcon event={ev} className="mr-1.5" />
+                          {ev.title}
+                        </p>
                         <p className="text-sm text-[var(--color-text-muted)]">
                           {ev.allDay ? "All day" : (ev.startTime ?? "Timed")}
                         </p>
