@@ -140,6 +140,18 @@ export {
   type RefillStatus,
   type SupplyEstimate,
 } from "./health-supply-arithmetic.js";
+export {
+  MAX_OCCURRENCE_DATES,
+  deriveOccurrence,
+  isOrganizerOccurrenceDate,
+  nextOrganizerOccurrenceAfter,
+  organizerOccurrenceDates,
+  organizerOccurrenceWindow,
+  type DerivedOccurrence,
+  type OccurrenceStatus,
+  type OccurrenceWindow,
+  type OrganizerSchedule,
+} from "./health-organizer-occurrences.js";
 export { scanSchoolReminders } from "./school-reminder-scan.js";
 export { scanHealthMedReminders } from "./health-med-reminder-scan.js";
 export { fanOutCheckReminderScans, fanOutMedReminderScans } from "./health-reminder-fanout.js";
