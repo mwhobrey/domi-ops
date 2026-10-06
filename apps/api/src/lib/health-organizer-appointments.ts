@@ -2,6 +2,7 @@ import {
   addDaysUtc,
   daysBetween,
   deriveOccurrence,
+  isOrganizerOccurrenceDate,
   nextOrganizerOccurrenceAfter,
   organizerOccurrenceDates,
   organizerOccurrenceWindow,
@@ -73,6 +74,18 @@ export function planSchedule(plan: PlanRow): OrganizerSchedule {
     : { kind: "monthly_date", monthlyDay: plan.monthlyDay as number };
 }
 
+/**
+ * Whether an appointment other than `except` has been moved onto `date`. Rows left over from before the schedule changed,
+ * whose own day is no longer an appointment day, do not count.
+ */
+export async function movedOnto(db: Database, plan: PlanRow, date: string, except?: string): Promise<boolean> {
+  const candidates = await db
+    .select({ occurrenceDate: healthOrganizerOccurrences.occurrenceDate })
+    .from(healthOrganizerOccurrences)
+    .where(and(eq(healthOrganizerOccurrences.planId, plan.id), eq(healthOrganizerOccurrences.rescheduledTo, date)));
+  return candidates.some((c) => c.occurrenceDate !== except && isOrganizerOccurrenceDate(planSchedule(plan), plan.anchorDate, c.occurrenceDate));
+}
+
 /** The last day an appointment can be set on: the Nth one ahead of today, N being the cap. */
 export function lastSettableDate(plan: PlanRow, today: string): string {
   const ahead = organizerOccurrenceDates(planSchedule(plan), plan.anchorDate, addDaysUtc(today, 1), addDaysUtc(today, 4400));
@@ -126,8 +139,10 @@ export async function loadAppointmentContext(db: Database, plan: PlanRow, auth: 
   const finishedLinked = new Set<string>();
   const finishedDates: string[] = [];
   for (const s of sessions) {
+    // A session started from an appointment finishes that appointment and no other; one started from nowhere in particular
+    // counts for the appointment on the day it finished or the day before.
     if (s.occurrenceId) finishedLinked.add(s.occurrenceId);
-    if (s.finishedAt) finishedDates.push(s.finishedAt.toLocaleDateString("en-CA", { timeZone }));
+    else if (s.finishedAt) finishedDates.push(s.finishedAt.toLocaleDateString("en-CA", { timeZone }));
   }
   return { now: new Date(), timeZone, today: todayIsoDateInTz(timeZone), finishedLinked, finishedDates };
 }
@@ -184,7 +199,13 @@ export async function loadAppointments(
   const lastAhead = lastSettableDate(plan, ctx.today);
   const generated = organizerOccurrenceDates(planSchedule(plan), plan.anchorDate, from, to < lastAhead ? to : lastAhead);
   const nominal = new Set(generated);
-  for (const row of rows) if (row.rescheduledTo && row.rescheduledTo >= from && row.rescheduledTo <= to) nominal.add(row.occurrenceDate);
+  // An appointment moved into the range from outside it. Leftover rows from before the schedule was changed, whose own
+  // day is no longer an appointment day, are not appointments any more and are not shown.
+  for (const row of rows) {
+    if (row.rescheduledTo && row.rescheduledTo >= from && row.rescheduledTo <= to && isOrganizerOccurrenceDate(planSchedule(plan), plan.anchorDate, row.occurrenceDate)) {
+      nominal.add(row.occurrenceDate);
+    }
+  }
 
   const views = [...nominal]
     .map((d) => buildView(plan, env, d, byNominal.get(d), ctx))

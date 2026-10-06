@@ -4,13 +4,14 @@ import type { Database } from "@domi-ops/db";
 import {
   healthMedicationGroups,
   healthOrganizerCompartments,
+  healthOrganizerOccurrences,
   healthOrganizerPlanCaregivers,
   healthOrganizerPlans,
   healthOrganizerSessions,
   healthOrganizerTimeMap,
   householdMembers,
 } from "@domi-ops/db";
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireHouseholdModule } from "../lib/household-modules.js";
@@ -277,6 +278,25 @@ export function healthOrganizerRoutes(db: Database, env: Env) {
           .where(and(eq(healthOrganizerPlans.id, plan.id), eq(healthOrganizerPlans.householdId, auth.householdId)))
           .limit(1);
         return c.json({ error: "version_conflict", ...(current ? { plan: await viewOf(auth, current) } : {}) }, 409);
+      }
+
+      // A different schedule or start day means a different set of appointments. The ones from today on start afresh (their
+      // outcomes, moves and notes belonged to the old rhythm); the ones before today stay as the record of what happened.
+      const scheduleChanged =
+        updated.scheduleKind !== plan.scheduleKind ||
+        updated.everyN !== plan.everyN ||
+        updated.monthlyDay !== plan.monthlyDay ||
+        updated.anchorDate !== plan.anchorDate;
+      if (scheduleChanged) {
+        const today = await householdTodayIsoDate(db, auth.householdId);
+        await db
+          .delete(healthOrganizerOccurrences)
+          .where(
+            and(
+              eq(healthOrganizerOccurrences.planId, plan.id),
+              or(gte(healthOrganizerOccurrences.occurrenceDate, today), gte(healthOrganizerOccurrences.rescheduledTo, today)),
+            ),
+          );
       }
 
       if (compartments) {

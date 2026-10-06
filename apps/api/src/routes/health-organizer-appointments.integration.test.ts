@@ -332,6 +332,26 @@ maybeDescribe("organizer appointments (integration)", () => {
       expect(a).toMatchObject({ status: "done", doneBy: "session" });
     });
 
+    it("does not let a session started from one appointment finish another one", async () => {
+      const { plan } = await newPlan();
+      // the appointment 30 days ago stays as it was; today's is moved to the day after it, and a session is run from that one
+      const moved = await put("mom", plan, plus(0), { outcome: "rescheduled", rescheduledTo: plus(-29) });
+      expect(moved.status, JSON.stringify(moved.json)).toBe(200);
+      const [row] = (await rows(plan)).filter((r) => r.occurrenceDate === plus(0));
+      await session(plan, { status: "finished", finishedAt: finishedAt(plus(-29)), occurrenceId: row!.id });
+      const res = await list("mom", plan, `?from=${plus(-30)}&to=${plus(-29)}`);
+      expect(res.json.appointments.map((a: Json) => [a.nominalDate, a.date, a.status, a.doneBy])).toEqual([
+        [plus(-30), plus(-30), "overdue", null],
+        [plus(0), plus(-29), "done", "session"],
+      ]);
+    });
+
+    it("still counts a session not started from any appointment for the one on its day", async () => {
+      const { plan } = await newPlan();
+      await session(plan, { status: "finished", finishedAt: finishedAt(plus(-30)) });
+      expect((await one("mom", plan, plus(-30))).json.appointment).toMatchObject({ status: "done", doneBy: "session" });
+    });
+
     it("does not override what the person said", async () => {
       const { plan } = await newPlan();
       await session(plan, { status: "finished", finishedAt: finishedAt(plus(-30)) });
@@ -630,6 +650,90 @@ maybeDescribe("organizer appointments (integration)", () => {
       await holder;
       expect((await pending).status).toBe(409);
       expect((await rows(plan))[0]).toMatchObject({ outcome: "done", version: 2 });
+    });
+  });
+
+  describe("when the plan's schedule changes", () => {
+    const changePlan = (plan: Json, body: Record<string, unknown>) => call("mom", "PATCH", `/${plan.id}`, { version: plan.version, ...body });
+
+    async function withHistory() {
+      const { plan } = await newPlan();
+      await put("mom", plan, plus(-30), { outcome: "skipped", note: "was away" });
+      await put("mom", plan, plus(30), { outcome: "skipped" });
+      await put("mom", plan, plus(60), { outcome: "rescheduled", rescheduledTo: plus(65) });
+      return plan;
+    }
+
+    it("starts the appointments from today on afresh, and keeps what happened before", async () => {
+      const plan = await withHistory();
+      const changed = await changePlan(plan, { everyN: 20 });
+      expect(changed.status, JSON.stringify(changed.json)).toBe(200);
+      const kept = await rows(plan);
+      expect(kept.map((r) => [r.occurrenceDate, r.outcome])).toEqual([[plus(-30), "skipped"]]);
+      expect((await events(plan, plus(-30))).length).toBe(1);
+      // the new rhythm is 20 days from the same anchor: -60, -40, -20, 0, 20, 40 ...
+      const res = await list("mom", plan, `?from=${plus(-60)}&to=${plus(45)}`);
+      expect(res.json.appointments.map((a: Json) => [a.date, a.outcome])).toEqual([
+        [plus(-60), "pending"],
+        [plus(-40), "pending"],
+        [plus(-20), "pending"],
+        [plus(0), "pending"],
+        [plus(20), "pending"],
+        [plus(40), "pending"],
+      ]);
+    });
+
+    it("does the same when the anchor day changes, and when the kind of schedule does", async () => {
+      const a = await withHistory();
+      expect((await changePlan(a, { anchorDate: plus(-55) })).status).toBe(200);
+      expect((await rows(a)).map((r) => r.occurrenceDate)).toEqual([plus(-30)]);
+      const b = await withHistory();
+      expect((await changePlan(b, { scheduleKind: "monthly_date", monthlyDay: 15 })).status).toBe(200);
+      expect((await rows(b)).map((r) => r.occurrenceDate)).toEqual([plus(-30)]);
+    });
+
+    it("leaves appointments alone when nothing about the schedule changed", async () => {
+      const plan = await withHistory();
+      const same = await changePlan(plan, { everyN: 30, anchorDate: plus(-60) });
+      expect(same.status).toBe(200);
+      const reminder = await changePlan(same.json.plan, { reminderTime: "07:00", fillLengthDays: 28 });
+      expect(reminder.status).toBe(200);
+      expect((await rows(plan)).map((r) => r.occurrenceDate)).toEqual([plus(-30), plus(30), plus(60)]);
+    });
+
+    it("also clears a past appointment that had been moved into the future", async () => {
+      const { plan } = await newPlan();
+      await put("mom", plan, plus(-30), { outcome: "rescheduled", rescheduledTo: plus(5) });
+      await put("mom", plan, plus(-60), { outcome: "skipped" });
+      expect((await changePlan(plan, { everyN: 20 })).status).toBe(200);
+      expect((await rows(plan)).map((r) => [r.occurrenceDate, r.outcome])).toEqual([[plus(-60), "skipped"]]);
+    });
+
+    it("leaves every other plan's appointments alone", async () => {
+      const mine = await withHistory();
+      const { plan: other } = await newPlan();
+      await put("mom", other, plus(30), { outcome: "skipped" });
+      await put("mom", other, plus(60), { outcome: "rescheduled", rescheduledTo: plus(65) });
+      expect((await changePlan(mine, { everyN: 20 })).status).toBe(200);
+      expect((await rows(mine)).map((r) => r.occurrenceDate)).toEqual([plus(-30)]);
+      expect((await rows(other)).map((r) => [r.occurrenceDate, r.outcome])).toEqual([[plus(30), "skipped"], [plus(60), "rescheduled"]]);
+    });
+
+    it("does not show or count an old move whose day the schedule no longer uses", async () => {
+      const { plan } = await newPlan();
+      // a leftover row from before a change: moved onto a day, though its own day is not an appointment day now
+      await inDb((tx) => tx.insert(healthOrganizerOccurrences).values({ planId: plan.id, occurrenceDate: plus(7), outcome: "rescheduled", rescheduledTo: plus(45), version: 1 }));
+      expect((await list("mom", plan, `?from=${plus(44)}&to=${plus(46)}`)).json.appointments).toEqual([]);
+      const landing = await put("mom", plan, plus(30), { outcome: "rescheduled", rescheduledTo: plus(45) });
+      expect(landing.status, JSON.stringify(landing.json)).toBe(200);
+    });
+
+    it("does not let an old move stop an appointment coming home", async () => {
+      const { plan } = await newPlan();
+      const away = await put("mom", plan, plus(30), { outcome: "rescheduled", rescheduledTo: plus(33) });
+      await inDb((tx) => tx.insert(healthOrganizerOccurrences).values({ planId: plan.id, occurrenceDate: plus(7), outcome: "rescheduled", rescheduledTo: plus(30), version: 1 }));
+      const home = await call("mom", "PUT", `/${plan.id}/appointments/${plus(30)}`, { outcome: "pending", version: away.json.appointment.version });
+      expect(home.status, JSON.stringify(home.json)).toBe(200);
     });
   });
 

@@ -3,7 +3,7 @@ import type { Env } from "@domi-ops/config";
 import { addDaysUtc, daysBetween, isOrganizerOccurrenceDate } from "@domi-ops/calendar-sync";
 import type { Database } from "@domi-ops/db";
 import { healthOrganizerOccurrenceEvents, healthOrganizerOccurrences, healthOrganizerPlans } from "@domi-ops/db";
-import { and, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireHouseholdModule } from "../lib/household-modules.js";
@@ -20,6 +20,7 @@ import {
   loadAppointments,
   loadEvents,
   loadOccurrenceRow,
+  movedOnto,
   planSchedule,
   type AppointmentContext,
   type AppointmentView,
@@ -202,30 +203,12 @@ export function healthOrganizerAppointmentRoutes(db: Database, env: Env) {
         // Another appointment already on that day: one of the schedule's own that has not been moved away, or one moved there.
         const landing = await loadOccurrenceRow(db, plan.id, body.rescheduledTo);
         const scheduledThere = isOrganizerOccurrenceDate(planSchedule(plan), plan.anchorDate, body.rescheduledTo) && landing?.outcome !== "rescheduled";
-        const [movedThere] = await db
-          .select({ id: healthOrganizerOccurrences.id })
-          .from(healthOrganizerOccurrences)
-          .where(
-            and(
-              eq(healthOrganizerOccurrences.planId, plan.id),
-              eq(healthOrganizerOccurrences.rescheduledTo, body.rescheduledTo),
-              ne(healthOrganizerOccurrences.occurrenceDate, date),
-            ),
-          )
-          .limit(1);
-        if (scheduledThere || movedThere) throw new BadInput("date_taken", 409);
+        if (scheduledThere || (await movedOnto(db, plan, body.rescheduledTo, date))) throw new BadInput("date_taken", 409);
       }
 
       const existing = await loadOccurrenceRow(db, plan.id, date);
       // Coming home from a move: the appointment goes back to its own day, which another may have been moved onto since.
-      if (!body.rescheduledTo && existing?.outcome === "rescheduled") {
-        const [movedOnto] = await db
-          .select({ id: healthOrganizerOccurrences.id })
-          .from(healthOrganizerOccurrences)
-          .where(and(eq(healthOrganizerOccurrences.planId, plan.id), eq(healthOrganizerOccurrences.rescheduledTo, date)))
-          .limit(1);
-        if (movedOnto) throw new BadInput("date_taken", 409);
-      }
+      if (!body.rescheduledTo && existing?.outcome === "rescheduled" && (await movedOnto(db, plan, date))) throw new BadInput("date_taken", 409);
       const note = body.note ? encryptHealthField(body.note, env) : null;
       const currentOutcome = (existing?.outcome ?? "pending") as Outcome;
 
