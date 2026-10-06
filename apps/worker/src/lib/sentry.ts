@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/node";
-import type { Env } from "@domi-ops/config";
+import { dropNodeProcessWarnings, type Env } from "@domi-ops/config";
 
 /**
  * WHO-253 — see apps/api/src/lib/sentry.ts for the full rationale; same pattern here. No-op if
@@ -11,5 +11,7 @@ export function initSentry(env: Env): void {
     dsn: env.SENTRY_DSN,
     environment: env.NODE_ENV,
     integrations: [Sentry.captureConsoleIntegration({ levels: ["error"] })],
+    // Node process warnings are not errors (WHO-438); they stay in the logs.
+    beforeSend: dropNodeProcessWarnings,
   });
 }

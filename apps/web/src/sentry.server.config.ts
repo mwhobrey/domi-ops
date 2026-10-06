@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/nextjs";
+import { dropNodeProcessWarnings } from "./lib/sentry-filters";
 
 /**
  * WHO-292 — Next.js Node runtime. Uses the same optional SENTRY_DSN as api/worker
@@ -10,5 +11,7 @@ if (dsn) {
     dsn,
     environment: process.env.NODE_ENV,
     integrations: [Sentry.captureConsoleIntegration({ levels: ["error"] })],
+    // Node process warnings are not errors (WHO-438); they stay in the container logs.
+    beforeSend: dropNodeProcessWarnings,
   });
 }
