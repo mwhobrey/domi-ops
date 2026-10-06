@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ApiError, apiClient } from "../../lib/client-api";
 import type { NoteShareMember } from "../NoteSharePicker";
 import { NoteSharePicker } from "../NoteSharePicker";
@@ -13,6 +13,8 @@ import {
 } from "./MedScheduleEditor";
 import { isAsNeededMedScheduleKind, resolveDefaultMemberId } from "./health-helpers";
 import type { HealthMedication, MedicationGroupOption } from "./health-types";
+import { pharmacyErrorMessage } from "./pharmacy-helpers";
+import type { Pharmacy } from "./supply-types";
 
 export function HealthMedicationSheet({
   open,
@@ -65,8 +67,20 @@ export function HealthMedicationSheet({
     medication?.sharedMemberIds ?? [],
   );
   const [enabled, setEnabled] = useState(medication?.enabled ?? true);
+  /** The pharmacy that fills this medication ("" = none). Optional, one at a time (WHO-421). */
+  const [pharmacyId, setPharmacyId] = useState(medication?.pharmacy?.id ?? "");
+  const [newPharmacyName, setNewPharmacyName] = useState("");
+  const [pharmacies, setPharmacies] = useState<Pharmacy[]>([]);
+  const [canAddPharmacy, setCanAddPharmacy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  /** Set once a new medication exists, so a retry after a later step failed edits it instead of adding a second. */
+  const createdIdRef = useRef<string | null>(null);
+  /** One idempotency key for the supply change of this save, and the pharmacy it already assigned, so a
+   *  retry after a later step failed neither resends it with a stale version nor under a new key. */
+  const supplyKeyRef = useRef<string | null>(null);
+  const assignedPharmacyRef = useRef<string | null>(null);
+  const supplyVersionRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -80,7 +94,32 @@ export function HealthMedicationSheet({
     setVisibility(medication?.visibility ?? "private");
     setSharedMemberIds(medication?.sharedMemberIds ?? []);
     setEnabled(medication?.enabled ?? true);
+    setPharmacyId(medication?.pharmacy?.id ?? "");
+    setNewPharmacyName("");
+    createdIdRef.current = null;
+    supplyKeyRef.current = null;
+    assignedPharmacyRef.current = null;
+    supplyVersionRef.current = null;
   }, [open, medication, defaultMemberId]);
+
+  // The directory for the picker: active pharmacies only. If listing fails the picker simply stays empty.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    apiClient
+      .get<{ pharmacies: Pharmacy[]; canEdit: boolean }>("/api/health/pharmacies")
+      .then((res) => {
+        if (cancelled) return;
+        setPharmacies(res.pharmacies);
+        setCanAddPharmacy(res.canEdit);
+      })
+      .catch(() => {
+        if (!cancelled) setPharmacies([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   // Groups are member-scoped — a selection from a previously-chosen member is invalid once
   // memberId changes, so drop any that no longer belong to the current member rather than let
@@ -115,16 +154,46 @@ export function HealthMedicationSheet({
       sharedMemberIds: visibility === "private" ? sharedMemberIds : undefined,
     };
     try {
-      let medicationId = medication?.id;
-      if (medication) {
-        await apiClient.patch(`/api/health/medications/${medication.id}`, body);
-        medicationId = medication.id;
+      let medicationId = medication?.id ?? createdIdRef.current ?? undefined;
+      if (medicationId) {
+        await apiClient.patch(`/api/health/medications/${medicationId}`, body);
       } else {
         const created = await apiClient.post<{ medication: { id: string } }>(
           "/api/health/medications",
           body,
         );
         medicationId = created.medication.id;
+        createdIdRef.current = medicationId;
+      }
+
+      // Pharmacy: create the typed one if there is one, then assign when it differs from what the
+      // medication already had. The version makes a stale edit fail instead of overwriting someone else's.
+      if (medicationId) {
+        let desiredPharmacyId = pharmacyId;
+        if (newPharmacyName.trim()) {
+          const created = await apiClient.post<{ pharmacy: Pharmacy }>("/api/health/pharmacies", {
+            name: newPharmacyName.trim(),
+          });
+          desiredPharmacyId = created.pharmacy.id;
+          setPharmacyId(desiredPharmacyId);
+          setNewPharmacyName("");
+        }
+        const currentPharmacyId = assignedPharmacyRef.current ?? (medication?.pharmacy?.id ?? "");
+        if (desiredPharmacyId !== currentPharmacyId) {
+          supplyKeyRef.current ??= crypto.randomUUID();
+          const knownVersion = supplyVersionRef.current ?? medication?.supply?.version;
+          const saved = await apiClient.put<{ supply: { version: number } | null }>(
+            `/api/health/medications/${medicationId}/supply`,
+            {
+              pharmacyId: desiredPharmacyId || null,
+              ...(knownVersion !== undefined ? { version: knownVersion } : {}),
+              idempotencyKey: supplyKeyRef.current,
+            },
+          );
+          supplyVersionRef.current = saved.supply?.version ?? null;
+          assignedPharmacyRef.current = desiredPharmacyId;
+          supplyKeyRef.current = null;
+        }
       }
 
       // Quick-group: join/leave existing groups and optionally create-and-join one more, all in
@@ -157,7 +226,7 @@ export function HealthMedicationSheet({
 
       onSaved();
     } catch (e) {
-      setErr(e instanceof ApiError ? e.message : "Save failed");
+      setErr(e instanceof ApiError ? pharmacyErrorMessage(e, e.message) : "Save failed");
     } finally {
       setBusy(false);
     }
@@ -238,6 +307,34 @@ export function HealthMedicationSheet({
             </label>
           </div>
         )}
+        <div className="space-y-2">
+          <label className="block space-y-1 text-sm">
+            <span>Pharmacy (optional)</span>
+            <Select value={pharmacyId} onChange={(e) => setPharmacyId(e.target.value)}>
+              <option value="">No pharmacy</option>
+              {/* The one it has now, when it is no longer offered (archived since this list was loaded). */}
+              {medication?.pharmacy && !pharmacies.some((p) => p.id === medication.pharmacy?.id) ? (
+                <option value={medication.pharmacy.id}>{medication.pharmacy.name} (archived)</option>
+              ) : null}
+              {pharmacies.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </Select>
+          </label>
+          {canAddPharmacy && !readOnly ? (
+            <label className="block space-y-1 text-sm">
+              <span>+ New pharmacy (optional)</span>
+              <Input
+                value={newPharmacyName}
+                onChange={(e) => setNewPharmacyName(e.target.value)}
+                placeholder="Corner Drug"
+                maxLength={200}
+              />
+            </label>
+          ) : null}
+        </div>
         <Checkbox checked={enabled} onChange={(e) => setEnabled(e.target.checked)} label="Enabled" />
         <label className="block space-y-1 text-sm">
           <span>Visibility</span>

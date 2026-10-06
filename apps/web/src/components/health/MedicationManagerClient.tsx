@@ -6,7 +6,9 @@ import { ApiError, apiClient } from "../../lib/client-api";
 import type { NoteShareMember } from "../NoteSharePicker";
 import { NoteSharePicker } from "../NoteSharePicker";
 import type { HealthAclGrants } from "../HealthPeopleAccessPanel";
-import { HealthMedicationSheet } from "./HealthMedicationSheet";import { isAsNeededMedScheduleKind, memberLabel, resolveDefaultMemberId, scheduleKindLabel } from "./health-helpers";
+import { HealthMedicationSheet } from "./HealthMedicationSheet";
+import { PharmaciesSection } from "./PharmaciesSection";
+import { isAsNeededMedScheduleKind, memberLabel, resolveDefaultMemberId, scheduleKindLabel } from "./health-helpers";
 import type { HealthMedication } from "./health-types";
 import {
   Alert,
@@ -380,6 +382,8 @@ export function MedicationManagerClient({
   const [groupSheetOpen, setGroupSheetOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<MedicationGroup | null>(null);
   const initialMedHandled = useRef(false);
+  /** Bumped after every reload of the medications, so the pharmacy card's counts follow them. */
+  const [pharmacyRefresh, setPharmacyRefresh] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -397,6 +401,7 @@ export function MedicationManagerClient({
       setError(err instanceof ApiError ? err.message : "Failed to load medications");
     } finally {
       setLoading(false);
+      setPharmacyRefresh((n) => n + 1);
     }
   }, []);
 
@@ -704,6 +709,8 @@ export function MedicationManagerClient({
           </Card>
         </>
       )}
+
+      <PharmaciesSection refreshKey={pharmacyRefresh} onChanged={() => void load()} />
 
       <HealthMedicationSheet
         open={medSheetOpen}

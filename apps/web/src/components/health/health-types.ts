@@ -4,6 +4,8 @@
  * HealthSharingClient) don't have to reach sideways into a component file for a type.
  */
 
+import type { PharmacySummary, SupplySummary } from "./supply-types";
+
 export type HealthEventType =
   | "sickness"
   | "injury"
@@ -136,6 +138,9 @@ export interface HealthMedication {
   sharedWithMe?: boolean;
   canEdit?: boolean;
   canLog?: boolean;
+  /** Supply estimate and pharmacy (WHO-419). Both are absent until something about supply is set. */
+  supply?: SupplySummary;
+  pharmacy?: PharmacySummary | null;
 }
 
 export interface PendingDose {
