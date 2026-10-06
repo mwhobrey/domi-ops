@@ -76,6 +76,11 @@ export function HealthMedicationSheet({
   const [err, setErr] = useState<string | null>(null);
   /** Set once a new medication exists, so a retry after a later step failed edits it instead of adding a second. */
   const createdIdRef = useRef<string | null>(null);
+  /** One idempotency key for the supply change of this save, and the pharmacy it already assigned, so a
+   *  retry after a later step failed neither resends it with a stale version nor under a new key. */
+  const supplyKeyRef = useRef<string | null>(null);
+  const assignedPharmacyRef = useRef<string | null>(null);
+  const supplyVersionRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -92,6 +97,9 @@ export function HealthMedicationSheet({
     setPharmacyId(medication?.pharmacy?.id ?? "");
     setNewPharmacyName("");
     createdIdRef.current = null;
+    supplyKeyRef.current = null;
+    assignedPharmacyRef.current = null;
+    supplyVersionRef.current = null;
   }, [open, medication, defaultMemberId]);
 
   // The directory for the picker: active pharmacies only. If listing fails the picker simply stays empty.
@@ -170,12 +178,21 @@ export function HealthMedicationSheet({
           setPharmacyId(desiredPharmacyId);
           setNewPharmacyName("");
         }
-        if (desiredPharmacyId !== (medication?.pharmacy?.id ?? "")) {
-          await apiClient.put(`/api/health/medications/${medicationId}/supply`, {
-            pharmacyId: desiredPharmacyId || null,
-            ...(medication?.supply ? { version: medication.supply.version } : {}),
-            idempotencyKey: crypto.randomUUID(),
-          });
+        const currentPharmacyId = assignedPharmacyRef.current ?? (medication?.pharmacy?.id ?? "");
+        if (desiredPharmacyId !== currentPharmacyId) {
+          supplyKeyRef.current ??= crypto.randomUUID();
+          const knownVersion = supplyVersionRef.current ?? medication?.supply?.version;
+          const saved = await apiClient.put<{ supply: { version: number } | null }>(
+            `/api/health/medications/${medicationId}/supply`,
+            {
+              pharmacyId: desiredPharmacyId || null,
+              ...(knownVersion !== undefined ? { version: knownVersion } : {}),
+              idempotencyKey: supplyKeyRef.current,
+            },
+          );
+          supplyVersionRef.current = saved.supply?.version ?? null;
+          assignedPharmacyRef.current = desiredPharmacyId;
+          supplyKeyRef.current = null;
         }
       }
 
