@@ -6,6 +6,7 @@ import {
   notGuidedReasonLabel,
   organizerErrorMessage,
   parseQuantityInput,
+  planFromConflict,
   scheduleSummary,
   setupChecklist,
   stepQuantity,
@@ -238,6 +239,28 @@ describe("setupChecklist", () => {
       meds,
     );
     expect(items.map((i) => i.key)).toEqual(["times", "quantities", "not-guided"]);
+  });
+});
+
+describe("planFromConflict", () => {
+  const body = (code: string, plan?: unknown) => JSON.stringify({ error: code, ...(plan === undefined ? {} : { plan }) });
+  const err = (status: number, text: string | undefined) => new ApiError(`API ${status}`, status, text);
+
+  it("takes the existing plan out of a plan_exists or version_conflict answer", () => {
+    const plan = { id: "p1", version: 4 };
+    expect(planFromConflict(err(409, body("plan_exists", plan)))).toEqual(plan);
+    expect(planFromConflict(err(409, body("version_conflict", plan)))).toEqual(plan);
+  });
+
+  it("gives nothing for other answers, a missing or malformed plan, or something that is not an API error", () => {
+    expect(planFromConflict(err(409, body("plan_exists")))).toBeNull();
+    expect(planFromConflict(err(409, body("plan_exists", "nope")))).toBeNull();
+    expect(planFromConflict(err(409, body("plan_exists", { version: 1 })))).toBeNull();
+    expect(planFromConflict(err(400, body("invalid_every_n", { id: "p1" })))).toBeNull();
+    expect(planFromConflict(err(409, "not json"))).toBeNull();
+    expect(planFromConflict(err(409, undefined))).toBeNull();
+    expect(planFromConflict(new Error("boom"))).toBeNull();
+    expect(planFromConflict(null)).toBeNull();
   });
 });
 

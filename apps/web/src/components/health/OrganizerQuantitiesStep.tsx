@@ -35,14 +35,10 @@ export function OrganizerQuantitiesStep({
   onSaved: () => Promise<void> | void;
   onDone: () => void;
 }) {
-  // Only medications that take fixed times, are on, and can be changed by this person.
-  const meds = useMemo(
-    () =>
-      medications
-        .filter((m) => m.scheduleKind === "scheduled" && m.enabled)
-        .sort((a, b) => a.name.localeCompare(b.name)),
-    [medications],
-  );
+  // Medications that take fixed times and are on. Only the ones this person can change get fields; the rest are named below.
+  const guided = useMemo(() => medications.filter((m) => m.scheduleKind === "scheduled" && m.enabled), [medications]);
+  const meds = useMemo(() => guided.filter((m) => m.canEdit !== false).sort((a, b) => a.name.localeCompare(b.name)), [guided]);
+  const readOnly = useMemo(() => guided.filter((m) => m.canEdit === false).sort((a, b) => a.name.localeCompare(b.name)), [guided]);
 
   const initial = (): Draft => {
     const d: Draft = {};
@@ -156,6 +152,12 @@ export function OrganizerQuantitiesStep({
           })}
         </ul>
       )}
+
+      {readOnly.length > 0 ? (
+        <p className="text-sm text-[var(--color-text-muted)]">
+          You cannot change the pill amounts for {readOnly.map((m) => m.name).join(", ")}. Ask whoever manages {readOnly.length === 1 ? "it" : "them"}.
+        </p>
+      ) : null}
 
       <div className="flex justify-end">
         <Button type="button" loading={busy} onClick={() => void submit()}>

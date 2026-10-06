@@ -1,3 +1,4 @@
+import { ApiError } from "../../lib/client-api";
 import { apiErrorCode } from "./pharmacy-helpers";
 import { formatDay } from "./supply-helpers";
 import type { HealthMedication } from "./health-types";
@@ -200,7 +201,7 @@ export function setupChecklist(plan: OrganizerPlan, medications: readonly Pick<H
 }
 
 const MESSAGES: Record<string, string> = {
-  plan_exists: "This person already has a pill organizer plan. Reload the page.",
+  plan_exists: "This person already has a pill organizer plan.",
   version_conflict: "Someone else changed the plan. Reload and try again.",
   forbidden: "You do not have permission to change this plan.",
   invalid_every_n: "Enter a number of days from 1 to 365.",
@@ -223,6 +224,21 @@ const MESSAGES: Record<string, string> = {
   quantity_out_of_range: "Use between ¼ and 100 pills.",
   quantity_not_quarter_step: "Use whole quarters of a pill.",
 };
+
+/**
+ * The plan an error response carries, for the answers that hand back the current one: "plan_exists" (someone made it first)
+ * and "version_conflict" (someone changed it first). Anything else, or a body without a plan, gives null.
+ */
+export function planFromConflict(err: unknown): OrganizerPlan | null {
+  const code = apiErrorCode(err);
+  if ((code !== "plan_exists" && code !== "version_conflict") || !(err instanceof ApiError) || !err.body) return null;
+  try {
+    const plan = (JSON.parse(err.body) as { plan?: OrganizerPlan }).plan;
+    return plan && typeof plan === "object" && typeof plan.id === "string" ? plan : null;
+  } catch {
+    return null;
+  }
+}
 
 /** A sentence for the person, never a raw code. */
 export function organizerErrorMessage(err: unknown, fallback: string): string {

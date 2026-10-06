@@ -727,6 +727,7 @@ export function MedicationManagerClient({
           </Card>
 
           <OrganizerSection
+            key={selectedMemberId}
             memberId={selectedMemberId}
             memberLabelText={memberLabel(members, selectedMemberId)}
             members={members}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, apiClient } from "../../lib/client-api";
 import type { NoteShareMember } from "../NoteSharePicker";
 import { Alert, Badge, Button, Card, CardBody, EmptyState, SectionHeader } from "../ui";
@@ -49,17 +49,22 @@ export function OrganizerSection({
   const [forbidden, setForbidden] = useState(false);
   const [sheet, setSheet] = useState<{ step: OrganizerStep } | null>(null);
 
+  // Only the latest load may change what is shown: a slow answer for someone else must not replace this person's organizer.
+  const latest = useRef(0);
   const load = useCallback(async () => {
+    const mine = ++latest.current;
     setError(null);
     try {
-      const res = await apiClient.get<{ plan: OrganizerPlan | null }>(`/api/health/organizers?memberId=${memberId}`);
+      const res = await apiClient.get<{ plan: OrganizerPlan | null }>(`/api/health/organizers?memberId=${encodeURIComponent(memberId)}`);
+      if (mine !== latest.current) return;
       setPlan(res.plan);
       setForbidden(false);
     } catch (e) {
+      if (mine !== latest.current) return;
       if (e instanceof ApiError && e.status === 403) setForbidden(true);
       else setError("Could not load the pill organizer.");
     } finally {
-      setLoaded(true);
+      if (mine === latest.current) setLoaded(true);
     }
   }, [memberId]);
 

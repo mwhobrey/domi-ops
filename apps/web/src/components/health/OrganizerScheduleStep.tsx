@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { apiClient } from "../../lib/client-api";
 import { Alert, Button, Input, Select } from "../ui";
-import { organizerErrorMessage } from "./organizer-helpers";
+import { organizerErrorMessage, planFromConflict } from "./organizer-helpers";
 import type { OrganizerPlan, OrganizerScheduleKind } from "./organizer-types";
 
 const todayLocal = () => new Date().toLocaleDateString("en-CA");
@@ -75,6 +75,13 @@ export function OrganizerScheduleStep({
       }
       onDone();
     } catch (e) {
+      // Someone else (or another tab) set the organizer up first: carry on with theirs rather than leave a sheet with no plan.
+      const existing = !plan ? planFromConflict(e) : null;
+      if (existing) {
+        onCreated(existing);
+        onDone();
+        return;
+      }
       setErr(organizerErrorMessage(e, "Could not save the schedule. Try again."));
     } finally {
       setBusy(false);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ApiError, apiClient } from "../../lib/client-api";
+import { apiClient } from "../../lib/client-api";
 import type { NoteShareMember } from "../NoteSharePicker";
 import { Alert, Sheet } from "../ui";
 import type { HealthMedication } from "./health-types";
@@ -10,8 +10,7 @@ import { OrganizerPeopleStep } from "./OrganizerPeopleStep";
 import { OrganizerQuantitiesStep } from "./OrganizerQuantitiesStep";
 import { OrganizerScheduleStep } from "./OrganizerScheduleStep";
 import { OrganizerTimesStep } from "./OrganizerTimesStep";
-import { apiErrorCode } from "./pharmacy-helpers";
-import { organizerErrorMessage, type GroupLike } from "./organizer-helpers";
+import { organizerErrorMessage, planFromConflict, type GroupLike } from "./organizer-helpers";
 import { ORGANIZER_STEPS, ORGANIZER_STEP_LABELS, type OrganizerPlan, type OrganizerStep } from "./organizer-types";
 
 /**
@@ -87,7 +86,7 @@ export function OrganizerSheet({
   );
 
   const reloadPlan = useCallback(async () => {
-    const res = await apiClient.get<{ plan: OrganizerPlan | null }>(`/api/health/organizers?memberId=${memberId}`);
+    const res = await apiClient.get<{ plan: OrganizerPlan | null }>(`/api/health/organizers?memberId=${encodeURIComponent(memberId)}`);
     if (res.plan) accept(res.plan);
   }, [memberId, accept]);
 
@@ -100,14 +99,9 @@ export function OrganizerSheet({
         accept(res.plan);
         return null;
       } catch (e) {
-        if (apiErrorCode(e) === "version_conflict" && e instanceof ApiError) {
-          try {
-            const body = JSON.parse(e.body ?? "{}") as { plan?: OrganizerPlan };
-            if (body.plan) accept(body.plan);
-          } catch {
-            // the message below is enough
-          }
-        }
+        // Someone changed it first: show their version, so the next try is against the current one.
+        const current = planFromConflict(e);
+        if (current) accept(current);
         return organizerErrorMessage(e, "Could not save. Try again.");
       }
     },
