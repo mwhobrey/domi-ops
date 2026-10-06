@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { apiClient } from "../../lib/client-api";
-import { Alert, Badge, Button, Checkbox, Input } from "../ui";
+import { Alert, Badge, Button, Checkbox, ConfirmDialog, Input } from "../ui";
 import { CompartmentDiagram } from "./CompartmentDiagram";
 import {
   count,
@@ -34,6 +34,7 @@ export function FillingMedicationPanel({
   planId,
   session,
   medication,
+  reviewRequired,
   onBack,
   onSaved,
   onStale,
@@ -41,6 +42,8 @@ export function FillingMedicationPanel({
   planId: string;
   session: SessionView;
   medication: SessionMedication;
+  /** The instructions changed since the session started: nothing can be saved until they are reviewed. */
+  reviewRequired: boolean;
   onBack: () => void;
   /** The fill was recorded: the session as it is now, and what to tell the person. */
   onSaved: (session: SessionView, message: string) => void;
@@ -60,6 +63,7 @@ export function FillingMedicationPanel({
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [confirmUndo, setConfirmUndo] = useState(false);
   const keyRef = useRef(newFillKey());
   const supplyRef = useRef<HTMLDivElement>(null);
   const previewSeq = useRef(0);
@@ -166,6 +170,31 @@ export function FillingMedicationPanel({
     }
   }
 
+  async function undo() {
+    const fill = medication.lastFill;
+    if (!fill) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const res = await apiClient.post<{ session: SessionView; supplyRestored?: boolean; unchanged?: boolean }>(`${base}/${fill.id}/undo`, { version: session.version });
+      const days = rangeLabel({ from: fill.coveredFrom, to: fill.coveredTo });
+      onSaved(
+        res.session,
+        res.unchanged
+          ? `${medication.name}: the fill for ${days} had already been undone.`
+          : res.supplyRestored
+            ? `${medication.name}: the fill for ${days} was undone and the supply estimate put back.`
+            : `${medication.name}: the fill for ${days} was undone. The supply estimate was changed since, so it was left as it is.`,
+      );
+    } catch (e) {
+      setConfirmUndo(false);
+      if (isStaleAnswer(e)) onStale(sessionFromConflict(e), fillErrorMessage(e, "This session changed. It was reloaded."));
+      else setErr(fillErrorMessage(e, "Could not undo. Try again."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <Button type="button" variant="secondary" size="sm" onClick={onBack}>
@@ -197,6 +226,26 @@ export function FillingMedicationPanel({
           Filled so far: <span className="text-[var(--color-text)]">{rangesLabel(medication.covered)}</span> ({count(medication.filledDays, "day")} of {medication.requiredDays}).
         </p>
       ) : null}
+
+      {medication.lastFill ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm">
+          <span className="text-[var(--color-text-muted)]">
+            Last saved: <span className="text-[var(--color-text)]">{rangeLabel({ from: medication.lastFill.coveredFrom, to: medication.lastFill.coveredTo })}</span>
+          </span>
+          <Button type="button" size="sm" variant="secondary" disabled={busy} onClick={() => setConfirmUndo(true)}>
+            Undo
+          </Button>
+        </div>
+      ) : null}
+      <ConfirmDialog
+        open={confirmUndo}
+        title="Undo this fill?"
+        message={`This takes back the last save for ${medication.name}. Its days go back to still to fill, and the supply estimate is put back as it was if nothing has changed it since.`}
+        confirmLabel="Undo fill"
+        loading={busy}
+        onConfirm={() => void undo()}
+        onCancel={() => setConfirmUndo(false)}
+      />
 
       {!range0 ? (
         <Alert variant="success">Every day of this fill is done for {medication.name}.</Alert>
@@ -231,7 +280,8 @@ export function FillingMedicationPanel({
 
           {stage === "days" ? (
             <div className="sticky bottom-0 -mx-3 -mb-3 flex flex-wrap justify-end gap-2 rounded-b-lg border-t border-[var(--color-border)] bg-[var(--color-surface-elevated)] px-3 py-3">
-              <Button type="button" disabled={range === null} onClick={() => setStage("supply")}>
+              {reviewRequired ? <span className="mr-auto self-center text-xs text-[var(--color-text-muted)]">Use the new instructions first.</span> : null}
+              <Button type="button" disabled={range === null || reviewRequired} onClick={() => setStage("supply")}>
                 Filled. Next
               </Button>
             </div>

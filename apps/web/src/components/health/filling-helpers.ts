@@ -1,7 +1,7 @@
 import { ApiError } from "../../lib/client-api";
 import { apiErrorCode } from "./pharmacy-helpers";
 import { formatDay } from "./supply-helpers";
-import type { DateRange, FillStatus, SessionCompartment, SessionMedication, SessionPlacement, SessionView } from "./filling-types";
+import type { DateRange, FillStatus, ReviewChanges, SessionCompartment, SessionMedication, SessionPlacement, SessionView } from "./filling-types";
 
 /**
  * Pure helpers for the filling screen (WHO-428): which days a fill covers, how a medication's doses group into
@@ -213,4 +213,28 @@ export function finishSummary(session: Pick<SessionView, "medications">): Finish
     else out.nothingToFill.push(m);
   }
   return out;
+}
+
+/**
+ * What changed since a session started, in words, one line per medication and per compartment, ready to list.
+ * `nameOf` turns ids into the names the person knows.
+ */
+export function describeChanges(changes: ReviewChanges | null, nameOf: (medicationId: string) => string): string[] {
+  if (!changes) return [];
+  const lines: string[] = [];
+  for (const m of changes.medications) {
+    const parts: string[] = [];
+    if (m.added > 0) parts.push(`${count(m.added, "dose")} added`);
+    if (m.removed > 0) parts.push(`${count(m.removed, "dose")} removed`);
+    if (m.quantityChanged > 0) parts.push(`${count(m.quantityChanged, "dose")} with a different amount`);
+    if (m.compartmentChanged > 0) parts.push(`${count(m.compartmentChanged, "dose")} in a different compartment`);
+    const days = m.dates.slice(0, 3).map(formatDay).join(", ");
+    lines.push(`${nameOf(m.medicationId)}: ${parts.join(", ") || "changed"}${days ? ` (for example ${days})` : ""}`);
+  }
+  for (const c of changes.compartments) {
+    if (c.from && c.to) lines.push(`Compartment "${c.from}" is now "${c.to}"`);
+    else if (c.from) lines.push(`Compartment "${c.from}" was removed`);
+    else if (c.to) lines.push(`Compartment "${c.to}" was added`);
+  }
+  return lines;
 }

@@ -51,6 +51,32 @@ export interface SessionCompartment {
   position: number;
 }
 
+export type ChangeKind = "schedule" | "quantity" | "compartment";
+
+export interface MedicationChange {
+  medicationId: string;
+  kinds: ChangeKind[];
+  added: number;
+  removed: number;
+  quantityChanged: number;
+  compartmentChanged: number;
+  /** A few of the days affected, oldest first. */
+  dates: string[];
+}
+
+export interface CompartmentChange {
+  id: string;
+  from: string | null;
+  to: string | null;
+}
+
+/** What differs between the instructions a session started with and the ones that hold now. */
+export interface ReviewChanges {
+  changed: boolean;
+  medications: MedicationChange[];
+  compartments: CompartmentChange[];
+}
+
 export interface SessionView {
   id: string;
   planId: string;
@@ -65,6 +91,7 @@ export interface SessionView {
   abandonedAt: string | null;
   /** The instructions changed since the session started: more filling waits for a review (WHO-429). */
   reviewRequired: boolean;
+  changes: ReviewChanges | null;
   compartments: SessionCompartment[];
   medications: SessionMedication[];
   notGuided: Array<{ medicationId: string; reason: string }>;
