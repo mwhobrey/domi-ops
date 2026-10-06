@@ -1,5 +1,6 @@
 "use client";
 
+import { EventKindIcon } from "./calendar/EventKindIcon";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -118,7 +119,10 @@ export function TodayAgenda() {
                     aria-hidden
                   />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{ev.title}</p>
+                    <p className="truncate text-sm font-medium">
+                      <EventKindIcon event={ev} className="mr-1.5" />
+                      {ev.title}
+                    </p>
                     <p className="text-xs text-[var(--color-text-muted)]">{formatEventTime(ev)}</p>
                   </div>
                 </button>

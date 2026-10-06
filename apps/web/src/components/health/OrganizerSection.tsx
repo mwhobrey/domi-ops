@@ -33,6 +33,8 @@ export function OrganizerSection({
   canWrite,
   refreshKey,
   onMedicationsChanged,
+  openAppointment = null,
+  onAppointmentOpened,
 }: {
   memberId: string;
   memberLabelText: string;
@@ -44,6 +46,9 @@ export function OrganizerSection({
   /** Changes when the medications were reloaded, which can change what is missing here. */
   refreshKey: number;
   onMedicationsChanged: () => Promise<void> | void;
+  /** A calendar chip or notice's link: open this appointment of this plan once the plan has loaded. */
+  openAppointment?: { planId: string; date: string } | null;
+  onAppointmentOpened?: () => void;
 }) {
   const [plan, setPlan] = useState<OrganizerPlan | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -95,6 +100,15 @@ export function OrganizerSection({
     setLoaded(false);
     void load();
   }, [load, refreshKey]);
+
+  // A link to one appointment: open it when it is this plan's; a plan that is gone says so instead of doing nothing.
+  useEffect(() => {
+    if (!openAppointment || !loaded) return;
+    if (plan && plan.id === openAppointment.planId) setAppointment(openAppointment.date);
+    else setError("That fill appointment is no longer there. The organizer may have been changed or removed.");
+    onAppointmentOpened?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openAppointment, loaded, plan?.id]);
 
   const checklist = useMemo(() => (plan ? setupChecklist(plan, medications) : []), [plan, medications]);
   const nameOf = (id: string) => members.find((m) => m.memberId === id)?.label ?? "Someone";

@@ -1,5 +1,6 @@
 "use client";
 
+import { EventKindIcon } from "./EventKindIcon";
 import type { ReactNode } from "react";
 import { eventsForDate } from "../../lib/calendar-event-span";
 import { eventDescriptionPlainText } from "../../lib/event-html";
@@ -68,7 +69,10 @@ export function CalendarDaySheet({
                       className="h-3 w-3 shrink-0 rounded-full"
                       style={{ background: colors.background }}
                     />
-                    <span className="flex-1 font-medium">{ev.title}</span>
+                    <span className="flex-1 font-medium">
+                      <EventKindIcon event={ev} className="mr-1.5" />
+                      {ev.title}
+                    </span>
                     <span className="text-sm text-[var(--color-text-muted)]">{timeLabel}</span>
                   </span>
                   {ev.categoryLabel && (

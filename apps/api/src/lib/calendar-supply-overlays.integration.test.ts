@@ -19,6 +19,7 @@ import {
   type Database,
 } from "@domi-ops/db";
 import { buildAllCalendarOverlays, buildSupplyOverlays } from "./calendar-overlays.js";
+import { loadRefillsDue } from "./health-supply-glance.js";
 
 /**
  * WHO-430: the calendar shows a person's pill organizer fill appointments and their medications' refill deadlines.
@@ -185,7 +186,7 @@ maybeDescribe("health_supply calendar overlays (integration)", () => {
         overlayKind: "health_supply",
         calendarId: "__overlay_health_supply__",
         editable: false,
-        deepLink: `/health?fill=${planId}&appointment=${TODAY}`,
+        deepLink: `/health?fill=${planId}&appointment=${TODAY}&member=${ally.memberId}`,
         id: `overlay:health:appointment:${planId}:${TODAY}`,
       });
     });
@@ -219,7 +220,7 @@ maybeDescribe("health_supply calendar overlays (integration)", () => {
       const moved = list.find((c) => c.startDate === "2026-10-09")!;
       expect(moved.title).toBe("Fill pill organizer (moved)");
       // Still identified by the day the schedule put it on, so the link opens the right appointment.
-      expect(moved.deepLink).toBe(`/health?fill=${planId}&appointment=${TODAY}`);
+      expect(moved.deepLink).toBe(`/health?fill=${planId}&appointment=${TODAY}&member=${ally.memberId}`);
     });
 
     it("puts an appointment back when it is set to pending again", async () => {
@@ -314,6 +315,43 @@ maybeDescribe("health_supply calendar overlays (integration)", () => {
       const id = await addMed({ name: "Dads", runsOutOn: "2026-10-26", memberId: dad.memberId });
       const chip = (await refills(mom)).find((c) => c.id.includes(id))!;
       expect(chip.attendeeMemberIds).toEqual([dad.memberId]);
+    });
+  });
+
+  describe("refills due (dashboard tile)", () => {
+    const due = async (w: Who) => (await withHouseholdContext(db, householdId, (tx) => loadRefillsDue(tx, env, auth(w)))).map((r) => r.name);
+
+    it("lists medications whose refill deadline has come and nobody has asked for, soonest to run out first", async () => {
+      // Lead time is 5 days: running out on the 9th means the deadline was the 4th, two days ago.
+      await addMed({ name: "Later", runsOutOn: "2026-10-10" });
+      await addMed({ name: "Sooner", runsOutOn: "2026-10-08" });
+      await addMed({ name: "NotYet", runsOutOn: "2026-10-26" });
+      expect(await due(mom)).toEqual(["Sooner", "Later"]);
+    });
+
+    it("leaves out a requested refill, a paused medication and one with no estimate", async () => {
+      await addMed({ name: "Waiting", runsOutOn: "2026-10-08", requested: true });
+      await addMed({ name: "Paused", runsOutOn: "2026-10-08", enabled: false });
+      await addMed({ name: "Nothing" });
+      await addMed({ name: "Due", runsOutOn: "2026-10-08" });
+      expect(await due(mom)).toEqual(["Due"]);
+    });
+
+    it("says whether the deadline has passed and how long is left", async () => {
+      await addMed({ name: "Today", runsOutOn: "2026-10-11" });
+      await addMed({ name: "Late", runsOutOn: "2026-10-08" });
+      const rows = await withHouseholdContext(db, householdId, (tx) => loadRefillsDue(tx, env, auth(mom)));
+      expect(rows.map((r) => [r.name, r.overdue, r.daysRemaining])).toEqual([
+        ["Late", true, 2],
+        ["Today", false, 5],
+      ]);
+    });
+
+    it("does not show a private medication to someone who cannot see it", async () => {
+      await addMed({ name: "Private", runsOutOn: "2026-10-08", visibility: "private", createdBy: dad });
+      expect(await due(dad)).toEqual(["Private"]);
+      expect(await due(mom)).toEqual([]);
+      expect(await due(stranger)).toEqual([]);
     });
   });
 

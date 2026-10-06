@@ -1,4 +1,5 @@
 import type { GlancePreviewItem } from "../components/ui";
+import { formatDay } from "../components/health/supply-helpers";
 
 export type GlanceTone = "default" | "warning" | "success";
 
@@ -46,6 +47,16 @@ export type HealthGlance = {
   }[];
   /** Today's check slots answered with a reading, out of all of today's. */
   checkProgress?: { done: number; total: number };
+  /** Medications whose refill deadline has come and that nobody has asked the pharmacy for yet, soonest first (WHO-431). */
+  refillsDue?: {
+    medicationId: string;
+    name: string;
+    runsOutOn: string;
+    daysRemaining: number | null;
+    overdue: boolean;
+    memberLabel?: string | null;
+    isSelf?: boolean;
+  }[];
 };
 
 /** "Lunch Meds · Ally" for someone else's dose; just the name for your own. */
@@ -133,6 +144,18 @@ export function buildHealthTile(glance: HealthGlance | null, nowMs: number = Dat
     tone = "default";
   }
 
+  // Refills come after what is waiting today: they are due, but not at a time of day.
+  const refills = glance.refillsDue ?? [];
+  if (refills.length > 0) {
+    const refillText = `${refills.length} refill${refills.length === 1 ? "" : "s"}`;
+    if (pending.length === 0) {
+      headline = `${refillText} due`;
+      tone = "warning";
+    } else {
+      headline = `${headline} · ${refillText}`;
+    }
+  }
+
   const progress = glance.checkProgress;
   const emptyHint =
     tone !== "success"
@@ -147,15 +170,23 @@ export function buildHealthTile(glance: HealthGlance | null, nowMs: number = Dat
     href: "/health",
     headline,
     tone,
-    items: pending.slice(0, 3).map((d) => ({
-      key: d.key,
-      label: d.label,
-      meta: [isLate(d) ? "Overdue" : d.scheduledTimeLabel, d.metaExtra, d.awaitingFirst ? "Start" : null]
-        .filter(Boolean)
-        .join(" · "),
-      href: d.href,
-    })),
-    overflowCount: Math.max(0, pending.length - 3),
+    items: [
+      ...pending.slice(0, 3).map((d) => ({
+        key: d.key,
+        label: d.label,
+        meta: [isLate(d) ? "Overdue" : d.scheduledTimeLabel, d.metaExtra, d.awaitingFirst ? "Start" : null]
+          .filter(Boolean)
+          .join(" · "),
+        href: d.href,
+      })),
+      ...refills.slice(0, Math.max(0, 3 - pending.length)).map((r) => ({
+        key: `refill:${r.medicationId}`,
+        label: doseLabel({ name: `Refill ${r.name}`, memberLabel: r.memberLabel, isSelf: r.isSelf }),
+        meta: `${r.overdue ? "Overdue" : "Due"} · runs out ${formatDay(r.runsOutOn)}`,
+        href: `/health?supply=${encodeURIComponent(r.medicationId)}`,
+      })),
+    ],
+    overflowCount: Math.max(0, pending.length - 3) + Math.max(0, refills.length - Math.max(0, 3 - pending.length)),
     emptyHint,
   };
 }

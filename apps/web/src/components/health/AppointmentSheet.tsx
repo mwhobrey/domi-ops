@@ -144,6 +144,8 @@ export function AppointmentSheet({
   }
 
   const status = a ? appointmentStatus(a) : null;
+  // Filling can start from any appointment that is still to do; the filling screen picks up a session already open.
+  const canStart = canWrite && a !== null && (a.outcome === "pending" || a.outcome === "rescheduled") && a.status !== "done";
   const effects = detail?.effects ?? null;
   const lines = effectLines(effects);
 
@@ -171,6 +173,13 @@ export function AppointmentSheet({
               <p className="text-[var(--color-text)]">{appointmentDayLabel(a)}</p>
               {status ? <Badge tone={status.tone}>{status.label}</Badge> : null}
             </div>
+            {canStart ? (
+              <div>
+                <Button type="button" onClick={() => onStartSession(a.nominalDate)}>
+                  Start filling
+                </Button>
+              </div>
+            ) : null}
             {a.doneBy === "session" ? <p className="text-sm text-[var(--color-text-muted)]">Counted as done because a filling session was finished for it.</p> : null}
 
             {canWrite ? (
@@ -243,7 +252,7 @@ export function AppointmentSheet({
 
                 {canWrite ? (
                   <div className="flex flex-wrap gap-2 pt-1">
-                    {effects.actions.includes("start_session") ? (
+                    {effects.actions.includes("start_session") && !canStart ? (
                       <Button type="button" onClick={() => onStartSession(a.nominalDate)}>
                         Start filling now
                       </Button>

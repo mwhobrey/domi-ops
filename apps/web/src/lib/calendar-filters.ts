@@ -232,11 +232,22 @@ export function toggleHiddenOverlay(kind: string): Set<string> {
   return next;
 }
 
+/**
+ * The filter a chip answers to. Fill appointments and refill deadlines are medication overlays (WHO-431): the
+ * Medications switch shows and hides them with the doses, and they add no switch of their own.
+ */
+export function overlayFilterId(kind: string): string {
+  return kind === "health_supply" ? "health_med" : kind;
+}
+
 export function overlayKindsFromEvents(
   events: { overlayKind?: string | null }[],
 ): OverlayFilterMeta[] {
   const kinds = new Set(
-    events.map((e) => e.overlayKind).filter((k): k is string => Boolean(k)),
+    events
+      .map((e) => e.overlayKind)
+      .filter((k): k is string => Boolean(k))
+      .map(overlayFilterId),
   );
   return OVERLAY_FILTER_META.filter((m) => kinds.has(m.id));
 }
@@ -266,6 +277,6 @@ export function filterEventsByOverlays<T extends { overlayKind?: string | null }
   if (hiddenKinds.size === 0) return events;
   return events.filter((e) => {
     if (!e.overlayKind) return true;
-    return !hiddenKinds.has(e.overlayKind);
+    return !hiddenKinds.has(overlayFilterId(e.overlayKind));
   });
 }

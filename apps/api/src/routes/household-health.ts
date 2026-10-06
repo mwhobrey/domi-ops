@@ -28,6 +28,7 @@ import {
 import { HealthEncryptionError } from "../lib/health-crypto.js";
 import { skipCheckSlotFromPushAction } from "../lib/health-check-push-action.js";
 import { loadCheckGlance } from "../lib/health-check-glance.js";
+import { loadRefillsDue } from "../lib/health-supply-glance.js";
 import {
   canManageMemberHealth,
   hasHealthSegmentAccess,
@@ -827,6 +828,12 @@ export function householdHealthRoutes(db: Database, env: Env) {
       return { pendingChecks: [], checkProgress: { done: 0, total: 0 } };
     });
 
+    // Refills are additive too: the dashboard tile mentions them, and a problem reading them must not hide the doses.
+    const refillsDue = await loadRefillsDue(db, env, auth).catch((e) => {
+      console.error("health glance: could not load refills due", e);
+      return [];
+    });
+
     return c.json({
       enabled: true,
       today,
@@ -839,6 +846,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
       loggedToday,
       pendingChecks: checkGlance.pendingChecks.map(withMember),
       checkProgress: checkGlance.checkProgress,
+      refillsDue: refillsDue.map(withMember),
     });
   });
 

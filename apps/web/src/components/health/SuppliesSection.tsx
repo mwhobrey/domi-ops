@@ -35,6 +35,8 @@ export function SuppliesSection({
   onChanged,
   autoPromptMedicationId = null,
   onPromptHandled,
+  highlightMedicationId = null,
+  onHighlightHandled,
 }: {
   memberId: string;
   memberLabelText: string;
@@ -47,7 +49,11 @@ export function SuppliesSection({
   /** A medication that was just resumed: if its estimate now needs confirming, ask about it right away. */
   autoPromptMedicationId?: string | null;
   onPromptHandled?: () => void;
+  /** A calendar chip or notice's link: scroll to this medication's supply and mark it for a few seconds. */
+  highlightMedicationId?: string | null;
+  onHighlightHandled?: () => void;
 }) {
+  const [flashId, setFlashId] = useState<string | null>(null);
   const [defaultLead, setDefaultLead] = useState(DEFAULT_LEAD);
   const [editingLead, setEditingLead] = useState(false);
   const [leadText, setLeadText] = useState("");
@@ -103,6 +109,29 @@ export function SuppliesSection({
     }
     onPromptHandled?.();
   }, [autoPromptMedicationId, medications, onPromptHandled]);
+
+  // A link to one medication's supply: bring it into view and mark it, then let go of the link.
+  useEffect(() => {
+    if (!highlightMedicationId) return;
+    if (!medications.some((m) => m.id === highlightMedicationId)) return;
+    setFlashId(highlightMedicationId);
+    // The row may render a moment after the medications arrive (the section loads its own settings too), so look for it a few times.
+    let tries = 0;
+    const look = setInterval(() => {
+      const row = document.getElementById(`supply-${highlightMedicationId}`);
+      if (row || ++tries >= 20) {
+        clearInterval(look);
+        // Instant, then once more: the cards below (pharmacies) finish loading and shift the page, which would cut a smooth scroll short.
+        const go = () => document.getElementById(`supply-${highlightMedicationId}`)?.scrollIntoView({ block: "center" });
+        go();
+        setTimeout(go, 800);
+      }
+    }, 150);
+    // No cleanup on purpose: letting go of the link (next line) re-runs this effect, and that must not cancel the scroll or the mark.
+    setTimeout(() => setFlashId(null), 5000);
+    onHighlightHandled?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightMedicationId, medications.length]);
 
   async function confirmCurrent() {
     const med = confirming;
@@ -261,7 +290,14 @@ export function SuppliesSection({
                     const mayChange = medication.canEdit !== false;
                     const busy = busyId === medication.id;
                     return (
-                      <li key={medication.id} className="space-y-2 rounded-lg border border-[var(--color-border)] p-3">
+                      <li
+                        key={medication.id}
+                        id={`supply-${medication.id}`}
+                        className={
+                          "space-y-2 rounded-lg border p-3 transition-colors " +
+                          (flashId === medication.id ? "border-[var(--color-accent)] bg-[var(--color-accent-subtle)]" : "border-[var(--color-border)]")
+                        }
+                      >
                         <div className="flex flex-wrap items-start justify-between gap-2">
                           <div className="min-w-0">
                             <p className="break-words font-medium text-[var(--color-text)]">

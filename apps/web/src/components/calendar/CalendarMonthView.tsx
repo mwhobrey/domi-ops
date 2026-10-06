@@ -1,5 +1,6 @@
 "use client";
 
+import { EventKindIcon } from "./EventKindIcon";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { cn } from "../../lib/cn";
 import { eventOverlapsDate } from "../../lib/calendar-event-span";
@@ -159,7 +160,10 @@ export function CalendarMonthView({
                           {formatWallClock(ev.startTime).replace(":00 ", " ")}
                         </span>
                       ) : null}
-                      <span className="truncate">{ev.title}</span>
+                      <span className="truncate">
+                        <EventKindIcon event={ev} className="mr-1" />
+                        {ev.title}
+                      </span>
                     </span>
                   ))}
                   {eventCount > TITLES_PER_CELL ? (

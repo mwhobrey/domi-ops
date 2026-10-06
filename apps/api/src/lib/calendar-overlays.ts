@@ -588,7 +588,7 @@ export async function buildSupplyOverlays(
           calendarId: OVERLAY_CALENDAR_HEALTH_SUPPLY,
           source: "health_supply",
           overlayKind: "health_supply",
-          deepLink: `/health?fill=${encodeURIComponent(plan.id)}&appointment=${a.nominalDate}`,
+          deepLink: `/health?fill=${encodeURIComponent(plan.id)}&appointment=${a.nominalDate}&member=${encodeURIComponent(plan.memberId)}`,
           attendeeMemberIds: attendees,
         }),
       );
