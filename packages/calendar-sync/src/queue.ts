@@ -158,6 +158,20 @@ export async function ensureHealthCheckReminderScheduler(redisUrl: string): Prom
   );
 }
 
+/** Pill organizer fill and medication refill reminders (every 5 minutes, WHO-432). */
+export async function ensureHealthSupplyReminderScheduler(redisUrl: string): Promise<void> {
+  const q = getSyncQueue(redisUrl);
+  await q.upsertJobScheduler(
+    "health-supply-reminder-scan",
+    { every: 5 * 60 * 1000 },
+    {
+      name: "health.supply.reminder.scan",
+      data: { name: "health.supply.reminder.scan", payload: { householdId: "scan" } },
+      opts: { removeOnComplete: 20, removeOnFail: 20 },
+    },
+  );
+}
+
 /** MyAllyFile med sync push (WHO-363): every 30s; per-link debounce lives in the scan. */
 export async function ensureMyallyfileSyncScheduler(redisUrl: string): Promise<void> {
   const q = getSyncQueue(redisUrl);

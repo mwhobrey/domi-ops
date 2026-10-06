@@ -21,6 +21,8 @@ export type SyncJobName =
   | "health.med.reminder.household"
   | "health.check.reminder.scan"
   | "health.check.reminder.household"
+  | "health.supply.reminder.scan"
+  | "health.supply.reminder.household"
   | "calendar.reminder.household"
   | "chore.reminder.household"
   | "chore.digest.household"
@@ -48,6 +50,7 @@ export {
   ensureDriveQuotaScheduler,
   ensureHealthMedReminderScheduler,
   ensureHealthCheckReminderScheduler,
+  ensureHealthSupplyReminderScheduler,
   ensureMyallyfileSyncScheduler,
   householdScanEnqueuer,
 } from "./queue.js";
@@ -163,7 +166,9 @@ export {
 } from "./health-organizer-session-logic.js";
 export { scanSchoolReminders } from "./school-reminder-scan.js";
 export { scanHealthMedReminders } from "./health-med-reminder-scan.js";
-export { fanOutCheckReminderScans, fanOutMedReminderScans } from "./health-reminder-fanout.js";
+export { fanOutCheckReminderScans, fanOutMedReminderScans, fanOutSupplyReminderScans } from "./health-reminder-fanout.js";
+export { scanHealthSupplyReminders } from "./health-supply-reminder-scan.js";
+export * from "./health-supply-reminder-plan.js";
 export {
   HOUSEHOLD_SCAN_INTERVAL_MS,
   enqueueForHouseholds,

@@ -11,6 +11,7 @@
 export type HouseholdScanJob =
   | "health.med.reminder.household"
   | "health.check.reminder.household"
+  | "health.supply.reminder.household"
   | "calendar.reminder.household"
   | "chore.reminder.household"
   | "chore.digest.household"
@@ -33,6 +34,7 @@ export type EnqueueHouseholdScan = (
 export const HOUSEHOLD_SCAN_INTERVAL_MS: Record<HouseholdScanJob, number> = {
   "health.med.reminder.household": 5 * 60 * 1000,
   "health.check.reminder.household": 5 * 60 * 1000,
+  "health.supply.reminder.household": 5 * 60 * 1000,
   "calendar.reminder.household": 5 * 60 * 1000,
   "chore.reminder.household": 5 * 60 * 1000,
   "school.reminder.household": 5 * 60 * 1000,

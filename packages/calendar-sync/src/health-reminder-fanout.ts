@@ -1,6 +1,13 @@
 import type { Database } from "@domi-ops/db";
-import { healthChecks, healthMedicationGroups, healthMedications, households } from "@domi-ops/db";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import {
+  healthChecks,
+  healthMedicationGroups,
+  healthMedicationSupply,
+  healthMedications,
+  healthOrganizerPlans,
+  households,
+} from "@domi-ops/db";
+import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import { householdHasHealthModule } from "./health-reminder-shared.js";
 import {
   enqueueForHouseholds,
@@ -45,4 +52,21 @@ export async function fanOutCheckReminderScans(db: Database, deps: Deps): Promis
     .from(healthChecks)
     .where(and(eq(healthChecks.enabled, true), isNull(healthChecks.deletedAt)));
   return fanOut(db, "health.check.reminder.household", checks.map((r) => r.id), deps);
+}
+
+/**
+ * Households with a pill organizer or a medication that has a supply estimate (WHO-432): the only ones that can have a
+ * fill or refill reminder. Whether one is actually due is the household scan's call.
+ */
+export async function fanOutSupplyReminderScans(db: Database, deps: Deps): Promise<number> {
+  const plans = await db
+    .selectDistinct({ id: healthOrganizerPlans.householdId })
+    .from(healthOrganizerPlans)
+    .where(isNull(healthOrganizerPlans.archivedAt));
+  const estimates = await db
+    .selectDistinct({ id: healthMedications.householdId })
+    .from(healthMedicationSupply)
+    .innerJoin(healthMedications, eq(healthMedications.id, healthMedicationSupply.medicationId))
+    .where(and(isNotNull(healthMedicationSupply.runsOutOn), eq(healthMedications.enabled, true), isNull(healthMedications.deletedAt)));
+  return fanOut(db, "health.supply.reminder.household", [...plans, ...estimates].map((r) => r.id), deps);
 }
