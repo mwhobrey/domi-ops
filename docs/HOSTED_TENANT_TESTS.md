@@ -120,6 +120,8 @@ All in `apps/api/src/routes/health-pharmacies`, `health-supply`, `health-refills
 
 A new `*.integration.test.ts` needs no registration: `npm run test:hosted` picks it up.
 
+What the feature does and where the code is: [MEDICATION_SUPPLY.md](./MEDICATION_SUPPLY.md).
+
 ## Manual API checks (after `dev:hosted` stack)
 
 1. Log in as `alpha@hosted-qa.domi-ops.test` — `/api/core/notes` returns one note.

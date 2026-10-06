@@ -18,6 +18,8 @@ export const metadata = {
 export const dynamic = "force-dynamic";
 
 const FAQ_KEYS = [
+  "Can it help me fill a pill organizer and remember refills?",
+  "Does it know how many pills are left?",
   "Is the health module HIPAA-compliant?",
   "Does Domi Ops work with MyAllyFile?",
   "Who can see and edit a family member's health records?",
@@ -43,6 +45,10 @@ export default function HealthPage() {
         {
           title: "Doses grouped, not spammed",
           body: "Medications taken together get one reminder and a Take all button, so nobody's phone lights up five times before breakfast.",
+        },
+        {
+          title: "Fill the pill organizer without guessing",
+          body: "Name the compartments, say which dose times go where, and a filling session walks you through each bottle: which pills, how many, for which days. Short on pills? Fill fewer days now and finish later. It estimates when each medication runs out, reminds you a week ahead (or the lead time you choose) and keeps track of the refill from requested to received. It is an estimate you confirm, not a live pill count.",
         },
         {
           title: "Pause it, or fix it later",

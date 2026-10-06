@@ -1,4 +1,4 @@
-import { refillStatus } from "./health-supply-arithmetic.js";
+import { REFILL_REMINDER_TIME, refillStatus } from "./health-supply-arithmetic.js";
 import { addDaysIso, localDateOfInstant, zonedLocalToUtc } from "./household-time.js";
 import type { OccurrenceStatus } from "./health-organizer-occurrences.js";
 
@@ -11,8 +11,6 @@ import type { OccurrenceStatus } from "./health-organizer-occurrences.js";
  * scan records what it sent, so it goes once).
  */
 
-/** The household-local time a refill reminder goes. */
-export const REFILL_REMINDER_TIME = "09:00";
 /** How far back a missed fill reminder is still worth sending: after this the appointment is history, not news. */
 export const FILL_REMINDER_LOOKBACK_DAYS = 3;
 /** A requested refill gets one "still waiting" nudge this many days before the supply runs out. */
