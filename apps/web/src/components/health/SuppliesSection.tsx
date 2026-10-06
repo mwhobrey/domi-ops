@@ -1,0 +1,245 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { apiClient } from "../../lib/client-api";
+import { Alert, Badge, Button, Card, CardBody, EmptyState, Input, SectionHeader } from "../ui";
+import type { HealthMedication } from "./health-types";
+import { SupplySheet } from "./SupplySheet";
+import {
+  canMarkRequested,
+  daysLeftLabel,
+  formatDay,
+  groupBySupply,
+  parseDays,
+  requestAgeLabel,
+  supplyErrorMessage,
+  supplyStatus,
+} from "./supply-helpers";
+
+const DEFAULT_LEAD = 7;
+
+/**
+ * Supplies for one person, under Health → Medications (WHO-422): every medication with how long it
+ * lasts, grouped by the pharmacy that fills it and ordered by what needs attention first. Seeing it needs
+ * only access to the medication; the buttons show for medications the caller may change.
+ */
+export function SuppliesSection({
+  memberId,
+  memberLabelText,
+  medications,
+  canWrite,
+  onChanged,
+}: {
+  memberId: string;
+  memberLabelText: string;
+  /** This person's medications, as the medication list returned them (each carries its supply summary). */
+  medications: HealthMedication[];
+  /** Whether the caller may change this person's medications, and with them their default lead time. */
+  canWrite: boolean;
+  /** Called after any change, so the medication list (and with it this section) reloads. */
+  onChanged: () => void;
+}) {
+  const [defaultLead, setDefaultLead] = useState(DEFAULT_LEAD);
+  const [editingLead, setEditingLead] = useState(false);
+  const [leadText, setLeadText] = useState("");
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [sheet, setSheet] = useState<{ mode: "set" | "receive"; medication: HealthMedication } | null>(null);
+
+  const loadLead = useCallback(async () => {
+    try {
+      const res = await apiClient.get<{ defaultLeadDays: number }>(`/api/health/supply-settings/${memberId}`);
+      setDefaultLead(res.defaultLeadDays);
+    } catch {
+      setDefaultLead(DEFAULT_LEAD);
+    }
+  }, [memberId]);
+
+  useEffect(() => {
+    setEditingLead(false);
+    void loadLead();
+  }, [loadLead]);
+
+  const groups = useMemo(() => groupBySupply(medications), [medications]);
+
+  async function act(medication: HealthMedication, run: () => Promise<unknown>, fallback: string) {
+    setBusyId(medication.id);
+    setError(null);
+    try {
+      await run();
+      onChanged();
+    } catch (e) {
+      setError(supplyErrorMessage(e, fallback));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const markRequested = (m: HealthMedication) =>
+    act(m, () => apiClient.post(`/api/health/medications/${m.id}/supply/request`, {}), "Could not mark it requested.");
+  const clearRequest = (m: HealthMedication) =>
+    act(m, () => apiClient.delete(`/api/health/medications/${m.id}/supply/request`), "Could not clear the request.");
+
+  async function saveLead() {
+    const days = parseDays(leadText, 90);
+    if (days === null) {
+      setError("Enter a whole number of days, from 0 to 90.");
+      return;
+    }
+    setError(null);
+    try {
+      const res = await apiClient.put<{ defaultLeadDays: number }>(`/api/health/supply-settings/${memberId}`, { defaultLeadDays: days });
+      setDefaultLead(res.defaultLeadDays);
+      setEditingLead(false);
+      onChanged();
+    } catch (e) {
+      setError(supplyErrorMessage(e, "Could not save the lead time."));
+    }
+  }
+
+  return (
+    <Card>
+      <CardBody className="space-y-4">
+        <SectionHeader title="Supplies" />
+
+        <div className="flex flex-wrap items-center gap-2 text-sm text-[var(--color-text-muted)]">
+          {editingLead ? (
+            <>
+              <span>Remind {memberLabelText} this many days before a medication runs out:</span>
+              <Input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                className="w-20"
+                value={leadText}
+                onChange={(e) => setLeadText(e.target.value)}
+                maxLength={2}
+                aria-label="Default refill lead time in days"
+                autoFocus
+              />
+              <Button size="sm" onClick={() => void saveLead()}>
+                Save
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => setEditingLead(false)}>
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <>
+              <span>
+                Refill reminders: {defaultLead} day{defaultLead === 1 ? "" : "s"} before it runs out
+              </span>
+              {canWrite ? (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    setLeadText(String(defaultLead));
+                    setEditingLead(true);
+                  }}
+                >
+                  Change
+                </Button>
+              ) : null}
+            </>
+          )}
+        </div>
+
+        {error ? <Alert variant="error">{error}</Alert> : null}
+
+        {groups.length === 0 ? (
+          <EmptyState title="No medications yet" description={`Add a medication for ${memberLabelText} to track how long it lasts.`} />
+        ) : (
+          <div className="space-y-4">
+            {groups.map((group) => (
+              <section key={group.key} className="space-y-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+                  {group.pharmacy ? group.pharmacy.name : "No pharmacy"}
+                  {group.pharmacy?.archived ? (
+                    <span className="ml-2 normal-case">
+                      <Badge>Archived</Badge>
+                    </span>
+                  ) : null}
+                </h3>
+                <ul className="space-y-2">
+                  {group.items.map(({ medication, supply }) => {
+                    const status = supply ? supplyStatus(supply, medication.enabled) : null;
+                    const mayChange = medication.canEdit !== false;
+                    const busy = busyId === medication.id;
+                    return (
+                      <li key={medication.id} className="space-y-2 rounded-lg border border-[var(--color-border)] p-3">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="break-words font-medium text-[var(--color-text)]">
+                              {medication.name}
+                              {medication.dosage ? <span className="font-normal text-[var(--color-text-muted)]"> · {medication.dosage}</span> : null}
+                            </p>
+                            <p className="text-sm text-[var(--color-text-muted)]">
+                              {supply?.runsOutOn
+                                ? [
+                                    `Runs out ${formatDay(supply.runsOutOn)}`,
+                                    medication.enabled ? daysLeftLabel(supply.daysRemaining) : "",
+                                    medication.enabled && supply.deadline && supply.state !== "requested" && supply.state !== "not_needed"
+                                      ? `Refill by ${formatDay(supply.deadline)}`
+                                      : "",
+                                  ]
+                                    .filter(Boolean)
+                                    .join(" · ")
+                                : "No supply estimate yet"}
+                            </p>
+                            {supply?.requestedAt ? (
+                              <p className="text-sm text-[var(--color-text-muted)]">{requestAgeLabel(supply.requestedAt)}</p>
+                            ) : null}
+                          </div>
+                          <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                            {supply?.needsConfirmation ? <Badge tone="warning">Confirm estimate</Badge> : null}
+                            {status ? <Badge tone={status.tone}>{status.label}</Badge> : null}
+                          </div>
+                        </div>
+
+                        {mayChange ? (
+                          <div className="flex flex-wrap gap-2">
+                            <Button size="sm" variant="secondary" disabled={busy} onClick={() => setSheet({ mode: "set", medication })}>
+                              {supply?.runsOutOn ? "Update supply" : "Set supply"}
+                            </Button>
+                            {canMarkRequested(supply ?? undefined, medication.enabled) ? (
+                              <Button size="sm" variant="secondary" loading={busy} onClick={() => void markRequested(medication)}>
+                                Mark requested
+                              </Button>
+                            ) : null}
+                            {medication.enabled ? (
+                              <Button size="sm" variant="secondary" disabled={busy} onClick={() => setSheet({ mode: "receive", medication })}>
+                                Mark received
+                              </Button>
+                            ) : null}
+                            {supply?.state === "requested" || supply?.requestedAt ? (
+                              <Button size="sm" variant="secondary" loading={busy} onClick={() => void clearRequest(medication)}>
+                                Clear request
+                              </Button>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            ))}
+          </div>
+        )}
+      </CardBody>
+
+      <SupplySheet
+        open={sheet !== null}
+        mode={sheet?.mode ?? "set"}
+        medication={sheet?.medication ?? null}
+        defaultLeadDays={defaultLead}
+        onClose={() => setSheet(null)}
+        onSaved={() => {
+          setSheet(null);
+          onChanged();
+        }}
+      />
+    </Card>
+  );
+}

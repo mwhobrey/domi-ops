@@ -29,6 +29,7 @@ import { computeEstimate, loadSupplyViews, type PharmacySummary, type SupplySumm
  *   GET  /refills                              the work, grouped by pharmacy
  *   POST /medications/:id/supply/request       "I contacted the pharmacy"
  *   POST /medications/:id/supply/receive       "It arrived": replaces the estimate, clears the request
+ *   DELETE /medications/:id/supply/request     "I asked by mistake": drops an open request
  *
  * The status itself is never stored; it is derived from the estimate, the lead time and whether a
  * request is open (see refillStatus). A request stays until it is received. Permissions follow the
@@ -197,6 +198,41 @@ export function healthRefillRoutes(db: Database, env: Env) {
         });
       }
       return c.json({ ...(await stateOf(auth, med)), alreadyRequested: !claimed });
+    } catch (e) {
+      const resp = encryptionError(c, e);
+      if (resp) return resp;
+      throw e;
+    }
+  });
+
+  // Drops an open request (asked by mistake, or no longer wanted). Nothing open: nothing changes.
+  // Allowed for a paused medication too, so a stale request can still be cleaned up.
+  app.delete("/medications/:id/supply/request", async (c) => {
+    const auth = c.get("auth")!;
+    const med = await loadMedication(auth, c.req.param("id"));
+    if (!med) return c.json({ error: "medication_not_found" }, 404);
+    if (!(await hasHealthSegmentAccess(db, auth, med.memberId, "medications", "write"))) return c.json({ error: "forbidden" }, 403);
+
+    try {
+      const [cleared] = await db
+        .update(healthMedicationSupply)
+        .set({
+          requestedAt: null,
+          requestedByUserId: null,
+          version: sql`${healthMedicationSupply.version} + 1`,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(healthMedicationSupply.medicationId, med.id), sql`${healthMedicationSupply.requestedAt} is not null`))
+        .returning({ pharmacyId: healthMedicationSupply.pharmacyId });
+      if (cleared) {
+        await db.insert(healthMedicationRefillEvents).values({
+          medicationId: med.id,
+          kind: "request_cleared",
+          pharmacyId: cleared.pharmacyId,
+          createdByUserId: auth.userId,
+        });
+      }
+      return c.json({ ...(await stateOf(auth, med)), alreadyClear: !cleared });
     } catch (e) {
       const resp = encryptionError(c, e);
       if (resp) return resp;

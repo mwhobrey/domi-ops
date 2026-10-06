@@ -461,6 +461,64 @@ maybeDescribe("refill workflow (integration)", () => {
     });
   });
 
+  describe("clearing a request", () => {
+    const clear = (as: string, id: string) => call(as, "DELETE", `/health/medications/${id}/supply/request`);
+
+    it("drops an open request, records it, and puts the medication back on its dates", async () => {
+      const id = await makeMed();
+      await withEstimate(id, 2);
+      await request("mom", id);
+      const res = await clear("writer", id);
+      expect(res.status).toBe(200);
+      expect(res.json.alreadyClear).toBe(false);
+      expect(res.json.supply).toMatchObject({ state: "needs_refill", requestedAt: null, version: 3 });
+      const row = (await stored(id))!;
+      expect(row).toMatchObject({ requestedAt: null, requestedByUserId: null, revision: 1 });
+      expect(await events(id)).toMatchObject([{ kind: "requested" }, { kind: "request_cleared", createdByUserId: people.writer!.userId }]);
+      // it can be requested again afterwards
+      expect((await request("mom", id)).json.alreadyRequested).toBe(false);
+    });
+
+    it("does nothing when there is no open request, and says so", async () => {
+      const id = await makeMed();
+      await withEstimate(id, 2);
+      const res = await clear("mom", id);
+      expect(res.status).toBe(200);
+      expect(res.json.alreadyClear).toBe(true);
+      expect(res.json.supply.version).toBe(1);
+      expect(await events(id)).toHaveLength(0);
+      // and for a medication that never had any supply row
+      expect((await clear("mom", await makeMed())).json).toMatchObject({ alreadyClear: true, supply: null });
+    });
+
+    it("records one clearing when several people clear at once", async () => {
+      const id = await makeMed();
+      await withEstimate(id, 2);
+      await request("mom", id);
+      const results = await Promise.all([clear("mom", id), clear("writer", id), clear("mom", id)]);
+      expect(results.filter((r) => r.json.alreadyClear === false)).toHaveLength(1);
+      expect((await events(id)).filter((e) => e.kind === "request_cleared")).toHaveLength(1);
+    });
+
+    it("can clean up a request on a paused medication, but only for people who may change it", async () => {
+      const id = await makeMed();
+      await withEstimate(id, 2, { requestedAt: new Date(), requestedByUserId: people.mom!.userId });
+      await withHouseholdContext(baseDb, hhId, (tx) => tx.update(healthMedications).set({ enabled: false }).where(eq(healthMedications.id, id)));
+      expect((await clear("reader", id)).status).toBe(403);
+      expect((await stored(id))!.requestedAt).not.toBeNull();
+      expect((await clear("mom", id)).status).toBe(200);
+      expect((await stored(id))!.requestedAt).toBeNull();
+    });
+
+    it("does not reveal a private or other-household medication, or a deleted one", async () => {
+      const hidden = await makeMed({ visibility: "private" }, "mom", "mom");
+      expect((await clear("writer", hidden)).status).toBe(404);
+      expect((await clear("outsider", await makeMed())).status).toBe(404);
+      expect((await clear("mom", await makeMed({ deletedAt: new Date() }))).status).toBe(404);
+      expect((await clear("mom", "nope")).status).toBe(404);
+    });
+  });
+
   describe("paused and deleted medications", () => {
     it("refuses to request or receive for a paused medication, and 404s a deleted one", async () => {
       const paused = await makeMed({ enabled: false });
