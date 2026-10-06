@@ -26,6 +26,14 @@ export const FAQ_ITEMS: FaqItem[] = [
     a: "Yes. Scheduled health checks work like medication reminders, but for measurements: set a check for a person (say, blood pressure four times a day), and Domi Ops sends a push reminder at each time. If the reading is already logged, no reminder goes out. You can bundle several checks into one reminder, skip a check right from the notification, and see adherence and blood pressure reports for date ranges of up to a year.",
   },
   {
+    q: "Can it help me fill a pill organizer and remember refills?",
+    a: "Yes. Set up a pill organizer for a person: how often you fill it, how many days it holds, and which compartment each dose time goes in (Morning, Lunch, Supper, Night, or your own). Then a filling session follows you through the bottles: pick a medication, see which pills go in which compartment and how many, save it, and move on. If you run short you can fill fewer days now and the rest later. Domi Ops reminds you on fill day and when a refill is due, and you mark a refill requested and then received. Filling never marks doses as taken.",
+  },
+  {
+    q: "Does it know how many pills are left?",
+    a: "No, and it says so. Supply is an estimate that you confirm, not a live count. You tell it how many days of a medication you keep outside the organizer, and it adds the days the organizer still holds to work out when you run out. Taking or skipping a dose never changes it, so if you take extra or skip some, update it. After a medication is paused and resumed, Domi Ops asks you to confirm the estimate before it reminds you again.",
+  },
+  {
     q: "Who can see and edit a family member's health records?",
     a: "You choose. Each record is private or shared with the household, and sharing is read-only by default. Editing needs the creator, the person the record is about, an owner or admin, or someone you've explicitly granted write access.",
   },
