@@ -79,6 +79,47 @@ WHO-382. Drives the real `/api/health/checks` and `/api/health/check-groups` han
 | Reading changes (`DELETE` / `PATCH /health/events/:id`, WHO-385) | Deleting a reading, re-typing it, or handing it to someone else removes the slot completions it backed, so the slot reads open again; any other edit leaves them; skipped slots are untouched |
 | Logging a slot (`POST /checks/:id/log`, WHO-383) | Needs `events` write on the person and visibility of the check (reader 403, admin without a grant 404). The linked event must be visible to the caller (otherwise 404, nothing revealed), the same person, and the same kind of entry; 409 if it already completes another slot of the check. Seconds are truncated, repeating a slot replaces the answer, and a slot counts however early or late the event was |
 
+## Pharmacies, supply, organizers and their reminders (WHO-413 to WHO-434)
+
+The medication filling and pharmacy feature adds sixteen tables over three migrations (`0087_health_supply`, `0088_health_organizers`, `0090_health_supply_reminders`); `0091_health_supply_least_privilege` narrows the worker's reach. All of them have `household_isolation`. Only `health_organizer_plans` and `health_medication_supply` also have `worker_scan`, because the scheduler's tick is the one cross-tenant reader (see [HOSTED_RLS.md](./HOSTED_RLS.md)). Everything runs as the non-superuser app role, and every file skips itself without a database URL.
+
+### Database level
+
+| Case | Where | Expectation |
+|------|-------|-------------|
+| Household isolation: pharmacies, supply, revisions, refill events, person-wide lead time | `packages/db/src/health-supply-isolation.integration.test.ts` | Each household sees only its own rows, by id; no household context returns nothing |
+| Household isolation: plans, compartments, time map, caregivers, occurrences and their history, sessions, fills, dose quantities | `packages/db/src/health-organizer-isolation.integration.test.ts` | Same, down to the child tables |
+| Household isolation: sent fill and refill reminders | `packages/db/src/health-supply-reminders-isolation.integration.test.ts` | Same; no context returns nothing |
+| Cross-household references rejected | the three files above | A medication pointed at another household's pharmacy, a time-map row at another plan's compartment, a fill at another household's session or medication, a reminder recorded for another household's plan or medication: all rejected by RLS (`42501`) or a foreign key (`23503`); an UPDATE or DELETE aimed at another tenant's row matches nothing |
+| Worker scan context reaches only what the tick reads | `health-supply-reminders-isolation.integration.test.ts`, `rls-worker-scan-coverage.integration.test.ts` | Among this feature's tables exactly `health_organizer_plans` and `health_medication_supply` carry `worker_scan`; a worker-scan transaction sees no pharmacy and no sent reminder, cannot record one (`42501`), and sees no supply revision |
+| A reminder can be claimed once | `health-supply-reminders-isolation.integration.test.ts` | A second claim for the same appointment and person, or the same estimate revision, kind and person, is `23505`; a new revision or the other kind goes through; an unknown kind is `23514` |
+| Append-only supply history | `health-supply-isolation.integration.test.ts` | An UPDATE or DELETE of a revision is refused (`23001`); the foreign keys still cascade |
+
+### API level (real routes through the real tenant middleware)
+
+All in `apps/api/src/routes/health-pharmacies`, `health-supply`, `health-refills`, `health-organizers`, `health-organizer-appointments` and `health-organizer-sessions` `.integration.test.ts`.
+
+| Case | Expectation |
+|------|-------------|
+| Household isolation | Another household's pharmacy, supply, refill, plan, appointment or session is 404, never a leak and never 403 |
+| Read-only access | A reader (or a child without a grant) can look; every change is refused. A writer can do both |
+| Revoked caregiver | After the grant is removed, a caregiver who could change things before is refused, partway through a session included, and nothing is changed |
+| Private medication filtering | Pharmacy counts and lists, supply summaries, the refill list, setup problems, session medications, change summaries and appointment effects include only what the caller may see, and a request for a hidden one never reveals that it exists (archive confirmations included) |
+| Cross-household references rejected | A pharmacy of another household on a medication's supply, a caregiver or person outside the household, a group that is another person's, another person's medication in a session: 404 or 400 with a specific code, nothing written |
+| Not through another plan | A session or appointment id under the wrong plan is 404 |
+
+### Calendar, dashboard and reminders
+
+| Case | Where | Expectation |
+|------|-------|-------------|
+| Calendar chips (`health_supply`) | `apps/api/src/lib/calendar-supply-overlays.integration.test.ts` | Appointments only for people who may read the person's medications; refill deadlines only for medications the viewer may see (a private one is invisible to an owner or admin without access, to a stranger, and to a caregiver without access); each chip lists only people who may see it |
+| Dashboard Health tile refills | the same file | Only visible, active, unrequested medications whose deadline has come |
+| Reminder job: own household only, no cross-tenant policy | `packages/calendar-sync/src/health-supply-reminder-scan.integration.test.ts` | The job runs in `withHouseholdContext`, so it needs no `worker_scan` policy on any table it touches (0091 removed them from its tables and the suite passes); a scan for one household sends nothing for another, whatever time zone it is on |
+| Recipients and access at send time | the same file | Only the plan's selected caregivers (the person when there is no plan), each rechecked for medications read at send time; a private medication reaches only people who can see it, with no admin override; inbox for everyone, push only where the health reminders setting is on |
+| The tick | `packages/calendar-sync/src/health-supply-reminder-fanout.integration.test.ts` | One job per household with a plan or an estimate and the health module, nothing else |
+
+A new `*.integration.test.ts` needs no registration: `npm run test:hosted` picks it up.
+
 ## Manual API checks (after `dev:hosted` stack)
 
 1. Log in as `alpha@hosted-qa.domi-ops.test` — `/api/core/notes` returns one note.

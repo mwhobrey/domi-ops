@@ -230,7 +230,7 @@ maybeDescribe("scanHealthSupplyReminders (integration)", () => {
       await makePlan({}, ["mom", "sitter"]);
       const counts = await Promise.all([scan("2026-10-06T14:00:00Z"), scan("2026-10-06T14:00:00Z"), scan("2026-10-06T14:00:00Z")]);
       expect(counts.reduce((a, b) => a + b, 0)).toBe(2);
-      const rows = await withWorkerScanContext(db, (tx) => tx.select().from(healthSupplyFillReminderSent));
+      const rows = await withHouseholdContext(db, householdId, (tx) => tx.select().from(healthSupplyFillReminderSent));
       expect(rows.filter((r) => [userIds.mom, userIds.sitter].includes(r.userId)).length).toBe(2);
       expect((await inbox("mom", "health-fill-%")).length).toBe(1);
       expect((await inbox("sitter", "health-fill-%")).length).toBe(1);
@@ -404,7 +404,7 @@ maybeDescribe("scanHealthSupplyReminders (integration)", () => {
       expect((await inbox("ally", "health-refill-%"))[0]!.tag).toBe(`health-refill-${med.id}-2-refill`);
 
       // A reminder already sent for revision 1 does not stop revision 2 reminding too.
-      const sent = await withWorkerScanContext(db, (tx) => tx.select().from(healthSupplyRefillReminderSent).where(eq(healthSupplyRefillReminderSent.medicationId, med.id)));
+      const sent = await withHouseholdContext(db, householdId, (tx) => tx.select().from(healthSupplyRefillReminderSent).where(eq(healthSupplyRefillReminderSent.medicationId, med.id)));
       expect(sent.map((r) => [r.revision, r.kind])).toEqual([[2, "refill"]]);
     });
 

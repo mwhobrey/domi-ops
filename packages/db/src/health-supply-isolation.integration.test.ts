@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq, inArray, like } from "drizzle-orm";
+import { eq, inArray, like, sql } from "drizzle-orm";
 import { closeDb, createDb, withHouseholdContext, withSystemContext, withWorkerScanContext } from "./index.js";
 import {
   healthMedicationRefillEvents,
@@ -104,13 +104,15 @@ maybeDescribe("health supply tenant isolation (integration)", () => {
     if (!db) return;
     // Supply, revisions and refill events cascade from the medication; settings stay with the
     // seeded members, so remove the ones this run created.
-    await withWorkerScanContext(db, async (tx) => {
-      await tx.delete(healthMedications).where(like(healthMedications.name, `${marker}%`));
-      await tx.delete(healthPharmacies).where(like(healthPharmacies.name, `${marker}%`));
-      for (const t of [alpha, beta]) {
-        if (t) await tx.delete(healthSupplySettings).where(eq(healthSupplySettings.memberId, t.memberId));
-      }
-    });
+    // Each household's own rows, from that household's own context: the worker no longer reaches these tables (WHO-434).
+    for (const t of [alpha, beta]) {
+      if (!t) continue;
+      await withHouseholdContext(db, t.householdId, async (tx) => {
+        await tx.delete(healthMedications).where(like(healthMedications.name, `${marker}%`));
+        await tx.delete(healthPharmacies).where(like(healthPharmacies.name, `${marker}%`));
+        await tx.delete(healthSupplySettings).where(eq(healthSupplySettings.memberId, t.memberId));
+      });
+    }
     await closeDb(db);
   });
 
@@ -364,12 +366,19 @@ maybeDescribe("health supply tenant isolation (integration)", () => {
         return row?.n;
       };
 
-      it("refuses a direct update or delete, from a household or from the worker, and leaves the row as it was", async () => {
+      it("refuses a direct update or delete from a household, and leaves the row as it was", async () => {
         const where = eq(healthMedicationSupplyRevisions.medicationId, alpha.medicationId);
         expect(await sqlState(inAlpha((tx) => tx.update(healthMedicationSupplyRevisions).set({ outsideDays: 99 }).where(where)))).toBe(RESTRICT_VIOLATION);
         expect(await sqlState(inAlpha((tx) => tx.delete(healthMedicationSupplyRevisions).where(where)))).toBe(RESTRICT_VIOLATION);
-        expect(await sqlState(withWorkerScanContext(db, (tx) => tx.update(healthMedicationSupplyRevisions).set({ source: "manual" }).where(where)))).toBe(RESTRICT_VIOLATION);
-        expect(await sqlState(withWorkerScanContext(db, (tx) => tx.delete(healthMedicationSupplyRevisions).where(where)))).toBe(RESTRICT_VIOLATION);
+        expect(await revisionOutsideDays(alpha.medicationId)).toBe(10);
+      });
+
+      it("is out of the worker's reach altogether: it neither sees a revision nor can change one", async () => {
+        const where = eq(healthMedicationSupplyRevisions.medicationId, alpha.medicationId);
+        expect(await withWorkerScanContext(db, (tx) => tx.select({ id: healthMedicationSupplyRevisions.id }).from(healthMedicationSupplyRevisions).where(where))).toHaveLength(0);
+        // No policy lets it in, so there is nothing to update or delete (no error, no change).
+        expect(await sqlState(withWorkerScanContext(db, (tx) => tx.update(healthMedicationSupplyRevisions).set({ source: "manual" }).where(where)))).toBeNull();
+        expect(await sqlState(withWorkerScanContext(db, (tx) => tx.delete(healthMedicationSupplyRevisions).where(where)))).toBeNull();
         expect(await revisionOutsideDays(alpha.medicationId)).toBe(10);
       });
 
@@ -389,12 +398,13 @@ maybeDescribe("health supply tenant isolation (integration)", () => {
           tx.insert(healthMedicationSupplyRevisions).values({ medicationId: med, revision: 1, source: "manual", runsOutOn: "2026-12-01", estimatedOn: "2026-10-05", outsideDays: 1, organizerDaysCounted: 0 }),
         );
         expect(await sqlState(inAlpha((tx) => tx.delete(healthMedications).where(eq(healthMedications.id, med))))).toBeNull();
-        // Looked for from the worker, which sees every row: once the medication is gone, row level
-        // security (which joins to it) would hide a revision that had wrongly been left behind.
-        const left = await withWorkerScanContext(db, (tx) =>
-          tx.select({ id: healthMedicationSupplyRevisions.id }).from(healthMedicationSupplyRevisions).where(eq(healthMedicationSupplyRevisions.medicationId, med)),
-        );
-        expect(left).toHaveLength(0);
+        // A leftover revision could not be seen from here (row level security joins to the medication), so check the
+        // rule that removes it: the foreign key cascades.
+        const fk = await db.execute<{ onDelete: string }>(sql`
+          select confdeltype as "onDelete" from pg_constraint
+          where conrelid = 'health_medication_supply_revisions'::regclass and confrelid = 'health_medications'::regclass and contype = 'f'
+        `);
+        expect([...fk].map((r) => r.onDelete)).toEqual(["c"]);
       });
 
       it("lets the foreign key actions through: deleting a user clears who made the estimate but keeps it", async () => {
