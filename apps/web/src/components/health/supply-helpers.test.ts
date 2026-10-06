@@ -6,10 +6,14 @@ import {
   daysLeftLabel,
   formatDay,
   groupBySupply,
+  medsNeedingConfirmation,
+  medsNeedingSetup,
   parseDays,
   parsePreview,
+  planSetupRow,
   previewLabel,
   requestAgeLabel,
+  setupDismissKey,
   supplyChip,
   supplyErrorMessage,
   supplyStatus,
@@ -217,5 +221,60 @@ describe("supplyErrorMessage", () => {
     expect(supplyErrorMessage(err("supply_too_large"), "x")).toMatch(/ten years/);
     expect(supplyErrorMessage(err("brand_new"), "Could not save.")).toBe("Could not save.");
     expect(supplyErrorMessage(new Error("boom"), "Could not save.")).toBe("Could not save.");
+  });
+});
+
+describe("medsNeedingSetup and medsNeedingConfirmation", () => {
+  it("lists active medications with no estimate, by name, leaving paused and estimated ones out", () => {
+    const meds = [
+      med("zinc"),
+      med("amoxicillin", { supply: supply({ runsOutOn: null, state: "no_estimate", daysRemaining: null }) }),
+      med("done", { supply: supply() }),
+      med("paused", { enabled: false }),
+      med("pharmacy only", { pharmacy: { id: "p", name: "P", archived: false }, supply: supply({ runsOutOn: null, state: "no_estimate" }) }),
+    ];
+    expect(medsNeedingSetup(meds).map((m) => m.name)).toEqual(["amoxicillin", "pharmacy only", "zinc"]);
+    expect(meds.map((m) => m.name)).toEqual(["zinc", "amoxicillin", "done", "paused", "pharmacy only"]);
+  });
+
+  it("lists active medications whose estimate needs confirming", () => {
+    const meds = [
+      med("a", { supply: supply({ needsConfirmation: true }) }),
+      med("b", { supply: supply() }),
+      med("c", { enabled: false, supply: supply({ needsConfirmation: true }) }),
+      med("d"),
+    ];
+    expect(medsNeedingConfirmation(meds).map((m) => m.name)).toEqual(["a"]);
+  });
+});
+
+describe("planSetupRow", () => {
+  it("leaves an untouched row alone", () => {
+    expect(planSetupRow({ daysText: "", pharmacyId: "", originalPharmacyId: "" })).toEqual({ kind: "skip" });
+    expect(planSetupRow({ daysText: "  ", pharmacyId: "p1", originalPharmacyId: "p1" })).toEqual({ kind: "skip" });
+  });
+
+  it("saves the days, and the pharmacy only when it changed", () => {
+    expect(planSetupRow({ daysText: "30", pharmacyId: "", originalPharmacyId: "" })).toEqual({ kind: "save", body: { outsideDays: 30 } });
+    expect(planSetupRow({ daysText: "30", pharmacyId: "p2", originalPharmacyId: "p1" })).toEqual({ kind: "save", body: { outsideDays: 30, pharmacyId: "p2" } });
+    expect(planSetupRow({ daysText: "0", pharmacyId: "p1", originalPharmacyId: "p1" })).toEqual({ kind: "save", body: { outsideDays: 0 } });
+  });
+
+  it("saves a pharmacy on its own, and clearing one sends null", () => {
+    expect(planSetupRow({ daysText: "", pharmacyId: "p1", originalPharmacyId: "" })).toEqual({ kind: "save", body: { pharmacyId: "p1" } });
+    expect(planSetupRow({ daysText: "", pharmacyId: "", originalPharmacyId: "p1" })).toEqual({ kind: "save", body: { pharmacyId: null } });
+  });
+
+  it("flags days that are not a whole number in range", () => {
+    for (const bad of ["abc", "-1", "1.5", "3651", "1e2"]) {
+      expect(planSetupRow({ daysText: bad, pharmacyId: "", originalPharmacyId: "" }), bad).toEqual({ kind: "invalid" });
+    }
+  });
+});
+
+describe("setupDismissKey", () => {
+  it("is separate for each person", () => {
+    expect(setupDismissKey("m1")).not.toBe(setupDismissKey("m2"));
+    expect(setupDismissKey("m1")).toContain("m1");
   });
 });

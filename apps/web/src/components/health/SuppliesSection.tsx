@@ -4,14 +4,18 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiClient } from "../../lib/client-api";
 import { Alert, Badge, Button, Card, CardBody, EmptyState, Input, SectionHeader } from "../ui";
 import type { HealthMedication } from "./health-types";
+import { SupplyConfirmDialog } from "./SupplyConfirmDialog";
+import { SupplySetupSheet } from "./SupplySetupSheet";
 import { SupplySheet } from "./SupplySheet";
 import {
   canMarkRequested,
   daysLeftLabel,
   formatDay,
   groupBySupply,
+  medsNeedingSetup,
   parseDays,
   requestAgeLabel,
+  setupDismissKey,
   supplyErrorMessage,
   supplyStatus,
 } from "./supply-helpers";
@@ -29,6 +33,8 @@ export function SuppliesSection({
   medications,
   canWrite,
   onChanged,
+  autoPromptMedicationId = null,
+  onPromptHandled,
 }: {
   memberId: string;
   memberLabelText: string;
@@ -38,6 +44,9 @@ export function SuppliesSection({
   canWrite: boolean;
   /** Called after any change, so the medication list (and with it this section) reloads. */
   onChanged: () => void;
+  /** A medication that was just resumed: if its estimate now needs confirming, ask about it right away. */
+  autoPromptMedicationId?: string | null;
+  onPromptHandled?: () => void;
 }) {
   const [defaultLead, setDefaultLead] = useState(DEFAULT_LEAD);
   const [editingLead, setEditingLead] = useState(false);
@@ -45,6 +54,11 @@ export function SuppliesSection({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sheet, setSheet] = useState<{ mode: "set" | "receive"; medication: HealthMedication } | null>(null);
+  const [setupOpen, setSetupOpen] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+  const [confirming, setConfirming] = useState<HealthMedication | null>(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
 
   const loadLead = useCallback(async () => {
     try {
@@ -60,7 +74,59 @@ export function SuppliesSection({
     void loadLead();
   }, [loadLead]);
 
+  // "Not now" on the setup prompt is remembered per person, in this browser only.
+  useEffect(() => {
+    try {
+      setDismissed(window.localStorage.getItem(setupDismissKey(memberId)) === "1");
+    } catch {
+      setDismissed(false);
+    }
+  }, [memberId]);
+
+  function dismissSetup() {
+    setDismissed(true);
+    try {
+      window.localStorage.setItem(setupDismissKey(memberId), "1");
+    } catch {
+      // not remembered; it will come back next visit
+    }
+  }
+
+  // Resuming a medication whose estimate predates the pause: ask whether it is still right, once.
+  useEffect(() => {
+    if (!autoPromptMedicationId) return;
+    const med = medications.find((m) => m.id === autoPromptMedicationId);
+    if (!med) return;
+    if (med.supply?.needsConfirmation) {
+      setConfirmError(null);
+      setConfirming(med);
+    }
+    onPromptHandled?.();
+  }, [autoPromptMedicationId, medications, onPromptHandled]);
+
+  async function confirmCurrent() {
+    const med = confirming;
+    if (!med?.supply) return;
+    setConfirmBusy(true);
+    setConfirmError(null);
+    try {
+      await apiClient.put(`/api/health/medications/${med.id}/supply`, {
+        confirm: true,
+        version: med.supply.version,
+        idempotencyKey: crypto.randomUUID(),
+      });
+      setConfirming(null);
+      onChanged();
+    } catch (e) {
+      setConfirmError(supplyErrorMessage(e, "Could not confirm the estimate."));
+    } finally {
+      setConfirmBusy(false);
+    }
+  }
+
   const groups = useMemo(() => groupBySupply(medications), [medications]);
+  const needingSetup = useMemo(() => medsNeedingSetup(medications), [medications]);
+  const hasAnyEstimate = medications.some((m) => m.supply?.runsOutOn);
 
   async function act(medication: HealthMedication, run: () => Promise<unknown>, fallback: string) {
     setBusyId(medication.id);
@@ -147,8 +213,36 @@ export function SuppliesSection({
 
         {error ? <Alert variant="error">{error}</Alert> : null}
 
+        {medications.length > 0 && !hasAnyEstimate ? (
+          <p className="text-sm text-[var(--color-text-muted)]">
+            Supply tracking tells you when to ask for a refill. You enter how many days of pills you have and it works out the run-out date. It is
+            an estimate you confirm, not a live count: logging a dose never changes it.
+          </p>
+        ) : null}
+
+        {canWrite && !dismissed && needingSetup.length > 0 ? (
+          <Alert variant="info">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span>
+                {needingSetup.length === 1 ? "1 medication has" : `${needingSetup.length} medications have`} no supply estimate yet.
+              </span>
+              <span className="flex gap-2">
+                <Button size="sm" onClick={() => setSetupOpen(true)}>
+                  Set up supply
+                </Button>
+                <Button size="sm" variant="ghost" onClick={dismissSetup}>
+                  Not now
+                </Button>
+              </span>
+            </div>
+          </Alert>
+        ) : null}
+
         {groups.length === 0 ? (
-          <EmptyState title="No medications yet" description={`Add a medication for ${memberLabelText} to track how long it lasts.`} />
+          <EmptyState
+            title="No medications yet"
+            description={`Add a medication for ${memberLabelText} and you can track how long it lasts. Supply is an estimate you confirm, not live inventory.`}
+          />
         ) : (
           <div className="space-y-4">
             {groups.map((group) => (
@@ -202,6 +296,19 @@ export function SuppliesSection({
                             <Button size="sm" variant="secondary" disabled={busy} onClick={() => setSheet({ mode: "set", medication })}>
                               {supply?.runsOutOn ? "Update supply" : "Set supply"}
                             </Button>
+                            {supply?.needsConfirmation && medication.enabled ? (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                disabled={busy}
+                                onClick={() => {
+                                  setConfirmError(null);
+                                  setConfirming(medication);
+                                }}
+                              >
+                                Confirm estimate
+                              </Button>
+                            ) : null}
                             {canMarkRequested(supply ?? undefined, medication.enabled) ? (
                               <Button size="sm" variant="secondary" loading={busy} onClick={() => void markRequested(medication)}>
                                 Mark requested
@@ -228,6 +335,27 @@ export function SuppliesSection({
           </div>
         )}
       </CardBody>
+
+      <SupplySetupSheet
+        open={setupOpen}
+        memberLabelText={memberLabelText}
+        medications={medications}
+        onClose={() => setSetupOpen(false)}
+        onSaved={onChanged}
+      />
+
+      <SupplyConfirmDialog
+        medication={confirming}
+        busy={confirmBusy}
+        error={confirmError}
+        onConfirm={() => void confirmCurrent()}
+        onReplace={() => {
+          const med = confirming;
+          setConfirming(null);
+          if (med) setSheet({ mode: "set", medication: med });
+        }}
+        onLater={() => setConfirming(null)}
+      />
 
       <SupplySheet
         open={sheet !== null}
