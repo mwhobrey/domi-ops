@@ -8,6 +8,7 @@ import { NoteSharePicker } from "../NoteSharePicker";
 import type { HealthAclGrants } from "../HealthPeopleAccessPanel";
 import { HealthMedicationSheet } from "./HealthMedicationSheet";
 import { PharmaciesSection } from "./PharmaciesSection";
+import { OrganizerSection } from "./OrganizerSection";
 import { SuppliesSection } from "./SuppliesSection";
 import { supplyChip } from "./supply-helpers";
 import { isAsNeededMedScheduleKind, memberLabel, resolveDefaultMemberId, scheduleKindLabel } from "./health-helpers";
@@ -724,6 +725,17 @@ export function MedicationManagerClient({
               )}
             </CardBody>
           </Card>
+
+          <OrganizerSection
+            memberId={selectedMemberId}
+            memberLabelText={memberLabel(members, selectedMemberId)}
+            members={members}
+            medications={memberMeds}
+            groups={memberGroups}
+            canWrite={canWriteSelected}
+            refreshKey={pharmacyRefresh}
+            onMedicationsChanged={() => load(true)}
+          />
 
           <SuppliesSection
             memberId={selectedMemberId}
