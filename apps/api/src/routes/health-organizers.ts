@@ -69,11 +69,17 @@ export function healthOrganizerRoutes(db: Database, env: Env) {
     return null;
   };
 
-  async function activePlanFor(memberId: string): Promise<PlanRow | null> {
+  async function activePlanFor(householdId: string, memberId: string): Promise<PlanRow | null> {
     const [row] = await db
       .select()
       .from(healthOrganizerPlans)
-      .where(and(eq(healthOrganizerPlans.memberId, memberId), isNull(healthOrganizerPlans.archivedAt)))
+      .where(
+        and(
+          eq(healthOrganizerPlans.householdId, householdId),
+          eq(healthOrganizerPlans.memberId, memberId),
+          isNull(healthOrganizerPlans.archivedAt),
+        ),
+      )
       .limit(1);
     return row ?? null;
   }
@@ -110,7 +116,7 @@ export function healthOrganizerRoutes(db: Database, env: Env) {
     try {
       await requireInHousehold(db, auth.householdId, { members: [memberId] });
       if (!(await hasHealthSegmentAccess(db, auth, memberId, "medications", "read"))) return c.json({ error: "forbidden" }, 403);
-      const plan = await activePlanFor(memberId);
+      const plan = await activePlanFor(auth.householdId, memberId);
       const canEdit = await hasHealthSegmentAccess(db, auth, memberId, "medications", "write");
       return c.json({ plan: plan ? await loadPlanView(db, auth, plan, canEdit) : null, canEdit });
     } catch (e) {
@@ -139,7 +145,7 @@ export function healthOrganizerRoutes(db: Database, env: Env) {
       const caregivers = body.caregiverMemberIds !== undefined ? parseCaregivers(body.caregiverMemberIds) : [auth.memberId];
       await assertCaregiversMayRead(auth, memberId, caregivers);
 
-      const existing = await activePlanFor(memberId);
+      const existing = await activePlanFor(auth.householdId, memberId);
       if (existing) return c.json({ error: "plan_exists", plan: await viewOf(auth, existing) }, 409);
 
       // ON CONFLICT rather than catching the unique violation: an error would abort the whole request's transaction.
@@ -157,7 +163,7 @@ export function healthOrganizerRoutes(db: Database, env: Env) {
         .onConflictDoNothing()
         .returning();
       if (!plan) {
-        const winner = await activePlanFor(memberId);
+        const winner = await activePlanFor(auth.householdId, memberId);
         return c.json({ error: "plan_exists", ...(winner ? { plan: await viewOf(auth, winner) } : {}) }, 409);
       }
       await db.insert(healthOrganizerCompartments).values(names.map((name, position) => ({ planId: plan.id, name, position })));
@@ -184,9 +190,9 @@ export function healthOrganizerRoutes(db: Database, env: Env) {
       const [plan] = await db
         .select()
         .from(healthOrganizerPlans)
-        .where(and(eq(healthOrganizerPlans.id, id), isNull(healthOrganizerPlans.archivedAt)))
+        .where(and(eq(healthOrganizerPlans.id, id), eq(healthOrganizerPlans.householdId, auth.householdId), isNull(healthOrganizerPlans.archivedAt)))
         .limit(1);
-      if (!plan || plan.householdId !== auth.householdId) return c.json({ error: "plan_not_found" }, 404);
+      if (!plan) return c.json({ error: "plan_not_found" }, 404);
       if (!(await hasHealthSegmentAccess(db, auth, plan.memberId, "medications", "write"))) return c.json({ error: "forbidden" }, 403);
 
       // ---- validate everything first
@@ -255,10 +261,21 @@ export function healthOrganizerRoutes(db: Database, env: Env) {
           version: sql`${healthOrganizerPlans.version} + 1`,
           updatedAt: new Date(),
         })
-        .where(and(eq(healthOrganizerPlans.id, plan.id), eq(healthOrganizerPlans.version, version), isNull(healthOrganizerPlans.archivedAt)))
+        .where(
+          and(
+            eq(healthOrganizerPlans.id, plan.id),
+            eq(healthOrganizerPlans.householdId, auth.householdId),
+            eq(healthOrganizerPlans.version, version),
+            isNull(healthOrganizerPlans.archivedAt),
+          ),
+        )
         .returning();
       if (!updated) {
-        const [current] = await db.select().from(healthOrganizerPlans).where(eq(healthOrganizerPlans.id, plan.id)).limit(1);
+        const [current] = await db
+          .select()
+          .from(healthOrganizerPlans)
+          .where(and(eq(healthOrganizerPlans.id, plan.id), eq(healthOrganizerPlans.householdId, auth.householdId)))
+          .limit(1);
         return c.json({ error: "version_conflict", ...(current ? { plan: await viewOf(auth, current) } : {}) }, 409);
       }
 
@@ -323,8 +340,12 @@ export function healthOrganizerRoutes(db: Database, env: Env) {
     const auth = c.get("auth")!;
     const id = c.req.param("id");
     if (!isUuid(id)) return c.json({ error: "plan_not_found" }, 404);
-    const [plan] = await db.select().from(healthOrganizerPlans).where(eq(healthOrganizerPlans.id, id)).limit(1);
-    if (!plan || plan.householdId !== auth.householdId) return c.json({ error: "plan_not_found" }, 404);
+    const [plan] = await db
+      .select()
+      .from(healthOrganizerPlans)
+      .where(and(eq(healthOrganizerPlans.id, id), eq(healthOrganizerPlans.householdId, auth.householdId)))
+      .limit(1);
+    if (!plan) return c.json({ error: "plan_not_found" }, 404);
     if (!(await hasHealthSegmentAccess(db, auth, plan.memberId, "medications", "write"))) return c.json({ error: "forbidden" }, 403);
     if (plan.archivedAt) return c.json({ archived: true });
 
@@ -338,7 +359,13 @@ export function healthOrganizerRoutes(db: Database, env: Env) {
     await db
       .update(healthOrganizerPlans)
       .set({ archivedAt: new Date(), version: sql`${healthOrganizerPlans.version} + 1`, updatedAt: new Date() })
-      .where(and(eq(healthOrganizerPlans.id, plan.id), isNull(healthOrganizerPlans.archivedAt)));
+      .where(
+        and(
+          eq(healthOrganizerPlans.id, plan.id),
+          eq(healthOrganizerPlans.householdId, auth.householdId),
+          isNull(healthOrganizerPlans.archivedAt),
+        ),
+      );
     return c.json({ archived: true });
   });
 

@@ -9,6 +9,7 @@ import {
   createDb,
   createScopedDb,
   healthMedicationDoseQuantities,
+  healthMedicationGroupMembers,
   healthMedicationGroups,
   healthMedications,
   healthMemberAcl,
@@ -605,6 +606,40 @@ maybeDescribe("organizer plans (integration)", () => {
       expect(seenByAdmin.json.plan.setup.doseTimes).toEqual([]);
       expect(seenByAdmin.json.plan.setup.problems).toEqual([]);
       expect(JSON.stringify(seenByAdmin.json)).not.toContain(hidden);
+    });
+  });
+
+  describe("groups the viewer cannot see", () => {
+    it("do not change what the viewer is told about the setup", async () => {
+      const kid = await newPerson();
+      await makePlan(kid);
+      const med = await makeMed(kid);
+      const group = (name: string, visibility: "household" | "private") =>
+        inDb(async (tx) => {
+          const [g] = await tx
+            .insert(healthMedicationGroups)
+            .values({
+              householdId: hhId,
+              memberId: people[kid]!.memberId,
+              name,
+              scheduleKind: "scheduled",
+              scheduleJson: JSON.stringify({ times: ["08:00"] }),
+              visibility,
+              createdByUserId: people.mom!.userId,
+            })
+            .returning({ id: healthMedicationGroups.id });
+          await tx.insert(healthMedicationGroupMembers).values({ groupId: g.id, medicationId: med });
+          return g.id;
+        });
+      await group("Visible", "household");
+      await group("Secret", "private");
+      const warnings = (json: Json) => json.plan.setup.problems.filter((p: Json) => p.kind === "double_claim");
+      const mine = await call("mom", "GET", `/?memberId=${people[kid]!.memberId}`);
+      expect(warnings(mine.json)).toEqual([{ kind: "double_claim", severity: "warning", medicationId: med, time: "08:00" }]);
+      // An admin can configure the plan but does not see the private group, so the clash it causes is not theirs to learn.
+      const admin = await call("dad", "GET", `/?memberId=${people[kid]!.memberId}`);
+      expect(admin.json.canEdit).toBe(true);
+      expect(warnings(admin.json)).toEqual([]);
     });
   });
 

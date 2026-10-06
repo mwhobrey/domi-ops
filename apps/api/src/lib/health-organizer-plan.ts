@@ -10,7 +10,7 @@ import {
   type healthOrganizerPlans,
 } from "@domi-ops/db";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
-import { healthMedicationVisibleWhere } from "./health-access.js";
+import { healthMedicationGroupVisibleWhere, healthMedicationVisibleWhere } from "./health-access.js";
 import { loadDoseQuantities } from "./health-dose-quantities.js";
 import { householdTodayIsoDate } from "./household-time.js";
 
@@ -75,7 +75,12 @@ async function computeSetup(
         healthMedicationVisibleWhere(db, auth),
       ),
     );
-  const groups = await db.select().from(healthMedicationGroups).where(eq(healthMedicationGroups.memberId, plan.memberId));
+  // Groups the viewer cannot see are left out too: a private group can claim a time or clash with another,
+  // and either would change the answer in a way that tells the viewer the group exists.
+  const groups = await db
+    .select()
+    .from(healthMedicationGroups)
+    .where(and(eq(healthMedicationGroups.memberId, plan.memberId), healthMedicationGroupVisibleWhere(db, auth)));
   const memberships = groups.length
     ? await db
         .select()
