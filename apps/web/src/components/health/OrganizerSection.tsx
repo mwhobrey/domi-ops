@@ -5,6 +5,7 @@ import { ApiError, apiClient } from "../../lib/client-api";
 import type { NoteShareMember } from "../NoteSharePicker";
 import { Alert, Badge, Button, Card, CardBody, EmptyState, SectionHeader } from "../ui";
 import type { HealthMedication } from "./health-types";
+import { FillingSheet } from "./FillingSheet";
 import { OrganizerSheet } from "./OrganizerSheet";
 import { scheduleSummary, setupChecklist, type GroupLike } from "./organizer-helpers";
 import type { OrganizerPlan, OrganizerStep } from "./organizer-types";
@@ -48,6 +49,9 @@ export function OrganizerSection({
   /** The person's medications may be partly visible to this viewer without their organizer being: then there is nothing to show. */
   const [forbidden, setForbidden] = useState(false);
   const [sheet, setSheet] = useState<{ step: OrganizerStep } | null>(null);
+  const [filling, setFilling] = useState(false);
+  /** How far the open filling session is, when there is one: for the button and a line under it. */
+  const [openSession, setOpenSession] = useState<{ filled: number; total: number } | null>(null);
 
   // Only the latest load may change what is shown: a slow answer for someone else must not replace this person's organizer.
   const latest = useRef(0);
@@ -59,6 +63,19 @@ export function OrganizerSection({
       if (mine !== latest.current) return;
       setPlan(res.plan);
       setForbidden(false);
+      let open: { filled: number; total: number } | null = null;
+      if (res.plan) {
+        try {
+          const current = await apiClient.get<{ session: { progress: { filled: number; total: number } } | null }>(
+            `/api/health/organizers/${res.plan.id}/sessions/current`,
+          );
+          if (current.session) open = { filled: current.session.progress.filled, total: current.session.progress.total };
+        } catch {
+          // The card still works without it: the filling screen finds the session itself.
+        }
+      }
+      if (mine !== latest.current) return;
+      setOpenSession(open);
     } catch (e) {
       if (mine !== latest.current) return;
       if (e instanceof ApiError && e.status === 403) setForbidden(true);
@@ -128,6 +145,17 @@ export function OrganizerSection({
               </dd>
             </dl>
 
+            {canWrite && (plan.setup.ready || openSession) ? (
+              <div className="flex flex-wrap items-center gap-3">
+                <Button onClick={() => setFilling(true)}>{openSession ? "Continue filling" : "Start filling"}</Button>
+                {openSession ? (
+                  <span className="text-sm text-[var(--color-text-muted)]">
+                    {openSession.filled} of {openSession.total} filled so far
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+
             <ul className="space-y-2">
               {checklist.map((item) => (
                 <li key={item.key} className="flex items-start gap-2 text-sm">
@@ -152,6 +180,19 @@ export function OrganizerSection({
           </>
         )}
       </CardBody>
+
+      {plan ? (
+        <FillingSheet
+          open={filling}
+          planId={plan.id}
+          memberLabelText={memberLabelText}
+          onClose={() => {
+            setFilling(false);
+            void load();
+          }}
+          onChanged={onMedicationsChanged}
+        />
+      ) : null}
 
       <OrganizerSheet
         open={sheet !== null}
