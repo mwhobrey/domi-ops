@@ -5,7 +5,9 @@ import { ApiError, apiClient } from "../../lib/client-api";
 import type { NoteShareMember } from "../NoteSharePicker";
 import { Alert, Badge, Button, Card, CardBody, EmptyState, SectionHeader } from "../ui";
 import type { HealthMedication } from "./health-types";
+import { AppointmentSheet } from "./AppointmentSheet";
 import { FillingSheet } from "./FillingSheet";
+import { OrganizerAppointments } from "./OrganizerAppointments";
 import { OrganizerSheet } from "./OrganizerSheet";
 import { scheduleSummary, setupChecklist, type GroupLike } from "./organizer-helpers";
 import type { OrganizerPlan, OrganizerStep } from "./organizer-types";
@@ -49,7 +51,11 @@ export function OrganizerSection({
   /** The person's medications may be partly visible to this viewer without their organizer being: then there is nothing to show. */
   const [forbidden, setForbidden] = useState(false);
   const [sheet, setSheet] = useState<{ step: OrganizerStep } | null>(null);
-  const [filling, setFilling] = useState(false);
+  const [filling, setFilling] = useState<{ occurrenceDate: string | null } | null>(null);
+  /** The appointment open in its own sheet, by the day the schedule put it on. */
+  const [appointment, setAppointment] = useState<string | null>(null);
+  /** Bumped when something happened that can change the appointment list (a session ended, an outcome was saved). */
+  const [appointmentsKey, setAppointmentsKey] = useState(0);
   /** How far the open filling session is, when there is one: for the button and a line under it. */
   const [openSession, setOpenSession] = useState<{ filled: number; total: number } | null>(null);
 
@@ -147,7 +153,7 @@ export function OrganizerSection({
 
             {canWrite && (plan.setup.ready || openSession) ? (
               <div className="flex flex-wrap items-center gap-3">
-                <Button onClick={() => setFilling(true)}>{openSession ? "Continue filling" : "Start filling"}</Button>
+                <Button onClick={() => setFilling({ occurrenceDate: null })}>{openSession ? "Continue filling" : "Start filling"}</Button>
                 {openSession ? (
                   <span className="text-sm text-[var(--color-text-muted)]">
                     {openSession.filled} of {openSession.total} filled so far
@@ -155,6 +161,8 @@ export function OrganizerSection({
                 ) : null}
               </div>
             ) : null}
+
+            <OrganizerAppointments planId={plan.id} refreshKey={appointmentsKey} onOpen={setAppointment} />
 
             <ul className="space-y-2">
               {checklist.map((item) => (
@@ -183,14 +191,32 @@ export function OrganizerSection({
 
       {plan ? (
         <FillingSheet
-          open={filling}
+          open={filling !== null}
           planId={plan.id}
           memberLabelText={memberLabelText}
+          medications={medications}
+          occurrenceDate={filling?.occurrenceDate ?? null}
           onClose={() => {
-            setFilling(false);
+            setFilling(null);
+            setAppointmentsKey((k) => k + 1);
             void load();
           }}
           onChanged={onMedicationsChanged}
+        />
+      ) : null}
+
+      {plan ? (
+        <AppointmentSheet
+          open={appointment !== null}
+          planId={plan.id}
+          nominalDate={appointment}
+          canWrite={canWrite}
+          onClose={() => setAppointment(null)}
+          onChanged={() => setAppointmentsKey((k) => k + 1)}
+          onStartSession={(date) => {
+            setAppointment(null);
+            setFilling({ occurrenceDate: date });
+          }}
         />
       ) : null}
 

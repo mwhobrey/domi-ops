@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiClient } from "../../lib/client-api";
-import { Alert, Button, Input, Modal, Sheet, Spinner } from "../ui";
+import { Alert, Button, ConfirmDialog, Input, Modal, Sheet, Spinner } from "../ui";
+import { FillingReviewBanner } from "./FillingReviewBanner";
 import { FillingMedicationPanel } from "./FillingMedicationPanel";
 import { FillingMedicationPicker } from "./FillingMedicationPicker";
 import { FillingSummary } from "./FillingSummary";
 import { count, fillErrorMessage, isStaleAnswer, progressLabel, rangeLabel, sessionFromConflict } from "./filling-helpers";
 import type { SessionDefaults, SessionView } from "./filling-types";
+import type { HealthMedication } from "./health-types";
 import { parseDays } from "./supply-helpers";
 
 type Notice = { tone: "success" | "info"; text: string };
@@ -22,12 +24,18 @@ export function FillingSheet({
   open,
   planId,
   memberLabelText,
+  medications,
+  occurrenceDate,
   onClose,
   onChanged,
 }: {
   open: boolean;
   planId: string;
   memberLabelText: string;
+  /** The person's medications, for naming the ones a change touches that the session itself does not list. */
+  medications: readonly Pick<HealthMedication, "id" | "name">[];
+  /** The appointment (by the day the schedule put it on) a new session is started from, if any. */
+  occurrenceDate?: string | null;
   onClose: () => void;
   /** Something that supplies read (the estimates, the lists) changed: a fill was saved or undone. */
   onChanged: () => Promise<void> | void;
@@ -43,6 +51,7 @@ export function FillingSheet({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [confirmFinish, setConfirmFinish] = useState(false);
+  const [confirmStop, setConfirmStop] = useState(false);
 
   const base = `/api/health/organizers/${planId}/sessions`;
   const sessionRef = useRef<SessionView | null>(null);
@@ -58,7 +67,7 @@ export function FillingSheet({
       if (current.session) {
         const prev = sessionRef.current;
         if (prev && prev.status === "open" && prev.version !== current.session.version) {
-          setNotice({ tone: "info", text: "This session was updated from another device." });
+          setNotice(current.session.reviewRequired && !prev.reviewRequired ? null : { tone: "info", text: "This session was updated from another device." });
         }
         setSession(current.session);
         setDefaults(null);
@@ -129,7 +138,7 @@ export function FillingSheet({
     setBusy(true);
     setErr(null);
     try {
-      const res = await apiClient.post<{ session: SessionView; existing: boolean }>(base, { coverageStart: startText, fillLengthDays: length });
+      const res = await apiClient.post<{ session: SessionView; existing: boolean }>(base, { coverageStart: startText, fillLengthDays: length, ...(occurrenceDate ? { occurrenceDate } : {}) });
       setSession(res.session);
       setNotice(res.existing ? { tone: "info", text: "Someone had already started a session. You are in it." } : null);
     } catch (e) {
@@ -171,6 +180,45 @@ export function FillingSheet({
       setBusy(false);
     }
   }
+
+  async function review() {
+    if (!session) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const res = await apiClient.post<{ session: SessionView }>(`${base}/${session.id}/review`, { version: session.version });
+      setSession(res.session);
+      setSelectedId(null);
+      setNotice({ tone: "success", text: "You are now using the new instructions." });
+    } catch (e) {
+      if (isStaleAnswer(e)) afterStale(sessionFromConflict(e), fillErrorMessage(e, "This session changed. It was reloaded."));
+      else setErr(fillErrorMessage(e, "Could not take the new instructions. Try again."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function stop() {
+    if (!session) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const res = await apiClient.post<{ session: SessionView }>(`${base}/${session.id}/abandon`, { version: session.version });
+      setSession(res.session);
+      setSelectedId(null);
+      setNotice(null);
+      setConfirmStop(false);
+      void onChanged();
+    } catch (e) {
+      setConfirmStop(false);
+      if (isStaleAnswer(e)) afterStale(sessionFromConflict(e), fillErrorMessage(e, "This session changed. It was reloaded."));
+      else setErr(fillErrorMessage(e, "Could not stop the session. Try again."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const nameOf = (id: string) => session?.medications.find((m) => m.medicationId === id)?.name ?? medications.find((m) => m.id === id)?.name ?? "A medication";
 
   const anyFilled = session ? session.progress.filled + session.progress.partial > 0 : false;
   const pct = session && session.progress.total > 0 ? Math.round(((session.progress.filled + session.progress.partial / 2) / session.progress.total) * 100) : 0;
@@ -259,9 +307,7 @@ export function FillingSheet({
                   </div>
                 </div>
 
-                {session.reviewRequired ? (
-                  <Alert variant="info">The instructions changed after this session started (a schedule, amount or compartment). Filling is paused until they are reviewed.</Alert>
-                ) : null}
+                {session.reviewRequired ? <FillingReviewBanner session={session} nameOf={nameOf} busy={busy} onReview={() => void review()} /> : null}
 
                 {selected ? (
                   <FillingMedicationPanel
@@ -269,6 +315,7 @@ export function FillingSheet({
                     planId={planId}
                     session={session}
                     medication={selected}
+                    reviewRequired={session.reviewRequired}
                     onBack={() => setSelectedId(null)}
                     onSaved={afterSaved}
                     onStale={afterStale}
@@ -282,7 +329,10 @@ export function FillingSheet({
                         setSelectedId(id);
                       }}
                     />
-                    <div className="flex justify-end">
+                    <div className="flex flex-wrap justify-between gap-2">
+                      <Button variant="ghost" onClick={() => setConfirmStop(true)}>
+                        Stop this session
+                      </Button>
                       <Button variant={session.progress.pending + session.progress.partial === 0 ? "primary" : "secondary"} disabled={!anyFilled} onClick={() => setConfirmFinish(true)}>
                         Finish session
                       </Button>
@@ -294,6 +344,16 @@ export function FillingSheet({
           </>
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmStop && session !== null}
+        title="Stop this session?"
+        message="Medications you already filled stay filled and keep counting toward their supply estimates. Nothing else is changed."
+        confirmLabel="Stop session"
+        loading={busy}
+        onConfirm={() => void stop()}
+        onCancel={() => setConfirmStop(false)}
+      />
 
       <Modal
         open={confirmFinish && session !== null}
