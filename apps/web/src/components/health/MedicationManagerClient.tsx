@@ -8,6 +8,8 @@ import { NoteSharePicker } from "../NoteSharePicker";
 import type { HealthAclGrants } from "../HealthPeopleAccessPanel";
 import { HealthMedicationSheet } from "./HealthMedicationSheet";
 import { PharmaciesSection } from "./PharmaciesSection";
+import { SuppliesSection } from "./SuppliesSection";
+import { supplyChip } from "./supply-helpers";
 import { isAsNeededMedScheduleKind, memberLabel, resolveDefaultMemberId, scheduleKindLabel } from "./health-helpers";
 import type { HealthMedication } from "./health-types";
 import {
@@ -520,6 +522,16 @@ export function MedicationManagerClient({
                   <Badge>Paused</Badge>
                 </span>
               ) : null}
+              {med.supply && med.enabled ? (
+                (() => {
+                  const chip = supplyChip(med.supply, med.enabled);
+                  return chip ? (
+                    <span className="ml-2">
+                      <Badge tone={chip.tone}>{chip.label}</Badge>
+                    </span>
+                  ) : null;
+                })()
+              ) : null}
             </p>
             <p className="truncate text-sm text-[var(--color-text-muted)]">
               {med.dosage ? `${med.dosage} · ` : ""}
@@ -707,6 +719,14 @@ export function MedicationManagerClient({
               )}
             </CardBody>
           </Card>
+
+          <SuppliesSection
+            memberId={selectedMemberId}
+            memberLabelText={memberLabel(members, selectedMemberId)}
+            medications={memberMeds}
+            canWrite={canWriteSelected}
+            onChanged={() => void load()}
+          />
         </>
       )}
 
