@@ -314,7 +314,10 @@ export function HealthMedicationSheet({
               <option value="">No pharmacy</option>
               {/* The one it has now, when it is no longer offered (archived since this list was loaded). */}
               {medication?.pharmacy && !pharmacies.some((p) => p.id === medication.pharmacy?.id) ? (
-                <option value={medication.pharmacy.id}>{medication.pharmacy.name} (archived)</option>
+                <option value={medication.pharmacy.id}>
+                  {medication.pharmacy.name}
+                  {medication.pharmacy.archived ? " (archived)" : ""}
+                </option>
               ) : null}
               {pharmacies.map((p) => (
                 <option key={p.id} value={p.id}>

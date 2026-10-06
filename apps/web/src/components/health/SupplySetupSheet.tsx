@@ -196,7 +196,10 @@ export function SupplySetupSheet({
                           >
                             <option value="">No pharmacy</option>
                             {row.medication.pharmacy && !pharmacies.some((p) => p.id === row.medication.pharmacy?.id) ? (
-                              <option value={row.medication.pharmacy.id}>{row.medication.pharmacy.name} (archived)</option>
+                              <option value={row.medication.pharmacy.id}>
+                                {row.medication.pharmacy.name}
+                                {row.medication.pharmacy.archived ? " (archived)" : ""}
+                              </option>
                             ) : null}
                             {pharmacies.map((p) => (
                               <option key={p.id} value={p.id}>

@@ -276,7 +276,10 @@ export function SupplySheet({
               <Select value={pharmacyId} onChange={(e) => setPharmacyId(e.target.value)}>
                 <option value="">No pharmacy</option>
                 {medication?.pharmacy && !pharmacies.some((p) => p.id === medication.pharmacy?.id) ? (
-                  <option value={medication.pharmacy.id}>{medication.pharmacy.name} (archived)</option>
+                  <option value={medication.pharmacy.id}>
+                    {medication.pharmacy.name}
+                    {medication.pharmacy.archived ? " (archived)" : ""}
+                  </option>
                 ) : null}
                 {pharmacies.map((p) => (
                   <option key={p.id} value={p.id}>
