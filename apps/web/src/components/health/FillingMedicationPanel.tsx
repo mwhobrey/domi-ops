@@ -176,12 +176,15 @@ export function FillingMedicationPanel({
     setBusy(true);
     setErr(null);
     try {
-      const res = await apiClient.post<{ session: SessionView; supplyRestored: boolean }>(`${base}/${fill.id}/undo`, { version: session.version });
+      const res = await apiClient.post<{ session: SessionView; supplyRestored?: boolean; unchanged?: boolean }>(`${base}/${fill.id}/undo`, { version: session.version });
+      const days = rangeLabel({ from: fill.coveredFrom, to: fill.coveredTo });
       onSaved(
         res.session,
-        res.supplyRestored
-          ? `${medication.name}: the fill for ${rangeLabel({ from: fill.coveredFrom, to: fill.coveredTo })} was undone and the supply estimate put back.`
-          : `${medication.name}: the fill for ${rangeLabel({ from: fill.coveredFrom, to: fill.coveredTo })} was undone. The supply estimate was changed since, so it was left as it is.`,
+        res.unchanged
+          ? `${medication.name}: the fill for ${days} had already been undone.`
+          : res.supplyRestored
+            ? `${medication.name}: the fill for ${days} was undone and the supply estimate put back.`
+            : `${medication.name}: the fill for ${days} was undone. The supply estimate was changed since, so it was left as it is.`,
       );
     } catch (e) {
       setConfirmUndo(false);

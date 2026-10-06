@@ -44,6 +44,8 @@ export function AppointmentSheet({
 }) {
   const [detail, setDetail] = useState<AppointmentDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  /** A reload after a save failed: the appointment on screen is still the one that was saved, so it stays. */
+  const [refreshError, setRefreshError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<AppointmentOutcome>("pending");
   const [moveTo, setMoveTo] = useState("");
   const [note, setNote] = useState("");
@@ -63,16 +65,20 @@ export function AppointmentSheet({
   }, []);
 
   const latest = useRef(0);
-  const load = useCallback(async () => {
+  const load = useCallback(async (background = false) => {
     if (!path) return;
     const mine = ++latest.current;
+    if (background) setRefreshError(null);
     try {
       const res = await apiClient.get<AppointmentDetail>(path);
       if (mine !== latest.current) return;
       show(res);
       setLoadError(null);
+      setRefreshError(null);
     } catch {
-      if (mine === latest.current) setLoadError("Could not load this appointment.");
+      if (mine !== latest.current) return;
+      if (background) setRefreshError("Could not refresh this appointment. What you see was just saved.");
+      else setLoadError("Could not load this appointment.");
     }
   }, [path, show]);
 
@@ -80,6 +86,7 @@ export function AppointmentSheet({
     if (!open) return;
     setDetail(null);
     setLoadError(null);
+    setRefreshError(null);
     setErr(null);
     setNotice(null);
     void load();
@@ -103,14 +110,14 @@ export function AppointmentSheet({
       });
       // The history is only on the full read.
       show({ ...res, events: detail?.events ?? [] });
-      void load();
+      void load(true);
       setNotice("Saved.");
       void onChanged();
     } catch (e) {
       const current = appointmentFromConflict(e);
       if (current) {
         show({ ...current, events: detail?.events ?? [] });
-        void load();
+        void load(true);
       }
       setErr(appointmentErrorMessage(e, "Could not save. Try again."));
     } finally {
@@ -126,7 +133,7 @@ export function AppointmentSheet({
     try {
       const res = await apiClient.post<AppointmentDetail>(`${path}/resolve`);
       show({ ...res, events: detail?.events ?? [] });
-      void load();
+      void load(true);
       setNotice("Marked as dealt with.");
       void onChanged();
     } catch (e) {
@@ -157,6 +164,7 @@ export function AppointmentSheet({
         ) : (
           <>
             {err ? <Alert variant="error">{err}</Alert> : null}
+            {refreshError ? <Alert variant="error">{refreshError}</Alert> : null}
             {notice ? <Alert variant="success">{notice}</Alert> : null}
 
             <div className="flex flex-wrap items-center gap-2">
