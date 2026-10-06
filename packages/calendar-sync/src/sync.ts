@@ -24,7 +24,8 @@ import { scanChoreDigest } from "./chore-digest-scan.js";
 import { scanDriveQuotaWarnings } from "./drive-quota-scan.js";
 import { scanHealthCheckReminders } from "./health-check-reminder-scan.js";
 import { scanHealthMedReminders } from "./health-med-reminder-scan.js";
-import { fanOutCheckReminderScans, fanOutMedReminderScans } from "./health-reminder-fanout.js";
+import { scanHealthSupplyReminders } from "./health-supply-reminder-scan.js";
+import { fanOutCheckReminderScans, fanOutMedReminderScans, fanOutSupplyReminderScans } from "./health-reminder-fanout.js";
 import {
   fanOutBudgetAlertScans,
   fanOutCalendarReminderScans,
@@ -419,6 +420,12 @@ export async function runCalendarSyncJob(
       break;
     case "health.check.reminder.scan":
       await fanOutCheckReminderScans(db, { enqueue: householdScanEnqueuer(redisUrlOf(env)) });
+      break;
+    case "health.supply.reminder.scan":
+      await fanOutSupplyReminderScans(db, { enqueue: householdScanEnqueuer(redisUrlOf(env)) });
+      break;
+    case "health.supply.reminder.household":
+      await scanHealthSupplyReminders(db, env, { householdId: payload.householdId });
       break;
     case "health.med.reminder.household":
       await scanHealthMedReminders(db, env, { householdId: payload.householdId });

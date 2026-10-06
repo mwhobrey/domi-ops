@@ -631,6 +631,13 @@
       "when": 1791100000000,
       "tag": "0089_health_supply_write_key",
       "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1791200000000,
+      "tag": "0090_health_supply_reminders",
+      "breakpoints": true
     }
   ]
 }

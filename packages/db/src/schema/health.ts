@@ -1112,3 +1112,47 @@ export const healthOrganizerSessionFills = pgTable(
       .where(sql`${t.undoneAt} is null`),
   ],
 );
+
+/**
+ * Fill reminders already sent (WHO-432): one per appointment (plan + the day the schedule put it on) and person.
+ * The unique index is what keeps a retry, an overlapping scan or a second worker from sending it twice.
+ */
+export const healthSupplyFillReminderSent = pgTable(
+  "health_supply_fill_reminder_sent",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    planId: uuid("plan_id")
+      .notNull()
+      .references(() => healthOrganizerPlans.id, { onDelete: "cascade" }),
+    occurrenceDate: date("occurrence_date").notNull(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("health_supply_fill_reminder_sent_unique").on(t.planId, t.occurrenceDate, t.userId)],
+);
+
+export const supplyRefillReminderKindValues = ["refill", "waiting"] as const;
+export type SupplyRefillReminderKind = (typeof supplyRefillReminderKindValues)[number];
+
+/**
+ * Refill reminders already sent: one per supply estimate (medication + revision), kind and person, so a new
+ * estimate is free to remind again for its own, moved deadline. 'waiting' is the nudge for a requested refill.
+ */
+export const healthSupplyRefillReminderSent = pgTable(
+  "health_supply_refill_reminder_sent",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    medicationId: uuid("medication_id")
+      .notNull()
+      .references(() => healthMedications.id, { onDelete: "cascade" }),
+    revision: integer("revision").notNull(),
+    kind: text("kind").$type<SupplyRefillReminderKind>().notNull(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("health_supply_refill_reminder_sent_unique").on(t.medicationId, t.revision, t.kind, t.userId)],
+);
