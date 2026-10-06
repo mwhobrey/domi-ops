@@ -320,7 +320,18 @@ export function healthOrganizerSessionRoutes(db: Database, env: Env) {
             .values({ planId: plan.id, occurrenceDate, version: 1 })
             .onConflictDoNothing()
             .returning({ id: healthOrganizerOccurrences.id });
-          occurrenceId = made?.id ?? null;
+          if (made) {
+            occurrenceId = made.id;
+          } else {
+            // Lost an insert race for the same day: take the row that won, so the session is still linked to the appointment.
+            // (Holding the plan row above already keeps anything else from inserting one meanwhile; this is the safety net.)
+            const [winner] = await db
+              .select({ id: healthOrganizerOccurrences.id })
+              .from(healthOrganizerOccurrences)
+              .where(and(eq(healthOrganizerOccurrences.planId, plan.id), eq(healthOrganizerOccurrences.occurrenceDate, occurrenceDate)))
+              .limit(1);
+            occurrenceId = winner?.id ?? null;
+          }
         }
       }
 
