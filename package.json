@@ -44,6 +44,7 @@
   },
   "overrides": {
     "drizzle-orm": "^0.45.3",
-    "esbuild": "^0.28.1"
+    "esbuild": "^0.28.1",
+    "prisma": "^7.0.0"
   }
 }
