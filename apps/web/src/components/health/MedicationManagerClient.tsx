@@ -388,6 +388,16 @@ export function MedicationManagerClient({
   const [error, setError] = useState<string | null>(null);
   const [medSheetOpen, setMedSheetOpen] = useState(false);
   const [editingMed, setEditingMed] = useState<HealthMedication | null>(null);
+  /** Open the medication editor from inside the organizer and supply screens (WHO-446). */
+  const editMedicationById = useCallback(
+    (id: string) => {
+      const med = medications.find((m) => m.id === id);
+      if (!med) return;
+      setEditingMed(med);
+      setMedSheetOpen(true);
+    },
+    [medications],
+  );
   const [groupSheetOpen, setGroupSheetOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<MedicationGroup | null>(null);
   const initialMedHandled = useRef(false);
@@ -771,6 +781,7 @@ export function MedicationManagerClient({
             canWrite={canWriteSelected}
             refreshKey={pharmacyRefresh}
             onMedicationsChanged={() => load(true)}
+            onEditMedication={editMedicationById}
             openAppointment={appointmentLink}
             onAppointmentOpened={() => setAppointmentLink(null)}
           />
@@ -783,6 +794,7 @@ export function MedicationManagerClient({
             onChanged={() => void load(true)}
             autoPromptMedicationId={promptMedicationId}
             onPromptHandled={() => setPromptMedicationId(null)}
+            onEditMedication={editMedicationById}
             highlightMedicationId={supplyHighlight}
             onHighlightHandled={() => setSupplyHighlight(null)}
           />
@@ -805,9 +817,12 @@ export function MedicationManagerClient({
           router.replace("/health");
         }}
         onSaved={() => {
+          // Editing an existing medication can happen from inside the organizer or supply screens: reload quietly so
+          // those cards (and the sheets open on them) are not torn down by the page's loading state (WHO-446).
+          const wasEditing = editingMed !== null;
           setMedSheetOpen(false);
           setEditingMed(null);
-          void load();
+          void load(wasEditing);
         }}
       />
 

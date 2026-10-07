@@ -17,6 +17,7 @@ import {
   rangeLabel,
   rangesLabel,
   sessionFromConflict,
+  splitCovered,
   statusView,
 } from "./filling-helpers";
 import type { SessionMedication, SessionView } from "./filling-types";
@@ -38,6 +39,7 @@ export function FillingMedicationPanel({
   onBack,
   onSaved,
   onStale,
+  onEdit,
 }: {
   planId: string;
   session: SessionView;
@@ -49,8 +51,11 @@ export function FillingMedicationPanel({
   onSaved: (session: SessionView, message: string) => void;
   /** The server said the screen was out of date and sent the current session (or none): show it, with this message. */
   onStale: (session: SessionView | null, message: string) => void;
+  /** Open this medication's editor on top of the screen (WHO-446), e.g. to fix a dosage written as one number. */
+  onEdit?: (medicationId: string) => void;
 }) {
   const range0 = useMemo(() => defaultFillRange(medication), [medication]);
+  const covered = useMemo(() => splitCovered(medication.covered, { from: session.coverageStart, to: session.coverageEnd }), [medication.covered, session.coverageStart, session.coverageEnd]);
   const maxDays = range0 ? rangeDays(range0) : 0;
   const [daysText, setDaysText] = useState(String(maxDays));
   const [stage, setStage] = useState<"days" | "supply">("days");
@@ -205,6 +210,11 @@ export function FillingMedicationPanel({
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="min-w-0 break-words text-xl font-semibold text-[var(--color-text)]">{medication.name}</h3>
           <Badge tone={status.tone}>{status.label}</Badge>
+          {onEdit ? (
+            <Button type="button" size="sm" variant="secondary" onClick={() => onEdit(medication.medicationId)}>
+              Edit medication
+            </Button>
+          ) : null}
         </div>
         {medication.dosage ? <p className="text-[var(--color-text-muted)]">{medication.dosage}</p> : null}
         {medication.instructions ? (
@@ -221,9 +231,19 @@ export function FillingMedicationPanel({
 
       <CompartmentDiagram compartments={session.compartments} medication={medication} />
 
-      {medication.covered.length > 0 ? (
+      {covered.inWindow.length > 0 ? (
         <p className="text-sm text-[var(--color-text-muted)]">
-          Filled so far: <span className="text-[var(--color-text)]">{rangesLabel(medication.covered)}</span> ({count(medication.filledDays, "day")} of {medication.requiredDays}).
+          Filled so far: <span className="text-[var(--color-text)]">{rangesLabel(covered.inWindow)}</span> ({count(medication.filledDays, "day")} of {medication.requiredDays}).
+        </p>
+      ) : null}
+      {covered.before.length > 0 ? (
+        <p className="text-sm text-[var(--color-text-muted)]">
+          Already filled before this session: <span className="text-[var(--color-text)]">{rangesLabel(covered.before)}</span>.
+        </p>
+      ) : null}
+      {covered.after.length > 0 ? (
+        <p className="text-sm text-[var(--color-text-muted)]">
+          Already filled after this session: <span className="text-[var(--color-text)]">{rangesLabel(covered.after)}</span>.
         </p>
       ) : null}
 

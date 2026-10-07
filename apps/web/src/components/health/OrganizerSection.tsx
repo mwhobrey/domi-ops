@@ -33,6 +33,7 @@ export function OrganizerSection({
   canWrite,
   refreshKey,
   onMedicationsChanged,
+  onEditMedication,
   openAppointment = null,
   onAppointmentOpened,
 }: {
@@ -46,6 +47,8 @@ export function OrganizerSection({
   /** Changes when the medications were reloaded, which can change what is missing here. */
   refreshKey: number;
   onMedicationsChanged: () => Promise<void> | void;
+  /** Open the medication editor on top of this card (WHO-446). */
+  onEditMedication?: (medicationId: string) => void;
   /** A calendar chip or notice's link: open this appointment of this plan once the plan has loaded. */
   openAppointment?: { planId: string; date: string } | null;
   onAppointmentOpened?: () => void;
@@ -100,6 +103,17 @@ export function OrganizerSection({
     setLoaded(false);
     void load();
   }, [load, refreshKey]);
+
+  // The medications changed under this card (one was edited from here, or its form changed): the plan's flags and counts follow.
+  const firstMedications = useRef(true);
+  useEffect(() => {
+    if (firstMedications.current) {
+      firstMedications.current = false;
+      return;
+    }
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [medications]);
 
   // A link to one appointment: open it when it is this plan's; a plan that is gone says so instead of doing nothing.
   useEffect(() => {
@@ -216,6 +230,7 @@ export function OrganizerSection({
             void load();
           }}
           onChanged={onMedicationsChanged}
+          onEditMedication={onEditMedication}
         />
       ) : null}
 
@@ -249,6 +264,7 @@ export function OrganizerSection({
         }}
         onPlanChanged={setPlan}
         onMedicationsChanged={onMedicationsChanged}
+        onEditMedication={onEditMedication}
       />
     </Card>
   );

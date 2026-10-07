@@ -118,6 +118,8 @@ export interface HealthMedication {
   name: string;
   dosage: string | null;
   instructions: string | null;
+  /** pill unless said otherwise; only pills go in a pill organizer (WHO-445). */
+  form?: MedicationFormValue;
   scheduleKind: "scheduled" | "prn" | "otc" | "interval";
   schedule: {
     times?: string[];
@@ -435,3 +437,13 @@ export interface HealthCheckGroup {
   /** Only the member checks the viewer is allowed to see. */
   checks: HealthCheck[];
 }
+
+export type MedicationFormValue = "pill" | "iv" | "injection" | "liquid" | "other";
+
+export const MEDICATION_FORMS: ReadonlyArray<{ value: MedicationFormValue; label: string }> = [
+  { value: "pill", label: "Pill or tablet" },
+  { value: "iv", label: "IV" },
+  { value: "injection", label: "Injection" },
+  { value: "liquid", label: "Liquid" },
+  { value: "other", label: "Other" },
+];

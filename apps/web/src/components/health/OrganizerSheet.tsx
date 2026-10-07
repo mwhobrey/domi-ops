@@ -30,6 +30,7 @@ export function OrganizerSheet({
   onClose,
   onPlanChanged,
   onMedicationsChanged,
+  onEditMedication,
 }: {
   open: boolean;
   memberId: string;
@@ -44,6 +45,7 @@ export function OrganizerSheet({
   onPlanChanged: (plan: OrganizerPlan) => void;
   /** Pill amounts were saved on medications, so the medication list needs reloading. */
   onMedicationsChanged: () => Promise<void> | void;
+  onEditMedication?: (medicationId: string) => void;
 }) {
   const [plan, setPlan] = useState<OrganizerPlan | null>(initialPlan);
   const [step, setStep] = useState<OrganizerStep>(initialStep);
@@ -56,6 +58,13 @@ export function OrganizerSheet({
     // Start from what the section has when the sheet opens; after that the sheet keeps its own copy as it saves.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  // The section reloaded the plan (a medication was edited from here, or changed elsewhere): follow it, never going back
+  // to an older version than the one this sheet just saved.
+  useEffect(() => {
+    if (!open || !initialPlan) return;
+    setPlan((prev) => (!prev || prev.id !== initialPlan.id || initialPlan.version >= prev.version ? initialPlan : prev));
+  }, [open, initialPlan]);
 
   // A filling session in progress is not stopped by a change here, but it will ask for a review before more filling.
   useEffect(() => {
@@ -154,6 +163,7 @@ export function OrganizerSheet({
           <OrganizerQuantitiesStep
             plan={plan}
             medications={medications}
+            onEdit={onEditMedication}
             onSaved={async () => {
               await onMedicationsChanged();
               await reloadPlan();

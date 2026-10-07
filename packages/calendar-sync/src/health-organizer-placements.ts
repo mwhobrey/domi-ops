@@ -33,6 +33,8 @@ export const MAX_ORGANIZER_DAYS = 93;
 export type OrganizerMedication = {
   id: string;
   scheduleKind: "scheduled" | "prn" | "otc" | "interval";
+  /** Only pills go in an organizer (WHO-445); left out means a pill. */
+  form?: "pill" | "iv" | "injection" | "liquid" | "other";
   scheduleJson: string | null;
   startDate: string | null;
   endDate: string | null;
@@ -84,7 +86,7 @@ export type PlacementProblem =
   /** Two groups both run this medication's dose on the same day. The dose is placed once. */
   | { kind: "double_claim"; severity: "warning"; medicationId: string; time: string; groupIds: string[] };
 
-export type NotGuidedReason = "as_needed" | "over_the_counter" | "interval" | "paused" | "no_times";
+export type NotGuidedReason = "as_needed" | "over_the_counter" | "interval" | "paused" | "no_times" | "not_a_pill";
 
 export type NotGuided = { medicationId: string; reason: NotGuidedReason };
 
@@ -200,6 +202,10 @@ export function computePlacements(input: PlacementInput): PlacementResult {
   const medications = [...input.medications].sort((a, b) => a.id.localeCompare(b.id));
   for (const med of medications) {
     if (med.deletedAt) continue;
+    if (med.form !== undefined && med.form !== "pill") {
+      notGuided.push({ medicationId: med.id, reason: "not_a_pill" });
+      continue;
+    }
     if (med.scheduleKind !== "scheduled") {
       notGuided.push({ medicationId: med.id, reason: NOT_GUIDED_BY_KIND[med.scheduleKind] });
       continue;
