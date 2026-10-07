@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, apiClient } from "../../lib/client-api";
-import { Alert, Badge, Button, Card, CardBody, Checkbox, ConfirmDialog, EmptyState, SectionHeader } from "../ui";
+import { Alert, Badge, Button, Card, CardBody, Checkbox, ConfirmDialog, EmptyState } from "../ui";
+import { CollapsibleHeader } from "./CollapsibleHeader";
+import { countLabel } from "./section-state";
 import { PharmacySheet } from "./PharmacySheet";
 import {
   apiErrorCode,
@@ -24,11 +26,16 @@ const linkClass = "text-[var(--color-accent)] underline-offset-2 hover:underline
 export function PharmaciesSection({
   refreshKey = 0,
   onChanged,
+  collapsed,
+  onToggleCollapsed,
 }: {
   /** Changes when the medications were reloaded, which can change the counts shown here. */
   refreshKey?: number;
   /** Called after the directory changed (saved, archived, restored), so medications showing a pharmacy can reload. */
   onChanged?: () => void;
+  /** Folded away by the person; the title stays and says what is inside (WHO-447). */
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
 }) {
   const [pharmacies, setPharmacies] = useState<Pharmacy[]>([]);
   const [canEdit, setCanEdit] = useState(false);
@@ -107,10 +114,16 @@ export function PharmaciesSection({
 
   return (
     <Card>
-      <CardBody className="space-y-4">
+      <CardBody className={collapsed ? undefined : "space-y-4"}>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <SectionHeader title="Pharmacies" />
-          {canEdit ? (
+          <CollapsibleHeader
+            id="health-pharmacies"
+            title="Pharmacies"
+            collapsed={collapsed}
+            onToggle={onToggleCollapsed}
+            summary={loading ? "" : countLabel(pharmacies.filter((p) => !p.archivedAt).length, "pharmacy", "pharmacies")}
+          />
+          {canEdit && !collapsed ? (
             <Button
               size="sm"
               variant="secondary"
@@ -124,132 +137,134 @@ export function PharmaciesSection({
           ) : null}
         </div>
 
-        {error ? <Alert variant="error">{error}</Alert> : null}
+        <div id="health-pharmacies-body" hidden={collapsed} className="space-y-4">
+          {error ? <Alert variant="error">{error}</Alert> : null}
 
-        {archivedCount > 0 ? (
-          <Checkbox
-            checked={showArchived}
-            onChange={(e) => setShowArchived(e.target.checked)}
-            label={`Show archived (${archivedCount})`}
-          />
-        ) : null}
+          {archivedCount > 0 ? (
+            <Checkbox
+              checked={showArchived}
+              onChange={(e) => setShowArchived(e.target.checked)}
+              label={`Show archived (${archivedCount})`}
+            />
+          ) : null}
 
-        {loading ? (
-          <p className="text-sm text-[var(--color-text-muted)]">Loading…</p>
-        ) : visible.length === 0 ? (
-          <EmptyState
-            title={archivedCount > 0 ? "No active pharmacies" : "No pharmacies yet"}
-            description={
-              archivedCount > 0
-                ? "Every pharmacy is archived. Show archived to restore one."
-                : canEdit
-                  ? "Add the pharmacies your household uses so refills and medications can point to them."
-                  : "No pharmacies have been added for this household."
-            }
-          />
-        ) : (
-          <ul className="space-y-3">
-            {visible.map((p) => {
-              const tel = telHref(p.phoneTel);
-              const site = safeWebsiteHref(p.website);
-              const maps = mapsSearchHref(p.address);
-              const archived = p.archivedAt !== null;
-              return (
-                <li key={p.id} className="space-y-2 rounded-lg border border-[var(--color-border)] p-3">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="break-words font-medium text-[var(--color-text)]">
-                        {p.name}
-                        {archived ? (
-                          <span className="ml-2">
-                            <Badge>Archived</Badge>
-                          </span>
-                        ) : null}
-                      </p>
-                      <p className="text-sm text-[var(--color-text-muted)]">{medicationCountLabel(p.medicationCount)}</p>
+          {loading ? (
+            <p className="text-sm text-[var(--color-text-muted)]">Loading…</p>
+          ) : visible.length === 0 ? (
+            <EmptyState
+              title={archivedCount > 0 ? "No active pharmacies" : "No pharmacies yet"}
+              description={
+                archivedCount > 0
+                  ? "Every pharmacy is archived. Show archived to restore one."
+                  : canEdit
+                    ? "Add the pharmacies your household uses so refills and medications can point to them."
+                    : "No pharmacies have been added for this household."
+              }
+            />
+          ) : (
+            <ul className="space-y-3">
+              {visible.map((p) => {
+                const tel = telHref(p.phoneTel);
+                const site = safeWebsiteHref(p.website);
+                const maps = mapsSearchHref(p.address);
+                const archived = p.archivedAt !== null;
+                return (
+                  <li key={p.id} className="space-y-2 rounded-lg border border-[var(--color-border)] p-3">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="break-words font-medium text-[var(--color-text)]">
+                          {p.name}
+                          {archived ? (
+                            <span className="ml-2">
+                              <Badge>Archived</Badge>
+                            </span>
+                          ) : null}
+                        </p>
+                        <p className="text-sm text-[var(--color-text-muted)]">{medicationCountLabel(p.medicationCount)}</p>
+                      </div>
+                      {canEdit ? (
+                        <div className="flex shrink-0 gap-2">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => {
+                              setEditing(p);
+                              setSheetOpen(true);
+                            }}
+                          >
+                            Edit
+                          </Button>
+                          {archived ? (
+                            <Button size="sm" variant="secondary" loading={busyId === p.id} onClick={() => void restore(p)}>
+                              Restore
+                            </Button>
+                          ) : (
+                            <Button size="sm" variant="secondary" loading={busyId === p.id} onClick={() => void archive(p, false)}>
+                              Archive
+                            </Button>
+                          )}
+                        </div>
+                      ) : null}
                     </div>
-                    {canEdit ? (
-                      <div className="flex shrink-0 gap-2">
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => {
-                            setEditing(p);
-                            setSheetOpen(true);
-                          }}
-                        >
-                          Edit
-                        </Button>
-                        {archived ? (
-                          <Button size="sm" variant="secondary" loading={busyId === p.id} onClick={() => void restore(p)}>
-                            Restore
-                          </Button>
-                        ) : (
-                          <Button size="sm" variant="secondary" loading={busyId === p.id} onClick={() => void archive(p, false)}>
-                            Archive
-                          </Button>
-                        )}
+
+                    {p.address || p.phone || p.website ? (
+                      <ul className="space-y-1 text-sm">
+                        {p.address ? (
+                          <li className="break-words whitespace-pre-line text-[var(--color-text)]">
+                            {maps ? (
+                              <a className={linkClass} href={maps} target="_blank" rel="noopener noreferrer">
+                                {p.address}
+                              </a>
+                            ) : (
+                              p.address
+                            )}
+                          </li>
+                        ) : null}
+                        {p.phone ? (
+                          <li>
+                            {tel ? (
+                              <a className={linkClass} href={tel}>
+                                Call {p.phone}
+                              </a>
+                            ) : (
+                              <span className="text-[var(--color-text)]">{p.phone}</span>
+                            )}
+                          </li>
+                        ) : null}
+                        {p.website ? (
+                          <li className="break-all">
+                            {site ? (
+                              <a className={linkClass} href={site} target="_blank" rel="noopener noreferrer">
+                                {site.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+                              </a>
+                            ) : (
+                              <span className="text-[var(--color-text)]">{p.website}</span>
+                            )}
+                          </li>
+                        ) : null}
+                      </ul>
+                    ) : null}
+
+                    {p.notes ? (
+                      <p className="whitespace-pre-line break-words text-sm text-[var(--color-text-muted)]">{p.notes}</p>
+                    ) : null}
+
+                    {p.medications.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {p.medications.map((m) => (
+                          <Badge key={m.id}>
+                            {m.name}
+                            {m.enabled ? "" : " · paused"}
+                          </Badge>
+                        ))}
                       </div>
                     ) : null}
-                  </div>
-
-                  {p.address || p.phone || p.website ? (
-                    <ul className="space-y-1 text-sm">
-                      {p.address ? (
-                        <li className="break-words whitespace-pre-line text-[var(--color-text)]">
-                          {maps ? (
-                            <a className={linkClass} href={maps} target="_blank" rel="noopener noreferrer">
-                              {p.address}
-                            </a>
-                          ) : (
-                            p.address
-                          )}
-                        </li>
-                      ) : null}
-                      {p.phone ? (
-                        <li>
-                          {tel ? (
-                            <a className={linkClass} href={tel}>
-                              Call {p.phone}
-                            </a>
-                          ) : (
-                            <span className="text-[var(--color-text)]">{p.phone}</span>
-                          )}
-                        </li>
-                      ) : null}
-                      {p.website ? (
-                        <li className="break-all">
-                          {site ? (
-                            <a className={linkClass} href={site} target="_blank" rel="noopener noreferrer">
-                              {site.replace(/^https?:\/\//, "").replace(/\/$/, "")}
-                            </a>
-                          ) : (
-                            <span className="text-[var(--color-text)]">{p.website}</span>
-                          )}
-                        </li>
-                      ) : null}
-                    </ul>
-                  ) : null}
-
-                  {p.notes ? (
-                    <p className="whitespace-pre-line break-words text-sm text-[var(--color-text-muted)]">{p.notes}</p>
-                  ) : null}
-
-                  {p.medications.length > 0 ? (
-                    <div className="flex flex-wrap gap-1.5">
-                      {p.medications.map((m) => (
-                        <Badge key={m.id}>
-                          {m.name}
-                          {m.enabled ? "" : " · paused"}
-                        </Badge>
-                      ))}
-                    </div>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
-        )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
       </CardBody>
 
       <PharmacySheet

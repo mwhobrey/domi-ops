@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiClient } from "../../lib/client-api";
-import { Alert, Badge, Button, Card, CardBody, EmptyState, Input, SectionHeader } from "../ui";
+import { Alert, Badge, Button, Card, CardBody, EmptyState, Input } from "../ui";
+import { CollapsibleHeader } from "./CollapsibleHeader";
+import { supplySummary } from "./section-state";
 import type { HealthMedication } from "./health-types";
 import { SupplyConfirmDialog } from "./SupplyConfirmDialog";
 import { SupplySetupSheet } from "./SupplySetupSheet";
@@ -38,6 +40,8 @@ export function SuppliesSection({
   highlightMedicationId = null,
   onHighlightHandled,
   onEditMedication,
+  collapsed,
+  onToggleCollapsed,
 }: {
   memberId: string;
   memberLabelText: string;
@@ -55,6 +59,9 @@ export function SuppliesSection({
   onHighlightHandled?: () => void;
   /** Open the medication's editor without leaving the supply setup (WHO-446). */
   onEditMedication?: (medicationId: string) => void;
+  /** Folded away by the person; the title stays and says what is inside (WHO-447). */
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
 }) {
   const [flashId, setFlashId] = useState<string | null>(null);
   const [defaultLead, setDefaultLead] = useState(DEFAULT_LEAD);
@@ -197,187 +204,195 @@ export function SuppliesSection({
 
   return (
     <Card>
-      <CardBody className="space-y-4">
-        <SectionHeader title="Supplies" />
+      <CardBody className={collapsed ? undefined : "space-y-4"}>
+        <CollapsibleHeader
+          id="health-supplies"
+          title="Supplies"
+          collapsed={collapsed}
+          onToggle={onToggleCollapsed}
+          summary={supplySummary(medications)}
+        />
 
-        <div className="flex flex-wrap items-center gap-2 text-sm text-[var(--color-text-muted)]">
-          {editingLead ? (
-            <>
-              <span>Remind {memberLabelText} this many days before a medication runs out:</span>
-              <Input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                className="w-20"
-                value={leadText}
-                onChange={(e) => setLeadText(e.target.value)}
-                maxLength={2}
-                aria-label="Default refill lead time in days"
-                autoFocus
-              />
-              <Button size="sm" onClick={() => void saveLead()}>
-                Save
-              </Button>
-              <Button size="sm" variant="secondary" onClick={() => setEditingLead(false)}>
-                Cancel
-              </Button>
-            </>
-          ) : (
-            <>
-              <span>
-                Refill reminders: {defaultLead} day{defaultLead === 1 ? "" : "s"} before it runs out
-              </span>
-              {canWrite ? (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => {
-                    setLeadText(String(defaultLead));
-                    setEditingLead(true);
-                  }}
-                >
-                  Change
+        <div id="health-supplies-body" hidden={collapsed} className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2 text-sm text-[var(--color-text-muted)]">
+            {editingLead ? (
+              <>
+                <span>Remind {memberLabelText} this many days before a medication runs out:</span>
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  className="w-20"
+                  value={leadText}
+                  onChange={(e) => setLeadText(e.target.value)}
+                  maxLength={2}
+                  aria-label="Default refill lead time in days"
+                  autoFocus
+                />
+                <Button size="sm" onClick={() => void saveLead()}>
+                  Save
                 </Button>
-              ) : null}
-            </>
+                <Button size="sm" variant="secondary" onClick={() => setEditingLead(false)}>
+                  Cancel
+                </Button>
+              </>
+            ) : (
+              <>
+                <span>
+                  Refill reminders: {defaultLead} day{defaultLead === 1 ? "" : "s"} before it runs out
+                </span>
+                {canWrite ? (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      setLeadText(String(defaultLead));
+                      setEditingLead(true);
+                    }}
+                  >
+                    Change
+                  </Button>
+                ) : null}
+              </>
+            )}
+          </div>
+
+          {error ? <Alert variant="error">{error}</Alert> : null}
+
+          {medications.length > 0 && !hasAnyEstimate ? (
+            <p className="text-sm text-[var(--color-text-muted)]">
+              Supply tracking tells you when to ask for a refill. You enter how many days of pills you have and it works out the run-out date. It is
+              an estimate you confirm, not a live count: logging a dose never changes it.
+            </p>
+          ) : null}
+
+          {canWrite && !dismissed && needingSetup.length > 0 ? (
+            <Alert variant="info">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span>
+                  {needingSetup.length === 1 ? "1 medication has" : `${needingSetup.length} medications have`} no supply estimate yet.
+                </span>
+                <span className="flex gap-2">
+                  <Button size="sm" onClick={() => setSetupOpen(true)}>
+                    Set up supply
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={dismissSetup}>
+                    Not now
+                  </Button>
+                </span>
+              </div>
+            </Alert>
+          ) : null}
+
+          {groups.length === 0 ? (
+            <EmptyState
+              title="No medications yet"
+              description={`Add a medication for ${memberLabelText} and you can track how long it lasts. Supply is an estimate you confirm, not live inventory.`}
+            />
+          ) : (
+            <div className="space-y-4">
+              {groups.map((group) => (
+                <section key={group.key} className="space-y-2">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+                    {group.pharmacy ? group.pharmacy.name : "No pharmacy"}
+                    {group.pharmacy?.archived ? (
+                      <span className="ml-2 normal-case">
+                        <Badge>Archived</Badge>
+                      </span>
+                    ) : null}
+                  </h3>
+                  <ul className="space-y-2">
+                    {group.items.map(({ medication, supply }) => {
+                      const status = supply ? supplyStatus(supply, medication.enabled) : null;
+                      const mayChange = medication.canEdit !== false;
+                      const busy = busyId === medication.id;
+                      return (
+                        <li
+                          key={medication.id}
+                          id={`supply-${medication.id}`}
+                          className={
+                            "space-y-2 rounded-lg border p-3 transition-colors " +
+                            (flashId === medication.id ? "border-[var(--color-accent)] bg-[var(--color-accent-subtle)]" : "border-[var(--color-border)]")
+                          }
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="break-words font-medium text-[var(--color-text)]">
+                                {medication.name}
+                                {medication.dosage ? <span className="font-normal text-[var(--color-text-muted)]"> · {medication.dosage}</span> : null}
+                              </p>
+                              <p className="text-sm text-[var(--color-text-muted)]">
+                                {supply?.runsOutOn
+                                  ? [
+                                      `Runs out ${formatDay(supply.runsOutOn)}`,
+                                      medication.enabled ? daysLeftLabel(supply.daysRemaining) : "",
+                                      medication.enabled && supply.deadline && supply.state !== "requested" && supply.state !== "not_needed"
+                                        ? `Refill by ${formatDay(supply.deadline)}`
+                                        : "",
+                                    ]
+                                      .filter(Boolean)
+                                      .join(" · ")
+                                  : "No supply estimate yet"}
+                              </p>
+                              {supply?.requestedAt ? (
+                                <p className="text-sm text-[var(--color-text-muted)]">{requestAgeLabel(supply.requestedAt)}</p>
+                              ) : null}
+                            </div>
+                            <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                              {supply?.needsConfirmation ? <Badge tone="warning">Confirm estimate</Badge> : null}
+                              {onEditMedication && medication.canEdit !== false ? (
+                                <Button type="button" size="sm" variant="ghost" onClick={() => onEditMedication(medication.id)}>
+                                  Edit medication
+                                </Button>
+                              ) : null}
+                              {status ? <Badge tone={status.tone}>{status.label}</Badge> : null}
+                            </div>
+                          </div>
+
+                          {mayChange ? (
+                            <div className="flex flex-wrap gap-2">
+                              <Button size="sm" variant="secondary" disabled={busy} onClick={() => setSheet({ mode: "set", medication })}>
+                                {supply?.runsOutOn ? "Update supply" : "Set supply"}
+                              </Button>
+                              {supply?.needsConfirmation && medication.enabled ? (
+                                <Button
+                                  size="sm"
+                                  variant="secondary"
+                                  disabled={busy}
+                                  onClick={() => {
+                                    setConfirmError(null);
+                                    setConfirming(medication);
+                                  }}
+                                >
+                                  Confirm estimate
+                                </Button>
+                              ) : null}
+                              {canMarkRequested(supply ?? undefined, medication.enabled) ? (
+                                <Button size="sm" variant="secondary" loading={busy} onClick={() => void markRequested(medication)}>
+                                  Mark requested
+                                </Button>
+                              ) : null}
+                              {medication.enabled ? (
+                                <Button size="sm" variant="secondary" disabled={busy} onClick={() => setSheet({ mode: "receive", medication })}>
+                                  Mark received
+                                </Button>
+                              ) : null}
+                              {supply?.state === "requested" || supply?.requestedAt ? (
+                                <Button size="sm" variant="secondary" loading={busy} onClick={() => void clearRequest(medication)}>
+                                  Clear request
+                                </Button>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+              ))}
+            </div>
           )}
         </div>
-
-        {error ? <Alert variant="error">{error}</Alert> : null}
-
-        {medications.length > 0 && !hasAnyEstimate ? (
-          <p className="text-sm text-[var(--color-text-muted)]">
-            Supply tracking tells you when to ask for a refill. You enter how many days of pills you have and it works out the run-out date. It is
-            an estimate you confirm, not a live count: logging a dose never changes it.
-          </p>
-        ) : null}
-
-        {canWrite && !dismissed && needingSetup.length > 0 ? (
-          <Alert variant="info">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span>
-                {needingSetup.length === 1 ? "1 medication has" : `${needingSetup.length} medications have`} no supply estimate yet.
-              </span>
-              <span className="flex gap-2">
-                <Button size="sm" onClick={() => setSetupOpen(true)}>
-                  Set up supply
-                </Button>
-                <Button size="sm" variant="ghost" onClick={dismissSetup}>
-                  Not now
-                </Button>
-              </span>
-            </div>
-          </Alert>
-        ) : null}
-
-        {groups.length === 0 ? (
-          <EmptyState
-            title="No medications yet"
-            description={`Add a medication for ${memberLabelText} and you can track how long it lasts. Supply is an estimate you confirm, not live inventory.`}
-          />
-        ) : (
-          <div className="space-y-4">
-            {groups.map((group) => (
-              <section key={group.key} className="space-y-2">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
-                  {group.pharmacy ? group.pharmacy.name : "No pharmacy"}
-                  {group.pharmacy?.archived ? (
-                    <span className="ml-2 normal-case">
-                      <Badge>Archived</Badge>
-                    </span>
-                  ) : null}
-                </h3>
-                <ul className="space-y-2">
-                  {group.items.map(({ medication, supply }) => {
-                    const status = supply ? supplyStatus(supply, medication.enabled) : null;
-                    const mayChange = medication.canEdit !== false;
-                    const busy = busyId === medication.id;
-                    return (
-                      <li
-                        key={medication.id}
-                        id={`supply-${medication.id}`}
-                        className={
-                          "space-y-2 rounded-lg border p-3 transition-colors " +
-                          (flashId === medication.id ? "border-[var(--color-accent)] bg-[var(--color-accent-subtle)]" : "border-[var(--color-border)]")
-                        }
-                      >
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="break-words font-medium text-[var(--color-text)]">
-                              {medication.name}
-                              {medication.dosage ? <span className="font-normal text-[var(--color-text-muted)]"> · {medication.dosage}</span> : null}
-                            </p>
-                            <p className="text-sm text-[var(--color-text-muted)]">
-                              {supply?.runsOutOn
-                                ? [
-                                    `Runs out ${formatDay(supply.runsOutOn)}`,
-                                    medication.enabled ? daysLeftLabel(supply.daysRemaining) : "",
-                                    medication.enabled && supply.deadline && supply.state !== "requested" && supply.state !== "not_needed"
-                                      ? `Refill by ${formatDay(supply.deadline)}`
-                                      : "",
-                                  ]
-                                    .filter(Boolean)
-                                    .join(" · ")
-                                : "No supply estimate yet"}
-                            </p>
-                            {supply?.requestedAt ? (
-                              <p className="text-sm text-[var(--color-text-muted)]">{requestAgeLabel(supply.requestedAt)}</p>
-                            ) : null}
-                          </div>
-                          <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-                            {supply?.needsConfirmation ? <Badge tone="warning">Confirm estimate</Badge> : null}
-                            {onEditMedication && medication.canEdit !== false ? (
-                              <Button type="button" size="sm" variant="ghost" onClick={() => onEditMedication(medication.id)}>
-                                Edit medication
-                              </Button>
-                            ) : null}
-                            {status ? <Badge tone={status.tone}>{status.label}</Badge> : null}
-                          </div>
-                        </div>
-
-                        {mayChange ? (
-                          <div className="flex flex-wrap gap-2">
-                            <Button size="sm" variant="secondary" disabled={busy} onClick={() => setSheet({ mode: "set", medication })}>
-                              {supply?.runsOutOn ? "Update supply" : "Set supply"}
-                            </Button>
-                            {supply?.needsConfirmation && medication.enabled ? (
-                              <Button
-                                size="sm"
-                                variant="secondary"
-                                disabled={busy}
-                                onClick={() => {
-                                  setConfirmError(null);
-                                  setConfirming(medication);
-                                }}
-                              >
-                                Confirm estimate
-                              </Button>
-                            ) : null}
-                            {canMarkRequested(supply ?? undefined, medication.enabled) ? (
-                              <Button size="sm" variant="secondary" loading={busy} onClick={() => void markRequested(medication)}>
-                                Mark requested
-                              </Button>
-                            ) : null}
-                            {medication.enabled ? (
-                              <Button size="sm" variant="secondary" disabled={busy} onClick={() => setSheet({ mode: "receive", medication })}>
-                                Mark received
-                              </Button>
-                            ) : null}
-                            {supply?.state === "requested" || supply?.requestedAt ? (
-                              <Button size="sm" variant="secondary" loading={busy} onClick={() => void clearRequest(medication)}>
-                                Clear request
-                              </Button>
-                            ) : null}
-                          </div>
-                        ) : null}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </section>
-            ))}
-          </div>
-        )}
       </CardBody>
 
       <SupplySetupSheet

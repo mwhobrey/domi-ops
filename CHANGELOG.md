@@ -14,6 +14,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 - **Edit a medication from the organizer and supply screens** (WHO-446). The pills step, the filling panel and each supply card have an Edit medication button that opens the usual editor on top, so a dosage saved as "600 mg" can become 2 x 300 mg without leaving the setup. Amounts typed but not saved stay put, and an open filling session asks for its usual review of what changed.
 - **A question before finishing or stopping a filling session with medications left** (WHO-444, WHO-440). Once something is filled, both dialogs name the medications not fully filled, say the next session will not offer those days, and offer Keep filling. Nothing is decided for you.
 
+### Changed
+
+- **A shorter medications page** (WHO-447). Groups, medications, the pill organizer, supplies and pharmacies now fold away, and what you choose is remembered in your browser. Supplies and pharmacies start folded with a one-line summary ("2 need a refill", "1 pharmacy"), and a Jump to row at the top takes you to any section, opening it first. A link or notice that points at a refill or a fill appointment opens its section by itself. On a phone the page went from about ten screens to five, on a laptop from about six to four.
+
 ### Fixed
 
 - **"Filled so far" on the filling screen** (WHO-439) no longer lists days an earlier session filled next to "0 days of 31". Those read "Already filled before this session" on their own line.
