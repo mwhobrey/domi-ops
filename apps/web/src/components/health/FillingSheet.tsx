@@ -127,14 +127,23 @@ export function FillingSheet({
 
   // A medication was edited from here: the server notices instructions that changed, so ask it again.
   const firstMedications = useRef(true);
+  const reloadPending = useRef(false);
   useEffect(() => {
     if (firstMedications.current) {
       firstMedications.current = false;
       return;
     }
-    if (open && !busy) void load();
+    if (!open) return;
+    // Busy means a save is in flight and may have been built before this edit: ask again once it is done.
+    if (busy) reloadPending.current = true;
+    else void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [medications]);
+  useEffect(() => {
+    if (busy || !reloadPending.current) return;
+    reloadPending.current = false;
+    if (open) void load();
+  }, [busy, open, load]);
 
   // Coming back to this tab (or this phone) after filling elsewhere: pick up where the session is now.
   useEffect(() => {

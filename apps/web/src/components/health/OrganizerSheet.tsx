@@ -59,6 +59,13 @@ export function OrganizerSheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
+  // The section reloaded the plan (a medication was edited from here, or changed elsewhere): follow it, never going back
+  // to an older version than the one this sheet just saved.
+  useEffect(() => {
+    if (!open || !initialPlan) return;
+    setPlan((prev) => (!prev || prev.id !== initialPlan.id || initialPlan.version >= prev.version ? initialPlan : prev));
+  }, [open, initialPlan]);
+
   // A filling session in progress is not stopped by a change here, but it will ask for a review before more filling.
   useEffect(() => {
     if (!open || !plan) {
