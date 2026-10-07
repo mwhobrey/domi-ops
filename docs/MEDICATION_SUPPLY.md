@@ -46,6 +46,7 @@ One **plan per person** (`/api/health/organizers`): how often they fill (every N
 
 - **Mapping is by dose time**: each dose time of the person's scheduled medications maps to one compartment (`health_organizer_time_map`). A medication taken at several times can land in several compartments. A group named like a compartment maps all its times in one tap.
 - **Quantities** are per medication per time, in **quarters of a pill** (¼ to 100, stored as integer quarters, `health_medication_dose_quantities`). The dosage text ("10 mg") is shown for reference and **never** used to fill a number: milligrams are not pills.
+- **Only pills go in an organizer.** A medication has a **form** (`health_medications.form`: pill, iv, injection, liquid, other; pill by default). The others keep their schedule, reminders and refill tracking, are listed under "left out" as not a pill, and never raise a missing-quantity problem. Set it on the medication's edit screen. The medication editor also opens from the pills step, the filling panel and the supply cards, so a dosage written as one number (600 mg) can be broken out (2 x 300 mg) without leaving the setup; what was typed and not yet saved is kept.
 - **Setup problems** are listed with the step that fixes them: dose times with no compartment, missing quantities, medications left out (as needed, over the counter, interval, paused, no fixed times), doses claimed by two groups (shown once). The plan is **ready** when there are no errors and at least one dose to place.
 - Changing the schedule, quantities or mapping while a session is open does not stop the session; it asks for a **review** (below). A plan cannot be archived while a session is open; archiving keeps history and allows a new plan.
 - Plan changes carry the `version` the client saw.
@@ -58,7 +59,7 @@ One **plan per person** (`/api/health/organizers`): how often they fill (every N
 - **Progress** per medication: `pending`, `partial`, `filled`, `nothing_to_fill`, with the covered and missing ranges.
 - **Review gate:** if the snapshot's hash no longer matches the instructions, `review_required` (409): filling pauses, the view lists what changed (schedule, quantity, compartment, renames) and the person accepts the new instructions (`POST .../review`). Fills already made stay filled and are not touched.
 - **Undo** takes back a medication's latest fill and puts the previous estimate back as a new revision, unless the estimate was changed since (then it says so and leaves it).
-- **Finish** and **stop** (abandon): both keep every fill and the estimates they made. Finishing requires at least one fill. **Neither creates dose logs**: filling is not taking.
+- **Finish** and **stop** (abandon): both keep every fill and the estimates they made. Finishing requires at least one fill. **Neither creates dose logs**: filling is not taking. When something is filled and some medications are not fully filled, both dialogs name them, say the next session starts after the last day filled so it will not offer those days, and offer **Keep filling**. Nothing is decided for the person (WHO-440, WHO-444).
 - Every medication is judged by what the **viewer** may see; the session itself is computed from all of the person's medications so every caregiver is told the same thing.
 
 ## Fill appointments
@@ -144,8 +145,7 @@ The per-household caps take a transaction-scoped advisory lock (`lockQuota`) bef
 
 ## Known gaps
 
-- Medications left unfilled when a session ends are not offered in the next one (WHO-440).
-- The filling panel's "Filled so far" counts days outside the session's window (WHO-439).
+- Medications left unfilled when a session ends are not offered in the next one. The person is asked at finish and stop (WHO-444) and chooses; there is no catch-up flow by design (WHO-440).
 - A medication taken only on some weekdays is placed correctly (unit tested) but the QA pass did not click it.
 - Supply is an estimate: nothing reads dose logs, so a person who takes extra or skips doses has to update it.
 - Real push delivery and the BullMQ tick are covered by stubs at the boundary, not end to end in CI.

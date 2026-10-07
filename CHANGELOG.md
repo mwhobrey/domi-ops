@@ -8,6 +8,16 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+### Added
+
+- **IV and other non-pill medications stay out of pill organizers** (WHO-445). A medication now has a form: pill (the default), IV, injection, liquid or other. Only pills are placed in an organizer; the others no longer get flagged for a missing pill amount and show under "left out" as not a pill. Reminders, refills and the supply estimate work as before. Set it on the medication's edit screen. **Migration `0092`** adds one column; every existing medication stays a pill (requires `npm run db:migrate`; the hosted tag deploy runs it).
+- **Edit a medication from the organizer and supply screens** (WHO-446). The pills step, the filling panel and each supply card have an Edit medication button that opens the usual editor on top, so a dosage saved as "600 mg" can become 2 x 300 mg without leaving the setup. Amounts typed but not saved stay put, and an open filling session asks for its usual review of what changed.
+- **A question before finishing or stopping a filling session with medications left** (WHO-444, WHO-440). Once something is filled, both dialogs name the medications not fully filled, say the next session will not offer those days, and offer Keep filling. Nothing is decided for you.
+
+### Fixed
+
+- **"Filled so far" on the filling screen** (WHO-439) no longer lists days an earlier session filled next to "0 days of 31". Those read "Already filled before this session" on their own line.
+
 ## [0.8.1] - 2026-10-07
 
 Two fixes on top of 0.8.0: the web app no longer floods Sentry with a Node warning, and Better Auth is updated to 1.7.7 (security fixes). **No migrations**, no new environment variables, nothing to do on upgrade. If you serve the web app without a proxy in front, see the compression note below.
