@@ -6,6 +6,12 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    ignore:
+      # Types follow the lowest Node major we run and test (22 in CI and the marketing image; the
+      # app images are 24). A newer major's types describe APIs that do not exist there, and CI
+      # cannot tell. Patch and minor updates still come through.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     groups:
       # Next.js/React ecosystem moves together often enough that separate PRs just churn CI —
       # bundle them. Everything else stays one-PR-per-bump so audits stay easy to reason about.

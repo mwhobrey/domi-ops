@@ -8,6 +8,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+### Fixed
+
+- **Sentry quota eaten by a Node warning** (WHO-438). Every request that went through the web app to `/api` made Node print "11 close listeners added to [ServerResponse]", and Sentry counted each one as an error: about 5,000 a day, which used up the monthly allowance. The cause was Next's own response compression stacking listeners on the proxied response, so compression is now off in the web app (the Caddy examples already compress with gzip and zstd; if you serve the web app with no proxy in front, add one). Node process warnings are also no longer reported to Sentry as errors from the web app, API and worker; they stay in the container logs. The notice board no longer asks for the same lists several times in a row when you switch back to a tab (a push still refreshes it at once) and the web app is tested for it.
+
 ## [0.8.0] - 2026-10-06
 
 Fill a pill organizer, keep track of when each medication runs out, and ask for refills in time: pharmacies, a supply estimate you confirm, a Requested and Received refill workflow, pill organizers with a guided filling session, fill appointments, calendar and dashboard presence, and reminders. Supply is an estimate, never a live pill count. **Includes five migrations, `0087` to `0091`** (requires `npm run db:migrate`; no other manual steps: no new environment variables, and reminders use the existing health reminders setting). The hosted deploy applies them automatically. `0091` also narrows what the worker can read across households. See [docs/MEDICATION_SUPPLY.md](docs/MEDICATION_SUPPLY.md).
