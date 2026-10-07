@@ -130,6 +130,7 @@ const REASONS: Record<NotGuidedReason, string> = {
   interval: "repeats every few hours",
   paused: "paused",
   no_times: "has no fixed times",
+  not_a_pill: "not a pill",
 };
 export const notGuidedReasonLabel = (reason: NotGuidedReason): string => REASONS[reason] ?? reason;
 

@@ -163,6 +163,33 @@ maybeDescribe("medication dose quantities, references and limits (integration)",
     await closeDb(baseDb);
   });
 
+  describe("medication form (WHO-445)", () => {
+    it("is a pill unless said otherwise, and can be set on create and changed on edit", async () => {
+      const plain = await makeMed();
+      expect(plain.form).toBe("pill");
+      const iv = await makeMed({ form: "iv" });
+      expect(iv.form).toBe("iv");
+      const edited = await call("mom", "PATCH", `/health/medications/${plain.id}`, { form: "injection" });
+      expect(edited.status).toBe(200);
+      expect(edited.json.medication.form).toBe("injection");
+      const kept = await call("mom", "PATCH", `/health/medications/${plain.id}`, { dosage: "600 mg" });
+      expect(kept.json.medication.form).toBe("injection");
+    });
+
+    it("refuses a form it does not know and writes nothing", async () => {
+      const before = await countMeds();
+      const bad = await call("mom", "POST", "/health/medications", med({ form: "gummy" }));
+      expect(bad.status).toBe(400);
+      expect(bad.json.error).toBe("invalid_form");
+      expect(await countMeds()).toBe(before);
+      const m = await makeMed();
+      const badEdit = await call("mom", "PATCH", `/health/medications/${m.id}`, { form: "gummy" });
+      expect(badEdit.status).toBe(400);
+      const list = await call("mom", "GET", "/health/medications");
+      expect(list.json.medications.find((x: Json) => x.id === m.id).form).toBe("pill");
+    });
+  });
+
   describe("pills per dose time", () => {
     it("stores whole quarters and answers in pills", async () => {
       const m = await makeMed({ doseQuantities: { "08:00": 1.5, "21:00": 0.25 } });

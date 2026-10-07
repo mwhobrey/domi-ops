@@ -383,6 +383,26 @@ describe("computePlacements", () => {
       expect(r.byMedication).toEqual([]);
     });
 
+    it("leaves non-pill medications out of the organizer, with no quantity problem (WHO-445)", () => {
+      const r = run({
+        days: 2,
+        medications: [
+          med("iv", ["08:00", "20:00"], { form: "iv" }),
+          med("shot", ["08:00"], { form: "injection", scheduleKind: "prn" }),
+          med("pill", ["08:00"], { form: "pill" }),
+          med("unset", ["08:00"]),
+        ],
+        quantities: qty({ pill: { "08:00": 4 }, unset: { "08:00": 4 } }),
+      });
+      expect(r.notGuided).toEqual([
+        { medicationId: "iv", reason: "not_a_pill" },
+        { medicationId: "shot", reason: "not_a_pill" },
+      ]);
+      expect(r.problems).toEqual([]);
+      expect(r.byMedication.map((m) => m.medicationId)).toEqual(["pill", "unset"]);
+      expect(r.placements.every((pl) => pl.medicationId === "pill" || pl.medicationId === "unset")).toBe(true);
+    });
+
     it("ignores unusable times: bad formats, out of range, seconds are trimmed and repeats collapse", () => {
       const r = run({
         days: 1,

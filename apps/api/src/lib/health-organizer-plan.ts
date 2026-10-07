@@ -123,6 +123,7 @@ export async function loadPlacements(
   const organizerMeds: OrganizerMedication[] = meds.map((m) => ({
     id: m.id,
     scheduleKind: m.scheduleKind,
+    form: m.form,
     scheduleJson: m.scheduleJson,
     startDate: m.startDate,
     endDate: m.endDate,

@@ -36,7 +36,7 @@ export function OrganizerQuantitiesStep({
   onDone: () => void;
 }) {
   // Medications that take fixed times and are on. Only the ones this person can change get fields; the rest are named below.
-  const guided = useMemo(() => medications.filter((m) => m.scheduleKind === "scheduled" && m.enabled), [medications]);
+  const guided = useMemo(() => medications.filter((m) => m.scheduleKind === "scheduled" && m.enabled && (m.form ?? "pill") === "pill"), [medications]);
   const meds = useMemo(() => guided.filter((m) => m.canEdit !== false).sort((a, b) => a.name.localeCompare(b.name)), [guided]);
   const readOnly = useMemo(() => guided.filter((m) => m.canEdit === false).sort((a, b) => a.name.localeCompare(b.name)), [guided]);
 

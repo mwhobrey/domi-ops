@@ -15,7 +15,7 @@ export type SetupProblem =
   | { kind: "missing_quantity"; severity: "error"; medicationId: string; time: string }
   | { kind: "double_claim"; severity: "warning"; medicationId: string; time: string };
 
-export type NotGuidedReason = "as_needed" | "over_the_counter" | "interval" | "paused" | "no_times";
+export type NotGuidedReason = "as_needed" | "over_the_counter" | "interval" | "paused" | "no_times" | "not_a_pill";
 
 export interface OrganizerPlan {
   id: string;

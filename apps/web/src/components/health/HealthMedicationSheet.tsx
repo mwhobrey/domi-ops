@@ -12,7 +12,7 @@ import {
   type MedScheduleDraft,
 } from "./MedScheduleEditor";
 import { isAsNeededMedScheduleKind, resolveDefaultMemberId } from "./health-helpers";
-import type { HealthMedication, MedicationGroupOption } from "./health-types";
+import { MEDICATION_FORMS, type HealthMedication, type MedicationFormValue, type MedicationGroupOption } from "./health-types";
 import { pharmacyErrorMessage } from "./pharmacy-helpers";
 import type { Pharmacy } from "./supply-types";
 
@@ -48,6 +48,7 @@ export function HealthMedicationSheet({
   const [name, setName] = useState(medication?.name ?? "");
   const [dosage, setDosage] = useState(medication?.dosage ?? "");
   const [instructions, setInstructions] = useState(medication?.instructions ?? "");
+  const [form, setForm] = useState<MedicationFormValue>(medication?.form ?? "pill");
   const [scheduleDraft, setScheduleDraft] = useState<MedScheduleDraft>(() =>
     medicationToScheduleDraft(medication),
   );
@@ -88,6 +89,7 @@ export function HealthMedicationSheet({
     setName(medication?.name ?? "");
     setDosage(medication?.dosage ?? "");
     setInstructions(medication?.instructions ?? "");
+    setForm(medication?.form ?? "pill");
     setScheduleDraft(medicationToScheduleDraft(medication));
     setSelectedGroupIds(new Set(medication?.groupIds ?? []));
     setNewGroupName("");
@@ -147,6 +149,7 @@ export function HealthMedicationSheet({
       name: name.trim(),
       dosage: dosage.trim() || undefined,
       instructions: instructions.trim() || undefined,
+      form,
       scheduleKind: scheduleResult.scheduleKind,
       schedule: scheduleResult.schedule,
       enabled,
@@ -257,6 +260,17 @@ export function HealthMedicationSheet({
         <label className="block space-y-1 text-sm">
           <span>Dosage</span>
           <Input value={dosage} onChange={(e) => setDosage(e.target.value)} />
+        </label>
+        <label className="block space-y-1 text-sm">
+          <span>Form</span>
+          <Select value={form} onChange={(e) => setForm(e.target.value as MedicationFormValue)}>
+            {MEDICATION_FORMS.map((f) => (
+              <option key={f.value} value={f.value}>
+                {f.label}
+              </option>
+            ))}
+          </Select>
+          {form !== "pill" ? <span className="block text-xs text-[var(--color-text-muted)]">Not a pill, so it stays out of pill organizers. Reminders and refills still work.</span> : null}
         </label>
         <label className="block space-y-1 text-sm">
           <span>Instructions</span>

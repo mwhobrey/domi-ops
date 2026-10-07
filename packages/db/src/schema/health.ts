@@ -88,6 +88,14 @@ export const healthPainBodyRegionEnum = pgEnum("health_pain_body_region", [
   "spine",
 ]);
 
+/**
+ * What a medication is (WHO-445). Only pills go in a pill organizer; IV, injection, liquid and other
+ * medications keep their schedule, reminders and refill tracking but are never placed in a compartment.
+ */
+export const medFormEnum = pgEnum("med_form", ["pill", "iv", "injection", "liquid", "other"]);
+export type MedicationForm = (typeof medFormEnum.enumValues)[number];
+export const isMedicationForm = (v: unknown): v is MedicationForm => (medFormEnum.enumValues as readonly unknown[]).includes(v);
+
 export const medScheduleKindEnum = pgEnum("med_schedule_kind", [
   "scheduled",
   "prn",
@@ -240,6 +248,7 @@ export const healthMedications = pgTable("health_medications", {
   dosage: text("dosage"),
   instructions: text("instructions"),
   scheduleKind: medScheduleKindEnum("schedule_kind").notNull().default("scheduled"),
+  form: medFormEnum("form").notNull().default("pill"),
   scheduleJson: text("schedule_json").default("{}"),
   reminderOffsetsJson: text("reminder_offsets_json").default("[0]"),
   startDate: date("start_date"),

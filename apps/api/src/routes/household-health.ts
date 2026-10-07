@@ -17,6 +17,8 @@ import {
   householdMembers,
   households,
   isAsNeededMedScheduleKind,
+  isMedicationForm,
+  type MedicationForm,
 } from "@domi-ops/db";
 import { and, desc, eq, gte, inArray, isNull, lt, lte, or } from "drizzle-orm";
 import type { AppVariables } from "../middleware/auth.js";
@@ -1278,10 +1280,15 @@ export function householdHealthRoutes(db: Database, env: Env) {
       sharedMemberIds?: string[];
       /** Pills per dose time, e.g. { "08:00": 1.5 }; whole quarters only (WHO-417). */
       doseQuantities?: Record<string, number>;
+      /** pill (default), iv, injection, liquid, other; only pills go in an organizer (WHO-445). */
+      form?: string;
     }>();
 
     if (!body.memberId || !body.name?.trim()) {
       return c.json({ error: "invalid_body" }, 400);
+    }
+    if (body.form !== undefined && !isMedicationForm(body.form)) {
+      return c.json({ error: "invalid_form" }, 400);
     }
     if (!(await isHouseholdMember(db, auth.householdId, body.memberId))) {
       return c.json({ error: "member_not_found" }, 404);
@@ -1337,6 +1344,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
           dosage: enc.dosage ?? null,
           instructions: enc.instructions ?? null,
           scheduleKind: scheduleMeta.scheduleKind,
+          form: body.form as MedicationForm | undefined,
           scheduleJson: scheduleMeta.scheduleJson,
           reminderOffsetsJson: JSON.stringify(offsets),
           startDate: body.startDate ?? null,
@@ -1422,7 +1430,12 @@ export function householdHealthRoutes(db: Database, env: Env) {
       leaveAllGroups?: boolean;
       /** Replaces ALL pills-per-dose-time (WHO-417); {} clears them, omitted leaves them alone. */
       doseQuantities?: Record<string, number>;
+      form?: string;
     }>();
+
+    if (body.form !== undefined && !isMedicationForm(body.form)) {
+      return c.json({ error: "invalid_form" }, 400);
+    }
 
     let doseQuantities: DoseQuantities | undefined;
     if (body.doseQuantities !== undefined) {
@@ -1438,6 +1451,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
       const patch: Partial<typeof healthMedications.$inferInsert> = { updatedAt: new Date() };
       if (body.name !== undefined) patch.name = encryptHealthField(body.name, env) ?? "";
       if (body.dosage !== undefined) patch.dosage = encryptHealthField(body.dosage, env);
+      if (body.form !== undefined) patch.form = body.form as MedicationForm;
       if (body.instructions !== undefined) {
         patch.instructions = encryptHealthField(body.instructions, env);
       }
