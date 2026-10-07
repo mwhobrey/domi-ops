@@ -20,7 +20,7 @@
     "@tiptap/pm": "^3.31.4",
     "@tiptap/react": "^3.31.4",
     "@tiptap/starter-kit": "^3.31.4",
-    "better-auth": "^1.6.14",
+    "better-auth": "^1.7.7",
     "clsx": "^2.1.1",
     "driver.js": "^1.8.0",
     "isomorphic-dompurify": "^4.4.0",
