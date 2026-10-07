@@ -110,12 +110,13 @@ export default async function LoginPage({
           </p>
         )}
 
-        {params.error === "oauth" && (
+        {params.error && params.error !== "no-household" && (
           <p
             className="rounded-[var(--radius-lg)] border border-[var(--color-danger-muted)] bg-[var(--color-danger-muted)]/20 px-3 py-2.5 text-sm text-[var(--color-danger)]"
             role="alert"
           >
-            Sign-in failed. Check OAuth redirect URIs and API logs, then try again.
+            Sign-in did not complete. Try again, or use your email and password. If it keeps happening, tell whoever runs this
+            server{params.error === "oauth" ? "" : ` (code: ${params.error.slice(0, 60)})`}.
           </p>
         )}
 

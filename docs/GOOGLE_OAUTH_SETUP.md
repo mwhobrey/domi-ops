@@ -135,6 +135,16 @@ No new OAuth client is required. Picker uses:
 
 Confirm **Authorized JavaScript origins** (§3) include your dev/prod browser URL.
 
+## Troubleshooting: Google sign-in returns to the login page
+
+After picking a Google account you land on `/login` (with a "Sign-in did not complete" message and a code). With the code `internal_server_error`, check for one Google account recorded twice, which Better Auth 1.7.3+ refuses to sign in (WHO-449; migration `0093` repairs it and prevents it):
+
+```sql
+SELECT provider_id, account_id, count(*) FROM ba_accounts GROUP BY 1, 2 HAVING count(*) > 1;
+```
+
+With the code `state_mismatch`, the browser lost the sign-in cookie between the two legs (a different host than `PUBLIC_APP_URL`, or blocked cookies).
+
 ## 10. Student Google Docs (school tests — WHO-209–212)
 
 Students connect the same **Google Docs** OAuth flow as teachers (`/auth/google/docs/start?next=…`). Scopes are **`drive.file` only** (plus login openid/email/profile), with no Docs `documents` scope and no full Drive scope. Family Link supervised accounts can usually grant `drive.file`; if a child previously connected with the old scopes, **disconnect and reconnect** after this change.

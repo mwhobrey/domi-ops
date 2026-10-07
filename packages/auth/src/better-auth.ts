@@ -151,6 +151,9 @@ export function createBetterAuth(db: Database, env: Env): WhomeBetterAuth {
         });
       },
     },
+    // A failed sign-in lands on the login page with the reason in the URL, instead of Better Auth's bare error page that the
+    // site turns into a silent bounce (WHO-449). The login page shows what happened.
+    onAPIError: { errorURL: "/login" },
     socialProviders: Object.keys(socialProviders).length > 0 ? socialProviders : undefined,
     plugins: [
       username({

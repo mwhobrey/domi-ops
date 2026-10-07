@@ -1,4 +1,4 @@
-import { index, pgTable, text, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
+import { index, pgTable, text, timestamp, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core";
 import { users } from "./household.js";
 
 /** Better Auth sessions (replaces legacy auth_sessions). */
@@ -43,7 +43,11 @@ export const baAccounts = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("ba_accounts_user_id_idx").on(t.userId)],
+  (t) => [
+    index("ba_accounts_user_id_idx").on(t.userId),
+    // Better Auth 1.7.3+ treats two rows for one provider account as fatal; keep it impossible (WHO-449, migration 0093).
+    uniqueIndex("ba_accounts_provider_account_uidx").on(t.providerId, t.accountId),
+  ],
 );
 
 /** Better Auth email verification / password reset tokens. */
