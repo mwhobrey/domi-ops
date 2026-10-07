@@ -34,6 +34,24 @@ export function rangesLabel(ranges: readonly DateRange[]): string {
   return ranges.map(rangeLabel).join(", ");
 }
 
+export type CoveredSplit = { inWindow: DateRange[]; before: DateRange[]; after: DateRange[] };
+
+/**
+ * Splits covered stretches around this session's window (WHO-439). Only `inWindow` belongs next to the
+ * "N of M days" count, which is about the window; days an earlier session already filled are `before`.
+ */
+export function splitCovered(covered: readonly DateRange[], window: DateRange): CoveredSplit {
+  const out: CoveredSplit = { inWindow: [], before: [], after: [] };
+  for (const r of covered) {
+    if (r.from < window.from) out.before.push({ from: r.from, to: r.to < window.from ? r.to : addDays(window.from, -1) });
+    if (r.to > window.to) out.after.push({ from: r.from > window.to ? r.from : addDays(window.to, 1), to: r.to });
+    const from = r.from > window.from ? r.from : window.from;
+    const to = r.to < window.to ? r.to : window.to;
+    if (from <= to) out.inWindow.push({ from, to });
+  }
+  return out;
+}
+
 /** count(1, "day") -> "1 day"; count(3, "day") -> "3 days". */
 export const count = (n: number, noun: string): string => `${n} ${noun}${n === 1 ? "" : "s"}`;
 

@@ -17,6 +17,7 @@ import {
   rangeLabel,
   runsOfDates,
   sessionFromConflict,
+  splitCovered,
 } from "./filling-helpers";
 import type { SessionMedication } from "./filling-types";
 
@@ -208,5 +209,38 @@ describe("answers from the API", () => {
     expect(fillErrorMessage(apiError({ error: "confirmation_required" }), "fallback")).toMatch(/gap/);
     expect(fillErrorMessage(apiError({ error: "something_new" }), "fallback")).toBe("fallback");
     expect(fillErrorMessage(new Error("x"), "fallback")).toBe("fallback");
+  });
+});
+
+describe("splitCovered", () => {
+  const window = { from: "2026-11-06", to: "2026-12-06" };
+
+  it("puts a stretch an earlier session filled in before, not in the window", () => {
+    expect(splitCovered([{ from: "2026-10-06", to: "2026-11-05" }], window)).toEqual({
+      inWindow: [],
+      before: [{ from: "2026-10-06", to: "2026-11-05" }],
+      after: [],
+    });
+  });
+
+  it("splits a stretch that runs across the start of the window", () => {
+    expect(splitCovered([{ from: "2026-10-30", to: "2026-11-10" }], window)).toEqual({
+      inWindow: [{ from: "2026-11-06", to: "2026-11-10" }],
+      before: [{ from: "2026-10-30", to: "2026-11-05" }],
+      after: [],
+    });
+  });
+
+  it("keeps a fresh medication and a fully filled window clean", () => {
+    expect(splitCovered([], window)).toEqual({ inWindow: [], before: [], after: [] });
+    expect(splitCovered([window], window)).toEqual({ inWindow: [window], before: [], after: [] });
+  });
+
+  it("splits a stretch that runs past the end of the window", () => {
+    expect(splitCovered([{ from: "2026-12-01", to: "2026-12-10" }], window)).toEqual({
+      inWindow: [{ from: "2026-12-01", to: "2026-12-06" }],
+      before: [],
+      after: [{ from: "2026-12-07", to: "2026-12-10" }],
+    });
   });
 });

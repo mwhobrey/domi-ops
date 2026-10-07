@@ -17,6 +17,7 @@ import {
   rangeLabel,
   rangesLabel,
   sessionFromConflict,
+  splitCovered,
   statusView,
 } from "./filling-helpers";
 import type { SessionMedication, SessionView } from "./filling-types";
@@ -51,6 +52,7 @@ export function FillingMedicationPanel({
   onStale: (session: SessionView | null, message: string) => void;
 }) {
   const range0 = useMemo(() => defaultFillRange(medication), [medication]);
+  const covered = useMemo(() => splitCovered(medication.covered, { from: session.coverageStart, to: session.coverageEnd }), [medication.covered, session.coverageStart, session.coverageEnd]);
   const maxDays = range0 ? rangeDays(range0) : 0;
   const [daysText, setDaysText] = useState(String(maxDays));
   const [stage, setStage] = useState<"days" | "supply">("days");
@@ -221,9 +223,19 @@ export function FillingMedicationPanel({
 
       <CompartmentDiagram compartments={session.compartments} medication={medication} />
 
-      {medication.covered.length > 0 ? (
+      {covered.inWindow.length > 0 ? (
         <p className="text-sm text-[var(--color-text-muted)]">
-          Filled so far: <span className="text-[var(--color-text)]">{rangesLabel(medication.covered)}</span> ({count(medication.filledDays, "day")} of {medication.requiredDays}).
+          Filled so far: <span className="text-[var(--color-text)]">{rangesLabel(covered.inWindow)}</span> ({count(medication.filledDays, "day")} of {medication.requiredDays}).
+        </p>
+      ) : null}
+      {covered.before.length > 0 ? (
+        <p className="text-sm text-[var(--color-text-muted)]">
+          Already filled before this session: <span className="text-[var(--color-text)]">{rangesLabel(covered.before)}</span>.
+        </p>
+      ) : null}
+      {covered.after.length > 0 ? (
+        <p className="text-sm text-[var(--color-text-muted)]">
+          Already filled after this session: <span className="text-[var(--color-text)]">{rangesLabel(covered.after)}</span>.
         </p>
       ) : null}
 
