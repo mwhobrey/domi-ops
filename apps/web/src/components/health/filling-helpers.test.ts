@@ -12,6 +12,7 @@ import {
   filterMedications,
   finishSummary,
   isStaleAnswer,
+  leftBehind,
   missingAfter,
   progressLabel,
   rangeLabel,
@@ -242,5 +243,21 @@ describe("splitCovered", () => {
       before: [],
       after: [{ from: "2026-12-07", to: "2026-12-10" }],
     });
+  });
+});
+
+describe("leftBehind", () => {
+  it("names partly filled and unfilled medications, and nothing else", () => {
+    const meds = [
+      med({ medicationId: "a", name: "Filled", status: "filled" }),
+      med({ medicationId: "b", name: "Partly", status: "partial" }),
+      med({ medicationId: "c", name: "Untouched", status: "pending" }),
+      med({ medicationId: "d", name: "Nothing", status: "nothing_to_fill" }),
+    ];
+    expect(leftBehind({ medications: meds })).toEqual(["Partly", "Untouched"]);
+  });
+
+  it("is empty when everything is filled", () => {
+    expect(leftBehind({ medications: [med({ status: "filled" })] })).toEqual([]);
   });
 });

@@ -234,6 +234,16 @@ export function finishSummary(session: Pick<SessionView, "medications">): Finish
 }
 
 /**
+ * The medications a session would leave not (fully) filled, for the question asked before finishing or stopping
+ * (WHO-444). The next session starts after the last day filled, so these days are not offered again; the person
+ * decides, nothing is done for them.
+ */
+export function leftBehind(session: Pick<SessionView, "medications">): string[] {
+  const { partial, pending } = finishSummary(session);
+  return [...partial.map((p) => p.medication.name), ...pending.map((m) => m.name)];
+}
+
+/**
  * What changed since a session started, in words, one line per medication and per compartment, ready to list.
  * `nameOf` turns ids into the names the person knows.
  */

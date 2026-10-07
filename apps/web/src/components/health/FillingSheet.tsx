@@ -2,17 +2,29 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiClient } from "../../lib/client-api";
-import { Alert, Button, ConfirmDialog, Input, Modal, Sheet, Spinner } from "../ui";
+import { Alert, Button, Input, Modal, Sheet, Spinner } from "../ui";
 import { FillingReviewBanner } from "./FillingReviewBanner";
 import { FillingMedicationPanel } from "./FillingMedicationPanel";
 import { FillingMedicationPicker } from "./FillingMedicationPicker";
 import { FillingSummary } from "./FillingSummary";
-import { count, fillErrorMessage, isStaleAnswer, progressLabel, rangeLabel, sessionFromConflict } from "./filling-helpers";
+import { count, fillErrorMessage, isStaleAnswer, leftBehind, progressLabel, rangeLabel, sessionFromConflict } from "./filling-helpers";
 import type { SessionDefaults, SessionView } from "./filling-types";
 import type { HealthMedication } from "./health-types";
 import { parseDays } from "./supply-helpers";
 
 type Notice = { tone: "success" | "info"; text: string };
+
+/** The question before finishing or stopping with something left (WHO-444): said plainly, nothing is decided for them. */
+function LeftBehindNote({ names }: { names: readonly string[] }) {
+  return (
+    <Alert variant="info">
+      <span className="break-words">
+        Not fully filled: {names.join(", ")}. The next session starts after the last day filled, so it will not offer the days left here. You can keep filling
+        now instead.
+      </span>
+    </Alert>
+  );
+}
 
 /**
  * The filling screen (WHO-428): follow the bottle in your hand. Starting (or picking up) the one open session for a
@@ -221,6 +233,7 @@ export function FillingSheet({
   const nameOf = (id: string) => session?.medications.find((m) => m.medicationId === id)?.name ?? medications.find((m) => m.id === id)?.name ?? "A medication";
 
   const anyFilled = session ? session.progress.filled + session.progress.partial > 0 : false;
+  const left = session ? leftBehind(session) : [];
   const pct = session && session.progress.total > 0 ? Math.round(((session.progress.filled + session.progress.partial / 2) / session.progress.total) * 100) : 0;
   const isOpen = session?.status === "open";
 
@@ -345,15 +358,26 @@ export function FillingSheet({
         )}
       </div>
 
-      <ConfirmDialog
+      <Modal
         open={confirmStop && session !== null}
+        onClose={() => setConfirmStop(false)}
         title="Stop this session?"
-        message="Medications you already filled stay filled and keep counting toward their supply estimates. Nothing else is changed."
-        confirmLabel="Stop session"
-        loading={busy}
-        onConfirm={() => void stop()}
-        onCancel={() => setConfirmStop(false)}
-      />
+        footer={
+          <div className="flex flex-wrap justify-end gap-2 px-6 py-5">
+            <Button variant="secondary" disabled={busy} onClick={() => setConfirmStop(false)}>
+              {left.length > 0 ? "Keep filling" : "Cancel"}
+            </Button>
+            <Button variant="danger" loading={busy} onClick={() => void stop()}>
+              Stop session
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3 text-sm leading-relaxed text-[var(--color-text-muted)]">
+          {left.length > 0 ? <LeftBehindNote names={left} /> : null}
+          <p>Medications you already filled stay filled and keep counting toward their supply estimates. Nothing else is changed.</p>
+        </div>
+      </Modal>
 
       <Modal
         open={confirmFinish && session !== null}
@@ -370,7 +394,12 @@ export function FillingSheet({
           </div>
         }
       >
-        {session ? <FillingSummary session={session} /> : null}
+        {session ? (
+          <div className="space-y-3">
+            {left.length > 0 ? <LeftBehindNote names={left} /> : null}
+            <FillingSummary session={session} />
+          </div>
+        ) : null}
       </Modal>
     </Sheet>
   );
