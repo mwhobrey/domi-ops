@@ -8,6 +8,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-10-07
+
+Medication forms, editing a medication without leaving organizer setup, a clearer filling screen and a much shorter medications page. **Includes one migration, `0092`** (one column on `health_medications`; every existing medication stays a pill). Self-hosters run `npm run db:migrate`; the hosted tag deploy runs it itself. No new environment variables.
+
 ### Added
 
 - **IV and other non-pill medications stay out of pill organizers** (WHO-445). A medication now has a form: pill (the default), IV, injection, liquid or other. Only pills are placed in an organizer; the others no longer get flagged for a missing pill amount and show under "left out" as not a pill. Reminders, refills and the supply estimate work as before. Set it on the medication's edit screen. **Migration `0092`** adds one column; every existing medication stays a pill (requires `npm run db:migrate`; the hosted tag deploy runs it).
