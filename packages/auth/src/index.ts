@@ -16,5 +16,4 @@ export * from "./import-records.js";
 export * from "./setup.js";
 export * from "./cleanup-user.js";
 export { hashPassword, verifyPassword } from "better-auth/crypto";
-export { createLocalAccountIssuer } from "better-auth/db";
 

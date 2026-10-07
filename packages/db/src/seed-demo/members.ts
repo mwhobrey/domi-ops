@@ -1,7 +1,6 @@
 import type { Database } from "../client.js";
 import { baAccounts, householdMembers, households, users } from "../schema/index.js";
 import { hashPassword } from "better-auth/crypto";
-import { createLocalAccountIssuer } from "better-auth/db";
 import { eq, inArray, or } from "drizzle-orm";
 import {
   DEMO_MEMBER_PASSWORD_DEFAULT,
@@ -77,14 +76,8 @@ async function createCredentialUser(
   await db.insert(baAccounts).values({
     userId: createdUser.id,
     providerId: "credential",
-    // Better Auth's credential sign-in match requires BOTH accountId === user.id AND issuer ===
-    // createLocalAccountIssuer(providerId) (see node_modules/better-auth/dist/api/routes/sign-in.mjs
-    // + internal-adapter.mjs). Neither was set here before - the row looked completely correct
-    // (user + credential account present, password hash verified fine in isolation) but Better
-    // Auth's own account match never found it, so every login attempt logged "User not found"
-    // and returned 401 regardless of password. Confirmed live + fixed 2026-08-31, WHO-250.
+    // Better Auth matches the credential account on (providerId, accountId) with accountId === user.id.
     accountId: createdUser.id,
-    issuer: createLocalAccountIssuer("credential"),
     password: passwordHash,
   });
 
