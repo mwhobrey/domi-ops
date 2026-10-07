@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, apiClient } from "../../lib/client-api";
 import type { NoteShareMember } from "../NoteSharePicker";
-import { Alert, Badge, Button, Card, CardBody, EmptyState, SectionHeader } from "../ui";
+import { Alert, Badge, Button, Card, CardBody, EmptyState } from "../ui";
+import { CollapsibleHeader } from "./CollapsibleHeader";
 import type { HealthMedication } from "./health-types";
 import { AppointmentSheet } from "./AppointmentSheet";
 import { FillingSheet } from "./FillingSheet";
@@ -34,6 +35,8 @@ export function OrganizerSection({
   refreshKey,
   onMedicationsChanged,
   onEditMedication,
+  collapsed,
+  onToggleCollapsed,
   openAppointment = null,
   onAppointmentOpened,
 }: {
@@ -49,6 +52,9 @@ export function OrganizerSection({
   onMedicationsChanged: () => Promise<void> | void;
   /** Open the medication editor on top of this card (WHO-446). */
   onEditMedication?: (medicationId: string) => void;
+  /** Folded away by the person; the title stays and says what is inside (WHO-447). */
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
   /** A calendar chip or notice's link: open this appointment of this plan once the plan has loaded. */
   openAppointment?: { planId: string; date: string } | null;
   onAppointmentOpened?: () => void;
@@ -127,94 +133,107 @@ export function OrganizerSection({
   const checklist = useMemo(() => (plan ? setupChecklist(plan, medications) : []), [plan, medications]);
   const nameOf = (id: string) => members.find((m) => m.memberId === id)?.label ?? "Someone";
   const hasScheduled = medications.some((m) => m.scheduleKind === "scheduled" && m.enabled);
+  const summary = !loaded
+    ? ""
+    : plan
+      ? `${scheduleSummary(plan)}${openSession ? ` · filling ${openSession.filled} of ${openSession.total}` : ""}`
+      : "Not set up";
 
   if (forbidden) return null;
 
   return (
     <Card>
-      <CardBody className="space-y-4">
+      <CardBody className={collapsed ? undefined : "space-y-4"}>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <SectionHeader title="Pill organizer" />
-          {canWrite && plan ? (
+          <CollapsibleHeader
+            id="health-organizer"
+            title="Pill organizer"
+            collapsed={collapsed}
+            onToggle={onToggleCollapsed}
+            summary={summary}
+          />
+          {canWrite && plan && !collapsed ? (
             <Button size="sm" variant="secondary" onClick={() => setSheet({ step: "schedule" })}>
               Edit
             </Button>
           ) : null}
         </div>
 
-        {error ? <Alert variant="error">{error}</Alert> : null}
+        <div id="health-organizer-body" hidden={collapsed} className="space-y-4">
+          {error ? <Alert variant="error">{error}</Alert> : null}
 
-        {!loaded ? (
-          <p className="text-sm text-[var(--color-text-muted)]">Loading…</p>
-        ) : !plan ? (
-          <EmptyState
-            title="No pill organizer set up"
-            description={
-              canWrite
-                ? `If ${memberLabelText} fills a pill organizer, set it up here and each fill tells you which pills go in which compartment, and how many days they cover.${hasScheduled ? "" : " It uses medications with fixed times, so add those first."}`
-                : `No pill organizer has been set up for ${memberLabelText}.`
-            }
-            action={
-              canWrite ? (
-                <Button onClick={() => setSheet({ step: "schedule" })}>Set up a pill organizer</Button>
-              ) : undefined
-            }
-          />
-        ) : (
-          <>
-            <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[auto_1fr]">
-              <dt className="text-[var(--color-text-muted)]">Fills</dt>
-              <dd className="text-[var(--color-text)]">
-                {scheduleSummary(plan)} · {plan.fillLengthDays} days each
-              </dd>
-              <dt className="text-[var(--color-text-muted)]">Compartments</dt>
-              <dd className="flex flex-wrap gap-1.5">
-                {plan.compartments.map((c) => (
-                  <Badge key={c.id}>{c.name}</Badge>
-                ))}
-              </dd>
-              <dt className="text-[var(--color-text-muted)]">Reminders</dt>
-              <dd className="text-[var(--color-text)]">
-                {plan.caregiverMemberIds.length === 0 ? "No one" : plan.caregiverMemberIds.map(nameOf).join(", ")} at {plan.reminderTime}
-              </dd>
-            </dl>
+          {!loaded ? (
+            <p className="text-sm text-[var(--color-text-muted)]">Loading…</p>
+          ) : !plan ? (
+            <EmptyState
+              title="No pill organizer set up"
+              description={
+                canWrite
+                  ? `If ${memberLabelText} fills a pill organizer, set it up here and each fill tells you which pills go in which compartment, and how many days they cover.${hasScheduled ? "" : " It uses medications with fixed times, so add those first."}`
+                  : `No pill organizer has been set up for ${memberLabelText}.`
+              }
+              action={
+                canWrite ? (
+                  <Button onClick={() => setSheet({ step: "schedule" })}>Set up a pill organizer</Button>
+                ) : undefined
+              }
+            />
+          ) : (
+            <>
+              <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[auto_1fr]">
+                <dt className="text-[var(--color-text-muted)]">Fills</dt>
+                <dd className="text-[var(--color-text)]">
+                  {scheduleSummary(plan)} · {plan.fillLengthDays} days each
+                </dd>
+                <dt className="text-[var(--color-text-muted)]">Compartments</dt>
+                <dd className="flex flex-wrap gap-1.5">
+                  {plan.compartments.map((c) => (
+                    <Badge key={c.id}>{c.name}</Badge>
+                  ))}
+                </dd>
+                <dt className="text-[var(--color-text-muted)]">Reminders</dt>
+                <dd className="text-[var(--color-text)]">
+                  {plan.caregiverMemberIds.length === 0 ? "No one" : plan.caregiverMemberIds.map(nameOf).join(", ")} at {plan.reminderTime}
+                </dd>
+              </dl>
 
-            {canWrite && (plan.setup.ready || openSession) ? (
-              <div className="flex flex-wrap items-center gap-3">
-                <Button onClick={() => setFilling({ occurrenceDate: null })}>{openSession ? "Continue filling" : "Start filling"}</Button>
-                {openSession ? (
-                  <span className="text-sm text-[var(--color-text-muted)]">
-                    {openSession.filled} of {openSession.total} filled so far
-                  </span>
-                ) : null}
-              </div>
-            ) : null}
-
-            <OrganizerAppointments planId={plan.id} refreshKey={appointmentsKey} onOpen={setAppointment} />
-
-            <ul className="space-y-2">
-              {checklist.map((item) => (
-                <li key={item.key} className="flex items-start gap-2 text-sm">
-                  <span
-                    aria-hidden
-                    className={`mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-current text-xs font-semibold ${TONE[item.status]}`}
-                  >
-                    {ICON[item.status]}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium text-[var(--color-text)]">{item.title}</p>
-                    {item.detail ? <p className="break-words text-[var(--color-text-muted)]">{item.detail}</p> : null}
-                  </div>
-                  {item.step && canWrite ? (
-                    <Button size="sm" variant="secondary" onClick={() => setSheet({ step: item.step! })}>
-                      Fix
-                    </Button>
+              {canWrite && (plan.setup.ready || openSession) ? (
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button onClick={() => setFilling({ occurrenceDate: null })}>{openSession ? "Continue filling" : "Start filling"}</Button>
+                  {openSession ? (
+                    <span className="text-sm text-[var(--color-text-muted)]">
+                      {openSession.filled} of {openSession.total} filled so far
+                    </span>
                   ) : null}
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
+                </div>
+              ) : null}
+
+              <OrganizerAppointments planId={plan.id} refreshKey={appointmentsKey} onOpen={setAppointment} />
+
+              <ul className="space-y-2">
+                {checklist.map((item) => (
+                  <li key={item.key} className="flex items-start gap-2 text-sm">
+                    <span
+                      aria-hidden
+                      className={`mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-current text-xs font-semibold ${TONE[item.status]}`}
+                    >
+                      {ICON[item.status]}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-[var(--color-text)]">{item.title}</p>
+                      {item.detail ? <p className="break-words text-[var(--color-text-muted)]">{item.detail}</p> : null}
+                    </div>
+                    {item.step && canWrite ? (
+                      <Button size="sm" variant="secondary" onClick={() => setSheet({ step: item.step! })}>
+                        Fix
+                      </Button>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
       </CardBody>
 
       {plan ? (

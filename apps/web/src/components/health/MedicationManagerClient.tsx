@@ -6,11 +6,14 @@ import { ApiError, apiClient } from "../../lib/client-api";
 import type { NoteShareMember } from "../NoteSharePicker";
 import { NoteSharePicker } from "../NoteSharePicker";
 import type { HealthAclGrants } from "../HealthPeopleAccessPanel";
+import { CollapsibleHeader } from "./CollapsibleHeader";
 import { HealthMedicationSheet } from "./HealthMedicationSheet";
 import { PharmaciesSection } from "./PharmaciesSection";
 import { OrganizerSection } from "./OrganizerSection";
 import { SuppliesSection } from "./SuppliesSection";
+import { SECTION_IDS, SECTION_LABELS, countLabel, type SectionId } from "./section-state";
 import { supplyChip } from "./supply-helpers";
+import { useSectionOpen } from "./use-section-open";
 import { isAsNeededMedScheduleKind, memberLabel, resolveDefaultMemberId, scheduleKindLabel } from "./health-helpers";
 import type { HealthMedication } from "./health-types";
 import {
@@ -403,12 +406,30 @@ export function MedicationManagerClient({
   const initialMedHandled = useRef(false);
   const fillLinkHandled = useRef(false);
   const supplyLinkHandled = useRef(false);
+  const sections = useSectionOpen();
+  const jumpTo = useCallback(
+    (id: SectionId) => {
+      sections.show(id);
+      // After the section has opened and painted, bring it to the top.
+      requestAnimationFrame(() => document.getElementById(`health-section-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    },
+    [sections],
+  );
   const [appointmentLink, setAppointmentLink] = useState<{ planId: string; date: string } | null>(null);
   const [supplyHighlight, setSupplyHighlight] = useState<string | null>(null);
   /** Bumped after every reload of the medications, so the pharmacy card's counts follow them. */
   const [pharmacyRefresh, setPharmacyRefresh] = useState(0);
   /** A medication just resumed whose supply estimate now needs confirming; the Supplies card asks about it. */
   const [promptMedicationId, setPromptMedicationId] = useState<string | null>(null);
+
+  // A link or notice that points inside a folded section opens it first, so the target is actually on screen (WHO-447).
+  const showSection = sections.show;
+  useEffect(() => {
+    if (promptMedicationId || supplyHighlight) showSection("supplies");
+  }, [promptMedicationId, supplyHighlight, showSection]);
+  useEffect(() => {
+    if (appointmentLink) showSection("organizer");
+  }, [appointmentLink, showSection]);
 
   // `silent` reloads in place (no "Loading…" flash), for changes made from sheets that must stay open.
   const load = useCallback(async (silent = false) => {
@@ -637,6 +658,22 @@ export function MedicationManagerClient({
         ))}
       </div>
 
+      {!loading ? (
+        <nav aria-label="Jump to a section" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-[var(--color-text-muted)]">
+          <span>Jump to</span>
+          {SECTION_IDS.map((id) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => jumpTo(id)}
+              className="rounded text-[var(--color-accent)] underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
+            >
+              {SECTION_LABELS[id]}
+            </button>
+          ))}
+        </nav>
+      ) : null}
+
       {loading ? (
         <p className="text-sm text-[var(--color-text-muted)]">Loading…</p>
       ) : (
@@ -662,11 +699,17 @@ export function MedicationManagerClient({
             </CardBody>
           </Card>
 
-          <Card>
-            <CardBody className="space-y-4">
+          <Card id="health-section-groups" className="scroll-mt-24">
+            <CardBody className={sections.open.groups ? "space-y-4" : undefined}>
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <SectionHeader title="Groups" />
-                {canWriteSelected ? (
+                <CollapsibleHeader
+                  id="health-groups"
+                  title="Groups"
+                  collapsed={!sections.open.groups}
+                  onToggle={() => sections.toggle("groups")}
+                  summary={countLabel(memberGroups.length, "group", "groups")}
+                />
+                {canWriteSelected && sections.open.groups ? (
                   <Button
                     size="sm"
                     onClick={() => {
@@ -678,76 +721,84 @@ export function MedicationManagerClient({
                   </Button>
                 ) : null}
               </div>
-              {memberGroups.length === 0 ? (
-                <EmptyState
-                  title="No groups yet"
-                  description="Bundle medications that share a time so reminders arrive together instead of one at a time."
-                />
-              ) : (
-                <ul className="space-y-3">
-                  {memberGroups.map((group) => (
-                    <li
-                      key={group.id}
-                      className="space-y-2 rounded-lg border border-[var(--color-border)] p-3"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                          <p className="font-medium text-[var(--color-text)]">
-                            {group.name}
-                            {!group.enabled ? (
-                              <span className="ml-2">
-                                <Badge>Disabled</Badge>
-                              </span>
-                            ) : null}
-                          </p>
-                          <p className="text-sm text-[var(--color-text-muted)]">
-                            {scheduleSummary(group.scheduleKind, group.schedule)}
-                          </p>
-                        </div>
-                        {canWriteSelected ? (
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => {
-                                setEditingGroup(group);
-                                setGroupSheetOpen(true);
-                              }}
-                            >
-                              Edit
-                            </Button>
-                            <Button size="sm" variant="secondary" onClick={() => void deleteGroup(group)}>
-                              Delete
-                            </Button>
+              <div id="health-groups-body" hidden={!sections.open.groups} className="space-y-4">
+                {memberGroups.length === 0 ? (
+                  <EmptyState
+                    title="No groups yet"
+                    description="Bundle medications that share a time so reminders arrive together instead of one at a time."
+                  />
+                ) : (
+                  <ul className="space-y-3">
+                    {memberGroups.map((group) => (
+                      <li
+                        key={group.id}
+                        className="space-y-2 rounded-lg border border-[var(--color-border)] p-3"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <p className="font-medium text-[var(--color-text)]">
+                              {group.name}
+                              {!group.enabled ? (
+                                <span className="ml-2">
+                                  <Badge>Disabled</Badge>
+                                </span>
+                              ) : null}
+                            </p>
+                            <p className="text-sm text-[var(--color-text-muted)]">
+                              {scheduleSummary(group.scheduleKind, group.schedule)}
+                            </p>
                           </div>
-                        ) : null}
-                      </div>
-                      {group.medications.length === 0 ? (
-                        <p className="text-sm text-[var(--color-text-muted)]">No medications yet</p>
-                      ) : (
-                        // The group payload only carries a slim med shape; edit from the full
-                        // medication row so the sheet gets schedule, groupIds, and canEdit.
-                        <ul className="space-y-2">
-                          {group.medications.map((m) => {
-                            const med = medications.find((full) => full.id === m.id);
-                            return med
-                              ? renderMedRow(med, `${group.id}-${med.id}`, { allowDelete: false })
-                              : null;
-                          })}
-                        </ul>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
+                          {canWriteSelected ? (
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => {
+                                  setEditingGroup(group);
+                                  setGroupSheetOpen(true);
+                                }}
+                              >
+                                Edit
+                              </Button>
+                              <Button size="sm" variant="secondary" onClick={() => void deleteGroup(group)}>
+                                Delete
+                              </Button>
+                            </div>
+                          ) : null}
+                        </div>
+                        {group.medications.length === 0 ? (
+                          <p className="text-sm text-[var(--color-text-muted)]">No medications yet</p>
+                        ) : (
+                          // The group payload only carries a slim med shape; edit from the full
+                          // medication row so the sheet gets schedule, groupIds, and canEdit.
+                          <ul className="space-y-2">
+                            {group.medications.map((m) => {
+                              const med = medications.find((full) => full.id === m.id);
+                              return med
+                                ? renderMedRow(med, `${group.id}-${med.id}`, { allowDelete: false })
+                                : null;
+                            })}
+                          </ul>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </CardBody>
           </Card>
 
-          <Card>
-            <CardBody className="space-y-4">
+          <Card id="health-section-medications" className="scroll-mt-24">
+            <CardBody className={sections.open.medications ? "space-y-4" : undefined}>
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <SectionHeader title="Individual medications" />
-                {canWriteSelected ? (
+                <CollapsibleHeader
+                  id="health-medications"
+                  title="Individual medications"
+                  collapsed={!sections.open.medications}
+                  onToggle={() => sections.toggle("medications")}
+                  summary={countLabel(ungroupedMeds.length, "medication", "medications")}
+                />
+                {canWriteSelected && sections.open.medications ? (
                   <Button
                     size="sm"
                     variant="secondary"
@@ -760,17 +811,20 @@ export function MedicationManagerClient({
                   </Button>
                 ) : null}
               </div>
-              {ungroupedMeds.length === 0 ? (
-                <p className="text-sm text-[var(--color-text-muted)]">
-                  No standalone medications — everything for {memberLabel(members, selectedMemberId)} is
-                  either grouped above or none exist yet.
-                </p>
-              ) : (
-                <ul className="space-y-2">{ungroupedMeds.map((med) => renderMedRow(med, med.id))}</ul>
-              )}
+              <div id="health-medications-body" hidden={!sections.open.medications} className="space-y-4">
+                {ungroupedMeds.length === 0 ? (
+                  <p className="text-sm text-[var(--color-text-muted)]">
+                    No standalone medications — everything for {memberLabel(members, selectedMemberId)} is
+                    either grouped above or none exist yet.
+                  </p>
+                ) : (
+                  <ul className="space-y-2">{ungroupedMeds.map((med) => renderMedRow(med, med.id))}</ul>
+                )}
+              </div>
             </CardBody>
           </Card>
 
+          <div id="health-section-organizer" className="scroll-mt-24 empty:hidden">
           <OrganizerSection
             key={selectedMemberId}
             memberId={selectedMemberId}
@@ -782,10 +836,14 @@ export function MedicationManagerClient({
             refreshKey={pharmacyRefresh}
             onMedicationsChanged={() => load(true)}
             onEditMedication={editMedicationById}
+            collapsed={!sections.open.organizer}
+            onToggleCollapsed={() => sections.toggle("organizer")}
             openAppointment={appointmentLink}
             onAppointmentOpened={() => setAppointmentLink(null)}
           />
+          </div>
 
+          <div id="health-section-supplies" className="scroll-mt-24 empty:hidden">
           <SuppliesSection
             memberId={selectedMemberId}
             memberLabelText={memberLabel(members, selectedMemberId)}
@@ -797,11 +855,21 @@ export function MedicationManagerClient({
             onEditMedication={editMedicationById}
             highlightMedicationId={supplyHighlight}
             onHighlightHandled={() => setSupplyHighlight(null)}
+            collapsed={!sections.open.supplies}
+            onToggleCollapsed={() => sections.toggle("supplies")}
           />
+          </div>
         </>
       )}
 
-      <PharmaciesSection refreshKey={pharmacyRefresh} onChanged={() => void load(true)} />
+      <div id="health-section-pharmacies" className="scroll-mt-24">
+        <PharmaciesSection
+          refreshKey={pharmacyRefresh}
+          onChanged={() => void load(true)}
+          collapsed={!sections.open.pharmacies}
+          onToggleCollapsed={() => sections.toggle("pharmacies")}
+        />
+      </div>
 
       <HealthMedicationSheet
         open={medSheetOpen}

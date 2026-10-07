@@ -83,6 +83,8 @@ Appointments are **computed** from the plan's schedule, never stored until somet
 
 Links: `/health?fill=<plan>&appointment=<day>&member=<person>` opens the organizer with that appointment; `/health?supply=<medication>` scrolls to the supply and marks it. A plan or medication that is gone says so.
 
+The medications page folds its sections (groups, medications, organizer, supplies, pharmacies; supplies and pharmacies start folded) and remembers the choice per browser (`use-section-open.ts`, `section-state.ts`). A folded header shows a one-line summary, and deep links (`?supply=`, `?appointment=`) open the section they point into.
+
 ## Reminders
 
 Worker job `health.supply.reminder.scan` ticks every 5 minutes and fans out one `health.supply.reminder.household` job per household that has a plan or a supply estimate (same machinery as the dose and check scans, see HEALTH_CHECKS.md "Per-household scans"). Pure rules are in `health-supply-reminder-plan.ts`, the scan in `health-supply-reminder-scan.ts`.
