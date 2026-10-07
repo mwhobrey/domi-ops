@@ -61,7 +61,10 @@ maybeDescribe("Google sign-in (integration)", () => {
   });
 
   /** Runs the whole round trip for a Google profile and returns the callback's answer. */
-  async function signInWithGoogle(profile: { sub: string; email: string; emailVerified?: boolean; name?: string }) {
+  async function signInWithGoogle(
+    profile: { sub: string; email: string; emailVerified?: boolean; name?: string },
+    options: { tokenEndpointStatus?: number } = {},
+  ) {
     const auth = createBetterAuth(db, env);
 
     const start = await auth.handler(
@@ -69,7 +72,7 @@ maybeDescribe("Google sign-in (integration)", () => {
         method: "POST",
         headers: { "content-type": "application/json", origin: BASE_URL },
         // The same options the login page sends.
-        body: JSON.stringify({ provider: "google", callbackURL: "/dashboard", errorCallbackURL: "/login?error=oauth" }),
+        body: JSON.stringify({ provider: "google", callbackURL: "/dashboard", errorCallbackURL: "/login" }),
       }),
     );
     expect(start.status, "sign-in/social should answer with the Google redirect").toBe(200);
@@ -82,6 +85,9 @@ maybeDescribe("Google sign-in (integration)", () => {
     globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
       const target = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
       if (target.startsWith("https://oauth2.googleapis.com/token")) {
+        if (options.tokenEndpointStatus && options.tokenEndpointStatus >= 400) {
+          return new Response(JSON.stringify({ error: "invalid_grant" }), { status: options.tokenEndpointStatus, headers: { "content-type": "application/json" } });
+        }
         return new Response(
           JSON.stringify({
             access_token: "ya29.test-access-token",
@@ -132,11 +138,23 @@ maybeDescribe("Google sign-in (integration)", () => {
     expect(res.headers.getSetCookie().join(";"), "a session cookie should be set").toMatch(/session_token/);
   }
 
+  /** Asks Better Auth who the cookies from the callback belong to, the way the browser's next request would. */
+  async function expectSessionUser(res: Response, userId: string) {
+    const auth = createBetterAuth(db, env);
+    const who = await auth.handler(
+      new Request(`${BASE_URL}/auth/get-session`, { headers: { cookie: cookieHeader(res), origin: BASE_URL } }),
+    );
+    const body = (await who.json()) as { user?: { id: string } } | null;
+    expect(body?.user?.id, "the callback session should identify the seeded person").toBe(userId);
+  }
+
   it("signs in a person who already has a Google account row", async () => {
     const sub = `g-${randomUUID()}`;
     const email = `google-${randomUUID()}@example.test`;
     const userId = await seedUser(email, [{ providerId: "google", accountId: sub }]);
-    expectSignedIn(await signInWithGoogle({ sub, email }));
+    const res = await signInWithGoogle({ sub, email });
+    expectSignedIn(res);
+    await expectSessionUser(res, userId);
     expect((await accountsOf(userId)).filter((a) => a.providerId === "google")).toHaveLength(1);
   });
 
@@ -144,15 +162,32 @@ maybeDescribe("Google sign-in (integration)", () => {
     const sub = `g-${randomUUID()}`;
     const email = `google-${randomUUID()}@example.test`;
     const userId = await seedUser(email, [{ providerId: "google", accountId: sub, issuer: "local:oauth:google" }]);
-    expectSignedIn(await signInWithGoogle({ sub, email }));
+    const res = await signInWithGoogle({ sub, email });
+    expectSignedIn(res);
+    await expectSessionUser(res, userId);
     expect((await accountsOf(userId)).filter((a) => a.providerId === "google")).toHaveLength(1);
+  });
+
+  it("sends a failed callback to the login page with exactly one error code", async () => {
+    const sub = `g-${randomUUID()}`;
+    const email = `google-${randomUUID()}@example.test`;
+    await seedUser(email, [{ providerId: "google", accountId: sub }]);
+    const res = await signInWithGoogle({ sub, email }, { tokenEndpointStatus: 400 });
+    const where = new URL(res.headers.get("location") ?? "", BASE_URL);
+    expect(res.status).toBe(302);
+    expect(where.pathname).toBe("/login");
+    expect(where.searchParams.getAll("error"), "one error parameter, not a preset plus Better Auth's").toHaveLength(1);
+    expect(where.searchParams.get("error")).toBeTruthy();
+    expect(res.headers.getSetCookie().join(";")).not.toMatch(/session_token=[^;]/);
   });
 
   it("links Google to a person who has only a password account for the same email", async () => {
     const sub = `g-${randomUUID()}`;
     const email = `google-${randomUUID()}@example.test`;
     const userId = await seedUser(email, [{ providerId: "credential", accountId: "will-be-user-id", password: "x" }]);
-    expectSignedIn(await signInWithGoogle({ sub, email }));
+    const res = await signInWithGoogle({ sub, email });
+    expectSignedIn(res);
+    await expectSessionUser(res, userId);
     expect((await accountsOf(userId)).map((a) => a.providerId).sort()).toEqual(["credential", "google"]);
   });
 
@@ -179,13 +214,7 @@ maybeDescribe("Google sign-in (integration)", () => {
     const res = await signInWithGoogle({ sub, email });
     expectSignedIn(res);
 
-    // The browser follows the redirect with the cookies the callback set; ask Better Auth who that is.
-    const auth = createBetterAuth(db, env);
-    const who = await auth.handler(
-      new Request(`${BASE_URL}/auth/get-session`, { headers: { cookie: cookieHeader(res), origin: BASE_URL } }),
-    );
-    const body = (await who.json()) as { user?: { id: string } } | null;
-    expect(body?.user?.id, "the session cookie from the callback should identify the person").toBe(userId);
+    await expectSessionUser(res, userId);
     // The API answers /auth/session inside the person's own lookup context; do the same.
     const ctx = await withUserLookupContext(db, userId, (tx) => resolveAuthContext(tx as unknown as Database, userId));
     expect(ctx, "and they should resolve to a household member").not.toBeNull();

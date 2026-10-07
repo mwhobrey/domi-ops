@@ -2,14 +2,16 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { isPublicSignupAllowed } from "../../lib/allow-public-signup";
+import { loginErrorCode } from "../../lib/login-error";
 import { LoginForm } from "./LoginForm";
 
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; next?: string; hosted?: string; reset?: string }>;
+  searchParams: Promise<{ error?: string | string[]; next?: string; hosted?: string; reset?: string }>;
 }) {
   const params = await searchParams;
+  const errorCode = loginErrorCode(params.error);
   const nextPath = params.next?.startsWith("/") ? params.next : "/dashboard";
   const cookieStore = await cookies();
   const cookieHeader = cookieStore
@@ -110,17 +112,17 @@ export default async function LoginPage({
           </p>
         )}
 
-        {params.error && params.error !== "no-household" && (
+        {errorCode && errorCode !== "no-household" && (
           <p
             className="rounded-[var(--radius-lg)] border border-[var(--color-danger-muted)] bg-[var(--color-danger-muted)]/20 px-3 py-2.5 text-sm text-[var(--color-danger)]"
             role="alert"
           >
             Sign-in did not complete. Try again, or use your email and password. If it keeps happening, tell whoever runs this
-            server{params.error === "oauth" ? "" : ` (code: ${params.error.slice(0, 60)})`}.
+            server{errorCode === "oauth" ? "" : ` (code: ${errorCode.slice(0, 60)})`}.
           </p>
         )}
 
-        {(noHousehold || params.error === "no-household") && (
+        {(noHousehold || errorCode === "no-household") && (
           <p
             className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-sm leading-relaxed text-[var(--color-text-muted)]"
             role="status"
@@ -178,7 +180,7 @@ export default async function LoginPage({
           nextPath={nextPath}
           googleEnabled={googleEnabled}
           allowPublicSignup={allowPublicSignup}
-          noHousehold={noHousehold || params.error === "no-household"}
+          noHousehold={noHousehold || errorCode === "no-household"}
         />
 
         <p className="text-center text-xs text-[var(--color-text-muted)]">
