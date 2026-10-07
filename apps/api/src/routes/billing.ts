@@ -13,7 +13,7 @@ import {
   users,
   withSystemContext,
 } from "@domi-ops/db";
-import { createLocalAccountIssuer, hashPassword } from "@domi-ops/auth";
+import { hashPassword } from "@domi-ops/auth";
 import type { AppVariables } from "../middleware/auth.js";
 
 const ALL_MODULES = JSON.stringify(["core", "school", "calendar_sync", "drive", "health"]);
@@ -566,7 +566,6 @@ export function billingRoutes(db: Database, env: Env) {
               userId,
               providerId: "credential",
               accountId: userId,
-              issuer: createLocalAccountIssuer("credential"),
               password: passwordHash,
             });
           }
@@ -663,13 +662,8 @@ export function billingRoutes(db: Database, env: Env) {
         await tx.insert(baAccounts).values({
           userId: createdUser.id,
           providerId: "credential",
-          // Better Auth's credential sign-in match requires BOTH accountId === user.id AND
-          // issuer === createLocalAccountIssuer(providerId) (see node_modules/better-auth/dist/
-          // api/routes/sign-in.mjs + internal-adapter.mjs) - neither was set here, meaning a
-          // hosted customer who checked out with email/password could never sign back in.
-          // Found via WHO-250 (same bug in the demo-seed script, root-caused there first).
+          // Better Auth matches the credential account on (providerId, accountId) with accountId === user.id.
           accountId: createdUser.id,
-          issuer: createLocalAccountIssuer("credential"),
           password: passwordHash,
         });
 

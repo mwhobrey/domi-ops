@@ -29,10 +29,9 @@ export const baAccounts = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     accountId: text("account_id").notNull(),
     providerId: varchar("provider_id", { length: 32 }).notNull(),
-    // Better Auth 1.7+ requires this on every account row - synthetic value from
-    // createLocalAccountIssuer/createOAuthAccountIssuer (better-auth/db), e.g. "local:credential"
-    // or "local:oauth:google". Sign-in/account lookups filter on it; a null/missing value never
-    // matches, which is exactly what broke every manually-inserted credential row (WHO-250).
+    // Legacy: Better Auth 1.7.0-1.7.2 matched accounts on this column (migration 0064). 1.7.3+
+    // went back to (providerId, accountId) and ignores it. Nullable, no index, so no cleanup is
+    // needed; nothing writes it any more.
     issuer: text("issuer"),
     accessToken: text("access_token"),
     refreshToken: text("refresh_token"),
