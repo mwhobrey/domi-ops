@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { apiClient } from "../../lib/client-api";
 import { Alert, Badge, Button } from "../ui";
 import type { HealthMedication } from "./health-types";
@@ -26,11 +26,14 @@ function timesFor(med: HealthMedication, plan: OrganizerPlan): string[] {
 export function OrganizerQuantitiesStep({
   plan,
   medications,
+  onEdit,
   onSaved,
   onDone,
 }: {
   plan: OrganizerPlan;
   medications: readonly HealthMedication[];
+  /** Open this medication's editor (WHO-446), e.g. to turn "600 mg" into 2 x 300 mg without leaving the setup. */
+  onEdit?: (medicationId: string) => void;
   /** Called after quantities were saved, so the lists and the plan behind the sheet refresh. */
   onSaved: () => Promise<void> | void;
   onDone: () => void;
@@ -56,8 +59,26 @@ export function OrganizerQuantitiesStep({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  // What the saved amounts looked like last time, to tell what the person typed from what was just reloaded.
+  const baseline = useRef<Draft | null>(null);
   useEffect(() => {
-    setDraft(initial());
+    const fresh = initial();
+    const was = baseline.current;
+    // Editing a medication reloads the list: keep amounts typed but not saved yet, take everything else from the server.
+    setDraft((prev) => {
+      if (!was) return fresh;
+      const merged: Draft = {};
+      for (const [id, times] of Object.entries(fresh)) {
+        merged[id] = {};
+        for (const [time, value] of Object.entries(times)) {
+          const typed = prev[id]?.[time];
+          const before = was[id]?.[time];
+          merged[id]![time] = typed !== undefined && before !== undefined && typed !== before ? typed : value;
+        }
+      }
+      return merged;
+    });
+    baseline.current = fresh;
     // Reset when the saved medications or the plan's problems change, not on each keystroke.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [medications, plan.version]);
@@ -121,7 +142,14 @@ export function OrganizerQuantitiesStep({
                     {m.name}
                     {m.dosage ? <span className="font-normal text-[var(--color-text-muted)]"> · {m.dosage}</span> : null}
                   </p>
-                  {flagged.size > 0 ? <Badge tone="warning">Needs amounts</Badge> : null}
+                  <div className="flex shrink-0 items-center gap-2">
+                    {flagged.size > 0 ? <Badge tone="warning">Needs amounts</Badge> : null}
+                    {onEdit ? (
+                      <Button type="button" size="sm" variant="secondary" onClick={() => onEdit(m.id)}>
+                        Edit medication
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
                 <ul className="space-y-2">
                   {Object.keys(draft[m.id] ?? {}).sort().map((time) => {

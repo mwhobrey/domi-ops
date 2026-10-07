@@ -39,6 +39,7 @@ export function FillingMedicationPanel({
   onBack,
   onSaved,
   onStale,
+  onEdit,
 }: {
   planId: string;
   session: SessionView;
@@ -50,6 +51,8 @@ export function FillingMedicationPanel({
   onSaved: (session: SessionView, message: string) => void;
   /** The server said the screen was out of date and sent the current session (or none): show it, with this message. */
   onStale: (session: SessionView | null, message: string) => void;
+  /** Open this medication's editor on top of the screen (WHO-446), e.g. to fix a dosage written as one number. */
+  onEdit?: (medicationId: string) => void;
 }) {
   const range0 = useMemo(() => defaultFillRange(medication), [medication]);
   const covered = useMemo(() => splitCovered(medication.covered, { from: session.coverageStart, to: session.coverageEnd }), [medication.covered, session.coverageStart, session.coverageEnd]);
@@ -207,6 +210,11 @@ export function FillingMedicationPanel({
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="min-w-0 break-words text-xl font-semibold text-[var(--color-text)]">{medication.name}</h3>
           <Badge tone={status.tone}>{status.label}</Badge>
+          {onEdit ? (
+            <Button type="button" size="sm" variant="secondary" onClick={() => onEdit(medication.medicationId)}>
+              Edit medication
+            </Button>
+          ) : null}
         </div>
         {medication.dosage ? <p className="text-[var(--color-text-muted)]">{medication.dosage}</p> : null}
         {medication.instructions ? (

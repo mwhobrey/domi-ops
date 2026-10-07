@@ -30,6 +30,7 @@ export function OrganizerSheet({
   onClose,
   onPlanChanged,
   onMedicationsChanged,
+  onEditMedication,
 }: {
   open: boolean;
   memberId: string;
@@ -44,6 +45,7 @@ export function OrganizerSheet({
   onPlanChanged: (plan: OrganizerPlan) => void;
   /** Pill amounts were saved on medications, so the medication list needs reloading. */
   onMedicationsChanged: () => Promise<void> | void;
+  onEditMedication?: (medicationId: string) => void;
 }) {
   const [plan, setPlan] = useState<OrganizerPlan | null>(initialPlan);
   const [step, setStep] = useState<OrganizerStep>(initialStep);
@@ -154,6 +156,7 @@ export function OrganizerSheet({
           <OrganizerQuantitiesStep
             plan={plan}
             medications={medications}
+            onEdit={onEditMedication}
             onSaved={async () => {
               await onMedicationsChanged();
               await reloadPlan();

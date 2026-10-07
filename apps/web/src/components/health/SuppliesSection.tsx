@@ -37,6 +37,7 @@ export function SuppliesSection({
   onPromptHandled,
   highlightMedicationId = null,
   onHighlightHandled,
+  onEditMedication,
 }: {
   memberId: string;
   memberLabelText: string;
@@ -52,6 +53,8 @@ export function SuppliesSection({
   /** A calendar chip or notice's link: scroll to this medication's supply and mark it for a few seconds. */
   highlightMedicationId?: string | null;
   onHighlightHandled?: () => void;
+  /** Open the medication's editor without leaving the supply setup (WHO-446). */
+  onEditMedication?: (medicationId: string) => void;
 }) {
   const [flashId, setFlashId] = useState<string | null>(null);
   const [defaultLead, setDefaultLead] = useState(DEFAULT_LEAD);
@@ -323,6 +326,11 @@ export function SuppliesSection({
                           </div>
                           <div className="flex shrink-0 flex-wrap items-center gap-1.5">
                             {supply?.needsConfirmation ? <Badge tone="warning">Confirm estimate</Badge> : null}
+                            {onEditMedication && medication.canEdit !== false ? (
+                              <Button type="button" size="sm" variant="ghost" onClick={() => onEditMedication(medication.id)}>
+                                Edit medication
+                              </Button>
+                            ) : null}
                             {status ? <Badge tone={status.tone}>{status.label}</Badge> : null}
                           </div>
                         </div>

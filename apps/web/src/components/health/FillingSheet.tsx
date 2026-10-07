@@ -40,6 +40,7 @@ export function FillingSheet({
   occurrenceDate,
   onClose,
   onChanged,
+  onEditMedication,
 }: {
   open: boolean;
   planId: string;
@@ -51,6 +52,8 @@ export function FillingSheet({
   onClose: () => void;
   /** Something that supplies read (the estimates, the lists) changed: a fill was saved or undone. */
   onChanged: () => Promise<void> | void;
+  /** Open the medication editor on top of this screen (WHO-446); the session is reloaded when the medications change. */
+  onEditMedication?: (medicationId: string) => void;
 }) {
   const [session, setSession] = useState<SessionView | null>(null);
   const [defaults, setDefaults] = useState<SessionDefaults | null>(null);
@@ -121,6 +124,17 @@ export function FillingSheet({
     setLengthText("");
     void load();
   }, [open, load]);
+
+  // A medication was edited from here: the server notices instructions that changed, so ask it again.
+  const firstMedications = useRef(true);
+  useEffect(() => {
+    if (firstMedications.current) {
+      firstMedications.current = false;
+      return;
+    }
+    if (open && !busy) void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [medications]);
 
   // Coming back to this tab (or this phone) after filling elsewhere: pick up where the session is now.
   useEffect(() => {
@@ -233,7 +247,8 @@ export function FillingSheet({
   const nameOf = (id: string) => session?.medications.find((m) => m.medicationId === id)?.name ?? medications.find((m) => m.id === id)?.name ?? "A medication";
 
   const anyFilled = session ? session.progress.filled + session.progress.partial > 0 : false;
-  const left = session ? leftBehind(session) : [];
+  // Only once something is filled: with nothing saved, the next session starts on the same days, so nothing is left behind.
+  const left = session && anyFilled ? leftBehind(session) : [];
   const pct = session && session.progress.total > 0 ? Math.round(((session.progress.filled + session.progress.partial / 2) / session.progress.total) * 100) : 0;
   const isOpen = session?.status === "open";
 
@@ -324,6 +339,7 @@ export function FillingSheet({
 
                 {selected ? (
                   <FillingMedicationPanel
+                    onEdit={onEditMedication}
                     key={`${selected.medicationId}:${session.version}`}
                     planId={planId}
                     session={session}
