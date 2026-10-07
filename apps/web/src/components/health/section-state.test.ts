@@ -7,6 +7,7 @@ import {
   parseSectionState,
   saveSectionState,
   serializeSectionState,
+  setSection,
   showSection,
   supplySummary,
   toggleSection,
@@ -119,5 +120,40 @@ describe("loading, saving and changing sections", () => {
   it("shows a folded section and hands back the same object for one already open", () => {
     expect(showSection(SECTION_DEFAULTS, "pharmacies").pharmacies).toBe(true);
     expect(showSection(SECTION_DEFAULTS, "groups")).toBe(SECTION_DEFAULTS);
+  });
+});
+
+describe("setSection", () => {
+  const start = { current: SECTION_DEFAULTS, saved: SECTION_DEFAULTS };
+
+  it("shows and remembers a choice the person made", () => {
+    const next = setSection(start, "supplies", true, true);
+    expect(next.current.supplies).toBe(true);
+    expect(next.saved.supplies).toBe(true);
+  });
+
+  it("shows a link-driven open without remembering it", () => {
+    const next = setSection(start, "supplies", true, false);
+    expect(next.current.supplies).toBe(true);
+    expect(next.saved.supplies).toBe(false);
+  });
+
+  it("does not carry a link-driven open into the next save of something else", () => {
+    const linked = setSection(start, "supplies", true, false);
+    const folded = setSection(linked, "groups", false, true);
+    expect(folded.current).toEqual({ ...SECTION_DEFAULTS, supplies: true, groups: false });
+    expect(folded.saved).toEqual({ ...SECTION_DEFAULTS, groups: false });
+  });
+
+  it("lets the person fold a section a link opened, and remembers that", () => {
+    const linked = setSection(start, "supplies", true, false);
+    const folded = setSection(linked, "supplies", false, true);
+    expect(folded.current.supplies).toBe(false);
+    expect(folded.saved.supplies).toBe(false);
+  });
+
+  it("hands back the same object when nothing changes", () => {
+    expect(setSection(start, "groups", true, true)).toBe(start);
+    expect(setSection(start, "groups", true, false)).toBe(start);
   });
 });

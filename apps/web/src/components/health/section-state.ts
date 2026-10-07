@@ -71,6 +71,19 @@ export const toggleSection = (state: SectionState, id: SectionId): SectionState 
 /** Opens a section; the same object back when it already is, so nothing re-renders. */
 export const showSection = (state: SectionState, id: SectionId): SectionState => (state[id] ? state : { ...state, [id]: true });
 
+/**
+ * What is showing now, and what the person chose (what is remembered). They differ when a link opens a section for them:
+ * that is shown, but it is not their choice, so it is neither saved nor carried into the next save of something else.
+ */
+export type SectionMemory = { current: SectionState; saved: SectionState };
+
+/** Sets one section. `persist` false is for link-driven opens: shown now, not remembered. */
+export function setSection(memory: SectionMemory, id: SectionId, open: boolean, persist: boolean): SectionMemory {
+  const current = memory.current[id] === open ? memory.current : { ...memory.current, [id]: open };
+  const saved = persist && memory.saved[id] !== open ? { ...memory.saved, [id]: open } : memory.saved;
+  return current === memory.current && saved === memory.saved ? memory : { current, saved };
+}
+
 /** The pieces of the folded header's one-line summary, e.g. ["3 need a refill", "2 have no estimate"]. */
 export function supplySummary(
   supplies: ReadonlyArray<{ enabled: boolean; supply?: { state: string } | null }>,

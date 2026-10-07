@@ -425,10 +425,10 @@ export function MedicationManagerClient({
   // A link or notice that points inside a folded section opens it first, so the target is actually on screen (WHO-447).
   const showSection = sections.show;
   useEffect(() => {
-    if (promptMedicationId || supplyHighlight) showSection("supplies");
+    if (promptMedicationId || supplyHighlight) showSection("supplies", false);
   }, [promptMedicationId, supplyHighlight, showSection]);
   useEffect(() => {
-    if (appointmentLink) showSection("organizer");
+    if (appointmentLink) showSection("organizer", false);
   }, [appointmentLink, showSection]);
 
   // `silent` reloads in place (no "Loading…" flash), for changes made from sheets that must stay open.
