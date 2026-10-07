@@ -8,6 +8,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-10-07
+
+Two fixes on top of 0.8.0: the web app no longer floods Sentry with a Node warning, and Better Auth is updated to 1.7.7 (security fixes). **No migrations**, no new environment variables, nothing to do on upgrade. If you serve the web app without a proxy in front, see the compression note below.
+
 ### Fixed
 
 - **Sentry quota eaten by a Node warning** (WHO-438). Every request that went through the web app to `/api` made Node print "11 close listeners added to [ServerResponse]", and Sentry counted each one as an error: about 5,000 a day, which used up the monthly allowance. The cause was Next's own response compression stacking listeners on the proxied response, so compression is now off in the web app (the Caddy examples already compress with gzip and zstd; if you serve the web app with no proxy in front, add one). Node process warnings are also no longer reported to Sentry as errors from the web app, API and worker; they stay in the container logs. The notice board no longer asks for the same lists several times in a row when you switch back to a tab (a push still refreshes it at once) and the web app is tested for it.
