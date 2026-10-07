@@ -8,6 +8,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-10-07
+
+Repairs Google sign-in, which stopped working for people who had signed in with Google before 0.8.1. **Includes one migration, `0093`** (repairs duplicate Google account rows and adds a unique index). Self-hosters run `npm run db:migrate`; the hosted tag deploy runs it itself. No new environment variables.
+
 ### Fixed
 
 - **Google sign-in sent people straight back to the login page** (WHO-449). Better Auth 1.7.0 to 1.7.2 could quietly leave two rows for one person's Google account, and 1.7.3 and later refuse to sign in an account that has two. After the 0.8.1 upgrade those people picked their Google account and landed on a bare login page with no message. **Migration `0093`** keeps one row per person and Google account (the one Better Auth wrote itself, then the one holding a refresh token, then the newest) and adds a unique index so it cannot happen again. The index is added only when no two different people share one provider account: in that case the migration leaves those rows alone, warns, and skips the index, and you resolve them by hand. A failed sign-in now lands on the login page with a message (and a short code to pass on) instead of a silent bounce. Requires `npm run db:migrate`; the hosted tag deploy runs it.
