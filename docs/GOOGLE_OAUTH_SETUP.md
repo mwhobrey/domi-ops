@@ -135,6 +135,22 @@ No new OAuth client is required. Picker uses:
 
 Confirm **Authorized JavaScript origins** (§3) include your dev/prod browser URL.
 
+## Troubleshooting: Google sign-in returns to the login page
+
+After picking a Google account you land on `/login` (with a "Sign-in did not complete" message and a code). With the code `internal_server_error`, check for one Google account recorded twice, which Better Auth 1.7.3+ refuses to sign in (WHO-449; migration `0093` repairs it and, once no duplicates are left, prevents it):
+
+```sql
+SELECT provider_id, account_id, count(*) AS rows, count(DISTINCT user_id) AS people FROM ba_accounts GROUP BY 1, 2 HAVING count(*) > 1;
+```
+
+The migration removes the extra row when both rows belong to the same person. If `people` is more than 1, two different people share one Google account: the migration leaves those rows alone, prints a warning, and does **not** add the unique index. Sort those out by hand, then confirm the index exists:
+
+```sql
+SELECT indexname FROM pg_indexes WHERE tablename = 'ba_accounts' AND indexname = 'ba_accounts_provider_account_uidx';
+```
+
+With the code `state_mismatch`, the callback could not match the sign-in it belongs to. The usual causes are a different host than `PUBLIC_APP_URL` or blocked cookies, so the browser never sends the sign-in cookie back. Better Auth also keeps the sign-in state in `ba_verifications`, so check that the row exists and has not expired (the person took too long on Google's screen, or the table was cleaned in between), and that the clocks on the API and the database agree.
+
 ## 10. Student Google Docs (school tests — WHO-209–212)
 
 Students connect the same **Google Docs** OAuth flow as teachers (`/auth/google/docs/start?next=…`). Scopes are **`drive.file` only** (plus login openid/email/profile), with no Docs `documents` scope and no full Drive scope. Family Link supervised accounts can usually grant `drive.file`; if a child previously connected with the old scopes, **disconnect and reconnect** after this change.

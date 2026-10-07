@@ -143,8 +143,9 @@ export function LoginForm({
         provider: "google",
         callbackURL: nextPath,
         // Route OAuth failures back to the login page with a readable message instead of
-        // Better Auth's bare /auth/error page (WHO-277 / WHO-278).
-        errorCallbackURL: "/login?error=oauth",
+        // Better Auth's bare /auth/error page (WHO-277 / WHO-278). Better Auth appends `error=<code>` itself, so no
+        // preset error here: it would arrive as a second `error` parameter (WHO-449).
+        errorCallbackURL: "/login",
       });
       if (res.error) {
         setError(res.error.message ?? "Google sign-in failed. Try again.");
