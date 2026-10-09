@@ -10,8 +10,10 @@ import {
   driveObjects,
   expenseBudgets,
   expenses,
+  healthEvents,
   healthMedicationLogs,
   healthMedications,
+  healthVitalsReadings,
   notes,
   notices,
   noticeReads,
@@ -28,6 +30,7 @@ import {
 import { households } from "../schema/household.js";
 import {
   addDaysYmd,
+  chicagoInstant,
   chicagoYmd,
   dueAtEndOfDayYmd,
   parseYmd,
@@ -76,6 +79,9 @@ export async function seedDemoContent(
 
   const today = chicagoYmd(0);
   const yesterday = chicagoYmd(-1);
+  const todayParts = parseYmd(today);
+  const schoolYearStart = todayParts.m >= 7 ? todayParts.y : todayParts.y - 1;
+  const schoolTerm = `${schoolYearStart}–${schoolYearStart + 1}`;
 
   // —— Calendar ——
   const [calendar] = await db
@@ -156,6 +162,83 @@ export async function seedDemoContent(
     {
       householdId,
       calendarId: calId,
+      title: "Farmers market",
+      startDate: weekDayYmd(0),
+      startTime: "09:30:00",
+      endTime: "11:00:00",
+      allDay: false,
+      color: "#22c55e",
+      createdByUserId: maria.userId,
+    },
+    {
+      householdId,
+      calendarId: calId,
+      title: "Family dinner at Abuela's",
+      startDate: weekDayYmd(1),
+      startTime: "18:00:00",
+      endTime: "20:00:00",
+      allDay: false,
+      color: "#ec4899",
+      createdByUserId: maria.userId,
+    },
+    {
+      householdId,
+      calendarId: calId,
+      title: "Park day with the co-op kids",
+      startDate: weekDayYmd(2),
+      startTime: "13:00:00",
+      endTime: "14:30:00",
+      allDay: false,
+      color: "#06b6d4",
+      createdByUserId: maria.userId,
+    },
+    {
+      householdId,
+      calendarId: calId,
+      title: "Grocery pickup",
+      startDate: weekDayYmd(3),
+      startTime: "11:00:00",
+      endTime: "11:30:00",
+      allDay: false,
+      color: "#f59e0b",
+      createdByUserId: maria.userId,
+    },
+    {
+      householdId,
+      calendarId: calId,
+      title: "Life Science lab day",
+      startDate: weekDayYmd(4),
+      startTime: "10:30:00",
+      endTime: "12:00:00",
+      allDay: false,
+      color: "#6366f1",
+      createdByUserId: maria.userId,
+    },
+    {
+      householdId,
+      calendarId: calId,
+      title: "Library book club",
+      startDate: weekDayYmd(5),
+      startTime: "14:00:00",
+      endTime: "15:00:00",
+      allDay: false,
+      color: "#06b6d4",
+      createdByUserId: maria.userId,
+    },
+    {
+      householdId,
+      calendarId: calId,
+      title: "Soccer game — Lucas",
+      startDate: weekDayYmd(6),
+      startTime: "09:00:00",
+      endTime: "11:00:00",
+      allDay: false,
+      color: "#22c55e",
+      createdByUserId: maria.userId,
+    },
+    {
+      householdId,
+      calendarId: calId,
       title: "Field trip: Science museum",
       startDate: addDaysYmd(weekDayYmd(0), 8),
       allDay: true,
@@ -171,7 +254,7 @@ export async function seedDemoContent(
       householdId,
       name: "Math 6",
       subject: "Mathematics",
-      term: "2025–2026",
+      term: schoolTerm,
       teacherMemberId: maria.memberId,
       scheduleJson: JSON.stringify({ days: ["Mon", "Wed", "Fri"], time: "09:00" }),
     })
@@ -183,26 +266,50 @@ export async function seedDemoContent(
       householdId,
       name: "Life Science",
       subject: "Science",
-      term: "2025–2026",
+      term: schoolTerm,
       teacherMemberId: maria.memberId,
       scheduleJson: JSON.stringify({ days: ["Tue", "Thu"], time: "10:30" }),
     })
     .returning({ id: schoolClasses.id });
 
+  const [historyClass] = await db
+    .insert(schoolClasses)
+    .values({
+      householdId,
+      name: "World History",
+      subject: "History",
+      term: schoolTerm,
+      teacherMemberId: maria.memberId,
+      scheduleJson: JSON.stringify({ days: ["Mon", "Thu"], time: "13:00" }),
+    })
+    .returning({ id: schoolClasses.id });
+
+  // Siblings learn together, so the gradebooks have more than one student column.
   await db.insert(schoolEnrollments).values([
     { classId: mathClass.id, memberId: sofia.memberId, role: "student" },
+    { classId: mathClass.id, memberId: lucas.memberId, role: "student" },
     { classId: scienceClass.id, memberId: lucas.memberId, role: "student" },
+    { classId: scienceClass.id, memberId: sofia.memberId, role: "student" },
+    { classId: historyClass.id, memberId: sofia.memberId, role: "student" },
+    { classId: historyClass.id, memberId: lucas.memberId, role: "student" },
   ]);
 
-  const [homeworkCat] = await db
-    .insert(schoolAssignmentCategories)
-    .values({ classId: mathClass.id, name: "Homework", weightPercent: 100 })
-    .returning({ id: schoolAssignmentCategories.id });
-
-  const [labCat] = await db
-    .insert(schoolAssignmentCategories)
-    .values({ classId: scienceClass.id, name: "Labs", weightPercent: 100 })
-    .returning({ id: schoolAssignmentCategories.id });
+  async function addCategory(classId: string, name: string, weightPercent: number): Promise<string> {
+    const [cat] = await db
+      .insert(schoolAssignmentCategories)
+      .values({ classId, name, weightPercent })
+      .returning({ id: schoolAssignmentCategories.id });
+    return cat.id;
+  }
+  const homeworkCatId = await addCategory(mathClass.id, "Homework", 30);
+  const mathQuizCatId = await addCategory(mathClass.id, "Quizzes", 30);
+  const mathTestCatId = await addCategory(mathClass.id, "Tests", 40);
+  const labCatId = await addCategory(scienceClass.id, "Labs", 40);
+  const sciQuizCatId = await addCategory(scienceClass.id, "Quizzes", 20);
+  const sciProjectCatId = await addCategory(scienceClass.id, "Projects", 40);
+  const readingCatId = await addCategory(historyClass.id, "Reading", 40);
+  const histQuizCatId = await addCategory(historyClass.id, "Quizzes", 30);
+  const histProjectCatId = await addCategory(historyClass.id, "Projects", 30);
 
   const wedDue = weekDayYmd(3);
   const friDue = weekDayYmd(5);
@@ -211,7 +318,7 @@ export async function seedDemoContent(
     .insert(schoolAssignments)
     .values({
       classId: mathClass.id,
-      categoryId: homeworkCat.id,
+      categoryId: homeworkCatId,
       title: "Fractions worksheet",
       instructionsHtml: "<p>Complete problems 1–20.</p>",
       dueAt: dueAtEndOfDayYmd(wedDue),
@@ -225,7 +332,7 @@ export async function seedDemoContent(
     .insert(schoolAssignments)
     .values({
       classId: scienceClass.id,
-      categoryId: labCat.id,
+      categoryId: labCatId,
       title: "Plant cell lab report",
       instructionsHtml: "<p>Include labeled diagram.</p>",
       dueAt: dueAtEndOfDayYmd(friDue),
@@ -259,6 +366,136 @@ export async function seedDemoContent(
     studentMemberId: lucas.memberId,
     status: "not_started",
   });
+
+  // Turned in, waiting on Maria: gives the School page a real "to grade" count.
+  await db.insert(schoolSubmissions).values([
+    {
+      assignmentId: fractionsAssignment.id,
+      studentMemberId: lucas.memberId,
+      status: "submitted",
+      submittedAt: dueAtEndOfDayYmd(addDaysYmd(wedDue, -1)),
+      isLate: false,
+      turnInCount: 1,
+    },
+    {
+      assignmentId: labAssignment.id,
+      studentMemberId: sofia.memberId,
+      status: "submitted",
+      submittedAt: new Date(Date.now() - 3_600_000),
+      isLate: false,
+      turnInCount: 1,
+    },
+  ]);
+
+  // A term's worth of mixed work: graded, late, excused, waiting to be graded, missing, upcoming.
+  type SeedSubmission = {
+    member: string;
+    status: "graded" | "submitted" | "not_started" | "excused";
+    score?: number;
+    late?: boolean;
+  };
+  async function addAssignment(
+    classId: string,
+    categoryId: string,
+    title: string,
+    dueOffsetDays: number,
+    pointsPossible: number,
+    subs: SeedSubmission[],
+  ): Promise<void> {
+    const dueYmd = addDaysYmd(today, dueOffsetDays);
+    const [assignment] = await db
+      .insert(schoolAssignments)
+      .values({
+        classId,
+        categoryId,
+        title,
+        instructionsHtml: "",
+        dueAt: dueAtEndOfDayYmd(dueYmd),
+        pointsPossible,
+        visibility: "assigned",
+        createdByUserId: maria.userId,
+      })
+      .returning({ id: schoolAssignments.id });
+    for (const sub of subs) {
+      const turnedIn = sub.status === "graded" || sub.status === "submitted";
+      const submittedAt = turnedIn
+        ? dueAtEndOfDayYmd(addDaysYmd(dueYmd, sub.late ? 1 : -1))
+        : null;
+      const [row] = await db
+        .insert(schoolSubmissions)
+        .values({
+          assignmentId: assignment.id,
+          studentMemberId: sub.member,
+          status: sub.status,
+          submittedAt,
+          isLate: Boolean(sub.late),
+          turnInCount: turnedIn ? 1 : 0,
+        })
+        .returning({ id: schoolSubmissions.id });
+      if (sub.status === "graded") {
+        await db.insert(schoolGrades).values({
+          submissionId: row.id,
+          score: sub.score,
+          feedbackHtml: "",
+          gradedByUserId: maria.userId,
+          gradedAt: submittedAt ?? new Date(),
+        });
+      }
+    }
+  }
+
+  const S = sofia.memberId;
+  const L = lucas.memberId;
+  await addAssignment(mathClass.id, homeworkCatId, "Decimals review", -24, 100, [
+    { member: S, status: "graded", score: 92 },
+    { member: L, status: "graded", score: 88 },
+  ]);
+  await addAssignment(mathClass.id, mathQuizCatId, "Ratios quiz", -17, 50, [
+    { member: S, status: "graded", score: 46 },
+    { member: L, status: "graded", score: 41 },
+  ]);
+  await addAssignment(mathClass.id, homeworkCatId, "Percent word problems", -10, 100, [
+    { member: S, status: "graded", score: 100 },
+    { member: L, status: "graded", score: 85, late: true },
+  ]);
+  await addAssignment(mathClass.id, mathTestCatId, "Unit 3 test: fractions and decimals", -6, 100, [
+    { member: S, status: "graded", score: 91 },
+    { member: L, status: "graded", score: 78 },
+  ]);
+  await addAssignment(mathClass.id, homeworkCatId, "Order of operations", -3, 100, [
+    { member: S, status: "submitted" },
+    { member: L, status: "not_started" },
+  ]);
+
+  await addAssignment(scienceClass.id, labCatId, "Cell parts diagram", -20, 25, [
+    { member: L, status: "graded", score: 23 },
+    { member: S, status: "graded", score: 25 },
+  ]);
+  await addAssignment(scienceClass.id, labCatId, "Microscope lab", -12, 50, [
+    { member: L, status: "excused" },
+    { member: S, status: "graded", score: 48 },
+  ]);
+  await addAssignment(scienceClass.id, sciQuizCatId, "Ecosystems quiz", -8, 20, [
+    { member: L, status: "graded", score: 17 },
+    { member: S, status: "graded", score: 19 },
+  ]);
+  await addAssignment(scienceClass.id, sciProjectCatId, "Food web poster", -2, 100, [
+    { member: S, status: "submitted" },
+    { member: L, status: "submitted" },
+  ]);
+
+  await addAssignment(historyClass.id, readingCatId, "Ancient Egypt reading notes", -15, 20, [
+    { member: S, status: "graded", score: 19 },
+    { member: L, status: "graded", score: 17 },
+  ]);
+  await addAssignment(historyClass.id, histQuizCatId, "Pyramids quiz", -9, 30, [
+    { member: S, status: "graded", score: 27 },
+    { member: L, status: "graded", score: 24 },
+  ]);
+  await addAssignment(historyClass.id, histProjectCatId, "Timeline project", 9, 100, [
+    { member: S, status: "not_started" },
+    { member: L, status: "not_started" },
+  ]);
 
   // School days and hours over the last four weeks, so the Records page and transcript have
   // something to show. Homeschool schedules are irregular, so a few weekdays are off, and one
@@ -496,41 +733,213 @@ export async function seedDemoContent(
   ]);
 
   // —— Health ——
-  const [vitamin] = await db
+  // Dose history is written on the same slots the API derives (household timezone), so the Today
+  // tab shows only what is genuinely still due.
+  const nowMs = Date.now();
+  type DoseOutcome = "taken" | "skipped" | "missed";
+  async function addScheduledMed(
+    memberId: string,
+    name: string,
+    dosage: string,
+    times: string[],
+    instructions?: string,
+  ): Promise<string> {
+    const [med] = await db
+      .insert(healthMedications)
+      .values({
+        householdId,
+        memberId,
+        name: encHealth(name, encryptionKey),
+        dosage: encHealth(dosage, encryptionKey),
+        instructions: instructions ? encHealth(instructions, encryptionKey) : null,
+        scheduleKind: "scheduled",
+        scheduleJson: JSON.stringify({ times, daysOfWeek: [0, 1, 2, 3, 4, 5, 6] }),
+        startDate: addDaysYmd(today, -30),
+        enabled: true,
+        visibility: "private",
+        createdByUserId: maria.userId,
+      })
+      .returning({ id: healthMedications.id });
+    return med.id;
+  }
+  async function logDoses(
+    medicationId: string,
+    times: string[],
+    daysBack: number,
+    overrides: Record<number, DoseOutcome> = {},
+  ): Promise<void> {
+    const rows = [];
+    for (let back = daysBack; back >= 0; back -= 1) {
+      for (const time of times) {
+        const scheduledAt = chicagoInstant(addDaysYmd(today, -back), time);
+        if (scheduledAt.getTime() > nowMs) continue; // still due: shows on Today
+        rows.push({
+          medicationId,
+          scheduledAt,
+          status: overrides[back] ?? ("taken" as DoseOutcome),
+          loggedAt: new Date(scheduledAt.getTime() + 7 * 60_000),
+          loggedByUserId: maria.userId,
+          notes: null,
+        });
+      }
+    }
+    if (rows.length > 0) await db.insert(healthMedicationLogs).values(rows);
+  }
+
+  const vitaminD = await addScheduledMed(maria.memberId, "Vitamin D3", "2000 IU", ["08:00"]);
+  const magnesium = await addScheduledMed(
+    maria.memberId,
+    "Magnesium glycinate",
+    "400 mg",
+    ["21:00"],
+    "With water, before bed",
+  );
+  const vitamin = await addScheduledMed(sofia.memberId, "Daily vitamin", "1 chewable", ["08:00"]);
+  const cetirizine = await addScheduledMed(lucas.memberId, "Cetirizine", "5 mg", ["20:00"], "Seasonal allergies");
+  await logDoses(vitaminD, ["08:00"], 14, { 6: "skipped" });
+  await logDoses(magnesium, ["21:00"], 14, { 3: "skipped", 9: "missed" });
+  await logDoses(vitamin, ["08:00"], 14, { 5: "missed" });
+  await logDoses(cetirizine, ["20:00"], 14);
+
+  const [ibuprofen] = await db
     .insert(healthMedications)
     .values({
       householdId,
-      memberId: sofia.memberId,
-      name: encHealth("Daily vitamin", encryptionKey),
-      dosage: encHealth("1 chewable", encryptionKey),
-      scheduleKind: "scheduled",
-      scheduleJson: JSON.stringify({ times: ["08:00"], daysOfWeek: [0, 1, 2, 3, 4, 5, 6] }),
-      startDate: addDaysYmd(today, -30),
+      memberId: lucas.memberId,
+      name: encHealth("Ibuprofen", encryptionKey),
+      dosage: encHealth("200mg as needed", encryptionKey),
+      scheduleKind: "prn",
+      scheduleJson: "{}",
       enabled: true,
       visibility: "private",
       createdByUserId: maria.userId,
     })
     .returning({ id: healthMedications.id });
-
-  await db.insert(healthMedications).values({
-    householdId,
-    memberId: lucas.memberId,
-    name: encHealth("Ibuprofen", encryptionKey),
-    dosage: encHealth("200mg as needed", encryptionKey),
-    scheduleKind: "prn",
-    scheduleJson: "{}",
-    enabled: true,
-    visibility: "private",
-    createdByUserId: maria.userId,
-  });
-
+  // The sick day matches the school day Lucas has off above.
+  const sickDay = weekdays[3] ?? addDaysYmd(today, -5);
   await db.insert(healthMedicationLogs).values({
-    medicationId: vitamin.id,
-    scheduledAt: new Date(),
+    medicationId: ibuprofen.id,
+    scheduledAt: null,
     status: "taken",
+    loggedAt: chicagoInstant(sickDay, "14:20"),
     loggedByUserId: maria.userId,
-    notes: encHealth("Taken with breakfast", encryptionKey),
+    notes: encHealth("For the head cold", encryptionKey),
   });
+
+  async function addHealthEvent(
+    memberId: string,
+    type: "appointment" | "sickness" | "vitals",
+    title: string,
+    startedAt: Date,
+    notes?: string,
+    endedAt?: Date,
+  ): Promise<string> {
+    const [event] = await db
+      .insert(healthEvents)
+      .values({
+        householdId,
+        memberId,
+        type,
+        title: encHealth(title, encryptionKey),
+        notes: notes ? encHealth(notes, encryptionKey) : null,
+        startedAt,
+        endedAt: endedAt ?? null,
+        durationKind: "single_day",
+        visibility: "private",
+        createdByUserId: maria.userId,
+      })
+      .returning({ id: healthEvents.id });
+    return event.id;
+  }
+
+  await addHealthEvent(
+    sofia.memberId,
+    "appointment",
+    "Orthodontist — Sofia",
+    chicagoInstant(addDaysYmd(today, -9), "15:00"),
+    "Brackets adjusted. Next visit in six weeks.",
+  );
+  await addHealthEvent(
+    lucas.memberId,
+    "appointment",
+    "Well-child checkup — Lucas",
+    chicagoInstant(addDaysYmd(today, -21), "09:30"),
+    "Cleared for soccer. Growth on track.",
+  );
+  await addHealthEvent(
+    lucas.memberId,
+    "appointment",
+    "Eye exam — Lucas",
+    chicagoInstant(addDaysYmd(today, 12), "11:00"),
+    "Bring current glasses",
+  );
+  await addHealthEvent(
+    lucas.memberId,
+    "sickness",
+    "Head cold",
+    chicagoInstant(sickDay, "07:30"),
+    "Low fever and a sore throat. Rest day, no school.",
+    chicagoInstant(sickDay, "20:00"),
+  );
+
+  type VitalReading = {
+    metric: "weight" | "height" | "blood_pressure_systolic" | "blood_pressure_diastolic" | "heart_rate";
+    value: number;
+    unit: string;
+  };
+  async function addVitals(
+    memberId: string,
+    title: string,
+    offsetDays: number,
+    readings: VitalReading[],
+  ): Promise<void> {
+    const eventId = await addHealthEvent(
+      memberId,
+      "vitals",
+      title,
+      chicagoInstant(addDaysYmd(today, offsetDays), "07:45"),
+    );
+    await db.insert(healthVitalsReadings).values(
+      readings.map((r) => ({
+        eventId,
+        metric: r.metric,
+        value: encHealth(String(r.value), encryptionKey),
+        unit: r.unit,
+      })),
+    );
+  }
+  const mariaWeight = [152.4, 151.8, 151.0, 150.6, 150.1, 149.4, 149.0, 148.6];
+  const mariaSys = [124, 122, 121, 120, 119, 118, 118, 117];
+  const mariaDia = [82, 80, 80, 79, 78, 77, 76, 76];
+  const mariaHr = [72, 71, 70, 70, 68, 68, 67, 66];
+  for (let i = 0; i < mariaWeight.length; i += 1) {
+    await addVitals(maria.memberId, "Morning vitals", -56 + i * 7, [
+      { metric: "weight", value: mariaWeight[i], unit: "lb" },
+      { metric: "blood_pressure_systolic", value: mariaSys[i], unit: "mmHg" },
+      { metric: "blood_pressure_diastolic", value: mariaDia[i], unit: "mmHg" },
+      { metric: "heart_rate", value: mariaHr[i], unit: "bpm" },
+    ]);
+  }
+  const sofiaGrowth = [
+    [57.5, 82.0],
+    [58.0, 84.0],
+    [58.4, 85.5],
+  ];
+  const lucasGrowth = [
+    [52.0, 66.0],
+    [52.4, 67.5],
+    [52.9, 68.2],
+  ];
+  for (const [i, offset] of [-130, -70, -10].entries()) {
+    await addVitals(sofia.memberId, "Growth check", offset, [
+      { metric: "height", value: sofiaGrowth[i][0], unit: "in" },
+      { metric: "weight", value: sofiaGrowth[i][1], unit: "lb" },
+    ]);
+    await addVitals(lucas.memberId, "Growth check", offset, [
+      { metric: "height", value: lucasGrowth[i][0], unit: "in" },
+      { metric: "weight", value: lucasGrowth[i][1], unit: "lb" },
+    ]);
+  }
 
   // —— Notices ——
   const [welcomeNotice] = await db

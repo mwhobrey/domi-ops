@@ -314,13 +314,40 @@ const SHOTS = [
   {
     id: "drive",
     priority: "p2",
-    routes: [{ suffix: "desktop", viewport: DESKTOP }],
+    routes: [
+      {
+        suffix: "desktop",
+        viewport: DESKTOP,
+        // The root has no files of its own; open the seeded folder so the shot shows content.
+        act: async (page) => {
+          await page.getByText("School/2026", { exact: true }).first().click();
+          await waitForNetworkIdleSoft(page);
+          await page.waitForTimeout(1000);
+        },
+      },
+    ],
     path: "/drive",
   },
   {
     id: "health",
     priority: "p1",
     routes: [{ suffix: "desktop", viewport: DESKTOP }],
+    path: "/health",
+  },
+  {
+    id: "health-trends",
+    priority: "p1",
+    routes: [
+      {
+        suffix: "desktop",
+        viewport: DESKTOP,
+        act: async (page) => {
+          await page.getByRole("button", { name: "Trends" }).click();
+          await waitForNetworkIdleSoft(page);
+          await page.waitForTimeout(1500);
+        },
+      },
+    ],
     path: "/health",
   },
   {
@@ -384,6 +411,8 @@ async function captureTheme(browser, theme, shots, baseUrl, email, password) {
         await page.goto(`${baseUrl}${routePath}`, { waitUntil: "domcontentloaded" });
         await applyDemoPrefs(page, { calendarView: variant.calendarView });
         await waitForRoute(page, routePath, { calendarView: variant.calendarView });
+        // Shots that need an in-page step (e.g. switching a tab) after the route has loaded.
+        if (variant.act) await variant.act(page);
 
         await captureViewport(page, screenshotFileName(shot, variant, theme));
       }
