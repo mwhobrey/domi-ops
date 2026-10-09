@@ -127,6 +127,18 @@ async function applyDemoPrefs(page, { calendarView } = {}) {
     async ({ memberId, view }) => {
       if (view) localStorage.setItem("domi-ops:calendar-view", view);
       localStorage.setItem("domi-ops:calendar-setup-dismissed", "1");
+      // First-login "Getting started" checklist persists server-side (household_members), not in
+      // localStorage, so dismiss it the same way the UI does.
+      const onboarding = await fetch("/api/core/onboarding", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dismissed: true }),
+      });
+      if (!onboarding.ok) {
+        // Otherwise the checklist covers the dashboard and the shot looks wrong without anyone noticing.
+        throw new Error(`Could not dismiss the onboarding checklist: ${onboarding.status}`);
+      }
       if (memberId) {
         localStorage.setItem(`domi-ops:profile-onboarding-dismissed:${memberId}`, "1");
       }
@@ -209,6 +221,16 @@ async function waitForRoute(page, route, { calendarView } = {}) {
 
   if (route.startsWith("/school/transcript")) {
     await page.getByRole("heading", { name: /academic transcript/i }).waitFor({ state: "visible", timeout: 30_000 });
+    await page.waitForTimeout(400);
+    return;
+  }
+
+  if (/^\/school\/class\/[^/]+\/gradebook/.test(route)) {
+    // The route shows loading.tsx (same "Gradebook" heading, skeleton body) until the server
+    // render finishes, so a heading wait fires too early and captures the skeleton. Wait for
+    // the real table instead.
+    await page.getByRole("table", { name: "Class gradebook" }).waitFor({ state: "visible", timeout: 30_000 });
+    await waitForNetworkIdleSoft(page);
     await page.waitForTimeout(400);
     return;
   }
@@ -296,13 +318,40 @@ const SHOTS = [
   {
     id: "drive",
     priority: "p2",
-    routes: [{ suffix: "desktop", viewport: DESKTOP }],
+    routes: [
+      {
+        suffix: "desktop",
+        viewport: DESKTOP,
+        // The root has no files of its own; open the seeded folder so the shot shows content.
+        act: async (page) => {
+          await page.getByText("School/2026", { exact: true }).first().click();
+          await waitForNetworkIdleSoft(page);
+          await page.waitForTimeout(1000);
+        },
+      },
+    ],
     path: "/drive",
   },
   {
     id: "health",
     priority: "p1",
     routes: [{ suffix: "desktop", viewport: DESKTOP }],
+    path: "/health",
+  },
+  {
+    id: "health-trends",
+    priority: "p1",
+    routes: [
+      {
+        suffix: "desktop",
+        viewport: DESKTOP,
+        act: async (page) => {
+          await page.getByRole("button", { name: "Trends" }).click();
+          await waitForNetworkIdleSoft(page);
+          await page.waitForTimeout(1500);
+        },
+      },
+    ],
     path: "/health",
   },
   {
@@ -366,6 +415,8 @@ async function captureTheme(browser, theme, shots, baseUrl, email, password) {
         await page.goto(`${baseUrl}${routePath}`, { waitUntil: "domcontentloaded" });
         await applyDemoPrefs(page, { calendarView: variant.calendarView });
         await waitForRoute(page, routePath, { calendarView: variant.calendarView });
+        // Shots that need an in-page step (e.g. switching a tab) after the route has loaded.
+        if (variant.act) await variant.act(page);
 
         await captureViewport(page, screenshotFileName(shot, variant, theme));
       }

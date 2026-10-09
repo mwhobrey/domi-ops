@@ -106,13 +106,19 @@ Categories/colors assigned per member. No Google sync required — `source: loca
 
 ### School (`/school`)
 
-| Class | Student(s) | Content |
-|-------|------------|---------|
-| **Math 6** | Sofia | Assignment "Fractions worksheet" due Wed; one graded A |
-| **Life Science** | Lucas | Lab report due Fri, not started |
-| **History** | Sofia | Reading quiz completed |
+Both kids are enrolled in all three classes, so each gradebook has two student columns. Categories
+are weighted (for example Math 6: Homework 30, Quizzes 30, Tests 40). The term follows the current
+school year.
 
-Gradebook shows mixed completion; one submission with score for screenshot.
+| Class | Content |
+|-------|---------|
+| **Math 6** | Six assignments across Homework, Quizzes, and Tests: mostly graded, one late, one waiting to be graded, one overdue |
+| **Life Science** | Labs, a quiz, and a project; one lab excused for Lucas (sick day), a lab report due today, a poster waiting to be graded |
+| **World History** | Reading notes and a quiz graded; a timeline project still upcoming |
+
+The School page shows a real "to grade" count, work due this week, and one overdue item. Avoid
+seeding upcoming not-started work in a class whose gradebook is captured: the gradebook labels it
+"Missing", which reads as a flaw in a screenshot.
 
 ### Chores (`/chores`)
 
@@ -148,8 +154,12 @@ List **Groceries** — items with aisles: Produce (bananas, spinach), Dairy (mil
 
 ### Health (`/health`)
 
-- Sofia: daily vitamin (scheduled, shows calendar overlay)
-- One PRN med with recent log
+- Maria: Vitamin D3 (08:00) and magnesium (21:00); Sofia: daily vitamin; Lucas: cetirizine (20:00)
+  plus ibuprofen as needed. Two weeks of dose history on the same slots the API derives, with a
+  couple of skipped or missed doses. Whatever is still due at capture time shows on Today.
+- Appointments (past and upcoming), a head cold for Lucas on the same day he has off from school,
+  weekly vitals for Maria, and growth checks for the kids. Vitals sit in the previous week so they
+  stay out of the calendar hero shot, and the Trends tab has charts to show.
 
 ### Notifications / notices
 
@@ -165,6 +175,7 @@ List **Groceries** — items with aisles: Produce (bananas, spinach), Dairy (mil
 | P1 | `/dashboard` | Default | Full product story |
 | P1 | `/school` | Class or gradebook | Wedge differentiation |
 | P2 | `/chores` | List + karma | Table stakes |
+| P1 | `/health` | Today and Trends tabs | Health side of the pitch |
 | P2 | `/drive` | Root folder | Differentiation |
 | P3 | Mobile | Dashboard or calendar | PWA marketing |
 
