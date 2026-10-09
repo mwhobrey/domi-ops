@@ -129,12 +129,16 @@ async function applyDemoPrefs(page, { calendarView } = {}) {
       localStorage.setItem("domi-ops:calendar-setup-dismissed", "1");
       // First-login "Getting started" checklist persists server-side (household_members), not in
       // localStorage, so dismiss it the same way the UI does.
-      await fetch("/api/core/onboarding", {
+      const onboarding = await fetch("/api/core/onboarding", {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ dismissed: true }),
-      }).catch(() => {});
+      });
+      if (!onboarding.ok) {
+        // Otherwise the checklist covers the dashboard and the shot looks wrong without anyone noticing.
+        throw new Error(`Could not dismiss the onboarding checklist: ${onboarding.status}`);
+      }
       if (memberId) {
         localStorage.setItem(`domi-ops:profile-onboarding-dismissed:${memberId}`, "1");
       }

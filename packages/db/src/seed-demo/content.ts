@@ -294,6 +294,7 @@ export async function seedDemoContent(
     { classId: historyClass.id, memberId: lucas.memberId, role: "student" },
   ]);
 
+  /** Insert a weighted assignment category for a class and return its id. */
   async function addCategory(classId: string, name: string, weightPercent: number): Promise<string> {
     const [cat] = await db
       .insert(schoolAssignmentCategories)
@@ -394,6 +395,11 @@ export async function seedDemoContent(
     score?: number;
     late?: boolean;
   };
+  /**
+   * Insert an assignment due `dueOffsetDays` from today, with one submission per entry in `subs`.
+   * Graded submissions get a grade row; turned-in ones are timestamped a day before (or after, if
+   * late) the due date so nothing lands in the future.
+   */
   async function addAssignment(
     classId: string,
     categoryId: string,
@@ -737,6 +743,7 @@ export async function seedDemoContent(
   // tab shows only what is genuinely still due.
   const nowMs = Date.now();
   type DoseOutcome = "taken" | "skipped" | "missed";
+  /** Insert a daily scheduled medication for a member and return its id. */
   async function addScheduledMed(
     memberId: string,
     name: string,
@@ -762,6 +769,10 @@ export async function seedDemoContent(
       .returning({ id: healthMedications.id });
     return med.id;
   }
+  /**
+   * Write dose history for the last `daysBack` days on the medication's scheduled slots. Slots still
+   * in the future are skipped so Today shows them as due; `overrides` maps days-ago to a non-taken status.
+   */
   async function logDoses(
     medicationId: string,
     times: string[],
@@ -826,6 +837,7 @@ export async function seedDemoContent(
     notes: encHealth("For the head cold", encryptionKey),
   });
 
+  /** Insert a health event (appointment, sickness, or vitals check-in) and return its id. */
   async function addHealthEvent(
     memberId: string,
     type: "appointment" | "sickness" | "vitals",
@@ -887,6 +899,7 @@ export async function seedDemoContent(
     value: number;
     unit: string;
   };
+  /** Insert a vitals check-in event with one encrypted reading row per metric. */
   async function addVitals(
     memberId: string,
     title: string,
