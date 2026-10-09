@@ -213,6 +213,16 @@ async function waitForRoute(page, route, { calendarView } = {}) {
     return;
   }
 
+  if (/^\/school\/class\/[^/]+\/gradebook/.test(route)) {
+    // The route shows loading.tsx (same "Gradebook" heading, skeleton body) until the server
+    // render finishes, so a heading wait fires too early and captures the skeleton. Wait for
+    // the real table instead.
+    await page.getByRole("table", { name: "Class gradebook" }).waitFor({ state: "visible", timeout: 30_000 });
+    await waitForNetworkIdleSoft(page);
+    await page.waitForTimeout(400);
+    return;
+  }
+
   if (route.startsWith("/school")) {
     await page
       .getByRole("heading", { name: /school|math|gradebook/i })
