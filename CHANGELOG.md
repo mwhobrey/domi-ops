@@ -8,6 +8,16 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+## [0.8.4] - 2026-10-09
+
+Refreshes the public site's screenshots and the demo household. No app behavior changes, no migrations, no new environment variables.
+
+### Changed
+
+- **Marketing screenshots show the real product**. The gradebook shot now captures the loaded table instead of the loading skeleton, the "Getting started" checklist no longer covers the dashboard, and every light and dark shot is recaptured with the current "Domi Ops" branding. Adds a health Trends shot.
+- **Richer demo household.** The demo now seeds three weighted classes with about 15 assignments of mixed status, medications with two weeks of dose history, appointments, a sick day, vitals and a fuller calendar week. The school term follows the current school year. The daily demo reset picks this up on its next run.
+- **The screenshot capture script fails loudly** if it cannot dismiss onboarding, rather than saving a covered dashboard.
+
 ## [0.8.3] - 2026-10-07
 
 Repairs Google sign-in, which stopped working for people who had signed in with Google before 0.8.1. **Includes one migration, `0093`** (repairs duplicate Google account rows and adds a unique index). Self-hosters run `npm run db:migrate`; the hosted tag deploy runs it itself. No new environment variables.
