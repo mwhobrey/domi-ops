@@ -1,4 +1,4 @@
-FROM node:24-alpine AS builder
+FROM node:25-alpine AS builder
 WORKDIR /app
 RUN corepack enable
 # better-sqlite3 (packages/import-homehub) has no prebuilt binary for this Node major on
@@ -18,7 +18,7 @@ RUN npm ci
 COPY . .
 RUN npx turbo run build --filter=@domi-ops/worker...
 
-FROM node:24-alpine
+FROM node:25-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=builder --chown=node:node /app/apps/worker/dist ./apps/worker/dist
