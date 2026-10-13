@@ -215,14 +215,26 @@ export function WithingsPanel({
     try {
       setStatus(await apiClient.get<WithingsStatus>("/api/health/withings"));
     } catch {
-      // Optional panel: if the health module is off or the status can't load, hide it.
-      setStatus({ enabled: false, links: [] });
+      // Optional panel: if the health module is off or the status can't load at first, hide it. A
+      // failed re-read later (the API restarting, one dropped request) keeps what is already shown, so
+      // the controls don't vanish and the polling doesn't stop.
+      setStatus((prev) => prev ?? { enabled: false, links: [] });
     }
   }, []);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Connect leaves the buttons disabled while the browser heads to Withings. Coming back with Back can
+  // restore this page from the browser's cache exactly as it was, so release them.
+  useEffect(() => {
+    const release = (e: PageTransitionEvent) => {
+      if (e.persisted) setBusy(false);
+    };
+    window.addEventListener("pageshow", release);
+    return () => window.removeEventListener("pageshow", release);
+  }, []);
 
   const settling = status?.links.some((l) => withingsLinkState(l).settling) ?? false;
   useEffect(() => {
