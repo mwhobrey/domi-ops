@@ -8,6 +8,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+### Changed
+
+- **Privacy policy and terms cover Withings** (WHO-452). The privacy policy lists Withings as an optional processor and describes what is imported, what is (not) sent, how to disconnect and what stays after unlinking, and the terms gain a short "Connected services" section (separate services, connect only accounts you may, not a medical device). Last-updated date moved to October 13, 2026.
+
 ### Fixed
 
 - **Health access checks now stay inside the household** (WHO-454). The shared check behind most health routes let any owner or admin through for any member id, including one from a different household, so each route had to guard that itself (WHO-402). It now confirms the member is in the caller's household before the admin shortcut applies. Nothing was readable or writable across households before, since each query is scoped to the caller's household and row level security backs that up; this closes the gap for routes added later. No migration, no new environment variables.
