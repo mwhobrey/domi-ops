@@ -3,8 +3,8 @@ import { Hono } from "hono";
 import type { Env } from "@domi-ops/config";
 import { withingsCredentials } from "@domi-ops/config";
 import {
-  decryptWithingsSecret,
   withingsAuthorizeUrl,
+  withingsCurrentAccessToken,
   withingsUnsubscribe,
 } from "@domi-ops/calendar-sync";
 import type { Database } from "@domi-ops/db";
@@ -13,7 +13,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireHouseholdModule } from "../lib/household-modules.js";
-import { hasHealthSegmentAccess, isHouseholdMember } from "../lib/health-access.js";
+import { hasHealthSegmentAccess, isHouseholdMember, loadHealthCapabilities } from "../lib/health-access.js";
 import { setOAuthState } from "../lib/oauth-state.js";
 import {
   WITHINGS_OAUTH_PREFIX,
@@ -45,12 +45,14 @@ export function healthWithingsRoutes(db: Database, env: Env) {
       .select()
       .from(healthWithingsLinks)
       .where(eq(healthWithingsLinks.householdId, auth.householdId));
-    const links: ReturnType<typeof serializeWithingsLink>[] = [];
-    for (const row of rows) {
-      if (await hasHealthSegmentAccess(db, auth, row.memberId, "events", "read")) {
-        links.push(serializeWithingsLink(row));
-      }
-    }
+    // One lookup for everyone, not one per link: the panel re-reads this every few seconds while a
+    // link is importing. These members all come from the caller's own household.
+    const caps = await loadHealthCapabilities(
+      db,
+      auth,
+      rows.map((r) => r.memberId),
+    );
+    const links = rows.filter((r) => caps[r.memberId]?.events !== "none").map(serializeWithingsLink);
     return c.json({ enabled: true, links });
   });
 
@@ -173,13 +175,14 @@ export function healthWithingsRoutes(db: Database, env: Env) {
       .limit(1);
     if (!row) return c.json({ error: "not_found" }, 404);
 
-    // Best effort: if Withings is down or the token has lapsed we still drop our side, and the
-    // webhook token stops meaning anything the moment the link row is gone.
+    // Best effort: if Withings is down we still drop our side, and the webhook token stops meaning
+    // anything the moment the link row is gone. The access token is refreshed first when needed:
+    // they last about three hours, so the stored one is usually stale by the time someone unlinks.
     let unsubscribed = true;
     try {
       const callback = withingsWebhookUrl(env, row);
       if (!callback) throw new Error("no webhook secret");
-      await withingsUnsubscribe(decryptWithingsSecret(row.accessTokenEncrypted, env), callback);
+      await withingsUnsubscribe(await withingsCurrentAccessToken(env, row), callback);
     } catch {
       unsubscribed = false;
     }

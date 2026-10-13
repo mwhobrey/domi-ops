@@ -584,22 +584,28 @@ export const healthWithingsLinks = pgTable(
 );
 
 /**
- * Which Withings measure group became which vitals entry. The `(link, grpid)` key is the import's
- * dedupe. `eventId` is "set null", not "cascade", on purpose: delete an imported entry and the row
+ * Which Withings measure group became which vitals entry. The `(member, Withings user, grpid)` key is
+ * the import's dedupe. It is deliberately not tied to the link: unlinking deletes the link, and
+ * reconnecting the same Withings account (the way out of a revoked link) must not import everything a
+ * second time. `eventId` is "set null", not "cascade", on purpose: delete an imported entry and the row
  * stays as a tombstone, so a later backfill or a re-delivered webhook does not bring it back.
  */
 export const healthWithingsMeasureGroups = pgTable(
   "health_withings_measure_groups",
   {
-    linkId: uuid("link_id")
+    householdId: uuid("household_id")
       .notNull()
-      .references(() => healthWithingsLinks.id, { onDelete: "cascade" }),
+      .references(() => households.id, { onDelete: "cascade" }),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => householdMembers.id, { onDelete: "cascade" }),
+    withingsUserId: text("withings_user_id").notNull(),
     grpid: text("grpid").notNull(),
     eventId: uuid("event_id").references(() => healthEvents.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    primaryKey({ columns: [t.linkId, t.grpid] }),
+    primaryKey({ columns: [t.memberId, t.withingsUserId, t.grpid] }),
     index("health_withings_measure_groups_event_idx")
       .on(t.eventId)
       .where(sql`${t.eventId} is not null`),

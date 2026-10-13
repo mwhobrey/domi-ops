@@ -6,7 +6,6 @@ import { decryptSensitive } from "@domi-ops/crypto";
 import {
   closeDb,
   createDb,
-  healthCheckLogs,
   healthChecks,
   healthEvents,
   healthVitalsReadings,
@@ -127,8 +126,15 @@ maybeDescribe("Withings sync (integration)", () => {
     return row!;
   }
 
+  // The base database, not a transaction: the sync opens its own short household-scoped ones, exactly
+  // as the worker's household job does.
   const run = (linkId: string, fetchImpl: ReturnType<typeof fakeWithings>["impl"], now = NOW) =>
-    withHouseholdContext(db, householdId, (tx) => processWithingsLink(tx, env, linkId, now, fetchImpl));
+    processWithingsLink(db, env, { householdId, linkId }, now, fetchImpl);
+
+  const groupRows = () =>
+    withHouseholdContext(db, householdId, (tx) =>
+      tx.select().from(healthWithingsMeasureGroups).where(eq(healthWithingsMeasureGroups.memberId, memberId)),
+    );
 
   const reload = (linkId: string) =>
     withHouseholdContext(db, householdId, async (tx) => {
@@ -151,6 +157,8 @@ maybeDescribe("Withings sync (integration)", () => {
   beforeEach(async () => {
     if (!db) return;
     await withHouseholdContext(db, householdId, async (tx) => {
+      // The dedupe rows belong to the person, not the link, so deleting links does not clear them.
+      await tx.delete(healthWithingsMeasureGroups).where(eq(healthWithingsMeasureGroups.householdId, householdId));
       await tx.delete(healthWithingsLinks).where(eq(healthWithingsLinks.householdId, householdId));
       await tx.delete(healthChecks).where(eq(healthChecks.householdId, householdId));
       await tx.delete(healthEvents).where(eq(healthEvents.householdId, householdId));
@@ -264,9 +272,7 @@ maybeDescribe("Withings sync (integration)", () => {
       await run(link.id, fakeWithings({ pages }).impl);
 
       await withHouseholdContext(db, householdId, (tx) => tx.delete(healthEvents).where(eq(healthEvents.householdId, householdId)));
-      const tombstone = await withHouseholdContext(db, householdId, (tx) =>
-        tx.select().from(healthWithingsMeasureGroups).where(eq(healthWithingsMeasureGroups.linkId, link.id)),
-      );
+      const tombstone = await groupRows();
       expect(tombstone).toHaveLength(1);
       expect(tombstone[0]!.eventId).toBeNull();
 
@@ -280,37 +286,94 @@ maybeDescribe("Withings sync (integration)", () => {
       expect(await vitalsEvents()).toHaveLength(0);
     });
 
-    it("removes an entry, and the check completion that pointed at it, when Withings reports the group deleted", async () => {
+    it("reconnecting the same Withings account after an unlink imports nothing twice and keeps deleted readings deleted", async () => {
       const link = await makeLink();
-      await run(link.id, fakeWithings({ pages: [{ measuregrps: [grp(1, "2026-10-02T17:03:00Z")], more: 0, updatetime: 5 }] }).impl);
-      const [event] = await vitalsEvents();
+      const pages = [
+        { measuregrps: [grp(1, "2026-09-01T13:00:00Z"), grp(2, "2026-09-02T13:00:00Z")], more: 0, updatetime: 10 },
+      ];
+      await run(link.id, fakeWithings({ pages }).impl);
+      expect(await vitalsEvents()).toHaveLength(2);
 
+      // The person deletes one entry by hand, then unlinks (what a revoked link tells them to do).
+      const events = await vitalsEvents();
+      const sept1 = events.find((e) => e.startedAt?.toISOString() === "2026-09-01T13:00:00.000Z")!;
       await withHouseholdContext(db, householdId, async (tx) => {
-        const [check] = await tx
-          .insert(healthChecks)
-          .values({ householdId, memberId, name: "BP", eventType: "vitals", scheduleJson: JSON.stringify({ times: ["12:05"] }) })
-          .returning({ id: healthChecks.id });
-        await tx.insert(healthCheckLogs).values({
-          checkId: check!.id,
-          scheduledAt: new Date("2026-10-02T17:05:00Z"),
-          status: "done",
-          healthEventId: event!.id,
-        });
-        await tx
+        await tx.delete(healthEvents).where(eq(healthEvents.id, sept1.id));
+        await tx.delete(healthWithingsLinks).where(eq(healthWithingsLinks.id, link.id));
+      });
+      expect(await groupRows()).toHaveLength(2);
+
+      // Connect again: a new link and a fresh backfill over the same history.
+      const again = await makeLink();
+      await run(again.id, fakeWithings({ pages }).impl, new Date(NOW.getTime() + 60_000));
+
+      const after = await vitalsEvents();
+      expect(after).toHaveLength(1);
+      expect(after[0]!.startedAt?.toISOString()).toBe("2026-09-02T13:00:00.000Z");
+      expect(await groupRows()).toHaveLength(2);
+    });
+
+    it("leaves out readings Withings could not attribute to this person, and imports them once they are", async () => {
+      const link = await makeLink();
+      const fw = fakeWithings({
+        pages: [
+          {
+            measuregrps: [
+              grp(1, "2026-09-01T13:00:00Z", 128, 82, 64, { attrib: 1 }), // ambiguous: could be anyone on the cuff
+              grp(2, "2026-09-02T13:00:00Z", 128, 82, 64, { attrib: 4 }), // typed in during user creation
+              grp(3, "2026-09-03T13:00:00Z", 128, 82, 64, { attrib: 0 }),
+              grp(4, "2026-09-04T13:00:00Z", 128, 82, 64, { attrib: 2 }),
+              grp(5, "2026-09-05T13:00:00Z", 128, 82, 64, { attrib: 5 }),
+            ],
+            more: 0,
+            updatetime: 10,
+          },
+        ],
+      });
+      await run(link.id, fw.impl);
+
+      expect((await vitalsEvents()).map((e) => e.startedAt?.toISOString()).sort()).toEqual([
+        "2026-09-03T13:00:00.000Z",
+        "2026-09-04T13:00:00.000Z",
+        "2026-09-05T13:00:00.000Z",
+      ]);
+      // No row for what was skipped, so it is looked at again if it changes.
+      expect((await groupRows()).map((r) => r.grpid).sort()).toEqual(["3", "4", "5"]);
+
+      // The person assigns the first reading to themselves in the Withings app: it comes back changed.
+      await withHouseholdContext(db, householdId, (tx) =>
+        tx
           .update(healthWithingsLinks)
           .set({ syncRequestedAt: new Date(NOW.getTime() - 1), nextAttemptAt: null })
-          .where(eq(healthWithingsLinks.id, link.id));
-      });
-
+          .where(eq(healthWithingsLinks.id, link.id)),
+      );
       await run(
         link.id,
-        fakeWithings({ pages: [{ measuregrps: [grp(1, "2026-10-02T17:03:00Z", 128, 82, 64, { deleted: true })], more: 0, updatetime: 6 }] }).impl,
+        fakeWithings({ pages: [{ measuregrps: [grp(1, "2026-09-01T13:00:00Z", 128, 82, 64, { attrib: 0 })], more: 0, updatetime: 11 }] }).impl,
         new Date(NOW.getTime() + 60_000),
       );
+      expect(await vitalsEvents()).toHaveLength(4);
+    });
 
-      expect(await vitalsEvents()).toHaveLength(0);
-      const logs = await withHouseholdContext(db, householdId, (tx) => tx.select().from(healthCheckLogs));
-      expect(logs).toHaveLength(0);
+    it("pulls each page with no transaction open, so a failure keeps the pages already imported", async () => {
+      const link = await makeLink();
+      let page = 0;
+      const impl = vi.fn(async (url: string) => {
+        if (!url.includes("/measure")) return new Response(JSON.stringify({ status: 0, body: {} }), { status: 200 });
+        page += 1;
+        if (page === 1) {
+          const body = { measuregrps: [grp(1, "2026-09-01T13:00:00Z")], more: 1, offset: 1, updatetime: 10 };
+          return new Response(JSON.stringify({ status: 0, body }), { status: 200 });
+        }
+        return new Response("{}", { status: 503 });
+      });
+      expect(await run(link.id, impl)).toBe("failed");
+
+      // Page one stays, but the watermark did not move, so the next run starts over (and skips it).
+      expect(await vitalsEvents()).toHaveLength(1);
+      const after = await reload(link.id);
+      expect(after.backfillDoneAt).toBeNull();
+      expect(after.attempts).toBe(1);
     });
   });
 
@@ -421,21 +484,15 @@ maybeDescribe("Withings sync (integration)", () => {
         // Seven hours on, the three-hour access token has lapsed, so the safety-net pull refreshes first.
         token: { userid: 9001, access_token: "access-2", refresh_token: "refresh-2", expires_in: 10800 },
       });
-      const tally = await withHouseholdContext(db, householdId, (tx) =>
-        syncWithingsHousehold(tx, env, { householdId, now: NOW, fetchImpl: fw.impl }),
-      );
+      const tally = await syncWithingsHousehold(db, env, { householdId, now: NOW, fetchImpl: fw.impl });
       expect(tally).toEqual({ synced: 1, skipped: 0, failed: 0 });
 
       // Just synced, no webhook since: nothing to do until the safety net.
-      const again = await withHouseholdContext(db, householdId, (tx) =>
-        syncWithingsHousehold(tx, env, { householdId, now: new Date(NOW.getTime() + 60_000), fetchImpl: fw.impl }),
-      );
+      const again = await syncWithingsHousehold(db, env, { householdId, now: new Date(NOW.getTime() + 60_000), fetchImpl: fw.impl });
       expect(again).toEqual({ synced: 0, skipped: 0, failed: 0 });
 
       // ...and past the safety net it pulls again without being told to.
-      const later = await withHouseholdContext(db, householdId, (tx) =>
-        syncWithingsHousehold(tx, env, { householdId, now: new Date(NOW.getTime() + 7 * 60 * 60 * 1000), fetchImpl: fw.impl }),
-      );
+      const later = await syncWithingsHousehold(db, env, { householdId, now: new Date(NOW.getTime() + 7 * 60 * 60 * 1000), fetchImpl: fw.impl });
       expect(later.synced).toBe(1);
       expect(due.id).toBeTruthy();
     });
@@ -471,7 +528,7 @@ maybeDescribe("Withings sync (integration)", () => {
 
       await withHouseholdContext(db, otherHouseholdId, async (tx) => {
         expect(await tx.select().from(healthWithingsLinks).where(eq(healthWithingsLinks.id, link.id))).toHaveLength(0);
-        expect(await tx.select().from(healthWithingsMeasureGroups).where(eq(healthWithingsMeasureGroups.linkId, link.id))).toHaveLength(0);
+        expect(await tx.select().from(healthWithingsMeasureGroups).where(eq(healthWithingsMeasureGroups.memberId, memberId))).toHaveLength(0);
         const touched = await tx
           .update(healthWithingsLinks)
           .set({ status: "revoked" })
@@ -482,7 +539,7 @@ maybeDescribe("Withings sync (integration)", () => {
       // Its own transaction: a rejected write aborts the one it ran in.
       // Drizzle wraps the driver's message, so the policy violation is on the cause.
       const forged = await withHouseholdContext(db, otherHouseholdId, (tx) =>
-        tx.insert(healthWithingsMeasureGroups).values({ linkId: link.id, grpid: "forged", eventId: null }),
+        tx.insert(healthWithingsMeasureGroups).values({ householdId, memberId, withingsUserId: "forged", grpid: "forged", eventId: null }),
       ).then(
         () => null,
         (e: Error & { cause?: Error }) => e,
@@ -504,7 +561,7 @@ maybeDescribe("Withings sync (integration)", () => {
           .where(eq(healthWithingsLinks.id, link.id))
           .returning({ id: healthWithingsLinks.id });
         expect(touched).toHaveLength(0);
-        expect(await tx.select().from(healthWithingsMeasureGroups).where(eq(healthWithingsMeasureGroups.linkId, link.id))).toHaveLength(0);
+        expect(await tx.select().from(healthWithingsMeasureGroups).where(eq(healthWithingsMeasureGroups.memberId, memberId))).toHaveLength(0);
       });
       expect((await reload(link.id)).status).toBe("active");
     });

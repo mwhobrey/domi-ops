@@ -2,13 +2,13 @@ import { withingsCredentials, type Env } from "@domi-ops/config";
 import { decryptSensitive, encryptSensitive } from "@domi-ops/crypto";
 import type { Database } from "@domi-ops/db";
 import {
-  healthCheckLogs,
   healthEvents,
   healthVitalsReadings,
   healthWithingsLinks,
   healthWithingsMeasureGroups,
+  withHouseholdContext,
 } from "@domi-ops/db";
-import { and, eq, isNotNull, isNull, lt, lte, or } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, lt, lte, or } from "drizzle-orm";
 import { enqueueForHouseholds, type EnqueueHouseholdScan } from "./household-scan-fanout.js";
 
 /**
@@ -43,8 +43,15 @@ const MAX_ATTEMPTS = 8;
 const MAX_PAGES = 200;
 const HOUSEHOLD_BATCH = 20;
 
-/** Withings `status` values that mean "this token will never work again": the user has to re-link. */
-const TOKEN_INVALID_STATUSES = new Set([401, 293]);
+/**
+ * Withings `status` values that mean "this token will never work again": the user has to re-link.
+ * 343 ("OAuth access token absent or invalid") is in Withings' published table; since the token is
+ * refreshed before use, seeing it means the grant was withdrawn. 401 and 293 are from memory, not
+ * the table. 342 ("credentials absent or incorrect") is left out on purpose: it can mean our own app
+ * secret is wrong, and that must not flip every link to "reconnect"; it retries, then lands in `error`,
+ * which "Sync now" recovers. Confirmed: 601 is "Too Many Requests".
+ */
+const TOKEN_INVALID_STATUSES = new Set([343, 401, 293]);
 const RATE_LIMIT_STATUS = 601;
 
 export type WithingsErrorCode = "not_configured" | "token_invalid" | "rate_limited" | "transient";
@@ -228,9 +235,21 @@ export type WithingsMeasureGroup = {
   grpid: number | string;
   /** Unix seconds the reading was taken. */
   date: number;
-  deleted?: boolean | number;
+  /** How Withings attributed the group to this user (see `UNATTRIBUTED_ATTRIBS`). */
+  attrib?: number;
   measures?: WithingsMeasure[];
 };
+
+/**
+ * `attrib` 1: captured by a device but "may belong to other users as well as this one (it is
+ * ambiguous)". 4: entered manually during user creation, "may not be accurate". Both are left out, so
+ * a cuff shared by a household cannot put one person's reading in another's record. They are not
+ * remembered either: once the person assigns it in the Withings app the group comes back (updated)
+ * with a firmer `attrib` and is imported then. Everything else is imported: 0 and 8 (known to
+ * belong to this user), 2 (typed in for this user), 5 (blood pressure monitor's computed best value),
+ * 7 and 15.
+ */
+const UNATTRIBUTED_ATTRIBS = new Set([1, 4]);
 
 export type BloodPressureMetric = "blood_pressure_systolic" | "blood_pressure_diastolic" | "heart_rate";
 export type ShapedBloodPressure = {
@@ -254,6 +273,7 @@ const MEASURE_TYPES_PARAM = "9,10,11";
  */
 export function shapeBloodPressureGroup(group: WithingsMeasureGroup): ShapedBloodPressure | null {
   if (group.grpid == null || !Number.isFinite(group.date) || group.date <= 0) return null;
+  if (group.attrib != null && UNATTRIBUTED_ATTRIBS.has(group.attrib)) return null;
   const byMetric = new Map<BloodPressureMetric, { value: number; unit: "mmHg" | "bpm" }>();
   for (const m of group.measures ?? []) {
     const spec = MEASURE_TYPE_TO_METRIC[m.type];
@@ -303,7 +323,7 @@ async function getMeasurePage(
 
 type LinkRow = typeof healthWithingsLinks.$inferSelect;
 
-type ImportOutcome = "imported" | "seen" | "deleted" | "ignored";
+type ImportOutcome = "imported" | "seen" | "ignored";
 
 const EVENT_TITLE = "Blood pressure";
 const EVENT_NOTES = "Imported from Withings";
@@ -314,34 +334,58 @@ function requireKey(env: Pick<Env, "ENCRYPTION_KEY">): string {
 }
 
 /**
- * One group -> one `vitals` entry, exactly once. The `(link, grpid)` row is both the dedupe and, once
- * its entry is deleted, a tombstone (event_id goes null) that keeps a backfill from re-creating it.
- * A group Withings reports as deleted removes the entry and the check completions that pointed at it.
+ * Runs `fn` in a short transaction scoped to one household. Everything here that touches the database
+ * goes through one of these, and nothing waits on Withings while holding one: a worker that dies
+ * mid-sync then loses at most the page it was importing, never a token it already took from Withings.
+ */
+export type InHousehold = <T>(fn: (tx: Database) => Promise<T>) => Promise<T>;
+
+/** Withings group id -> the entry it made (null once that entry was deleted). */
+type SeenGroups = Map<string, string | null>;
+
+/**
+ * Which of a page's groups were imported before. Keyed to the person and their Withings user, not to
+ * the link, so it survives an unlink: reconnecting the same account (the fix for a revoked link) must
+ * not import the same readings a second time, nor bring back ones that were deleted.
+ */
+async function loadSeenGroups(
+  db: Database,
+  link: Pick<LinkRow, "memberId" | "withingsUserId">,
+  groups: WithingsMeasureGroup[],
+): Promise<SeenGroups> {
+  const ids = groups.map((g) => (g.grpid == null ? "" : String(g.grpid))).filter(Boolean);
+  const seen: SeenGroups = new Map();
+  if (ids.length === 0) return seen;
+  const rows = await db
+    .select({ grpid: healthWithingsMeasureGroups.grpid, eventId: healthWithingsMeasureGroups.eventId })
+    .from(healthWithingsMeasureGroups)
+    .where(
+      and(
+        eq(healthWithingsMeasureGroups.memberId, link.memberId),
+        eq(healthWithingsMeasureGroups.withingsUserId, link.withingsUserId),
+        inArray(healthWithingsMeasureGroups.grpid, ids),
+      ),
+    );
+  for (const row of rows) seen.set(row.grpid, row.eventId);
+  return seen;
+}
+
+/**
+ * One group -> one `vitals` entry, exactly once. The `(member, Withings user, grpid)` row is both the
+ * dedupe and, once its entry is deleted, a tombstone (event_id goes null) that keeps a backfill from
+ * re-creating it. Groups that are not blood pressure, or that Withings could not attribute, leave no
+ * row, so they are looked at again if they come back changed.
  */
 async function importGroup(
   db: Database,
   env: Pick<Env, "ENCRYPTION_KEY">,
-  link: Pick<LinkRow, "id" | "householdId" | "memberId" | "linkedByUserId">,
+  link: Pick<LinkRow, "householdId" | "memberId" | "withingsUserId" | "linkedByUserId">,
   group: WithingsMeasureGroup,
+  seen: SeenGroups,
 ): Promise<ImportOutcome> {
   const grpid = group.grpid == null ? "" : String(group.grpid);
   if (!grpid) return "ignored";
-
-  const [seen] = await db
-    .select({ eventId: healthWithingsMeasureGroups.eventId })
-    .from(healthWithingsMeasureGroups)
-    .where(and(eq(healthWithingsMeasureGroups.linkId, link.id), eq(healthWithingsMeasureGroups.grpid, grpid)))
-    .limit(1);
-
-  if (group.deleted === true || group.deleted === 1) {
-    if (seen?.eventId) {
-      await db.delete(healthCheckLogs).where(eq(healthCheckLogs.healthEventId, seen.eventId));
-      await db.delete(healthEvents).where(eq(healthEvents.id, seen.eventId));
-    }
-    if (!seen) await db.insert(healthWithingsMeasureGroups).values({ linkId: link.id, grpid, eventId: null }).onConflictDoNothing();
-    return "deleted";
-  }
-  if (seen) return "seen";
+  if (seen.has(grpid)) return "seen";
 
   const shaped = shapeBloodPressureGroup(group);
   if (!shaped) return "ignored";
@@ -371,35 +415,66 @@ async function importGroup(
     );
     await tx
       .insert(healthWithingsMeasureGroups)
-      .values({ linkId: link.id, grpid, eventId: event!.id })
+      .values({
+        householdId: link.householdId,
+        memberId: link.memberId,
+        withingsUserId: link.withingsUserId,
+        grpid,
+        eventId: event!.id,
+      })
       .onConflictDoNothing();
   });
+  seen.set(grpid, null);
   return "imported";
 }
 
 // --- Sync -------------------------------------------------------------------------------------
 
+function accessTokenIsFresh(link: Pick<LinkRow, "tokenExpiresAt">, now: Date): boolean {
+  return link.tokenExpiresAt.getTime() - now.getTime() > TOKEN_REFRESH_SKEW_MS;
+}
+
+/**
+ * A usable access token, refreshing first if it is about to lapse. Withings retires the old refresh
+ * token the moment it issues the new one, so the new pair is written and committed before anything else
+ * happens, in its own short transaction.
+ */
 async function freshAccessToken(
-  db: Database,
+  inHousehold: InHousehold,
   env: Env,
   link: LinkRow,
   now: Date,
   fetchImpl: FetchLike,
 ): Promise<string> {
-  if (link.tokenExpiresAt.getTime() - now.getTime() > TOKEN_REFRESH_SKEW_MS) {
-    return decryptWithingsSecret(link.accessTokenEncrypted, env);
-  }
+  if (accessTokenIsFresh(link, now)) return decryptWithingsSecret(link.accessTokenEncrypted, env);
   const tokens = await withingsRefresh(env, decryptWithingsSecret(link.refreshTokenEncrypted, env), fetchImpl);
-  // Withings rotates the refresh token on every use: persist the new pair before doing anything else.
-  await db
-    .update(healthWithingsLinks)
-    .set({
-      accessTokenEncrypted: encryptWithingsSecret(tokens.accessToken, env),
-      refreshTokenEncrypted: encryptWithingsSecret(tokens.refreshToken, env),
-      tokenExpiresAt: new Date(now.getTime() + tokens.expiresInSec * 1000),
-      updatedAt: now,
-    })
-    .where(eq(healthWithingsLinks.id, link.id));
+  await inHousehold((tx) =>
+    tx
+      .update(healthWithingsLinks)
+      .set({
+        accessTokenEncrypted: encryptWithingsSecret(tokens.accessToken, env),
+        refreshTokenEncrypted: encryptWithingsSecret(tokens.refreshToken, env),
+        tokenExpiresAt: new Date(now.getTime() + tokens.expiresInSec * 1000),
+        updatedAt: now,
+      })
+      .where(eq(healthWithingsLinks.id, link.id)),
+  );
+  return tokens.accessToken;
+}
+
+/**
+ * An access token that works right now, for a link that is about to be deleted (unlink): refreshes if
+ * needed but writes nothing, since the row is going away. Without this, unlink would try to cancel the
+ * webhook with a token that has usually lapsed (they last about three hours).
+ */
+export async function withingsCurrentAccessToken(
+  env: Env,
+  link: Pick<LinkRow, "accessTokenEncrypted" | "refreshTokenEncrypted" | "tokenExpiresAt">,
+  now: Date = new Date(),
+  fetchImpl: FetchLike = fetch,
+): Promise<string> {
+  if (accessTokenIsFresh(link, now)) return decryptWithingsSecret(link.accessTokenEncrypted, env);
+  const tokens = await withingsRefresh(env, decryptWithingsSecret(link.refreshTokenEncrypted, env), fetchImpl);
   return tokens.accessToken;
 }
 
@@ -412,9 +487,12 @@ export function withingsBackoffMs(attempts: number): number {
  * (`backfillFrom` .. now); later runs ask only for groups changed since the `lastUpdate` watermark.
  * The watermark is the `updatetime` of the first page, so a reading that lands while a long backfill
  * is still paging is picked up by the next incremental pull rather than lost.
+ *
+ * Each page is fetched with no transaction open and imported in one short one, so a failure keeps
+ * the pages already imported; the watermark only moves when every page succeeded.
  */
 export async function syncWithingsLink(
-  db: Database,
+  inHousehold: InHousehold,
   env: Pick<Env, "ENCRYPTION_KEY">,
   link: LinkRow,
   accessToken: string,
@@ -433,68 +511,77 @@ export async function syncWithingsLink(
   for (let page = 0; page < MAX_PAGES; page += 1) {
     const result = await getMeasurePage(accessToken, range, offset, fetchImpl);
     watermark ??= result.updatetime;
-    for (const group of result.groups) {
-      if ((await importGroup(db, env, link, group)) === "imported") imported += 1;
-    }
+    imported += await inHousehold(async (tx) => {
+      const seen = await loadSeenGroups(tx, link, result.groups);
+      let n = 0;
+      for (const group of result.groups) {
+        if ((await importGroup(tx, env, link, group, seen)) === "imported") n += 1;
+      }
+      return n;
+    });
     if (!result.more) {
       return { imported, backfilled: backfilling, lastUpdate: watermark ?? nowSec };
     }
     offset = result.offset;
   }
   // Never silently stop halfway: the watermark stays put, so the next run starts over (and the
-  // `(link, grpid)` dedupe makes that cheap).
+  // `(member, Withings user, grpid)` dedupe makes that cheap).
   throw new WithingsError("transient", "Withings history is larger than one sync can page through");
 }
 
 /**
- * Sync one link under the caller's household context. Takes a lease first (`next_attempt_at`), so a
- * second tick or worker cannot sync the same link at once, then records the outcome on the row.
- * Never throws: a failed link is that link's problem.
+ * Sync one link. `db` is the base database, not a transaction: the lease, the token refresh, each
+ * page and the outcome are each their own short household-scoped transaction, and Withings is only
+ * ever called between them. The lease (`next_attempt_at`) stops a second tick or worker from syncing
+ * the same link at once. A failed pull is recorded on the link and returned as `failed`; only a
+ * database failure while recording it throws.
  */
 export async function processWithingsLink(
   db: Database,
   env: Env,
-  linkId: string,
+  target: { householdId: string; linkId: string },
   now: Date,
   fetchImpl: FetchLike = fetch,
 ): Promise<"synced" | "skipped" | "failed"> {
-  const [link] = await db
-    .update(healthWithingsLinks)
-    .set({ nextAttemptAt: new Date(now.getTime() + LEASE_MS) })
-    .where(
-      and(
-        eq(healthWithingsLinks.id, linkId),
-        eq(healthWithingsLinks.status, "active"),
-        or(isNull(healthWithingsLinks.nextAttemptAt), lte(healthWithingsLinks.nextAttemptAt, now)),
-      ),
-    )
-    .returning();
+  const inHousehold: InHousehold = (fn) => withHouseholdContext(db, target.householdId, fn);
+
+  const [link] = await inHousehold((tx) =>
+    tx
+      .update(healthWithingsLinks)
+      .set({ nextAttemptAt: new Date(now.getTime() + LEASE_MS) })
+      .where(
+        and(
+          eq(healthWithingsLinks.id, target.linkId),
+          eq(healthWithingsLinks.status, "active"),
+          or(isNull(healthWithingsLinks.nextAttemptAt), lte(healthWithingsLinks.nextAttemptAt, now)),
+        ),
+      )
+      .returning(),
+  );
   if (!link) return "skipped";
 
   try {
-    // The refresh is committed with the lease, outside the savepoint below: if the pull fails after
-    // Withings has rotated the refresh token, rolling the new one back would strand the link.
-    const accessToken = await freshAccessToken(db, env, link, now, fetchImpl);
-    const result = await db.transaction((tx) =>
-      syncWithingsLink(tx as unknown as Database, env, link, accessToken, now, fetchImpl),
-    );
-    await db
-      .update(healthWithingsLinks)
-      .set({
-        lastSyncedAt: now,
-        lastError: null,
-        attempts: 0,
-        nextAttemptAt: null,
-        lastUpdate: result.lastUpdate,
-        backfillDoneAt: link.backfillDoneAt ?? now,
-        updatedAt: now,
-      })
-      .where(eq(healthWithingsLinks.id, link.id));
-    // Clear the request only if nothing re-flagged the link while we were pulling.
-    await db
-      .update(healthWithingsLinks)
-      .set({ syncRequestedAt: null })
-      .where(and(eq(healthWithingsLinks.id, link.id), lte(healthWithingsLinks.syncRequestedAt, now)));
+    const accessToken = await freshAccessToken(inHousehold, env, link, now, fetchImpl);
+    const result = await syncWithingsLink(inHousehold, env, link, accessToken, now, fetchImpl);
+    await inHousehold(async (tx) => {
+      await tx
+        .update(healthWithingsLinks)
+        .set({
+          lastSyncedAt: now,
+          lastError: null,
+          attempts: 0,
+          nextAttemptAt: null,
+          lastUpdate: result.lastUpdate,
+          backfillDoneAt: link.backfillDoneAt ?? now,
+          updatedAt: now,
+        })
+        .where(eq(healthWithingsLinks.id, link.id));
+      // Clear the request only if nothing re-flagged the link while we were pulling.
+      await tx
+        .update(healthWithingsLinks)
+        .set({ syncRequestedAt: null })
+        .where(and(eq(healthWithingsLinks.id, link.id), lte(healthWithingsLinks.syncRequestedAt, now)));
+    });
     return "synced";
   } catch (e) {
     const err = e instanceof WithingsError ? e : new WithingsError("transient", "sync failed");
@@ -503,25 +590,24 @@ export async function processWithingsLink(
     }
     const base = { lastError: err.opts.status ? `${err.code}: ${err.opts.status}` : err.code, updatedAt: now };
     const table = healthWithingsLinks;
+    const record = (set: Partial<typeof healthWithingsLinks.$inferInsert>) =>
+      inHousehold((tx) => tx.update(table).set({ ...base, ...set }).where(eq(table.id, link.id)));
     switch (err.code) {
       case "token_invalid":
-        await db.update(table).set({ ...base, status: "revoked", syncRequestedAt: null, nextAttemptAt: null }).where(eq(table.id, link.id));
+        await record({ status: "revoked", syncRequestedAt: null, nextAttemptAt: null });
         break;
       case "rate_limited":
-        await db.update(table).set({ ...base, nextAttemptAt: new Date(now.getTime() + RATE_LIMIT_BACKOFF_MS) }).where(eq(table.id, link.id));
+        await record({ nextAttemptAt: new Date(now.getTime() + RATE_LIMIT_BACKOFF_MS) });
         break;
       case "not_configured":
-        await db.update(table).set({ ...base, nextAttemptAt: new Date(now.getTime() + NOT_CONFIGURED_BACKOFF_MS) }).where(eq(table.id, link.id));
+        await record({ nextAttemptAt: new Date(now.getTime() + NOT_CONFIGURED_BACKOFF_MS) });
         break;
       default: {
         const attempts = link.attempts + 1;
         if (attempts >= MAX_ATTEMPTS) {
-          await db.update(table).set({ ...base, attempts, status: "error", syncRequestedAt: null, nextAttemptAt: null }).where(eq(table.id, link.id));
+          await record({ attempts, status: "error", syncRequestedAt: null, nextAttemptAt: null });
         } else {
-          await db
-            .update(table)
-            .set({ ...base, attempts, nextAttemptAt: new Date(now.getTime() + withingsBackoffMs(attempts)) })
-            .where(eq(table.id, link.id));
+          await record({ attempts, nextAttemptAt: new Date(now.getTime() + withingsBackoffMs(attempts)) });
         }
       }
     }
@@ -557,7 +643,10 @@ export async function fanOutWithingsSync(
   return enqueueForHouseholds("withings.sync.household", rows.map((r) => r.id), { ...deps, now });
 }
 
-/** The household job: sync that household's due links, in its own database context. */
+/**
+ * The household job: sync that household's due links. `db` is the base database; see
+ * `processWithingsLink` for why this job does not run inside one transaction.
+ */
 export async function syncWithingsHousehold(
   db: Database,
   env: Env,
@@ -566,13 +655,16 @@ export async function syncWithingsHousehold(
   const tally = { synced: 0, skipped: 0, failed: 0 };
   if (!withingsCredentials(env)) return tally;
   const now = input.now ?? new Date();
-  const due = await db
-    .select({ id: healthWithingsLinks.id })
-    .from(healthWithingsLinks)
-    .where(and(eq(healthWithingsLinks.householdId, input.householdId), dueWhere(now)))
-    .limit(HOUSEHOLD_BATCH);
+  const due = await withHouseholdContext(db, input.householdId, (tx) =>
+    tx
+      .select({ id: healthWithingsLinks.id })
+      .from(healthWithingsLinks)
+      .where(and(eq(healthWithingsLinks.householdId, input.householdId), dueWhere(now)))
+      .limit(HOUSEHOLD_BATCH),
+  );
   for (const link of due) {
-    tally[await processWithingsLink(db, env, link.id, now, input.fetchImpl ?? fetch)] += 1;
+    const target = { householdId: input.householdId, linkId: link.id };
+    tally[await processWithingsLink(db, env, target, now, input.fetchImpl ?? fetch)] += 1;
   }
   return tally;
 }

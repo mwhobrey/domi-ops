@@ -76,13 +76,27 @@ configured on the server (`GET /api/health/withings` says `enabled: false`) or t
 
 ## Behaviour worth knowing
 
-- **Duplicates.** One entry per Withings measure group, keyed `(link, grpid)`. Re-delivered webhooks and
-  repeated backfills change nothing.
-- **Deleted entries stay deleted.** Deleting an imported entry leaves a tombstone row, so a backfill does
-  not bring it back. A group Withings reports deleted removes the entry and any check completion on it.
-- **Unlinking** keeps everything already imported. It is the person's history now.
-- **Token rotation.** Withings retires the refresh token each time it is used, so the new pair is saved
-  in the same step as the refresh and survives a failed pull after it.
+- **Duplicates.** One entry per Withings measure group, keyed `(member, Withings user, grpid)`. Re-delivered
+  webhooks and repeated backfills change nothing. The key is the person's, not the link's, on purpose:
+  unlinking deletes the link, and reconnecting the same Withings account (the way out of a revoked link)
+  must not import the whole history a second time.
+- **Deleted entries stay deleted.** Deleting an imported entry leaves a tombstone row, so a backfill or a
+  reconnect does not bring it back.
+- **Not mirrored from Withings.** Withings' published group schema has no "deleted" flag, so a reading
+  removed in the Withings app stays in Domi Ops. An edit there is not picked up either: a group is
+  imported once, by its id, and `modified` is not compared.
+- **Whose reading it is.** Groups Withings marks `attrib` 1 (captured by a device but "may belong to other
+  users as well as this one") or 4 (entered during user creation, "may not be accurate") are left out, so a
+  cuff shared by a household cannot put one person's reading in another's record. They leave no trace: once
+  the person assigns the reading in the Withings app it comes back changed and is imported then. `attrib`
+  5 is the blood pressure monitor's computed best value and is imported with the rest.
+- **Unlinking** keeps everything already imported. It is the person's history now. It also asks Withings
+  to stop notifying, refreshing the access token first when needed (they last about three hours).
+- **Token rotation.** Withings retires the refresh token each time it is used, so the new pair is saved in
+  its own short transaction the moment the refresh succeeds. The household job does not run inside one big
+  transaction (`OWN_CONTEXT_JOBS` in the worker): the lease, the refresh, each page and the outcome are each
+  committed separately, and Withings is only called between them. A worker killed mid-sync (a deploy) loses
+  at most the page it was importing, never a token it had already been given.
 - **Only blood pressure.** A group needs both systolic and diastolic. A lone pulse (a scale, say) is
   skipped. Entries are private to the person and their `events` grantees, like any health entry.
 - **Backfill size.** One pull pages up to 200 pages. A history larger than that fails and retries, which
@@ -104,16 +118,26 @@ configured on the server (`GET /api/health/withings` says `enabled: false`) or t
 `health_withings_links` has `household_isolation` plus a **read-only** `worker_scan` policy: the tick has
 to ask which links are due across households. Every write, including the lease and the import, runs per
 household under that household's own context (WHO-434). `health_withings_measure_groups` has no
-`worker_scan` policy and is on the allowlist in `rls-worker-scan-coverage.integration.test.ts`.
+`worker_scan` policy (it carries its own `household_id` for the policy) and is on the allowlist in
+`rls-worker-scan-coverage.integration.test.ts`.
 
-## Not verified against Withings
+## What is and is not verified against Withings
 
-Written from Withings' public documentation without a live account; confirm on first real use:
+Checked against Withings' published OpenAPI spec and error table:
 
-- The `status` values mapped to "token will never work again" (`401`, `293`) and to rate limiting
-  (`601`). Anything else is retried with backoff.
-- Whether `getmeas` with `lastupdate` marks removed groups with `deleted`. The import handles it if so.
+- `attrib` values and meanings (above); status `343` is "OAuth access token absent or invalid" and `601`
+  is "Too Many Requests".
+- A group schema with no `deleted` field (so deletes are not mirrored, above).
+
+Not verified, and worth watching on first real use:
+
+- Status `401` and `293` are mapped to "token will never work again" from memory; they are not in the
+  table I could read. `342` ("credentials absent or incorrect") is deliberately not mapped, because it can
+  mean our own app secret is wrong and that must not flip every link to "reconnect": it retries, then the
+  link lands in `error`, which Sync now recovers.
 - That the webhook's `userid` arrives form-encoded as documented.
+- Whether a blood pressure monitor that reports a computed best value (`attrib` 5) also reports the
+  individual readings as separate groups. If so, one session would import as several entries.
 
 ## Tests
 

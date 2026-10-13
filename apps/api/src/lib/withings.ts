@@ -1,6 +1,5 @@
 import type { Env } from "@domi-ops/config";
-import { mintWithingsWebhookToken } from "@domi-ops/crypto";
-import { healthMedPushActionSecret } from "@domi-ops/crypto";
+import { healthMedPushActionSecret, mintWithingsWebhookToken } from "@domi-ops/crypto";
 import type { healthWithingsLinks } from "@domi-ops/db";
 import { WITHINGS_MAX_BACKFILL_DAYS, WITHINGS_DEFAULT_BACKFILL_DAYS } from "@domi-ops/calendar-sync";
 

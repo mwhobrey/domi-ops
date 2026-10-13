@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   WithingsError,
+  encryptWithingsSecret,
   shapeBloodPressureGroup,
   withingsAuthorizeUrl,
   withingsBackoffMs,
+  withingsCurrentAccessToken,
   withingsExchangeCode,
   withingsSubscribe,
 } from "./withings-sync.js";
@@ -74,6 +76,41 @@ describe("shapeBloodPressureGroup", () => {
   });
 });
 
+describe("shapeBloodPressureGroup attribution", () => {
+  it.each([1, 4])("leaves out attrib %i: Withings could not say it is this person's", (attrib) => {
+    expect(shapeBloodPressureGroup(group({ attrib }))).toBeNull();
+  });
+
+  it.each([0, 2, 5, 7, 8, 15, undefined])("keeps attrib %s", (attrib) => {
+    expect(shapeBloodPressureGroup(group({ attrib }))).not.toBeNull();
+  });
+});
+
+describe("withingsCurrentAccessToken (unlink)", () => {
+  const env = { ...creds, ENCRYPTION_KEY: "test-health-encryption-key-32chars!!" };
+  const link = (expiresInMs: number) => ({
+    accessTokenEncrypted: encryptWithingsSecret("access-old", env),
+    refreshTokenEncrypted: encryptWithingsSecret("refresh-old", env),
+    tokenExpiresAt: new Date(Date.now() + expiresInMs),
+  });
+
+  it("uses the stored token while it is good, without calling Withings", async () => {
+    const { fn, calls } = fakeFetch(200, { status: 0, body: {} });
+    expect(await withingsCurrentAccessToken(env as never, link(60 * 60 * 1000), new Date(), fn)).toBe("access-old");
+    expect(calls).toHaveLength(0);
+  });
+
+  it("refreshes a lapsed token, since the stored one is usually stale by the time someone unlinks", async () => {
+    const { fn, calls } = fakeFetch(200, {
+      status: 0,
+      body: { userid: 1, access_token: "access-new", refresh_token: "refresh-new", expires_in: 10800 },
+    });
+    expect(await withingsCurrentAccessToken(env as never, link(-1000), new Date(), fn)).toBe("access-new");
+    expect(calls[0]!.body.get("grant_type")).toBe("refresh_token");
+    expect(calls[0]!.body.get("refresh_token")).toBe("refresh-old");
+  });
+});
+
 describe("withingsBackoffMs", () => {
   it("doubles from 30 seconds and stops at an hour", () => {
     expect(withingsBackoffMs(1)).toBe(30_000);
@@ -133,7 +170,10 @@ describe("Withings client", () => {
   });
 
   it.each([
+    [200, { status: 343 }, "token_invalid"],
     [200, { status: 401 }, "token_invalid"],
+    // "credentials absent or incorrect" can be our own app secret: it must retry, not flip links to reconnect.
+    [200, { status: 342 }, "transient"],
     [200, { status: 601 }, "rate_limited"],
     [429, {}, "rate_limited"],
     [200, { status: 2554 }, "transient"],

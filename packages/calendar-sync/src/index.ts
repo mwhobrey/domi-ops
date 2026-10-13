@@ -225,6 +225,7 @@ export {
   syncWithingsHousehold,
   withingsAuthorizeUrl,
   withingsBackoffMs,
+  withingsCurrentAccessToken,
   withingsExchangeCode,
   withingsSubscribe,
   withingsUnsubscribe,

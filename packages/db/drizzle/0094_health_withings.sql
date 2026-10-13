@@ -1,6 +1,7 @@
 -- WHO-452: Withings blood pressure sync. One link per member; the sync outbox lives on the link
 -- row (sync_requested_at / next_attempt_at / attempts), like health_myallyfile_links (0083).
--- health_withings_measure_groups is the import's dedupe: (link, grpid) -> the vitals entry it made.
+-- health_withings_measure_groups is the import's dedupe: (member, Withings user, grpid) -> the vitals entry it made.
+-- It is not tied to the link, so unlinking and reconnecting the same Withings account imports nothing twice.
 -- event_id is "set null" so deleting an imported entry leaves a tombstone and a backfill can't resurrect it.
 
 DO $$ BEGIN
@@ -38,11 +39,13 @@ CREATE INDEX IF NOT EXISTS "health_withings_links_pending_idx"
   ON "health_withings_links" ("sync_requested_at") WHERE "sync_requested_at" IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS "health_withings_measure_groups" (
-  "link_id" uuid NOT NULL REFERENCES "health_withings_links"("id") ON DELETE cascade,
+  "household_id" uuid NOT NULL REFERENCES "households"("id") ON DELETE cascade,
+  "member_id" uuid NOT NULL REFERENCES "household_members"("id") ON DELETE cascade,
+  "withings_user_id" text NOT NULL,
   "grpid" text NOT NULL,
   "event_id" uuid REFERENCES "health_events"("id") ON DELETE set null,
   "created_at" timestamp with time zone DEFAULT now() NOT NULL,
-  PRIMARY KEY ("link_id", "grpid")
+  PRIMARY KEY ("member_id", "withings_user_id", "grpid")
 );
 
 CREATE INDEX IF NOT EXISTS "health_withings_measure_groups_event_idx"
@@ -63,5 +66,5 @@ CREATE POLICY worker_scan ON "health_withings_links" FOR SELECT
 ALTER TABLE "health_withings_measure_groups" ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS household_isolation ON "health_withings_measure_groups";
 CREATE POLICY household_isolation ON "health_withings_measure_groups" FOR ALL
-  USING (EXISTS (SELECT 1 FROM health_withings_links p WHERE p.id = health_withings_measure_groups.link_id AND p.household_id = NULLIF(current_setting('app.current_household_id', true), '')::uuid))
-  WITH CHECK (EXISTS (SELECT 1 FROM health_withings_links p WHERE p.id = health_withings_measure_groups.link_id AND p.household_id = NULLIF(current_setting('app.current_household_id', true), '')::uuid));
+  USING (household_id = NULLIF(current_setting('app.current_household_id', true), '')::uuid)
+  WITH CHECK (household_id = NULLIF(current_setting('app.current_household_id', true), '')::uuid);

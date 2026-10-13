@@ -437,7 +437,8 @@ export async function runCalendarSyncJob(
     case "myallyfile.sync.scan":
       await scanMyallyfileSync(db, env);
       break;
-    // The 30s tick only enqueues; the pull runs per household in that household's own context.
+    // The 30s tick only enqueues. The household job gets the base database (see OWN_CONTEXT_JOBS in the
+    // worker) and opens its own short household-scoped transactions.
     case "withings.sync.scan":
       await fanOutWithingsSync(db, env, { enqueue: householdScanEnqueuer(redisUrlOf(env)) });
       break;
