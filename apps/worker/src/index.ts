@@ -18,6 +18,7 @@ import {
   ensureHealthCheckReminderScheduler,
   ensureHealthSupplyReminderScheduler,
   ensureMyallyfileSyncScheduler,
+  ensureWithingsSyncScheduler,
 } from "@domi-ops/calendar-sync";
 
 const env = loadEnv();
@@ -36,6 +37,7 @@ const CROSS_TENANT_SCAN_JOBS = new Set<SyncJobName>([
   "health.check.reminder.scan",
   "health.supply.reminder.scan",
   "myallyfile.sync.scan",
+  "withings.sync.scan",
 ]);
 
 const worker = new Worker<{ name: SyncJobName; payload: SyncJobPayload }>(
@@ -116,6 +118,10 @@ void ensureHealthSupplyReminderScheduler(redisUrl).catch((err) => {
 
 void ensureMyallyfileSyncScheduler(redisUrl).catch((err) => {
   console.error("Failed to schedule MyAllyFile sync scan", err);
+});
+
+void ensureWithingsSyncScheduler(redisUrl).catch((err) => {
+  console.error("Failed to schedule Withings sync scan", err);
 });
 
 console.log(`domi-ops worker listening on queue ${SYNC_QUEUE}`);

@@ -58,6 +58,9 @@ export const envSchema = z
     S3_BUCKET: z.string().default("domi-ops"),
     /** MyAllyFile functions base URL (ADR 006). Unset on hosted = production; set on self-host/dev to opt in. */
     MYALLYFILE_API_BASE: z.string().url().optional(),
+    /** Withings developer app credentials (WHO-452). Each deployment registers its own app; both unset = feature off. */
+    WITHINGS_CLIENT_ID: z.string().optional(),
+    WITHINGS_CLIENT_SECRET: z.string().optional(),
     S3_FORCE_PATH_STYLE: z
       .string()
       .optional()
@@ -249,6 +252,14 @@ export function myallyfileApiBase(
 ): string | null {
   if (env.MYALLYFILE_API_BASE) return env.MYALLYFILE_API_BASE.replace(/\/+$/, "");
   return isHostedDeployment(env) ? MYALLYFILE_PROD_BASE : null;
+}
+
+/** Withings blood pressure sync (WHO-452): on wherever this deployment has its own Withings app credentials. */
+export function withingsCredentials(
+  env: Pick<Env, "WITHINGS_CLIENT_ID" | "WITHINGS_CLIENT_SECRET">,
+): { clientId: string; clientSecret: string } | null {
+  if (!env.WITHINGS_CLIENT_ID || !env.WITHINGS_CLIENT_SECRET) return null;
+  return { clientId: env.WITHINGS_CLIENT_ID, clientSecret: env.WITHINGS_CLIENT_SECRET };
 }
 
 /** Settings toggle ceiling: deploy catalog ∩ subscription entitlements (hosted) or deploy only (self-host). */

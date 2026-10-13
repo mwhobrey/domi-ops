@@ -34,6 +34,8 @@ import { healthOrganizerSessionRoutes } from "./routes/health-organizer-sessions
 import { healthCheckRoutes } from "./routes/health-checks.js";
 import { healthCheckGroupRoutes } from "./routes/health-check-groups.js";
 import { healthMyallyfileRoutes } from "./routes/health-myallyfile.js";
+import { healthWithingsRoutes } from "./routes/health-withings.js";
+import { integrationsWithingsRoutes } from "./routes/integrations-withings.js";
 import { schoolClassesRoutes } from "./routes/school-classes.js";
 import { schoolRecordsRoutes } from "./routes/school-records.js";
 import { schoolAssignmentsRoutes } from "./routes/school-assignments.js";
@@ -203,6 +205,8 @@ app.route("/api/health/organizers", healthOrganizerSessionRoutes(db, env));
 app.route("/api/health/checks", healthCheckRoutes(db, env));
 app.route("/api/health/check-groups", healthCheckGroupRoutes(db, env));
 app.route("/api/health/myallyfile", healthMyallyfileRoutes(db, env));
+app.route("/api/health/withings", healthWithingsRoutes(db, env));
+app.route("/api/integrations/withings", integrationsWithingsRoutes(db, env));
 app.route("/api/billing", billingRoutes(db, env));
 app.route("/api/billing", revenueCatRoutes(db, env));
 app.route("/api/core", nativeAuthRoutes(db, env, betterAuth));

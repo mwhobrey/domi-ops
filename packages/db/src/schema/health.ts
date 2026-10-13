@@ -1,4 +1,5 @@
 import {
+  bigint,
   boolean,
   date,
   foreignKey,
@@ -524,6 +525,84 @@ export const healthMyallyfileLinks = pgTable(
     index("health_myallyfile_links_pending_idx")
       .on(t.syncRequestedAt)
       .where(sql`${t.syncRequestedAt} is not null`),
+  ],
+);
+
+/**
+ * Link state for the Withings blood pressure sync (WHO-452). `active` syncs; `revoked` = Withings
+ * rejected the token or the user withdrew access, so only re-linking helps; `error` = repeated
+ * failures, cleared by "Sync now".
+ */
+export const withingsLinkStatusEnum = pgEnum("withings_link_status", ["active", "revoked", "error"]);
+
+/**
+ * One Withings account linked to one Domi Ops member. Both tokens are encrypted text; neither is
+ * ever returned by the API. Withings rotates the refresh token on every refresh, so the row is
+ * rewritten the moment a refresh succeeds.
+ *
+ * The sync outbox lives on this row, same as the MyAllyFile link: `syncRequestedAt` is set by the
+ * webhook or "Sync now", `nextAttemptAt` / `attempts` drive backoff (and double as the lease while
+ * a worker holds the link). `lastUpdate` is Withings' `updatetime` watermark for incremental pulls.
+ * History is pulled once, from `backfillFrom`, until `backfillDoneAt` is set.
+ */
+export const healthWithingsLinks = pgTable(
+  "health_withings_links",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    householdId: uuid("household_id")
+      .notNull()
+      .references(() => households.id, { onDelete: "cascade" }),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => householdMembers.id, { onDelete: "cascade" }),
+    withingsUserId: text("withings_user_id").notNull(),
+    accessTokenEncrypted: text("access_token_encrypted").notNull(),
+    refreshTokenEncrypted: text("refresh_token_encrypted").notNull(),
+    tokenExpiresAt: timestamp("token_expires_at", { withTimezone: true }).notNull(),
+    scope: text("scope"),
+    status: withingsLinkStatusEnum("status").notNull().default("active"),
+    linkedByUserId: uuid("linked_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    linkedAt: timestamp("linked_at", { withTimezone: true }).notNull().defaultNow(),
+    backfillFrom: timestamp("backfill_from", { withTimezone: true }).notNull(),
+    backfillDoneAt: timestamp("backfill_done_at", { withTimezone: true }),
+    /** Withings `updatetime` (unix seconds) of the last pull; null until the backfill finishes. */
+    lastUpdate: bigint("last_update", { mode: "number" }),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+    lastError: text("last_error"),
+    syncRequestedAt: timestamp("sync_requested_at", { withTimezone: true }),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
+    attempts: integer("attempts").notNull().default(0),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // One link per member: a member maps to a single Withings account.
+    uniqueIndex("health_withings_links_member_unique").on(t.memberId),
+    index("health_withings_links_pending_idx")
+      .on(t.syncRequestedAt)
+      .where(sql`${t.syncRequestedAt} is not null`),
+  ],
+);
+
+/**
+ * Which Withings measure group became which vitals entry. The `(link, grpid)` key is the import's
+ * dedupe. `eventId` is "set null", not "cascade", on purpose: delete an imported entry and the row
+ * stays as a tombstone, so a later backfill or a re-delivered webhook does not bring it back.
+ */
+export const healthWithingsMeasureGroups = pgTable(
+  "health_withings_measure_groups",
+  {
+    linkId: uuid("link_id")
+      .notNull()
+      .references(() => healthWithingsLinks.id, { onDelete: "cascade" }),
+    grpid: text("grpid").notNull(),
+    eventId: uuid("event_id").references(() => healthEvents.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.linkId, t.grpid] }),
+    index("health_withings_measure_groups_event_idx")
+      .on(t.eventId)
+      .where(sql`${t.eventId} is not null`),
   ],
 );
 

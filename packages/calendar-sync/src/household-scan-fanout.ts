@@ -17,7 +17,8 @@ export type HouseholdScanJob =
   | "chore.digest.household"
   | "expense.budget.household"
   | "school.reminder.household"
-  | "drive.quota.household";
+  | "drive.quota.household"
+  | "withings.sync.household";
 
 /** Adds a household's scan job to the queue. `jobId` makes a double enqueue a no-op. */
 export type EnqueueHouseholdScan = (
@@ -41,6 +42,7 @@ export const HOUSEHOLD_SCAN_INTERVAL_MS: Record<HouseholdScanJob, number> = {
   "chore.digest.household": 15 * 60 * 1000,
   "expense.budget.household": 30 * 60 * 1000,
   "drive.quota.household": 30 * 60 * 1000,
+  "withings.sync.household": 30 * 1000,
 };
 
 /**
