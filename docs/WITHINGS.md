@@ -52,6 +52,9 @@ safety net keep links working until they are re-subscribed.
 ## The screen
 
 Health, **Checks** tab, panel **Blood pressure cuff (Withings)** (`apps/web/src/components/health/WithingsPanel.tsx`).
+The same panel is also on **Settings** and **Profile**, below the MyAllyFile card (`WithingsSettings.tsx`, which
+loads the roster and the viewer's permissions the way `MyAllyFileSettings` does). A member who can't open Settings
+still reaches it from Profile. Connecting from any of the three returns to Health, Checks with the result banner.
 It lists each person the viewer has `events: write` for, and does not render at all when Withings is not
 configured on the server (`GET /api/health/withings` says `enabled: false`) or the viewer manages no one.
 
