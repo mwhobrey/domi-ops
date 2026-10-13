@@ -1,7 +1,6 @@
 # Withings blood pressure sync
 
-Operator and developer notes for the Withings integration. Linear: WHO-452 (API and worker),
-WHO-453 (screens).
+Operator and developer notes for the Withings integration. Linear: WHO-452 (API and worker), WHO-453 (screens).
 
 ## What it does
 
@@ -50,6 +49,23 @@ the link's Withings user. The token can only ask for a sync. It has no expiry; r
 (or `SESSION_SECRET` when there is no key) invalidates every subscription, and "Sync now" plus the
 safety net keep links working until they are re-subscribed.
 
+## The screen
+
+Health, **Checks** tab, panel **Blood pressure cuff (Withings)** (`apps/web/src/components/health/WithingsPanel.tsx`).
+It lists each person the viewer has `events: write` for, and does not render at all when Withings is not
+configured on the server (`GET /api/health/withings` says `enabled: false`) or the viewer manages no one.
+
+- **Not connected:** pick how far back to import (30 or 90 days, a year, everything up to 10 years) and
+  **Connect Withings**, which sends the browser to Withings to approve access.
+- **Connected:** state badge, last synced time, and where the import starts. **Sync now**, **Import history**
+  (over a window picked beside it) and **Unlink** (with a confirmation).
+- **Coming back from Withings** lands on `/health?withings=<result>` (`connected`, `denied`, `expired`,
+  `forbidden`, `already_linked`, `unavailable`, `error`), opens Checks and shows what happened. The parent
+  (`HealthPageClient`) holds that message so a data reload or tab switch does not drop it, and it has a
+  Dismiss link. The query parameter is removed from the address once read.
+- A link that is still importing or waiting on a pull is re-read every 8 seconds. Anything that needs a
+  person (disconnected, needs attention) is not polled.
+
 ## Link states
 
 | `status` | Meaning | How it recovers |
@@ -81,6 +97,7 @@ safety net keep links working until they are re-subscribed.
 | Jobs | `withings.sync.scan` (30 s tick), `withings.sync.household`; `queue.ts`, `sync.ts`, `apps/worker/src/index.ts` |
 | Routes | `apps/api/src/routes/health-withings.ts` (signed in), `integrations-withings.ts` (callback, webhook) |
 | Webhook token | `packages/crypto/src/index.ts` |
+| Screen | `apps/web/src/components/health/WithingsPanel.tsx`, `withings-helpers.ts` (copy and state, unit tested), wired in `HealthPageClient.tsx` and `app/health/page.tsx` |
 
 ## RLS
 
@@ -106,3 +123,4 @@ Written from Withings' public documentation without a live account; confirm on f
 - `apps/api/src/routes/health-withings.integration.test.ts`: who may connect, the callback's state
   rules, the webhook, link management.
 - `packages/crypto/src/withings-webhook-token.test.ts`.
+- `apps/web/src/components/health/withings-helpers.test.ts`: link states, result messages, error copy.

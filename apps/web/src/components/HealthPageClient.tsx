@@ -12,6 +12,8 @@ import { EditDoseSheet, type EditableDose } from "./health/EditDoseSheet";
 import { MedicationManagerClient } from "./health/MedicationManagerClient";
 import { HealthTrendsTab } from "./health/HealthTrendsTab";
 import { ChecksManagerClient } from "./health/ChecksManagerClient";
+import { WithingsPanel } from "./health/WithingsPanel";
+import { withingsResultNotice } from "./health/withings-helpers";
 import { LogVitalsSheet } from "./health/LogVitalsSheet";
 import { LogExerciseSheet } from "./health/LogExerciseSheet";
 import { LogPainSheet } from "./health/LogPainSheet";
@@ -96,6 +98,7 @@ export function HealthPageClient({
   initialFillMemberId,
   initialFillDate,
   initialSupplyMedicationId,
+  initialWithingsResult,
   pushAction,
 }: {
   members: NoteShareMember[];
@@ -119,6 +122,8 @@ export function HealthPageClient({
   initialFillDate?: string;
   /** Refill link from a calendar chip or notice: that medication's supply. */
   initialSupplyMedicationId?: string;
+  /** Where Withings sent the browser back to (`?withings=connected`, ...): open Checks and say how it went (WHO-453). */
+  initialWithingsResult?: string;
   /** iOS / no-actions deep-link auto-log (WHO-235). */
   pushAction?: {
     medicationId: string;
@@ -131,7 +136,10 @@ export function HealthPageClient({
   // The page's zone comes from household settings, which 403s for non-admins and falls back to
   // UTC; the session's zone (via AppShell) is right for every member.
   const householdTimezone = useHouseholdTimeZone() ?? householdTimezoneProp;
-  const [tab, setTab] = useState<"today" | "log" | "medications" | "checks" | "trends">("today");
+  // Coming back from Withings opens Checks, where the cuff panel is (WHO-453).
+  const [tab, setTab] = useState<"today" | "log" | "medications" | "checks" | "trends">(
+    initialWithingsResult ? "checks" : "today",
+  );
   const [eventTypeFilter, setEventTypeFilter] = useState<HealthEventType | "all">("all");
   const [events, setEvents] = useState<HealthEvent[]>([]);
   const [doseLogs, setDoseLogs] = useState<DoseLogEntry[]>([]);
@@ -259,6 +267,19 @@ export function HealthPageClient({
   useEffect(() => {
     if ((initialFillPlanId && initialFillDate) || initialSupplyMedicationId) setTab("medications");
   }, [initialFillPlanId, initialFillDate, initialSupplyMedicationId]);
+
+  // The Withings round trip's result lives here, not in the panel: this page reloads its data and a
+  // tab switch remounts the panel, and either would drop the message before it was read.
+  const [withingsNotice, setWithingsNotice] = useState(() => withingsResultNotice(initialWithingsResult));
+  const dismissWithingsNotice = useCallback(() => setWithingsNotice(null), []);
+  // Shown once: drop it from the address so a refresh or a shared link doesn't repeat it.
+  useEffect(() => {
+    if (!initialWithingsResult) return;
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("withings")) return;
+    url.searchParams.delete("withings");
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+  }, [initialWithingsResult]);
 
   const managerInitialFill =
     initialFillPlanId && initialFillMemberId && initialFillDate
@@ -1251,12 +1272,20 @@ export function HealthPageClient({
       ) : null}
 
       {tab === "checks" ? (
-        <ChecksManagerClient
-          members={members}
-          currentMemberId={currentMemberId}
-          capabilities={capabilities}
-          onChanged={() => void load()}
-        />
+        <div className="space-y-6">
+          <WithingsPanel
+            members={members}
+            capabilities={capabilities}
+            notice={withingsNotice}
+            onDismissNotice={dismissWithingsNotice}
+          />
+          <ChecksManagerClient
+            members={members}
+            currentMemberId={currentMemberId}
+            capabilities={capabilities}
+            onChanged={() => void load()}
+          />
+        </div>
       ) : null}
 
       {tab === "trends" ? (
