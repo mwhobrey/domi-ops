@@ -399,7 +399,12 @@ export async function hasHealthSegmentAccess(
   segment: HealthAclSegment,
   min: HealthAclLevel,
 ): Promise<boolean> {
-  if (canManageMemberHealth(auth.role, subjectMemberId, auth.memberId)) return true;
+  if (subjectMemberId === auth.memberId) return true;
+  // An admin may manage anyone in their own household, and no one outside it (WHO-454).
+  // `canManageMemberHealth` is role-only and cannot tell the difference, so before this a member id
+  // from another household passed for any owner or admin, and the routes had to guard it themselves
+  // (WHO-402). Self and the ACL below are already scoped to the caller's household.
+  if (isHouseholdAdmin(auth.role)) return isHouseholdMember(db, auth.householdId, subjectMemberId);
   const map = await loadHealthAclBySubjectForGrantee(db, auth.householdId, auth.memberId);
   return canAccessHealthSegment(map.get(subjectMemberId) ?? emptyHealthAclGrants(), segment, min);
 }

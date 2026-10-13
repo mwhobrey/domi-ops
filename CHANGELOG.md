@@ -8,6 +8,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+### Fixed
+
+- **Health access checks now stay inside the household** (WHO-454). The shared check behind most health routes let any owner or admin through for any member id, including one from a different household, so each route had to guard that itself (WHO-402). It now confirms the member is in the caller's household before the admin shortcut applies. Nothing was readable or writable across households before, since each query is scoped to the caller's household and row level security backs that up; this closes the gap for routes added later. No migration, no new environment variables.
+
 ### Added
 
 - **Withings blood pressure sync, API and worker** (WHO-452). A member can be linked to a Withings account, and readings from a Withings cuff are imported as ordinary vitals entries: new ones within seconds of the cuff syncing (Withings notifies Domi Ops, and the worker pulls), plus the history from before the link, over a window chosen at connect time (default one year). Scheduled blood pressure checks pick the readings up through the usual 30 minute window, so a slot fills in by itself. Deleting an imported reading keeps it deleted, and Withings-side deletes are mirrored. Who can link a cuff follows scheduled checks: the person, or anyone with `events: write` on them. **No screens yet**: connecting is the next change (WHO-453). **Migration `0094`** adds two tables (requires `npm run db:migrate`; the hosted tag deploy runs it). **New optional environment variables** `WITHINGS_CLIENT_ID` and `WITHINGS_CLIENT_SECRET`; unset, the feature is off. See [docs/WITHINGS.md](docs/WITHINGS.md).

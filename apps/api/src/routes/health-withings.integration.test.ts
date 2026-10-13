@@ -477,16 +477,13 @@ maybeDescribe("withings routes (integration)", () => {
 
     it("cannot reach into another household's link", async () => {
       const link = await makeLink();
-      // The outsider owns their own household, so the role check alone would let them through
-      // (`hasHealthSegmentAccess` does not look at which household the member is in). What stops
-      // them is that every query here is scoped to the caller's household and RLS: the link isn't
-      // there to find, which also doesn't confirm that it exists.
+      // The outsider owns their own household, but Ally is not in it.
       for (const [method, path] of [
         ["DELETE", ""],
         ["POST", "/sync"],
         ["POST", "/backfill"],
       ] as const) {
-        expect((await call("outsider", method, `/withings/links/${people.ally!.memberId}${path}`, { days: 30 })).status).toBe(404);
+        expect((await call("outsider", method, `/withings/links/${people.ally!.memberId}${path}`, { days: 30 })).status).toBe(403);
       }
       const untouched = (await reload(link.id))!;
       expect(untouched).toMatchObject({ status: "active", syncRequestedAt: null, backfillDoneAt: null });
