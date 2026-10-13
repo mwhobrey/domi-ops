@@ -11,6 +11,7 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 ### Changed
 
 - **Privacy policy and terms cover Withings** (WHO-452). The privacy policy lists Withings as an optional processor and describes what is imported, what is (not) sent, how to disconnect and what stays after unlinking, and the terms gain a short "Connected services" section (separate services, connect only accounts you may, not a medical device). Last-updated date moved to October 13, 2026.
+- **Marketing site mentions the Withings cuff** (WHO-452). The Health page gains a "Blood pressure without the typing" section and a Withings FAQ entry, the blood pressure reminder answer points to it, and the home page health list has a line for it. The "not a medical record system" note now also says not a medical device.
 
 ### Fixed
 

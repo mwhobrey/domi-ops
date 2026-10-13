@@ -176,6 +176,9 @@ export function LandingPage() {
                 </li>
                 <li>Pause a medication and its dose history stays.</li>
                 <li>
+                  Connect a Withings blood pressure cuff and readings arrive on their own, no typing.
+                </li>
+                <li>
                   Medication names, doses, and notes are encrypted at rest, and being able to see a
                   record never lets someone edit it.
                 </li>
