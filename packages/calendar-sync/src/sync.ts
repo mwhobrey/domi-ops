@@ -36,6 +36,7 @@ import {
 } from "./scan-fanout.js";
 import { householdScanEnqueuer } from "./queue.js";
 import { scanMyallyfileSync } from "./myallyfile-sync.js";
+import { fanOutWithingsSync, syncWithingsHousehold } from "./withings-sync.js";
 import { scanSchoolReminders } from "./school-reminder-scan.js";
 import { setSyncRun } from "./sync-run.js";
 import type { SyncJobPayload } from "./index.js";
@@ -435,6 +436,14 @@ export async function runCalendarSyncJob(
       break;
     case "myallyfile.sync.scan":
       await scanMyallyfileSync(db, env);
+      break;
+    // The 30s tick only enqueues. The household job gets the base database (see OWN_CONTEXT_JOBS in the
+    // worker) and opens its own short household-scoped transactions.
+    case "withings.sync.scan":
+      await fanOutWithingsSync(db, env, { enqueue: householdScanEnqueuer(redisUrlOf(env)) });
+      break;
+    case "withings.sync.household":
+      await syncWithingsHousehold(db, env, { householdId: payload.householdId });
       break;
     default:
       throw new Error(`Unknown sync job: ${name}`);

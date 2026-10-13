@@ -172,6 +172,23 @@ export async function ensureHealthSupplyReminderScheduler(redisUrl: string): Pro
   );
 }
 
+/**
+ * Withings blood pressure sync tick (WHO-452): every 30s it only works out which households have a link
+ * to pull and enqueues one `withings.sync.household` job each. A webhook sets a flag; this is what notices.
+ */
+export async function ensureWithingsSyncScheduler(redisUrl: string): Promise<void> {
+  const q = getSyncQueue(redisUrl);
+  await q.upsertJobScheduler(
+    "withings-sync-scan",
+    { every: 30 * 1000 },
+    {
+      name: "withings.sync.scan",
+      data: { name: "withings.sync.scan", payload: { householdId: "scan" } },
+      opts: { removeOnComplete: 20, removeOnFail: 20 },
+    },
+  );
+}
+
 /** MyAllyFile med sync push (WHO-363): every 30s; per-link debounce lives in the scan. */
 export async function ensureMyallyfileSyncScheduler(redisUrl: string): Promise<void> {
   const q = getSyncQueue(redisUrl);

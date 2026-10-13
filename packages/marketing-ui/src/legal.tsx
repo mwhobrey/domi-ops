@@ -1,4 +1,4 @@
-export const LEGAL_LAST_UPDATED = "September 19, 2026";
+export const LEGAL_LAST_UPDATED = "October 13, 2026";
 export const LEGAL_CONTACT_EMAIL = "privacy@domi-ops.com";
 
 const bodyClass =
@@ -176,6 +176,18 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
             . OAuth tokens are encrypted at rest on the instance.
           </li>
           <li>
+            <strong>Withings</strong>: optional blood pressure cuff import, only if you connect a
+            Withings account. See{" "}
+            <a
+              href="https://www.withings.com/us/en/legal/privacy-policy"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Withings&apos; Privacy Policy
+            </a>
+            . Access tokens are encrypted at rest on the instance.
+          </li>
+          <li>
             <strong>Object storage</strong>: S3-compatible storage (MinIO or a cloud bucket) for
             uploads.
           </li>
@@ -218,6 +230,23 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
           credential that you can revoke from either product; unlinking removes the synced
           medications from the MyAllyFile profile. MyAllyFile is a separate service with its own
           privacy policy.
+        </p>
+        <p>
+          <strong className="text-[var(--color-text)]">Withings (optional).</strong> If you connect
+          a household member to a Withings account, Domi Ops imports that person&apos;s blood
+          pressure readings (systolic, diastolic, pulse, and when each was taken) as ordinary
+          health entries, including past readings from the period you choose when you connect, and
+          new ones as the cuff syncs. They are protected like any other health entry. Withings&apos;
+          permission for this covers body measurements generally; Domi Ops reads only blood
+          pressure and pulse and ignores the rest. Nothing about the person is sent to Withings:
+          Domi Ops only asks Withings to notify it when there is new data. Readings Withings cannot
+          attribute to one person, such as on a cuff shared by a household, are left out until
+          they are assigned in the Withings app. The connection is stored as encrypted
+          credentials that you can revoke from either product. Unlinking stops new readings and
+          asks Withings to stop notifying Domi Ops; readings already imported stay in Domi Ops
+          until you delete them, and Withings keeps its own copy under its own privacy policy.
+          Domi Ops does not change or delete anything at Withings, and a reading removed or edited
+          in the Withings app is not changed in Domi Ops.
         </p>
       </section>
 
@@ -307,7 +336,8 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
           >
             Google Account
           </a>
-          , disable Web Push, turn off optional modules (within what the instance enables), and
+          , disconnect a Withings cuff from Health (Checks), disable Web Push, turn off optional
+          modules (within what the instance enables), and
           turn anonymized metrics on or off. See also the <a href={termsHref}>Terms of Service</a>.
         </p>
       </section>
@@ -359,6 +389,20 @@ export function TermsOfServiceContent({ privacyHref }: { privacyHref: string }) 
           You must provide accurate account details and keep credentials confidential. Household
           owners and admins may provision additional members, including children. You are
           responsible for activity under those accounts.
+        </p>
+      </section>
+
+      <section>
+        <h2>Connected services</h2>
+        <p>
+          Optional integrations (such as Google, MyAllyFile, Withings and Stripe) are separate
+          services with their own terms and privacy policies, and you are responsible for how you
+          use them. Connect only accounts you own or are authorized to connect, and for a child or
+          another household member only with their or their guardian&apos;s permission. Readings and
+          records imported from a connected service are shown as received. Domi Ops is not a
+          medical device and does not give medical advice; do not rely on it for diagnosis or
+          emergency care. An integration may change or stop working if the other service changes
+          or ends access.
         </p>
       </section>
 

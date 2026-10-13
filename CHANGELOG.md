@@ -8,6 +8,19 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+### Changed
+
+- **Privacy policy and terms cover Withings** (WHO-452). The privacy policy lists Withings as an optional processor and describes what is imported, what is (not) sent, how to disconnect and what stays after unlinking, and the terms gain a short "Connected services" section (separate services, connect only accounts you may, not a medical device). Last-updated date moved to October 13, 2026.
+- **Marketing site mentions the Withings cuff** (WHO-452). The Health page gains a "Blood pressure without the typing" section and a Withings FAQ entry, the blood pressure reminder answer points to it, and the home page health list has a line for it. The "not a medical record system" note now also says not a medical device.
+
+### Fixed
+
+- **Health access checks now stay inside the household** (WHO-454). The shared check behind most health routes let any owner or admin through for any member id, including one from a different household, so each route had to guard that itself (WHO-402). It now confirms the member is in the caller's household before the admin shortcut applies. Nothing was readable or writable across households before, since each query is scoped to the caller's household and row level security backs that up; this closes the gap for routes added later. No migration, no new environment variables.
+
+### Added
+
+- **Withings blood pressure cuff sync** (WHO-452, WHO-453). A person can be connected to a Withings account from a new "Blood pressure cuff (Withings)" panel at the top of Health, Checks, and readings from a Withings cuff are imported as ordinary vitals entries: new ones within seconds of the cuff syncing (Withings notifies Domi Ops, and the worker pulls), plus the history from before the link, over a window you choose at connect time (last 30 or 90 days, a year, or everything Withings has). The panel shows each person's state (importing history, connected, disconnected, needs attention), with Sync now, Import history again over a new window, and Unlink. Scheduled blood pressure checks pick the readings up through the usual 30 minute window, so a slot fills in by itself. Deleting an imported reading keeps it deleted, and unlinking then reconnecting the same Withings account imports nothing twice. Readings Withings can't attribute to one person (a shared cuff) are left out until they are assigned. A reading deleted or edited inside the Withings app is not changed in Domi Ops. Who can connect a cuff follows scheduled checks: the person, or anyone with `events: write` on them. Needs a Withings developer app per deployment. **Migration `0094`** adds two tables (requires `npm run db:migrate`; the hosted tag deploy runs it). **New optional environment variables** `WITHINGS_CLIENT_ID` and `WITHINGS_CLIENT_SECRET`; unset, the feature is off and the panel does not appear. See [docs/WITHINGS.md](docs/WITHINGS.md).
+
 ## [0.8.4] - 2026-10-09
 
 Refreshes the public site's screenshots and the demo household. No app behavior changes, no migrations, no new environment variables.

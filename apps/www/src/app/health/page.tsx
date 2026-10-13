@@ -5,7 +5,7 @@ import { pageSocial } from "@/lib/og";
 
 const TITLE = "Family medication and health tracker | Domi Ops";
 const DESCRIPTION =
-  "Grouped medication reminders, dose history, appointments, and vitals for everyone in your household. Encrypted at rest, shared only with who you choose.";
+  "Grouped medication reminders, dose history, appointments, and vitals, including blood pressure from a Withings cuff, for everyone in your household. Encrypted at rest, shared only with who you choose.";
 
 export const metadata = {
   title: TITLE,
@@ -22,6 +22,8 @@ const FAQ_KEYS = [
   "Does it know how many pills are left?",
   "Is the health module HIPAA-compliant?",
   "Does Domi Ops work with MyAllyFile?",
+  "Can it remind someone to take blood pressure or weight readings?",
+  "Does it work with a Withings blood pressure cuff?",
   "Who can see and edit a family member's health records?",
   "Do you sell or share my data?",
   "What happens to my data if I cancel Cloud?",
@@ -63,6 +65,10 @@ export default function HealthPage() {
           body: "Link a member to their MyAllyFile profile and their current medications are copied there whenever they change, so the QR code on the fridge or the keychain never lists last month's pills. It only goes one way, you link it on purpose from Settings, and it needs a MyAllyFile Plus or Pro plan.",
         },
         {
+          title: "Blood pressure without the typing",
+          body: "Connect a Withings cuff and the readings arrive on their own, past ones included, and fill the scheduled blood pressure checks they fall near. Nobody types numbers, and nobody gets a reminder for a reading already taken. It reads blood pressure and pulse only, nothing goes back to Withings, and a cuff the household shares won't put one person's reading in another's record. You connect it on purpose from Health, and it works on Cloud or on your own server with your own Withings app.",
+        },
+        {
           title: "On the household calendar",
           body: "Appointments and medication times appear next to everything else, so a doctor's visit doesn't collide with a co-op day. Track parents, kids, and grandparents in one place, each with their own records and sharing.",
         },
@@ -81,7 +87,7 @@ export default function HealthPage() {
       ]}
       notYet={{
         title: "What this is, and isn't",
-        body: "Domi Ops is a household tool, not a medical record system. It isn't a healthcare provider and makes no HIPAA claims. It doesn't replace your doctor's or pharmacy's records; it helps your family remember, share, and keep track.",
+        body: "Domi Ops is a household tool, not a medical record system or a medical device. It isn't a healthcare provider and makes no HIPAA claims. It doesn't replace your doctor's or pharmacy's records; it helps your family remember, share, and keep track.",
       }}
       faq={FAQ_ITEMS.filter((i) => FAQ_KEYS.includes(i.q))}
       closing={{

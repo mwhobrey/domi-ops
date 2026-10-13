@@ -18,6 +18,7 @@ import {
   ensureHealthCheckReminderScheduler,
   ensureHealthSupplyReminderScheduler,
   ensureMyallyfileSyncScheduler,
+  ensureWithingsSyncScheduler,
 } from "@domi-ops/calendar-sync";
 
 const env = loadEnv();
@@ -36,12 +37,28 @@ const CROSS_TENANT_SCAN_JOBS = new Set<SyncJobName>([
   "health.check.reminder.scan",
   "health.supply.reminder.scan",
   "myallyfile.sync.scan",
+  "withings.sync.scan",
 ]);
+
+/**
+ * Jobs that open their own short household-scoped transactions instead of running inside one. They
+ * call a third party between database writes and hold a secret that party rotates on use (Withings
+ * retires the old refresh token when it issues a new one), so one long transaction that can roll back,
+ * or be cut off by a deploy, would lose it.
+ */
+const OWN_CONTEXT_JOBS = new Set<SyncJobName>(["withings.sync.household"]);
 
 const worker = new Worker<{ name: SyncJobName; payload: SyncJobPayload }>(
   SYNC_QUEUE,
   async (job) => {
     const { name, payload } = job.data;
+
+    if (OWN_CONTEXT_JOBS.has(name)) {
+      if (!payload.householdId || payload.householdId === "scan") {
+        throw new Error(`householdId required for job ${name}`);
+      }
+      return runCalendarSyncJob(db, env, name, payload);
+    }
 
     if (CROSS_TENANT_SCAN_JOBS.has(name)) {
       return withWorkerScanContext(db, (scanDb) =>
@@ -116,6 +133,10 @@ void ensureHealthSupplyReminderScheduler(redisUrl).catch((err) => {
 
 void ensureMyallyfileSyncScheduler(redisUrl).catch((err) => {
   console.error("Failed to schedule MyAllyFile sync scan", err);
+});
+
+void ensureWithingsSyncScheduler(redisUrl).catch((err) => {
+  console.error("Failed to schedule Withings sync scan", err);
 });
 
 console.log(`domi-ops worker listening on queue ${SYNC_QUEUE}`);

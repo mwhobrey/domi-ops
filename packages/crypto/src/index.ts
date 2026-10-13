@@ -333,6 +333,45 @@ export function verifyHealthCheckPushActionToken(
   return claims && claims.actions.every((a) => a === "skipped") ? claims : null;
 }
 
+/**
+ * Claims for the token carried in a Withings webhook's callback URL (WHO-452). Withings does not
+ * sign its notifications, so the URL we subscribe with is the credential: it names one link in one
+ * household and is signed with the server's secret. It confers one power, "ask for a sync of this
+ * link", so it has no expiry; rotating the secret simply makes the link re-subscribe.
+ */
+export type WithingsWebhookClaims = { v: 1; kind: "withings-webhook"; householdId: string; linkId: string };
+
+export function mintWithingsWebhookToken(input: { householdId: string; linkId: string }, secret: string): string {
+  if (!secret) throw new Error("withings_webhook_secret_required");
+  const claims: WithingsWebhookClaims = { v: 1, kind: "withings-webhook", ...input };
+  const payloadB64 = Buffer.from(JSON.stringify(claims), "utf8").toString("base64url");
+  return `${payloadB64}.${signHealthMedPayload(payloadB64, secret)}`;
+}
+
+export function verifyWithingsWebhookToken(token: string, secret: string): WithingsWebhookClaims | null {
+  if (!token || !secret) return null;
+  const dot = token.indexOf(".");
+  if (dot <= 0 || dot === token.length - 1) return null;
+  const payloadB64 = token.slice(0, dot);
+  const sigBuf = Buffer.from(token.slice(dot + 1));
+  const expBuf = Buffer.from(signHealthMedPayload(payloadB64, secret));
+  if (sigBuf.length !== expBuf.length || !timingSafeEqual(sigBuf, expBuf)) return null;
+  try {
+    const raw = JSON.parse(Buffer.from(payloadB64, "base64url").toString("utf8")) as Record<string, unknown>;
+    if (
+      raw.v !== 1 ||
+      raw.kind !== "withings-webhook" ||
+      typeof raw.householdId !== "string" ||
+      typeof raw.linkId !== "string"
+    ) {
+      return null;
+    }
+    return { v: 1, kind: "withings-webhook", householdId: raw.householdId, linkId: raw.linkId };
+  } catch {
+    return null;
+  }
+}
+
 /** Resolve signing secret for med push tokens. */
 export function healthMedPushActionSecret(env: {
   ENCRYPTION_KEY?: string;

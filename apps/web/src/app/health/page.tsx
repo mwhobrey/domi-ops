@@ -22,6 +22,8 @@ export default async function HealthPage({
     appointment?: string;
     member?: string;
     supply?: string;
+    /** What the Withings round trip reported; see `withingsResultNotice`. */
+    withings?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -61,6 +63,7 @@ export default async function HealthPage({
         initialFillMemberId={params.member}
         initialFillDate={params.appointment}
         initialSupplyMedicationId={params.supply}
+        initialWithingsResult={params.withings}
         pushAction={
           params.token && params.action && params.scheduledAt && params.medication
             ? {

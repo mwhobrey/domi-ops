@@ -23,7 +23,11 @@ export const FAQ_ITEMS: FaqItem[] = [
   },
   {
     q: "Can it remind someone to take blood pressure or weight readings?",
-    a: "Yes. Scheduled health checks work like medication reminders, but for measurements: set a check for a person (say, blood pressure four times a day), and Domi Ops sends a push reminder at each time. If the reading is already logged, no reminder goes out. You can bundle several checks into one reminder, skip a check right from the notification, and see adherence and blood pressure reports for date ranges of up to a year.",
+    a: "Yes. Scheduled health checks work like medication reminders, but for measurements: set a check for a person (say, blood pressure four times a day), and Domi Ops sends a push reminder at each time. If the reading is already logged, no reminder goes out. You can bundle several checks into one reminder, skip a check right from the notification, and see adherence and blood pressure reports for date ranges of up to a year. With a Withings cuff the readings can arrive on their own, so a check fills in without anyone typing a number.",
+  },
+  {
+    q: "Does it work with a Withings blood pressure cuff?",
+    a: "Yes, on Domi Ops Cloud. Connect a person's Withings account from Health, then Checks, and choose how far back to import, from the last 30 days up to everything Withings has. After that their readings arrive on their own: systolic, diastolic, and pulse, usually within seconds of the cuff syncing. A reading close to a scheduled check fills it in, so nobody types numbers or gets reminded about a reading already taken. It only goes one way: Domi Ops reads blood pressure and pulse, and nothing is sent back to Withings. Readings Withings can't pin on one person, like a cuff the whole household shares, are left out until you assign them in the Withings app. Unlinking stops new readings and keeps what's already imported; a reading you edit or delete inside the Withings app isn't changed here. Self-hosting works too, but you register your own Withings developer app and add its keys. Domi Ops is a household tool, not a medical device.",
   },
   {
     q: "Can it help me fill a pill organizer and remember refills?",

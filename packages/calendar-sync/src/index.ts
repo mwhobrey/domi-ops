@@ -29,7 +29,9 @@ export type SyncJobName =
   | "expense.budget.household"
   | "school.reminder.household"
   | "drive.quota.household"
-  | "myallyfile.sync.scan";
+  | "myallyfile.sync.scan"
+  | "withings.sync.scan"
+  | "withings.sync.household";
 
 export interface SyncJobPayload {
   householdId: string;
@@ -52,6 +54,7 @@ export {
   ensureHealthCheckReminderScheduler,
   ensureHealthSupplyReminderScheduler,
   ensureMyallyfileSyncScheduler,
+  ensureWithingsSyncScheduler,
   householdScanEnqueuer,
 } from "./queue.js";
 export { runCalendarSyncJob, syncConnection, pullLinkedCalendar } from "./sync.js";
@@ -207,6 +210,29 @@ export {
   type MyallyfileErrorCode,
   type SnapshotMedication,
 } from "./myallyfile-sync.js";
+export {
+  WITHINGS_APPLI_BLOOD_PRESSURE,
+  WITHINGS_DEFAULT_BACKFILL_DAYS,
+  WITHINGS_MAX_BACKFILL_DAYS,
+  WITHINGS_SCOPE,
+  WithingsError,
+  decryptWithingsSecret,
+  encryptWithingsSecret,
+  fanOutWithingsSync,
+  markWithingsSyncNeeded,
+  processWithingsLink,
+  shapeBloodPressureGroup,
+  syncWithingsHousehold,
+  withingsAuthorizeUrl,
+  withingsBackoffMs,
+  withingsCurrentAccessToken,
+  withingsExchangeCode,
+  withingsSubscribe,
+  withingsUnsubscribe,
+  type ShapedBloodPressure,
+  type WithingsErrorCode,
+  type WithingsMeasureGroup,
+} from "./withings-sync.js";
 export { checkHouseholdBudgetAlerts, scanBudgetAlerts } from "./budget-alert-scan.js";
 export {
   inferGoogleCategories,
