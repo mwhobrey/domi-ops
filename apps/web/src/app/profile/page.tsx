@@ -3,6 +3,7 @@ import { AppShell } from "../../components/AppShell";
 import { FeedbackCard } from "../../components/FeedbackCard";
 import { GlanceConfigCard, type GlanceTileOption } from "../../components/GlanceConfigCard";
 import { MyAllyFileSettings } from "../../components/MyAllyFileSettings";
+import { WithingsSettings } from "../../components/health/WithingsSettings";
 import { OnboardingReplayCard } from "../../components/OnboardingReplayCard";
 import { PendingTourRunner } from "../../components/PendingTourRunner";
 import { ProfileEditor } from "../../components/ProfileEditor";
@@ -116,6 +117,7 @@ export default async function ProfilePage() {
             />
             <GlanceConfigCard available={availableGlanceTiles} initialConfig={glanceConfig} />
             <MyAllyFileSettings />
+            <WithingsSettings />
             <OnboardingReplayCard />
             <FeedbackCard
               endpoint={process.env.TELEMETRY_ENDPOINT ?? "https://app.domi-ops.com/api/telemetry"}
