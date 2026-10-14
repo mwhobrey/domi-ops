@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
-import { and, eq, isNull, like, sql } from "drizzle-orm";
+import { and, eq, isNull, like, notInArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import type { Env } from "@domi-ops/config";
 import { mintHealthCheckPushActionToken, mintHealthMedPushActionToken } from "@domi-ops/crypto";
@@ -1032,6 +1032,21 @@ maybeDescribe("health checks routes (integration)", () => {
     });
 
     describe("offering a reading that did not count on its own (attach prompt)", () => {
+      // These make many checks for Ally; another suite counts how many a person has, so leave none behind.
+      let keep: string[] = [];
+      beforeEach(async () => {
+        keep = await withHouseholdContext(baseDb, people.mom!.householdId, async (tx) =>
+          (await tx.select({ id: healthChecks.id }).from(healthChecks).where(eq(healthChecks.householdId, people.mom!.householdId))).map((r) => r.id),
+        );
+      });
+      afterEach(async () => {
+        await withHouseholdContext(baseDb, people.mom!.householdId, (tx) =>
+          tx
+            .delete(healthChecks)
+            .where(and(eq(healthChecks.householdId, people.mom!.householdId), keep.length > 0 ? notInArray(healthChecks.id, keep) : undefined)),
+        );
+      });
+
       it("offers an early reading to the next check, with what it says", async () => {
         const check = await makeBpCheck();
         // 05:00 is 3 hours before 08:00: too far to count by itself, near enough to ask about.
@@ -1124,6 +1139,23 @@ maybeDescribe("health checks routes (integration)", () => {
         // The caller who owns the closer reading is offered it; dad is offered his own, not nothing.
         expect((await slotsFor("mom", check.id, `from=${PAST}&to=${PAST}`)).slots[0].suggestion?.eventId).toBe(hidden);
         expect((await slotsFor("dad", check.id, `from=${PAST}&to=${PAST}`)).slots[0].suggestion?.eventId).toBe(dads);
+      });
+
+      it("does not offer a reading that already counts for a slot on a neighbouring day", async () => {
+        // Slots at 02:00 and 23:45. A reading at 23:50 on the 3rd counts for 23:45 on the 3rd on its own.
+        const check = await makeBpCheck({ schedule: { times: ["02:00", "23:45"] } });
+        const reading = await readingAt("2025-03-03T23:50:00.000Z");
+
+        // Viewing only the 4th, that reading is 2h10 before the 4th's 02:00 slot. It is not up for grabs:
+        // attaching it there would take it away from the 23:45 slot it already completes.
+        const fourth = await slotsFor("mom", check.id, "from=2025-03-04&to=2025-03-04");
+        expect(compact(fourth.slots)).toEqual(["02:00 overdue", "23:45 overdue"]);
+        expect(fourth.slots.map((x) => x.suggestion ?? null)).toEqual([null, null]);
+
+        // And on its own day it really does count, so the two views agree.
+        const third = await slotsFor("mom", check.id, "from=2025-03-03&to=2025-03-03");
+        expect(compact(third.slots)).toEqual(["02:00 overdue", "23:45 done"]);
+        expect(third.slots[1].eventId).toBe(reading);
       });
 
       it("offers nothing for an interval check, whose slots are made from the readings", async () => {

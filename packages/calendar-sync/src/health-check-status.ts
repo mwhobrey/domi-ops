@@ -348,13 +348,24 @@ export async function loadAttachSuggestions(
   if (eligible.length === 0) return result;
 
   const data = await gatherSlotData(db, { ...input, checks: eligible, paddingMs: CHECK_ATTACH_SUGGEST_RADIUS_MS });
+  // A reading can already count, on its own, for a slot on the day before or after the days asked for (a
+  // 23:50 reading for a 23:45 check, viewed from the next day). `input.statuses` does not reach there, and
+  // offering that reading would take it from the slot it completes, so judge "spoken for" over a day either
+  // side. The offer radius is hours, so one day is always enough.
+  const wide = await loadCheckSlotStatuses(db, env, {
+    checks: eligible,
+    from: addDaysIso(input.from, -1),
+    to: addDaysIso(input.to, 1),
+    timeZone: input.timeZone,
+    now: input.now,
+  });
 
   // Each check's own candidates: qualifying, and not spoken for by that check.
   const candidatesByCheck = new Map<string, CheckSlotEvent[]>();
   for (const check of eligible) {
     const spokenFor = new Set<string>();
     for (const l of data.allLogs) if (l.checkId === check.id && l.healthEventId) spokenFor.add(l.healthEventId);
-    for (const s of input.statuses.get(check.id) ?? []) if (s.eventId) spokenFor.add(s.eventId);
+    for (const s of wide.get(check.id) ?? []) if (s.eventId) spokenFor.add(s.eventId);
     const forCheck = slotCheckFor(check, env);
     candidatesByCheck.set(
       check.id,
