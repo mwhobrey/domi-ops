@@ -223,8 +223,10 @@ maybeDescribe("withings routes (integration)", () => {
       expect(url.searchParams.get("redirect_uri")).toBe("https://app.test.example/api/integrations/withings/callback");
       expect(url.searchParams.get("scope")).toBe("user.metrics");
 
-      const [, prefix, state, payload] = vi.mocked(setOAuthState).mock.calls[0] as unknown as [string, string, string, Record<string, unknown>];
+      const [, prefix, state, payload, ttlSec] = vi.mocked(setOAuthState).mock.calls[0] as unknown as [string, string, string, Record<string, unknown>, number];
       expect(prefix).toBe(WITHINGS_OAUTH_PREFIX);
+      // Long enough to sign up, subscribe to Withings+ and sign in again at Withings.
+      expect(ttlSec).toBe(30 * 60);
       expect(url.searchParams.get("state")).toBe(state);
       expect(payload).toEqual({
         userId: people[as]!.userId,

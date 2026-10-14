@@ -5,7 +5,15 @@ import { WITHINGS_MAX_BACKFILL_DAYS, WITHINGS_DEFAULT_BACKFILL_DAYS } from "@dom
 
 export const WITHINGS_OAUTH_PREFIX = "oauth:withings";
 
-/** What the connect step parks in Redis while the user is at Withings. Single use, 10 minute TTL. */
+/**
+ * How long the connect step's saved state lives. Generous on purpose: someone with a new Withings account has to
+ * sign up or sign in, possibly subscribe to Withings+ (needed for accounts created after October 12, 2026), and
+ * sign in again, which easily outruns the 10 minute default. It stays single use and tied to the signed-in user,
+ * so a longer window does not weaken the check.
+ */
+export const WITHINGS_OAUTH_STATE_TTL_SEC = 30 * 60;
+
+/** What the connect step parks in Redis while the user is at Withings. Single use, 30 minute TTL. */
 export type WithingsOAuthState = {
   userId: string;
   householdId: string;

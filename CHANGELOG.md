@@ -8,6 +8,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+### Fixed
+
+- **Connecting Withings no longer times out while you sign up or subscribe to Withings+** (WHO-457). The sign-in had to finish within 10 minutes, which is not enough when you also have to create an account, subscribe to Withings+ and sign in again. It now has 30 minutes. No migration, no new environment variables.
+
 ### Changed
 
 - **Withings+ disclosure** (WHO-455). Withings now requires a Withings+ membership for Withings accounts created after October 12, 2026 to share data with apps on its Start for Free API plan (Enterprise plans can be exempt for specific uses); older accounts are unaffected. The cuff panel says so, the failed-connect message points to it, the marketing FAQ and Health page mention it, and the terms note that connected services can need their own paid plan. No price is quoted. No migration, no new environment variables.

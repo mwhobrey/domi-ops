@@ -78,7 +78,7 @@ export function withingsResultNotice(result: string | undefined): WithingsNotice
     case "denied":
       return { variant: "info", message: "Withings access wasn't approved, so nothing was connected." };
     case "expired":
-      return { variant: "error", message: "That Withings sign-in took too long and expired. Choose Connect Withings to start again." };
+      return { variant: "error", message: "That Withings sign-in took too long and expired (it has to finish within 30 minutes). Choose Connect Withings to start again." };
     case "forbidden":
       return { variant: "error", message: "You don't have permission to connect a cuff for that person." };
     case "already_linked":
