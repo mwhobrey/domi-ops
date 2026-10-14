@@ -5,10 +5,12 @@ import { HealthRow } from "./TodayTabRows";
 import {
   checkRowValues,
   checkSlotBadge,
+  describeOffer,
   isCheckSlotPending,
   pendingRows,
   slotEditableEvent,
   summarizeCheckRows,
+  visibleOffer,
   type CheckGroupCard,
 } from "./health-check-helpers";
 import type { CheckSlotRow, HealthEvent } from "./health-types";
@@ -38,6 +40,12 @@ type Actions = {
   onSkip: (row: CheckSlotRow) => void;
   onUndo: (row: CheckSlotRow) => void;
   onEdit: (event: HealthEvent) => void;
+  /** Readings the person has already said are not for the slot they were offered for. */
+  dismissedOffers: ReadonlySet<string>;
+  /** Link the offered reading to this slot. */
+  onAttach: (row: CheckSlotRow) => void;
+  /** "Not this one": stop offering this reading for this slot. */
+  onDismissOffer: (row: CheckSlotRow) => void;
 };
 
 /** One slot of one check: where it stands, what was recorded, and what can be done about it. */
@@ -51,7 +59,10 @@ function CheckSlotLine({ row, actions, nested = false }: { row: CheckSlotRow; ac
   const busy = actions.busyKey === key;
   const allowed = actions.canAct(row);
   const editable = allowed ? slotEditableEvent(row, actions.events) : undefined;
+  // A reading too far from the slot to count by itself, offered for the person to attach.
+  const offer = allowed ? visibleOffer(row, actions.dismissedOffers) : null;
   return (
+    <div className="space-y-1.5">
     <HealthRow
       rowRef={highlighted ? actions.highlightRef : undefined}
       highlighted={highlighted}
@@ -91,6 +102,26 @@ function CheckSlotLine({ row, actions, nested = false }: { row: CheckSlotRow; ac
         </div>
       }
     />
+    {offer ? (
+      <div
+        className="ml-3 flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius-lg)] border border-dashed border-[var(--color-accent)]/50 bg-[var(--color-accent-subtle)] px-3 py-2 text-sm"
+        data-testid="check-attach-offer"
+      >
+        <span className="min-w-0">
+          <strong className="font-medium text-[var(--color-text)]">Use this reading for this check?</strong>{" "}
+          <span className="text-[var(--color-text-muted)]">{describeOffer(offer, formatSlotTime)}</span>
+        </span>
+        <span className="flex shrink-0 gap-2">
+          <Button size="sm" disabled={busy} onClick={() => actions.onAttach(row)}>
+            Attach
+          </Button>
+          <Button size="sm" variant="secondary" disabled={busy} onClick={() => actions.onDismissOffer(row)}>
+            Not this one
+          </Button>
+        </span>
+      </div>
+    ) : null}
+    </div>
   );
 }
 
@@ -166,6 +197,9 @@ export function TodayChecksCard({
   onEdit,
   onLogNext,
   loggingNext,
+  dismissedOffers,
+  onAttach,
+  onDismissOffer,
 }: {
   title: string;
   /** Slots not covered by a group. */
@@ -186,11 +220,27 @@ export function TodayChecksCard({
   /** Walk through these rows one log sheet after another. */
   onLogNext: (rows: CheckSlotRow[]) => void;
   loggingNext: boolean;
+  dismissedOffers: ReadonlySet<string>;
+  onAttach: (row: CheckSlotRow) => void;
+  onDismissOffer: (row: CheckSlotRow) => void;
 }) {
   const allRows = [...rows, ...groupCards.flatMap((c) => c.rows)];
   if (!loading && allRows.length === 0) return null;
   const summary = summarizeCheckRows(allRows);
-  const actions: Actions = { events, highlightKeys, highlightRef, busyKey, canAct, onLog, onSkip, onUndo, onEdit };
+  const actions: Actions = {
+    events,
+    highlightKeys,
+    highlightRef,
+    busyKey,
+    canAct,
+    onLog,
+    onSkip,
+    onUndo,
+    onEdit,
+    dismissedOffers,
+    onAttach,
+    onDismissOffer,
+  };
 
   const entries: Entry[] = [
     ...rows.map((row): Entry => ({ kind: "row", at: row.slot.scheduledAt, row })),

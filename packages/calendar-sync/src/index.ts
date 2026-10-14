@@ -83,10 +83,12 @@ export {
   type IntervalPendingDose,
   type IntervalEditLog,
 } from "./med-interval-schedule.js";
-export { datesBetween, loadCheckSlotStatuses } from "./health-check-status.js";
+export { datesBetween, loadAttachSuggestions, loadCheckSlotStatuses, type AttachSuggestion } from "./health-check-status.js";
 export { groupCoversCheckSlot } from "./health-check-group-reminders.js";
 export { parseCheckTemplate, type CheckTemplate } from "./health-check-template.js";
 export {
+  CHECK_ATTACH_SUGGEST_RADIUS_MINUTES,
+  CHECK_ATTACH_SUGGEST_RADIUS_MS,
   CHECK_SLOT_TOLERANCE_MINUTES,
   CHECK_SLOT_TOLERANCE_MS,
   computeSlotStatuses,
@@ -95,6 +97,7 @@ export {
   intervalCheckSlots,
   matchEventsToSlots,
   scheduledCheckSlots,
+  suggestAttachments,
   type CheckForSlots,
   type CheckSlotEvent,
   type CheckSlotLog,

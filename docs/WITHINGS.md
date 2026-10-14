@@ -110,6 +110,9 @@ configured on the server (`GET /api/health/withings` says `enabled: false`) or t
   transaction (`OWN_CONTEXT_JOBS` in the worker): the lease, the refresh, each page and the outcome are each
   committed separately, and Withings is only called between them. A worker killed mid-sync (a deploy) loses
   at most the page it was importing, never a token it had already been given.
+- **Readings that miss a scheduled check.** A reading fills a slot on its own within 30 minutes. One taken
+  earlier or later is offered inline on the nearest open check (see "attach prompt" in
+  [HEALTH_CHECKS.md](./HEALTH_CHECKS.md)): the person taps Attach or Not this one.
 - **Only blood pressure.** A group needs both systolic and diastolic. A lone pulse (a scale, say) is
   skipped. Entries are private to the person and their `events` grantees, like any health entry.
 - **Backfill size.** One pull pages up to 200 pages. A history larger than that fails and retries, which

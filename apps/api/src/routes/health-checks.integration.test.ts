@@ -1031,6 +1031,87 @@ maybeDescribe("health checks routes (integration)", () => {
       expect(asStranger.slots[1]).toMatchObject({ source: "event", eventId: null });
     });
 
+    describe("offering a reading that did not count on its own (attach prompt)", () => {
+      it("offers an early reading to the next check, with what it says", async () => {
+        const check = await makeBpCheck();
+        // 05:00 is 3 hours before 08:00: too far to count by itself, near enough to ask about.
+        const early = await readingAt(`${PAST}T05:00:00.000Z`);
+        const res = await slotsFor("mom", check.id, `from=${PAST}&to=${PAST}`);
+        expect(compact(res.slots)).toEqual(["08:00 overdue", "12:00 overdue"]);
+        expect(res.slots[0].suggestion).toMatchObject({ eventId: early, startedAt: `${PAST}T05:00:00.000Z` });
+        expect((res.slots[0].suggestion.readings as Json[]).map((r) => r.metric).sort()).toEqual(BP.slice().sort());
+        // Noon is 7 hours away: nothing for it.
+        expect(res.slots[1].suggestion).toBeNull();
+      });
+
+      it("offers a reading between two checks to the closer, and only to that one", async () => {
+        const check = await makeBpCheck({ schedule: { times: ["08:00", "16:00"] } });
+        // 11:00 is 3h from 08:00 and 5h from 16:00; the reading is not the same distance from both.
+        await readingAt(`${PAST}T11:00:00.000Z`);
+        const res = await slotsFor("mom", check.id, `from=${PAST}&to=${PAST}`);
+        expect(res.slots.map((x) => x.suggestion?.eventId ?? null).filter(Boolean)).toHaveLength(1);
+        expect(res.slots[0].suggestion).not.toBeNull();
+        expect(res.slots[1].suggestion).toBeNull();
+      });
+
+      it("attaching it answers the slot, and the offer goes away", async () => {
+        const check = await makeBpCheck();
+        const early = await readingAt(`${PAST}T05:00:00.000Z`);
+        const before = await slotsFor("mom", check.id, `from=${PAST}&to=${PAST}`);
+        const offered = before.slots[0].suggestion;
+
+        const attach = await call("mom", "POST", `/checks/${check.id}/log`, {
+          scheduledAt: before.slots[0].scheduledAt,
+          eventId: offered.eventId,
+        });
+        expect(attach.status).toBe(201);
+
+        const after = await slotsFor("mom", check.id, `from=${PAST}&to=${PAST}`);
+        expect(compact(after.slots)).toEqual(["08:00 done", "12:00 overdue"]);
+        expect(after.slots[0]).toMatchObject({ source: "log", eventId: early, suggestion: null });
+        expect(after.slots[1].suggestion).toBeNull();
+      });
+
+      it("offers nothing for a slot that is already answered, or for a reading that already counts", async () => {
+        const check = await makeBpCheck();
+        await readingAt(`${PAST}T12:10:00.000Z`); // counts for 12:00 on its own
+        await readingAt(`${PAST}T05:00:00.000Z`);
+        await call("mom", "POST", `/checks/${check.id}/log`, { scheduledAt: `${PAST}T08:00:00.000Z`, status: "skipped" });
+        const res = await slotsFor("mom", check.id, `from=${PAST}&to=${PAST}`);
+        expect(compact(res.slots)).toEqual(["08:00 skipped", "12:00 done"]);
+        expect(res.slots.every((x) => x.suggestion == null)).toBe(true);
+      });
+
+      it("does not offer a reading that is not the kind the check asks for", async () => {
+        const check = await makeBpCheck();
+        await readingAt(`${PAST}T05:00:00.000Z`, ["weight"]);
+        await readingAt(`${PAST}T06:00:00.000Z`, BP, "pain");
+        const res = await slotsFor("mom", check.id, `from=${PAST}&to=${PAST}`);
+        expect(res.slots.every((x) => x.suggestion == null)).toBe(true);
+      });
+
+      it("does not name a reading the caller may not open", async () => {
+        const check = await makeBpCheck({ visibility: "household" });
+        await readingAt(`${PAST}T05:00:00.000Z`);
+        // mom created it (private); the stranger can see the check but not the reading.
+        expect((await slotsFor("mom", check.id, `from=${PAST}&to=${PAST}`)).slots[0].suggestion).not.toBeNull();
+        expect((await slotsFor("stranger", check.id, `from=${PAST}&to=${PAST}`)).slots[0].suggestion).toBeNull();
+      });
+
+      it("offers nothing for an interval check, whose slots are made from the readings", async () => {
+        const check = await makeBpCheck({
+          scheduleKind: "interval",
+          schedule: { everyMinutes: 240, anchor: "first_taken", stop: { mode: "midnight" } },
+        });
+        await readingAt(`${PAST}T05:00:00.000Z`);
+        const res = await slotsFor("mom", check.id, `from=${PAST}&to=${PAST}`);
+        expect(res.status).toBe(200);
+        expect(res.slots.every((x) => x.suggestion == null)).toBe(true);
+        // An interval check has a "start" slot today, which other tests' counts would pick up.
+        expect((await call("mom", "DELETE", `/checks/${check.id}`)).status).toBeLessThan(300);
+      });
+    });
+
     it("lays the day out in the caller's time zone", async () => {
       const check = await makeBpCheck({ schedule: { times: ["08:00"] } });
       const utc = await slotsFor("mom", check.id, `from=${PAST}&to=${PAST}`);

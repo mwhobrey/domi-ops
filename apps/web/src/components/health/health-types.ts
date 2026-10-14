@@ -411,6 +411,17 @@ export interface CheckSlot {
   logId: string | null;
   /** The completing entry, only when the viewer may open it. */
   eventId: string | null;
+  /**
+   * A reading near this unanswered slot that was not close enough to count by itself. The person can
+   * attach it to the slot; it is only ever a reading the viewer may open.
+   */
+  suggestion?: CheckSlotSuggestion | null;
+}
+
+export interface CheckSlotSuggestion {
+  eventId: string;
+  startedAt: string;
+  readings: VitalsReading[];
 }
 
 /** One line on the Today tab: a slot of a check. */

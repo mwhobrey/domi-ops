@@ -11,12 +11,14 @@ import type { healthChecks } from "@domi-ops/db";
 import { and, between, eq, inArray } from "drizzle-orm";
 import { parseFixedTimeSchedule } from "./health-schedule.js";
 import {
+  CHECK_ATTACH_SUGGEST_RADIUS_MS,
   CHECK_SLOT_TOLERANCE_MS,
   computeSlotStatuses,
   eventQualifiesForCheck,
   excludeInactiveInstants,
   intervalCheckSlots,
   scheduledCheckSlots,
+  suggestAttachments,
   type CheckSlotEvent,
   type CheckSlotLog,
   type PausePeriod,
@@ -79,6 +81,8 @@ async function gatherSlotData(
     now: Date;
     /** Look this much further back for readings (see `loadCheckIntervalLogs`). */
     lookbackMinutes?: number;
+    /** How far past each end of the range to look for readings. Defaults to the slot tolerance. */
+    paddingMs?: number;
   },
 ): Promise<SlotData> {
   const { checks, timeZone, now } = input;
@@ -96,8 +100,9 @@ async function gatherSlotData(
         .filter((c) => c.scheduleKind === "interval")
         .map((c) => parseIntervalSchedule(c.scheduleJson)?.everyMinutes ?? 0),
     ) * 60_000;
-  const windowStart = new Date(rangeStart.getTime() - CHECK_SLOT_TOLERANCE_MS - intervalLookbackMs);
-  const windowEnd = new Date(rangeEnd.getTime() + CHECK_SLOT_TOLERANCE_MS);
+  const padding = input.paddingMs ?? CHECK_SLOT_TOLERANCE_MS;
+  const windowStart = new Date(rangeStart.getTime() - padding - intervalLookbackMs);
+  const windowEnd = new Date(rangeEnd.getTime() + padding);
   const checkIds = checks.map((c) => c.id);
   const householdId = checks[0]!.householdId;
   const today = localDateOfInstant(now, timeZone);
@@ -299,6 +304,61 @@ export async function loadCheckSlotStatuses(
         now,
       }),
     );
+  }
+  return result;
+}
+
+export type AttachSuggestion = { eventId: string; startedAt: Date };
+
+/**
+ * For each unanswered slot of `checks`, a reading the person could attach to it: one that qualifies for
+ * the check but is not yet linked to any of its slots or counted for one, and is within
+ * `CHECK_ATTACH_SUGGEST_RADIUS_MS` of the slot. Pairing is closest-first and one reading goes to one
+ * slot, so a reading is never offered twice (see `suggestAttachments`).
+ *
+ * `statuses` must be what `loadCheckSlotStatuses` returned for the same `checks` and range. Only
+ * fixed-time checks get suggestions: an interval check's slots are made from the readings, so there is
+ * nothing to attach a stray one to. Returns checkId -> slot instant (ms) -> suggestion. Like the
+ * statuses, this looks at all of the person's entries; callers decide which ones they may reveal.
+ */
+export async function loadAttachSuggestions(
+  db: Database,
+  env: Env,
+  input: {
+    checks: HealthCheckRow[];
+    statuses: Map<string, SlotResult[]>;
+    from: string;
+    to: string;
+    timeZone: string;
+    now: Date;
+  },
+): Promise<Map<string, Map<number, AttachSuggestion>>> {
+  const result = new Map<string, Map<number, AttachSuggestion>>();
+  const openStatuses = new Set(["upcoming", "due", "overdue"]);
+  const eligible = input.checks.filter(
+    (c) => c.scheduleKind !== "interval" && (input.statuses.get(c.id) ?? []).some((s) => openStatuses.has(s.status)),
+  );
+  if (eligible.length === 0) return result;
+
+  const data = await gatherSlotData(db, { ...input, checks: eligible, paddingMs: CHECK_ATTACH_SUGGEST_RADIUS_MS });
+  for (const check of eligible) {
+    const slots = input.statuses.get(check.id) ?? [];
+    const spokenFor = new Set<string>();
+    for (const l of data.allLogs) if (l.checkId === check.id && l.healthEventId) spokenFor.add(l.healthEventId);
+    for (const s of slots) if (s.eventId) spokenFor.add(s.eventId);
+
+    const forCheck = slotCheckFor(check, env);
+    const candidates = data.slotEvents.filter((e) => !spokenFor.has(e.id) && eventQualifiesForCheck(e, forCheck));
+    const matched = suggestAttachments({
+      openSlots: slots.filter((s) => openStatuses.has(s.status)).map((s) => s.scheduledAt),
+      events: candidates,
+    });
+    if (matched.size === 0) continue;
+    const bySlot = new Map<number, AttachSuggestion>();
+    for (const [slotMs, event] of matched) {
+      if (event.startedAt) bySlot.set(slotMs, { eventId: event.id, startedAt: event.startedAt });
+    }
+    result.set(check.id, bySlot);
   }
   return result;
 }

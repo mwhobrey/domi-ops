@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildCheckLogContext,
   checkLogSheet,
+  describeOffer,
   checkRowValues,
   checkSlotBadge,
   checkSlotRowsForMember,
@@ -9,6 +10,7 @@ import {
   groupCoversSlot,
   groupHighlightKeys,
   isCheckSlotPending,
+  offerKey,
   parseSlotInstant,
   pendingRows,
   slotCountsByEvent,
@@ -16,6 +18,7 @@ import {
   slotLookupRange,
   splitCheckRowsByGroup,
   summarizeCheckRows,
+  visibleOffer,
 } from "./health-check-helpers";
 import type { CheckSlot, CheckSlotStatus, HealthCheck, HealthCheckGroup, HealthEvent } from "./health-types";
 
@@ -359,5 +362,56 @@ describe("check groups on the Today tab", () => {
       const rows = [{ check: bp, slot: localSlot(8) }];
       expect(splitCheckRowsByGroup(rows, [])).toEqual({ cards: [], loose: rows });
     });
+  });
+});
+
+describe("offered readings (attach prompt)", () => {
+  const offered = {
+    eventId: "e1",
+    startedAt: "2026-10-02T08:56:00.000Z",
+    readings: [
+      { metric: "blood_pressure_systolic" as const, value: 128, unit: "mmHg" },
+      { metric: "blood_pressure_diastolic" as const, value: 82, unit: "mmHg" },
+      { metric: "heart_rate" as const, value: 64, unit: "bpm" },
+    ],
+  };
+  const row = (status: CheckSlotStatus = "overdue", suggestion: typeof offered | null = offered) => ({
+    check: check(),
+    slot: slot("08:00", status, { suggestion }),
+  });
+  const time = (iso: string) => (iso.includes("08:56") ? "8:56 AM" : iso);
+
+  it("describes the reading by when it was taken and what it says", () => {
+    expect(describeOffer(offered, time)).toBe("8:56 AM reading · BP 128/82 · HR 64");
+  });
+
+  it("still describes a reading with no values", () => {
+    expect(describeOffer({ ...offered, readings: [] }, time)).toBe("8:56 AM reading");
+  });
+
+  it("keys a dismissal to the slot and the reading together", () => {
+    const key = offerKey(row());
+    expect(key).toBe("c1|" + Math.floor(Date.parse("2026-10-02T08:00:00.000Z") / 60_000) + "|e1");
+    expect(offerKey(row("overdue", null))).toBeNull();
+    // A different reading offered for the same slot is a different offer.
+    expect(offerKey({ ...row(), slot: { ...row().slot, suggestion: { ...offered, eventId: "e2" } } })).not.toBe(key);
+  });
+
+  it("shows an offer for a waiting slot", () => {
+    for (const status of ["upcoming", "due", "overdue"] as const) {
+      expect(visibleOffer(row(status), new Set())).toEqual(offered);
+    }
+  });
+
+  it("shows nothing for an answered slot, even from a stale list", () => {
+    for (const status of ["done", "skipped", "missed"] as const) {
+      expect(visibleOffer(row(status), new Set())).toBeNull();
+    }
+  });
+
+  it("shows nothing once the person said it is not this one, but still shows a different reading", () => {
+    const dismissed = new Set([offerKey(row())!]);
+    expect(visibleOffer(row(), dismissed)).toBeNull();
+    expect(visibleOffer({ ...row(), slot: { ...row().slot, suggestion: { ...offered, eventId: "e2" } } }, dismissed)).not.toBeNull();
   });
 });

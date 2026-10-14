@@ -192,6 +192,35 @@ export function matchEventsToSlots(input: {
   return matched;
 }
 
+/**
+ * How far from an open slot a reading may be and still be *offered* for it. Wider than the
+ * automatic tolerance on purpose: a reading 30 minutes off just counts, but one taken an hour or three
+ * hours early or late is the person's call, so the app asks instead of deciding.
+ */
+export const CHECK_ATTACH_SUGGEST_RADIUS_MINUTES = 240;
+export const CHECK_ATTACH_SUGGEST_RADIUS_MS = CHECK_ATTACH_SUGGEST_RADIUS_MINUTES * 60_000;
+
+/**
+ * Which unanswered slot should each stray reading be offered to? The same closest-first pairing as
+ * the automatic match (so a reading is offered to one slot only, and a slot gets one reading), over a
+ * wider radius, and only over slots nobody has answered. A reading taken early and nowhere near
+ * another check is offered to the next one; one taken between two checks, to the closer.
+ *
+ * `events` must already be the readings that qualify for the check and are not spoken for (linked to a
+ * slot, or already counted for one). Returns slot instant (ms) -> reading.
+ */
+export function suggestAttachments(input: {
+  openSlots: readonly Date[];
+  events: readonly CheckSlotEvent[];
+  radiusMs?: number;
+}): Map<number, CheckSlotEvent> {
+  return matchEventsToSlots({
+    slots: input.openSlots,
+    events: input.events,
+    toleranceMs: input.radiusMs ?? CHECK_ATTACH_SUGGEST_RADIUS_MS,
+  });
+}
+
 // ---------------------------------------------------------------------------------------------
 // Slot status
 // ---------------------------------------------------------------------------------------------

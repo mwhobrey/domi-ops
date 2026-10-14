@@ -27,6 +27,7 @@ import {
   findDeepLinkedRow,
   groupHighlightKeys,
   isCheckSlotPending,
+  offerKey,
   slotCountsByEvent,
   slotLookupRange,
   splitCheckRowsByGroup,
@@ -81,6 +82,28 @@ import {
   LinkButton,
   SectionHeader,
 } from "./ui";
+
+const DISMISSED_OFFERS_KEY = "domi-ops:dismissed-check-offers";
+const DISMISSED_OFFERS_MAX = 200;
+
+function readDismissedOffers(): ReadonlySet<string> {
+  try {
+    const raw = typeof window === "undefined" ? null : window.localStorage.getItem(DISMISSED_OFFERS_KEY);
+    const list: unknown = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(list) ? list.filter((v): v is string => typeof v === "string") : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function writeDismissedOffers(keys: ReadonlySet<string>): void {
+  try {
+    // Newest last; keep the most recent so the list can't grow without end.
+    window.localStorage.setItem(DISMISSED_OFFERS_KEY, JSON.stringify([...keys].slice(-DISMISSED_OFFERS_MAX)));
+  } catch {
+    /* private mode or storage full: the choice just isn't remembered */
+  }
+}
 
 export function HealthPageClient({
   members,
@@ -172,6 +195,9 @@ export function HealthPageClient({
   const [logQueue, setLogQueue] = useState<CheckSlotRow[]>([]);
   const [checkSlots, setCheckSlots] = useState<Record<string, CheckSlot[]>>({});
   const [checkBusyKey, setCheckBusyKey] = useState<string | null>(null);
+  // Readings the person said are not for the check they were offered for. Per device, which is enough for
+  // a prompt that comes back only when a *different* reading shows up; nothing is lost by saying no.
+  const [dismissedOffers, setDismissedOffers] = useState<ReadonlySet<string>>(readDismissedOffers);
   const [checkHighlight, setCheckHighlight] = useState<Set<string>>(new Set());
   /** The slot of a scheduled check the open log sheet is for. Null for an ad hoc log. */
   const [activeCheckLog, setActiveCheckLog] = useState<{ row: CheckSlotRow; context: CheckLogContext } | null>(null);
@@ -579,6 +605,35 @@ export function HealthPageClient({
     }
   }
 
+  /** Link the offered reading to its slot, the same call as logging a slot with an existing entry. */
+  async function attachOffer(row: CheckSlotRow) {
+    const offer = row.slot.suggestion;
+    if (checkBusyKey || !offer) return;
+    setError(null);
+    setCheckBusyKey(checkSlotKey(row));
+    try {
+      await apiClient.post(`/api/health/checks/${row.check.id}/log`, {
+        scheduledAt: row.slot.scheduledAt,
+        eventId: offer.eventId,
+      });
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not attach that reading");
+    } finally {
+      setCheckBusyKey(null);
+    }
+  }
+
+  function dismissOffer(row: CheckSlotRow) {
+    const key = offerKey(row);
+    if (!key) return;
+    setDismissedOffers((prev) => {
+      const next = new Set(prev).add(key);
+      writeDismissedOffers(next);
+      return next;
+    });
+  }
+
   async function undoCheckSlot(row: CheckSlotRow) {
     if (checkBusyKey || !row.slot.logId) return;
     setError(null);
@@ -811,6 +866,9 @@ export function HealthPageClient({
             onLog={startCheckLog}
             onSkip={(row) => void skipCheckSlot(row)}
             onUndo={(row) => void undoCheckSlot(row)}
+            dismissedOffers={dismissedOffers}
+            onAttach={(row) => void attachOffer(row)}
+            onDismissOffer={dismissOffer}
             onEdit={(ev) => {
               setEditingEvent(ev);
               setEventSheetOpen(true);
