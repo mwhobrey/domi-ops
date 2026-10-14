@@ -39,7 +39,7 @@ API says so (`enabled: false`). It also needs `ENCRYPTION_KEY` (tokens are store
 ## How it flows
 
 1. **Connect.** `POST /api/health/withings/links/:memberId/connect` returns a Withings consent URL and
-   parks a single-use state in Redis (10 minutes) bound to the signed-in user.
+   parks a single-use state in Redis (30 minutes: signing up, subscribing to Withings+ and signing in again can take a while) bound to the signed-in user.
 2. **Callback.** Withings redirects to `/api/integrations/withings/callback`. The state must belong to
    the signed-in user who started it, and write access is rechecked. The link is created with encrypted
    tokens, a pull is queued, and the webhook subscription is made. A failed subscription does not fail

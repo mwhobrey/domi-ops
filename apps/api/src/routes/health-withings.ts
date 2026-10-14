@@ -17,6 +17,7 @@ import { hasHealthSegmentAccess, isHouseholdMember, loadHealthCapabilities } fro
 import { setOAuthState } from "../lib/oauth-state.js";
 import {
   WITHINGS_OAUTH_PREFIX,
+  WITHINGS_OAUTH_STATE_TTL_SEC,
   normalizeBackfillDays,
   serializeWithingsLink,
   withingsRedirectUri,
@@ -87,7 +88,7 @@ export function healthWithingsRoutes(db: Database, env: Env) {
       memberId,
       backfillDays: normalizeBackfillDays(body.backfillDays),
     };
-    await setOAuthState(env.REDIS_URL, WITHINGS_OAUTH_PREFIX, state, payload);
+    await setOAuthState(env.REDIS_URL, WITHINGS_OAUTH_PREFIX, state, payload, WITHINGS_OAUTH_STATE_TTL_SEC);
     return c.json({ authorizeUrl: withingsAuthorizeUrl(env, { redirectUri: withingsRedirectUri(env), state }) });
   });
 
