@@ -86,7 +86,11 @@ export function withingsResultNotice(result: string | undefined): WithingsNotice
     case "unavailable":
       return { variant: "error", message: "Withings isn't set up on this server yet. Ask whoever runs it to add the Withings app credentials." };
     default:
-      return { variant: "error", message: "Couldn't finish connecting to Withings. Try again, and if it keeps happening let whoever runs the server know." };
+      return {
+        variant: "error",
+        message:
+          "Couldn't finish connecting to Withings. Try again. If the Withings account was created after October 12, 2026 it may need a Withings+ membership first. If it keeps happening, let whoever runs the server know.",
+      };
   }
 }
 

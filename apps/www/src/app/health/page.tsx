@@ -66,7 +66,7 @@ export default function HealthPage() {
         },
         {
           title: "Blood pressure without the typing",
-          body: "Connect a Withings cuff and the readings arrive on their own, past ones included, and fill the scheduled blood pressure checks they fall near. Nobody types numbers, and nobody gets a reminder for a reading already taken. It reads blood pressure and pulse only, nothing goes back to Withings, and a cuff the household shares won't put one person's reading in another's record. You connect it on purpose from Health, and it works on Cloud or on your own server with your own Withings app.",
+          body: "Connect a Withings cuff and the readings arrive on their own, past ones included, and fill the scheduled blood pressure checks they fall near. Nobody types numbers, and nobody gets a reminder for a reading already taken. It reads blood pressure and pulse only, nothing goes back to Withings, and a cuff the household shares won't put one person's reading in another's record. You connect it on purpose from Health, and it works on Cloud or on your own server with your own Withings app. Withings now asks accounts created after October 12, 2026 to have a Withings+ membership before they can share data with apps like this one; older accounts aren't affected.",
         },
         {
           title: "On the household calendar",

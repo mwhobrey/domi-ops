@@ -283,6 +283,12 @@ export function WithingsPanel({
           that fall near them. Only blood pressure and pulse are imported, and only into Domi Ops: nothing is sent back
           to Withings.
         </p>
+        <p className="text-sm text-[var(--color-text-muted)]">
+          <strong className="text-[var(--color-text)]">Withings+ for new accounts.</strong> Since October 12, 2026,
+          Withings requires a Withings+ membership before a Withings account created after that date can share data
+          with apps like Domi Ops. Accounts created earlier are not affected. Withings+ is Withings&apos; own paid
+          membership; Domi Ops doesn&apos;t sell it or pay for it.
+        </p>
         {noticeAlert}
         {error ? <Alert variant="error">{error}</Alert> : null}
         <ul className="space-y-3">
