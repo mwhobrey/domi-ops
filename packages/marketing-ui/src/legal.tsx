@@ -1,4 +1,4 @@
-export const LEGAL_LAST_UPDATED = "October 13, 2026";
+export const LEGAL_LAST_UPDATED = "October 14, 2026";
 export const LEGAL_CONTACT_EMAIL = "privacy@domi-ops.com";
 
 const bodyClass =
@@ -397,7 +397,9 @@ export function TermsOfServiceContent({ privacyHref }: { privacyHref: string }) 
         <p>
           Optional integrations (such as Google, MyAllyFile, Withings and Stripe) are separate
           services with their own terms and privacy policies, and you are responsible for how you
-          use them. Connect only accounts you own or are authorized to connect, and for a child or
+          use them. Some require their own paid plan or membership (for example, for Withings accounts
+          created after October 12, 2026, Withings requires Withings+ to share data with apps on its
+          Start for Free API plan); Domi Ops does not provide or pay for those. Connect only accounts you own or are authorized to connect, and for a child or
           another household member only with their or their guardian&apos;s permission. Readings and
           records imported from a connected service are shown as received. Domi Ops is not a
           medical device and does not give medical advice; do not rely on it for diagnosis or

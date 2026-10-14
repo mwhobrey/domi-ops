@@ -12,6 +12,16 @@ There is no matcher for scheduled checks. A slot counts as answered when a readi
 30 minute window ([HEALTH_CHECKS.md](./HEALTH_CHECKS.md)), and an imported reading is a reading, so a
 scheduled BP check fills in by itself and an unscheduled one is simply an entry in the log.
 
+## Withings+ for new accounts
+
+From October 12, 2026 Withings requires a Withings+ membership for a Withings account **created after that
+date** to share data with a free-plan API app (their banner: "Withings+ becomes required on the Start for Free
+API plan from October 12, 2026 ... Accounts created before that date are unaffected. Enterprise lifts the
+requirement for specific use cases."). Domi Ops says so in the panel, in the failed-connect message, in the
+marketing FAQ and Health page, and in the terms. No price is quoted anywhere, since Withings' notice gives none.
+If this starts costing hosted users, the lever is an Enterprise arrangement with Withings; it is not a code change.
+The scope of "free plan" for our app is Withings' call, so confirm which plan each deployment's app is on.
+
 ## Turning it on
 
 Each deployment registers its own app at developer.withings.com. Withings needs the callback and
