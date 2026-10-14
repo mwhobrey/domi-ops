@@ -8,6 +8,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+### Added
+
+- **A reading that missed a scheduled check is offered for it** (WHO-458). A reading only filled a check on its own within 30 minutes of its time, so one taken earlier or later (a Withings cuff reading at 5:24 AM for an 8:00 AM check, or between two checks) sat in the log with the check still open. Now the check offers it inline on the Today tab, "Use this reading for this check?" with the time and values, and Attach links it. An early reading with no other check near it is offered to the next check; one between two checks, to the closer. Not this one hides it (remembered on that device). Only fixed-time checks, only readings that match what the check asks for, and only ones you can open. No migration, no new environment variables.
+
 ### Fixed
 
 - **Connecting Withings no longer times out while you sign up or subscribe to Withings+** (WHO-457). The sign-in had to finish within 10 minutes, which is not enough when you also have to create an account, subscribe to Withings+ and sign in again. It now has 30 minutes. No migration, no new environment variables.

@@ -26,6 +26,34 @@ tolerance window (30 minutes). Deleting or re-typing the reading reopens the slo
 Computed by `computeSlotStatuses` / `loadCheckSlotStatuses` in `packages/calendar-sync`, never
 stored. Interval checks look back far enough to find the log that anchors their clock.
 
+### Readings that did not count: the attach prompt (WHO-458)
+
+A reading counts for a slot on its own only within 30 minutes of it. One taken earlier or later than that
+(a cuff reading at 5:24 AM for an 8:00 AM check, or 3:10 PM between noon and 6:00 PM) used to sit in the log
+with the slot still open. Now `GET /api/health/checks/slots` adds a `suggestion` to each unanswered slot
+(`{ eventId, startedAt, readings }`) and the Today tab shows it inline: **Use this reading for this check?
+8:56 AM reading · BP 128/82 · HR 64 — Attach / Not this one**.
+
+- **Which readings:** ones that qualify for the check (same person, same kind, every metric the check asks
+  for), not linked to any slot of it, and not already counted for one (judged over the day before and after the
+  days asked for too, so a 23:50 reading that completes a 23:45 check is never offered for the next day's 02:00).
+- **Which slot:** closest-first, within 4 hours (`CHECK_ATTACH_SUGGEST_RADIUS_MINUTES`). Within one check, each
+  reading is offered to one slot and each slot is given one reading. An early reading with no other check near
+  it goes to the next check; one between two checks goes to the closer, and a tie to the earlier. Different
+  checks of the same person are independent, as they are for automatic matching and for logging: one reading
+  can be offered on, and attached to, more than one check (a BP check and a BP-and-pulse check, say).
+- **Which readings compete:** only ones the caller can open, decided *before* pairing. Otherwise a private
+  reading of someone else's (a household admin has no override of private health data) could be the closest,
+  get dropped afterwards, and leave a farther reading they could attach un-offered.
+- **Which checks:** fixed-time checks with an unanswered slot. Interval checks are skipped, because their
+  slots are built from the readings.
+- **Attach** is the existing `POST /checks/:id/log` with `eventId` (it counts however far off the reading
+  was). **Not this one** is remembered on that device, by slot and reading, so a different reading offered
+  later still shows.
+- The response only names readings the caller may open, and only people who can log the check see the prompt.
+- Logic: `suggestAttachments` (pure, `health-check-slots.ts`) and `loadAttachSuggestions`
+  (`health-check-status.ts`).
+
 ## Groups
 
 A group bundles one person's checks so they share one reminder ("Morning: BP, weight").

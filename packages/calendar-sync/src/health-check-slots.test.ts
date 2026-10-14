@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  CHECK_ATTACH_SUGGEST_RADIUS_MS,
   CHECK_SLOT_TOLERANCE_MS,
   computeSlotStatuses,
   eventQualifiesForCheck,
@@ -7,6 +8,7 @@ import {
   intervalCheckSlots,
   matchEventsToSlots,
   scheduledCheckSlots,
+  suggestAttachments,
   type CheckForSlots,
   type CheckSlotEvent,
   type CheckSlotLog,
@@ -316,6 +318,67 @@ describe("matchEventsToSlots", () => {
     const events = [reading("e", "2026-10-02T12:10:00.000Z")];
     expect(matchEventsToSlots({ slots, events, toleranceMs: 5 * MIN }).size).toBe(0);
     expect(matchEventsToSlots({ slots, events, toleranceMs: 10 * MIN }).size).toBe(1);
+  });
+});
+
+describe("suggestAttachments", () => {
+  // A check at 8:00, 12:00, 6:00 pm and 9:00 pm in Chicago (CDT, UTC-5) on 2026-10-13.
+  const slot8 = at("2026-10-13T13:00:00Z");
+  const slot12 = at("2026-10-13T17:00:00Z");
+  const slot18 = at("2026-10-13T23:00:00Z");
+  const slot21 = at("2026-10-14T02:00:00Z");
+  const all = [slot8, slot12, slot18, slot21];
+  const ids = (m: Map<number, CheckSlotEvent>) => Object.fromEntries([...m].map(([t, e]) => [new Date(t).toISOString(), e.id]));
+
+  it("offers an early reading to the next check when no other check is near it", () => {
+    // 5:24 am: 2h36 before the 8:00 slot, and nothing else within 4 hours.
+    const out = suggestAttachments({ openSlots: all, events: [reading("early", "2026-10-13T10:24:00Z")] });
+    expect(ids(out)).toEqual({ "2026-10-13T13:00:00.000Z": "early" });
+  });
+
+  it("offers a reading between two checks to the closer one", () => {
+    // 3:10 pm: 3h10 after noon, 2h50 before 6:00 pm.
+    const out = suggestAttachments({ openSlots: all, events: [reading("mid", "2026-10-13T20:10:00Z")] });
+    expect(ids(out)).toEqual({ "2026-10-13T23:00:00.000Z": "mid" });
+  });
+
+  it("offers a late reading to the check it follows", () => {
+    // 8:56 am is 56 minutes after 8:00, and over 3 hours from noon.
+    const out = suggestAttachments({ openSlots: all, events: [reading("late", "2026-10-13T13:56:00Z")] });
+    expect(ids(out)).toEqual({ "2026-10-13T13:00:00.000Z": "late" });
+  });
+
+  it("sends a tie to the earlier slot", () => {
+    // 10:00 am is 2h from both 8:00 and noon.
+    const out = suggestAttachments({ openSlots: [slot8, slot12], events: [reading("tie", "2026-10-13T15:00:00Z")] });
+    expect(ids(out)).toEqual({ "2026-10-13T13:00:00.000Z": "tie" });
+  });
+
+  it("offers each reading to one slot only, and each slot one reading", () => {
+    // Three readings around the 8:00 slot (last night's 5:24 and 6:02, and 8:56): the closest takes it,
+    // the others are not offered a slot that is already spoken for.
+    const out = suggestAttachments({
+      openSlots: all,
+      events: [
+        reading("a", "2026-10-13T10:24:00Z"),
+        reading("b", "2026-10-13T11:02:00Z"),
+        reading("c", "2026-10-13T13:56:00Z"),
+      ],
+    });
+    expect(ids(out)).toEqual({ "2026-10-13T13:00:00.000Z": "c" });
+  });
+
+  it("does not reach past the radius", () => {
+    const justOut = new Date(slot8.getTime() - CHECK_ATTACH_SUGGEST_RADIUS_MS - MIN);
+    expect(suggestAttachments({ openSlots: [slot8], events: [reading("far", justOut.toISOString())] }).size).toBe(0);
+    const justIn = new Date(slot8.getTime() - CHECK_ATTACH_SUGGEST_RADIUS_MS);
+    expect(suggestAttachments({ openSlots: [slot8], events: [reading("edge", justIn.toISOString())] }).size).toBe(1);
+  });
+
+  it("offers nothing when there are no open slots or no readings", () => {
+    expect(suggestAttachments({ openSlots: [], events: [reading("r", "2026-10-13T13:00:00Z")] }).size).toBe(0);
+    expect(suggestAttachments({ openSlots: all, events: [] }).size).toBe(0);
+    expect(suggestAttachments({ openSlots: all, events: [reading("untimed", null)] }).size).toBe(0);
   });
 });
 

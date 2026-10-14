@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Env } from "@domi-ops/config";
 import {
   datesBetween,
+  loadAttachSuggestions,
   loadCheckSlotStatuses,
   resolveAlertTimeZone,
   todayIsoDateInTz,
@@ -43,7 +44,7 @@ import {
   validateCheckDateRange,
 } from "../lib/health-check-template.js";
 import { householdTimezone } from "../lib/household-time.js";
-import { parseMedSchedule } from "../lib/health-serialize.js";
+import { loadVitalsReadingsForEvents, parseMedSchedule } from "../lib/health-serialize.js";
 import { isUuid, isUuidList } from "../lib/uuid.js";
 
 type Auth = NonNullable<AppVariables["auth"]>;
@@ -186,10 +187,31 @@ export function healthCheckRoutes(db: Database, env: Env) {
 
     try {
       const statuses = await loadCheckSlotStatuses(db, env, { checks: rows, from, to, timeZone, now });
+      // A reading that is near an open slot but not close enough to count on its own is offered for it.
+      const suggestions = await loadAttachSuggestions(db, env, {
+        checks: rows,
+        statuses,
+        from,
+        to,
+        timeZone,
+        now,
+        // Only readings the caller can open compete for a slot (see `canOpen`).
+        canOpen: async (ids) => {
+          if (ids.length === 0) return new Set<string>();
+          const visible = await db
+            .select({ id: healthEvents.id })
+            .from(healthEvents)
+            .where(and(inArray(healthEvents.id, ids), healthEventVisibleWhere(db, auth)));
+          return new Set(visible.map((v) => v.id));
+        },
+      });
 
       // Only name entries the caller is allowed to open.
       const linkedIds = [
-        ...new Set([...statuses.values()].flat().map((r) => r.eventId).filter((id): id is string => id != null)),
+        ...new Set([
+          ...[...statuses.values()].flat().map((r) => r.eventId).filter((id): id is string => id != null),
+          ...[...suggestions.values()].flatMap((bySlot) => [...bySlot.values()].map((s) => s.eventId)),
+        ]),
       ];
       const openable = new Set<string>();
       if (linkedIds.length > 0) {
@@ -199,6 +221,11 @@ export function healthCheckRoutes(db: Database, env: Env) {
           .where(and(inArray(healthEvents.id, linkedIds), healthEventVisibleWhere(db, auth)));
         for (const v of visible) openable.add(v.id);
       }
+      // What each offered reading says, so the prompt can show it ("BP 128/82") without a second request.
+      const suggestedIds = [
+        ...new Set([...suggestions.values()].flatMap((bySlot) => [...bySlot.values()].map((s) => s.eventId))),
+      ].filter((id) => openable.has(id));
+      const suggestedReadings = await loadVitalsReadingsForEvents(db, env, suggestedIds);
 
       return c.json({
         timeZone,
@@ -214,6 +241,15 @@ export function healthCheckRoutes(db: Database, env: Env) {
             source: r.source,
             logId: r.logId,
             eventId: r.eventId && openable.has(r.eventId) ? r.eventId : null,
+            suggestion: (() => {
+              const s = suggestions.get(check.id)?.get(r.scheduledAt.getTime());
+              if (!s || !openable.has(s.eventId)) return null;
+              return {
+                eventId: s.eventId,
+                startedAt: s.startedAt.toISOString(),
+                readings: suggestedReadings.get(s.eventId) ?? [],
+              };
+            })(),
           })),
         })),
       });

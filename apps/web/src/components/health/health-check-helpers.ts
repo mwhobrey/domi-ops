@@ -8,6 +8,7 @@ import type {
   CheckSlot,
   CheckSlotRow,
   CheckSlotStatus,
+  CheckSlotSuggestion,
   HealthCheck,
   HealthCheckGroup,
   HealthCheckTemplate,
@@ -104,6 +105,32 @@ export function summarizeCheckRows(rows: readonly CheckSlotRow[]): { done: numbe
     total: rows.length,
     overdue: rows.filter((r) => r.slot.status === "overdue").length,
   };
+}
+
+/**
+ * "Not this one" is remembered by slot and reading together, so saying no to one reading never hides
+ * a different one offered later for the same slot.
+ */
+export function offerKey(row: CheckSlotRow): string | null {
+  const offer = row.slot.suggestion;
+  if (!offer) return null;
+  return `${row.check.id}|${Math.floor(Date.parse(row.slot.scheduledAt) / 60_000)}|${offer.eventId}`;
+}
+
+/**
+ * The reading to offer for a slot, or null: nothing was offered, the slot has been answered since (a
+ * stale list), or the person already said it is not this one.
+ */
+export function visibleOffer(row: CheckSlotRow, dismissed: ReadonlySet<string>): CheckSlotSuggestion | null {
+  const offer = row.slot.suggestion;
+  if (!offer || !isCheckSlotPending(row.slot.status)) return null;
+  const key = offerKey(row);
+  return key && dismissed.has(key) ? null : offer;
+}
+
+/** "8:56 AM reading · BP 128/82 · Pulse 64": when it was taken and what it says. */
+export function describeOffer(offer: CheckSlotSuggestion, formatTime: (iso: string) => string): string {
+  return [`${formatTime(offer.startedAt)} reading`, formatReadingsSummary(offer.readings)].filter(Boolean).join(" · ");
 }
 
 export function checkSlotBadge(status: CheckSlotStatus): { label: string; tone: "success" | "warning" | "default" } {
