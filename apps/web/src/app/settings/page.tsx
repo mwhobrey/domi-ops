@@ -6,6 +6,7 @@ import {
   type HouseholdIntegrationsStatus,
 } from "../../components/HouseholdIntegrationsPanel";
 import { MyAllyFileSettings } from "../../components/MyAllyFileSettings";
+import { WithingsSettings } from "../../components/health/WithingsSettings";
 import { PendingTourRunner } from "../../components/PendingTourRunner";
 import { ScrollToTopFab } from "../../components/ScrollToTopFab";
 import { HouseholdMembersPanel } from "../../components/HouseholdMembersPanel";
@@ -71,6 +72,7 @@ export default async function SettingsPage() {
             <HouseholdMembersPanel canManage actorRole={profile.role} />
             {integrations ? <HouseholdIntegrationsPanel status={integrations} /> : null}
             <MyAllyFileSettings />
+            <WithingsSettings />
           </div>
           <ScrollToTopFab />
         </>
