@@ -68,7 +68,14 @@ const env = loadEnv();
 initSentry(env);
 const baseDb = createDb(env.DATABASE_URL);
 const db = createScopedDb(baseDb);
-const betterAuth = createBetterAuth(baseDb, env);
+// Better Auth and the setup check get a pool of their own. Every authenticated request holds one `baseDb`
+// connection for its whole duration (the tenant transaction), and /auth/session and the /auth/* catch-all
+// ask Better Auth for the session while holding it. If that came from the same pool, ten simultaneous
+// requests would each hold a connection and wait for another: every request, /api/healthz included, hangs
+// and nothing ever frees (whome, 2026-10-14). A request that holds a `baseDb` connection never waits for
+// `baseDb` again this way, because `authDb` is only ever held for a single short query.
+const authDb = createDb(env.DATABASE_URL);
+const betterAuth = createBetterAuth(authDb, env);
 
 const app = new Hono<{ Variables: AppVariables }>();
 
@@ -116,7 +123,7 @@ app.on(["POST", "GET"], "/auth/*", async (c) => {
   const grantCookie = getCookie(c, SETUP_GRANT_COOKIE);
   const headerToken = c.req.header("x-setup-token");
   const setupAccess = hasSetupAccess(env, { headerToken, grantCookie });
-  const needsSetup = await needsGreenfieldSetup(baseDb, env);
+  const needsSetup = await needsGreenfieldSetup(authDb, env);
 
   if (path.includes("/sign-up")) {
     if (env.DEMO_MODE) {
