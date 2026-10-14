@@ -15,6 +15,8 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Fixed
 
+- **The site could stop responding after a burst of page loads** (WHO-456). Every signed-in request holds one database connection while it runs, and the session check inside it asked for a second connection from the same pool of ten. When ten or more requests arrived at once (a phone prefetching every menu link right after a redeploy), each held one and waited for another, so every request, including the health check, hung until the API was restarted while CPU and memory sat idle. Sign-in and the setup check now use their own pool, so a request that holds a connection never waits on the pool it holds. Also adds `DB_POOL_MAX` to change the pool size (default 10). No migration.
+
 - **Health access checks now stay inside the household** (WHO-454). The shared check behind most health routes let any owner or admin through for any member id, including one from a different household, so each route had to guard that itself (WHO-402). It now confirms the member is in the caller's household before the admin shortcut applies. Nothing was readable or writable across households before, since each query is scoped to the caller's household and row level security backs that up; this closes the gap for routes added later. No migration, no new environment variables.
 
 ### Added
