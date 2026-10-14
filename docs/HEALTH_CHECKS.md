@@ -35,7 +35,8 @@ with the slot still open. Now `GET /api/health/checks/slots` adds a `suggestion`
 8:56 AM reading · BP 128/82 · HR 64 — Attach / Not this one**.
 
 - **Which readings:** ones that qualify for the check (same person, same kind, every metric the check asks
-  for), not linked to any slot of it, and not already counted for one.
+  for), not linked to any slot of it, and not already counted for one (judged over the day before and after the
+  days asked for too, so a 23:50 reading that completes a 23:45 check is never offered for the next day's 02:00).
 - **Which slot:** closest-first, within 4 hours (`CHECK_ATTACH_SUGGEST_RADIUS_MINUTES`). Within one check, each
   reading is offered to one slot and each slot is given one reading. An early reading with no other check near
   it goes to the next check; one between two checks goes to the closer, and a tie to the earlier. Different
