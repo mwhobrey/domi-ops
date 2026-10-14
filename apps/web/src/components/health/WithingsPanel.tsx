@@ -284,10 +284,10 @@ export function WithingsPanel({
           to Withings.
         </p>
         <p className="text-sm text-[var(--color-text-muted)]">
-          <strong className="text-[var(--color-text)]">Withings+ for new accounts.</strong> Since October 12, 2026,
-          Withings requires a Withings+ membership before a Withings account created after that date can share data
-          with apps like Domi Ops. Accounts created earlier are not affected. Withings+ is Withings&apos; own paid
-          membership; Domi Ops doesn&apos;t sell it or pay for it.
+          <strong className="text-[var(--color-text)]">Withings+ for new accounts.</strong> For a Withings account
+          created after October 12, 2026, Withings requires a Withings+ membership to share data with apps on its
+          Start for Free API plan; Withings can lift that for apps on an Enterprise plan. Accounts created earlier are
+          not affected. Withings+ is Withings&apos; own paid membership; Domi Ops doesn&apos;t sell it or pay for it.
         </p>
         {noticeAlert}
         {error ? <Alert variant="error">{error}</Alert> : null}

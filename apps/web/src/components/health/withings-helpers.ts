@@ -89,7 +89,7 @@ export function withingsResultNotice(result: string | undefined): WithingsNotice
       return {
         variant: "error",
         message:
-          "Couldn't finish connecting to Withings. Try again. If the Withings account was created after October 12, 2026 it may need a Withings+ membership first. If it keeps happening, let whoever runs the server know.",
+          "Couldn't finish connecting to Withings. Try again. If the Withings account was created after October 12, 2026, Withings may require a Withings+ membership first. If it keeps happening, let whoever runs the server know.",
       };
   }
 }
