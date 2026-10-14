@@ -36,9 +36,14 @@ with the slot still open. Now `GET /api/health/checks/slots` adds a `suggestion`
 
 - **Which readings:** ones that qualify for the check (same person, same kind, every metric the check asks
   for), not linked to any slot of it, and not already counted for one.
-- **Which slot:** closest-first, within 4 hours (`CHECK_ATTACH_SUGGEST_RADIUS_MINUTES`), each reading offered
-  to one slot and each slot given one reading. An early reading with no other check near it goes to the next
-  check; one between two checks goes to the closer, and a tie to the earlier.
+- **Which slot:** closest-first, within 4 hours (`CHECK_ATTACH_SUGGEST_RADIUS_MINUTES`). Within one check, each
+  reading is offered to one slot and each slot is given one reading. An early reading with no other check near
+  it goes to the next check; one between two checks goes to the closer, and a tie to the earlier. Different
+  checks of the same person are independent, as they are for automatic matching and for logging: one reading
+  can be offered on, and attached to, more than one check (a BP check and a BP-and-pulse check, say).
+- **Which readings compete:** only ones the caller can open, decided *before* pairing. Otherwise a private
+  reading of someone else's (a household admin has no override of private health data) could be the closest,
+  get dropped afterwards, and leave a farther reading they could attach un-offered.
 - **Which checks:** fixed-time checks with an unanswered slot. Interval checks are skipped, because their
   slots are built from the readings.
 - **Attach** is the existing `POST /checks/:id/log` with `eventId` (it counts however far off the reading

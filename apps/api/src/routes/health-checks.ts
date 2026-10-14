@@ -188,7 +188,23 @@ export function healthCheckRoutes(db: Database, env: Env) {
     try {
       const statuses = await loadCheckSlotStatuses(db, env, { checks: rows, from, to, timeZone, now });
       // A reading that is near an open slot but not close enough to count on its own is offered for it.
-      const suggestions = await loadAttachSuggestions(db, env, { checks: rows, statuses, from, to, timeZone, now });
+      const suggestions = await loadAttachSuggestions(db, env, {
+        checks: rows,
+        statuses,
+        from,
+        to,
+        timeZone,
+        now,
+        // Only readings the caller can open compete for a slot (see `canOpen`).
+        canOpen: async (ids) => {
+          if (ids.length === 0) return new Set<string>();
+          const visible = await db
+            .select({ id: healthEvents.id })
+            .from(healthEvents)
+            .where(and(inArray(healthEvents.id, ids), healthEventVisibleWhere(db, auth)));
+          return new Set(visible.map((v) => v.id));
+        },
+      });
 
       // Only name entries the caller is allowed to open.
       const linkedIds = [

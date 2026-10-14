@@ -331,6 +331,13 @@ export async function loadAttachSuggestions(
     to: string;
     timeZone: string;
     now: Date;
+    /**
+     * Which of these entries the caller may open. Applied to the candidates *before* they are paired with
+     * slots: otherwise a reading the caller can't open could win the closest-first match and then be
+     * dropped by the route, leaving a farther reading they could attach un-offered. Leave it out only
+     * when every entry is fair game (the reminder worker never asks).
+     */
+    canOpen?: (eventIds: string[]) => Promise<ReadonlySet<string>>;
   },
 ): Promise<Map<string, Map<number, AttachSuggestion>>> {
   const result = new Map<string, Map<number, AttachSuggestion>>();
@@ -341,14 +348,27 @@ export async function loadAttachSuggestions(
   if (eligible.length === 0) return result;
 
   const data = await gatherSlotData(db, { ...input, checks: eligible, paddingMs: CHECK_ATTACH_SUGGEST_RADIUS_MS });
+
+  // Each check's own candidates: qualifying, and not spoken for by that check.
+  const candidatesByCheck = new Map<string, CheckSlotEvent[]>();
   for (const check of eligible) {
-    const slots = input.statuses.get(check.id) ?? [];
     const spokenFor = new Set<string>();
     for (const l of data.allLogs) if (l.checkId === check.id && l.healthEventId) spokenFor.add(l.healthEventId);
-    for (const s of slots) if (s.eventId) spokenFor.add(s.eventId);
-
+    for (const s of input.statuses.get(check.id) ?? []) if (s.eventId) spokenFor.add(s.eventId);
     const forCheck = slotCheckFor(check, env);
-    const candidates = data.slotEvents.filter((e) => !spokenFor.has(e.id) && eventQualifiesForCheck(e, forCheck));
+    candidatesByCheck.set(
+      check.id,
+      data.slotEvents.filter((e) => !spokenFor.has(e.id) && eventQualifiesForCheck(e, forCheck)),
+    );
+  }
+  // One visibility lookup for all of them, before anything is paired.
+  const openable = input.canOpen
+    ? await input.canOpen([...new Set([...candidatesByCheck.values()].flat().map((e) => e.id))])
+    : null;
+
+  for (const check of eligible) {
+    const slots = input.statuses.get(check.id) ?? [];
+    const candidates = (candidatesByCheck.get(check.id) ?? []).filter((e) => !openable || openable.has(e.id));
     const matched = suggestAttachments({
       openSlots: slots.filter((s) => openStatuses.has(s.status)).map((s) => s.scheduledAt),
       events: candidates,

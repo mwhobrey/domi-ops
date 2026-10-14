@@ -1098,6 +1098,34 @@ maybeDescribe("health checks routes (integration)", () => {
         expect((await slotsFor("stranger", check.id, `from=${PAST}&to=${PAST}`)).slots[0].suggestion).toBeNull();
       });
 
+      it("pairs only readings the caller can open, so a hidden closer one cannot crowd out a visible farther one", async () => {
+        const check = await makeBpCheck({ visibility: "household" });
+        // mom's private reading is the closest to 08:00 (1.5h), but dad, an admin who may log this check,
+        // cannot open it (there is no admin override of private health data). His own is 3h away.
+        const hidden = await readingAt(`${PAST}T06:30:00.000Z`);
+        const dads = await withHouseholdContext(baseDb, people.mom!.householdId, async (tx) => {
+          const [ev] = await tx
+            .insert(healthEvents)
+            .values({
+              householdId: people.mom!.householdId,
+              memberId: people.ally!.memberId,
+              type: "vitals",
+              title: "who384 reading",
+              startedAt: new Date(`${PAST}T05:00:00.000Z`),
+              createdByUserId: people.dad!.userId,
+            })
+            .returning({ id: healthEvents.id });
+          for (const metric of BP) {
+            await tx.insert(healthVitalsReadings).values({ eventId: ev!.id, metric: metric as never, value: "1", unit: "x" });
+          }
+          return ev!.id;
+        });
+
+        // The caller who owns the closer reading is offered it; dad is offered his own, not nothing.
+        expect((await slotsFor("mom", check.id, `from=${PAST}&to=${PAST}`)).slots[0].suggestion?.eventId).toBe(hidden);
+        expect((await slotsFor("dad", check.id, `from=${PAST}&to=${PAST}`)).slots[0].suggestion?.eventId).toBe(dads);
+      });
+
       it("offers nothing for an interval check, whose slots are made from the readings", async () => {
         const check = await makeBpCheck({
           scheduleKind: "interval",
