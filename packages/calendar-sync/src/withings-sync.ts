@@ -476,7 +476,8 @@ const WORKOUTS_URL = "https://wbsapi.withings.net/v2/measure";
 /**
  * Workouts share the measurement watermark (`link.lastUpdate`, from `getmeas`), and Withings does not
  * say whether its `updatetime` and a workout's `modified` are the same clock. Reading a day further back
- * costs nothing, since `workout:<id>` dedupes, and means a skew can only re-read, never skip.
+ * costs nothing, since `workout:<id>` dedupes, and covers a skew of up to a day. A larger one would still
+ * skip a workout; a workout-specific watermark (WHO-462) removes the assumption.
  */
 const WORKOUT_OVERLAP_SEC = 24 * 60 * 60;
 const WORKOUT_FIELDS = "calories,distance,steps,hr_average";
