@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   WithingsError,
   encryptWithingsSecret,
-  shapeBloodPressureGroup,
+  shapeVitalsGroup,
+  shapeWorkout,
+  withingsScopeAllowsWorkouts,
+  withingsUnsubscribe,
   withingsAuthorizeUrl,
   withingsBackoffMs,
   withingsCurrentAccessToken,
@@ -23,12 +26,13 @@ const group = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-describe("shapeBloodPressureGroup", () => {
+describe("shapeVitalsGroup", () => {
   it("maps systolic, diastolic and pulse, in that order, with the measured instant", () => {
-    const shaped = shapeBloodPressureGroup(group());
+    const shaped = shapeVitalsGroup(group());
     expect(shaped).toEqual({
       grpid: "4242",
       measuredAt: new Date(1_791_000_000 * 1000),
+      title: "Blood pressure",
       readings: [
         { metric: "blood_pressure_systolic", value: 128, unit: "mmHg" },
         { metric: "blood_pressure_diastolic", value: 82, unit: "mmHg" },
@@ -38,25 +42,53 @@ describe("shapeBloodPressureGroup", () => {
   });
 
   it("applies the power-of-ten unit", () => {
-    const shaped = shapeBloodPressureGroup(
+    const shaped = shapeVitalsGroup(
       group({ measures: [{ value: 1285, type: 10, unit: -1 }, { value: 82, type: 9, unit: 0 }] }),
     );
     expect(shaped?.readings[0]).toEqual({ metric: "blood_pressure_systolic", value: 128.5, unit: "mmHg" });
   });
 
   it("keeps a reading without a pulse", () => {
-    const shaped = shapeBloodPressureGroup(group({ measures: [{ value: 120, type: 10, unit: 0 }, { value: 80, type: 9, unit: 0 }] }));
+    const shaped = shapeVitalsGroup(group({ measures: [{ value: 120, type: 10, unit: 0 }, { value: 80, type: 9, unit: 0 }] }));
     expect(shaped?.readings.map((r) => r.metric)).toEqual(["blood_pressure_systolic", "blood_pressure_diastolic"]);
   });
 
-  it("is not a blood pressure reading without both pressures", () => {
-    expect(shapeBloodPressureGroup(group({ measures: [{ value: 64, type: 11, unit: 0 }] }))).toBeNull();
-    expect(shapeBloodPressureGroup(group({ measures: [{ value: 120, type: 10, unit: 0 }] }))).toBeNull();
-    expect(shapeBloodPressureGroup(group({ measures: [] }))).toBeNull();
+  it("drops half a blood pressure pair but keeps the rest of the group", () => {
+    expect(shapeVitalsGroup(group({ measures: [{ value: 120, type: 10, unit: 0 }] }))).toBeNull();
+    expect(shapeVitalsGroup(group({ measures: [] }))).toBeNull();
+    const withPulse = shapeVitalsGroup(
+      group({ measures: [{ value: 120, type: 10, unit: 0 }, { value: 64, type: 11, unit: 0 }] }),
+    );
+    expect(withPulse?.readings.map((r) => r.metric)).toEqual(["heart_rate"]);
+    expect(withPulse?.title).toBe("Vitals");
+  });
+
+  it("keeps watch readings: blood oxygen, body temperature in Fahrenheit, a lone pulse", () => {
+    const shaped = shapeVitalsGroup(
+      group({
+        measures: [
+          { value: 97, type: 54, unit: 0 },
+          { value: 3700, type: 71, unit: -2 },
+          { value: 58, type: 11, unit: 0 },
+        ],
+      }),
+    );
+    expect(shaped?.title).toBe("Vitals");
+    expect(shaped?.readings).toEqual([
+      { metric: "heart_rate", value: 58, unit: "bpm" },
+      { metric: "blood_oxygen", value: 97, unit: "%" },
+      { metric: "temperature", value: 98.6, unit: "°F" },
+    ]);
+  });
+
+  it("titles a group with blood pressure as blood pressure and ignores skin temperature", () => {
+    const shaped = shapeVitalsGroup(group({ measures: [...group().measures, { value: 3300, type: 73, unit: -2 }] }));
+    expect(shaped?.title).toBe("Blood pressure");
+    expect(shaped?.readings.map((r) => r.metric)).not.toContain("temperature");
   });
 
   it("ignores measure types it did not ask for and values that make no sense", () => {
-    const shaped = shapeBloodPressureGroup(
+    const shaped = shapeVitalsGroup(
       group({
         measures: [
           { value: 70_000, type: 1, unit: -3 },
@@ -70,19 +102,19 @@ describe("shapeBloodPressureGroup", () => {
   });
 
   it("rejects a group without an id or a usable time", () => {
-    expect(shapeBloodPressureGroup(group({ grpid: undefined }))).toBeNull();
-    expect(shapeBloodPressureGroup(group({ date: 0 }))).toBeNull();
-    expect(shapeBloodPressureGroup(group({ date: Number.NaN }))).toBeNull();
+    expect(shapeVitalsGroup(group({ grpid: undefined }))).toBeNull();
+    expect(shapeVitalsGroup(group({ date: 0 }))).toBeNull();
+    expect(shapeVitalsGroup(group({ date: Number.NaN }))).toBeNull();
   });
 });
 
-describe("shapeBloodPressureGroup attribution", () => {
+describe("shapeVitalsGroup attribution", () => {
   it.each([1, 4])("leaves out attrib %i: Withings could not say it is this person's", (attrib) => {
-    expect(shapeBloodPressureGroup(group({ attrib }))).toBeNull();
+    expect(shapeVitalsGroup(group({ attrib }))).toBeNull();
   });
 
   it.each([0, 2, 5, 7, 8, 15, undefined])("keeps attrib %s", (attrib) => {
-    expect(shapeBloodPressureGroup(group({ attrib }))).not.toBeNull();
+    expect(shapeVitalsGroup(group({ attrib }))).not.toBeNull();
   });
 });
 
@@ -126,7 +158,7 @@ describe("withingsAuthorizeUrl", () => {
     expect(url.origin + url.pathname).toBe("https://account.withings.com/oauth2_user/authorize2");
     expect(url.searchParams.get("client_id")).toBe("client-id");
     expect(url.searchParams.get("redirect_uri")).toBe("https://app.example/cb");
-    expect(url.searchParams.get("scope")).toBe("user.metrics");
+    expect(url.searchParams.get("scope")).toBe("user.metrics,user.activity");
     expect(url.searchParams.get("state")).toBe("abc");
     expect(url.searchParams.get("response_type")).toBe("code");
   });
@@ -169,6 +201,20 @@ describe("Withings client", () => {
     expect(calls[0]!.auth).toBe("Bearer tok");
   });
 
+  it("also subscribes for workouts when the link may read them, and tolerates that one failing", async () => {
+    const calls: string[] = [];
+    const fn = (async (_u: unknown, init: { body: string }) => {
+      const appli = new URLSearchParams(init.body).get("appli")!;
+      calls.push(appli);
+      return new Response(JSON.stringify(appli === "16" ? { status: 293 } : { status: 0, body: {} }), { status: 200 });
+    }) as never;
+    await withingsSubscribe("tok", "https://app.example/hook", fn, { workouts: true });
+    expect(calls).toEqual(["4", "16"]);
+    calls.length = 0;
+    await withingsUnsubscribe("tok", "https://app.example/hook", fn);
+    expect(calls).toEqual(["4", "16"]);
+  });
+
   it.each([
     [200, { status: 343 }, "token_invalid"],
     [200, { status: 401 }, "token_invalid"],
@@ -193,5 +239,45 @@ describe("Withings client", () => {
   it("rejects a token response missing a field", async () => {
     const { fn } = fakeFetch(200, { status: 0, body: { userid: 1, access_token: "a" } });
     await expect(withingsExchangeCode(creds, "c", "https://app.example/cb", fn)).rejects.toMatchObject({ code: "transient" });
+  });
+});
+
+describe("withingsScopeAllowsWorkouts", () => {
+  it("needs the activity scope, however Withings separates it", () => {
+    expect(withingsScopeAllowsWorkouts("user.metrics,user.activity")).toBe(true);
+    expect(withingsScopeAllowsWorkouts("user.metrics user.activity")).toBe(true);
+    expect(withingsScopeAllowsWorkouts("user.metrics")).toBe(false);
+    expect(withingsScopeAllowsWorkouts(null)).toBe(false);
+  });
+});
+
+describe("shapeWorkout", () => {
+  const workout = (over: Record<string, unknown> = {}) => ({
+    id: 9001,
+    category: 2,
+    startdate: 1_791_000_000,
+    enddate: 1_791_001_800,
+    data: { distance: 5230, calories: 311.6, steps: 6100, hr_average: 141 },
+    ...over,
+  });
+
+  it("turns a run into a named exercise with minutes, kilometres and calories", () => {
+    expect(shapeWorkout(workout())).toMatchObject({
+      key: "workout:9001",
+      activity: "Running",
+      durationMinutes: 30,
+      distanceKm: 5.23,
+      calories: 312,
+    });
+  });
+
+  it("calls an unknown category a workout and leaves out figures it was not given", () => {
+    const shaped = shapeWorkout(workout({ category: 9999, data: {} }));
+    expect(shaped).toMatchObject({ activity: "Workout", distanceKm: null, calories: null });
+  });
+
+  it("rejects a workout with no usable span", () => {
+    expect(shapeWorkout(workout({ enddate: 1_791_000_000 }))).toBeNull();
+    expect(shapeWorkout(workout({ id: undefined }))).toBeNull();
   });
 });

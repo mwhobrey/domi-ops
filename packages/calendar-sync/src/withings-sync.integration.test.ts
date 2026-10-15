@@ -8,6 +8,7 @@ import {
   createDb,
   healthChecks,
   healthEvents,
+  healthExerciseDetails,
   healthVitalsReadings,
   healthWithingsLinks,
   healthWithingsMeasureGroups,
@@ -38,17 +39,25 @@ type FetchCall = { url: string; form: URLSearchParams; auth: string | null };
 /** A fake Withings: measure pages come from `pages` in order, token requests from `token`. */
 function fakeWithings(opts: {
   pages?: Array<Record<string, unknown>>;
+  /** Pages of `getworkouts`, in order. */
+  workouts?: Array<Record<string, unknown>>;
   measureStatus?: number;
   token?: Record<string, unknown>;
   tokenStatus?: number;
 }) {
   const calls: FetchCall[] = [];
   let page = 0;
+  let workoutPage = 0;
   const impl = vi.fn(async (url: string, init?: RequestInit) => {
     const form = new URLSearchParams(String(init?.body ?? ""));
     calls.push({ url, form, auth: new Headers(init?.headers).get("authorization") });
     if (url.includes("/v2/oauth2")) {
       return new Response(JSON.stringify({ status: opts.tokenStatus ?? 0, body: opts.token ?? {} }), { status: 200 });
+    }
+    if (url.includes("/v2/measure")) {
+      const body = opts.workouts?.[Math.min(workoutPage, opts.workouts.length - 1)] ?? { series: [], more: 0, offset: 0 };
+      workoutPage += 1;
+      return new Response(JSON.stringify({ status: 0, body }), { status: 200 });
     }
     if (url.includes("/measure")) {
       if (opts.measureStatus && opts.measureStatus >= 500) return new Response("{}", { status: opts.measureStatus });
@@ -58,7 +67,12 @@ function fakeWithings(opts: {
     }
     return new Response(JSON.stringify({ status: 0, body: {} }), { status: 200 });
   });
-  return { impl, calls, measureCalls: () => calls.filter((c) => c.url.includes("/measure")) };
+  return {
+    impl,
+    calls,
+    measureCalls: () => calls.filter((c) => c.url.includes("/measure") && !c.url.includes("/v2/")),
+    workoutCalls: () => calls.filter((c) => c.url.includes("/v2/measure")),
+  };
 }
 
 const grp = (grpid: number, iso: string, sys = 128, dia = 82, pulse = 64, extra: Record<string, unknown> = {}) => ({
@@ -216,7 +230,7 @@ maybeDescribe("Withings sync (integration)", () => {
       const [p1, p2] = fw.measureCalls();
       expect(p1!.form.get("startdate")).toBe(String(Math.floor(link.backfillFrom.getTime() / 1000)));
       expect(p1!.form.get("enddate")).toBe(String(Math.floor(NOW.getTime() / 1000)));
-      expect(p1!.form.get("meastypes")).toBe("9,10,11");
+      expect(p1!.form.get("meastypes")).toBe("9,10,11,54,71");
       expect(p1!.form.get("offset")).toBeNull();
       expect(p2!.form.get("offset")).toBe("2");
       expect(p1!.auth).toBe("Bearer access-1");
@@ -251,12 +265,12 @@ maybeDescribe("Withings sync (integration)", () => {
       expect((await reload(link.id)).lastUpdate).toBe(1_790_000_100);
     });
 
-    it("ignores groups that are not blood pressure", async () => {
+    it("ignores groups with nothing it keeps (a weight on its own)", async () => {
       const link = await makeLink();
       const fw = fakeWithings({
         pages: [
           {
-            measuregrps: [{ grpid: 7, date: 1_790_000_000, measures: [{ value: 64, type: 11, unit: 0 }] }, grp(8, "2026-09-01T13:00:00Z")],
+            measuregrps: [{ grpid: 7, date: 1_790_000_000, measures: [{ value: 70_000, type: 1, unit: -3 }] }, grp(8, "2026-09-01T13:00:00Z")],
             more: 0,
             updatetime: 1,
           },
@@ -264,6 +278,32 @@ maybeDescribe("Withings sync (integration)", () => {
       });
       await run(link.id, fw.impl);
       expect(await vitalsEvents()).toHaveLength(1);
+    });
+
+    it("imports watch readings (SpO2, temperature, a lone pulse) as vitals entries", async () => {
+      const link = await makeLink();
+      const fw = fakeWithings({
+        pages: [
+          {
+            measuregrps: [
+              { grpid: 30, date: 1_790_000_000, measures: [{ value: 97, type: 54, unit: 0 }] },
+              { grpid: 31, date: 1_790_000_100, measures: [{ value: 3700, type: 71, unit: -2 }] },
+              { grpid: 32, date: 1_790_000_200, measures: [{ value: 58, type: 11, unit: 0 }] },
+            ],
+            more: 0,
+            updatetime: 1,
+          },
+        ],
+      });
+      await run(link.id, fw.impl);
+      const events = await vitalsEvents();
+      expect(events).toHaveLength(3);
+      const readings = await withHouseholdContext(db, householdId, (tx) =>
+        tx.select().from(healthVitalsReadings).where(inArray(healthVitalsReadings.eventId, events.map((e) => e.id))),
+      );
+      const byMetric = Object.fromEntries(readings.map((r) => [r.metric, `${decryptSensitive(r.value, KEY)} ${r.unit}`]));
+      expect(byMetric).toEqual({ blood_oxygen: "97 %", temperature: "98.6 °F", heart_rate: "58 bpm" });
+      expect(fw.measureCalls()[0]!.form.get("meastypes")).toBe("9,10,11,54,71");
     });
 
     it("does not bring back an entry the user deleted, even on a fresh backfill", async () => {
@@ -374,6 +414,76 @@ maybeDescribe("Withings sync (integration)", () => {
       const after = await reload(link.id);
       expect(after.backfillDoneAt).toBeNull();
       expect(after.attempts).toBe(1);
+    });
+  });
+
+  describe("workouts", () => {
+    const run1 = (over: Record<string, unknown> = {}) => ({
+      id: 5001,
+      category: 2,
+      startdate: 1_790_000_000,
+      enddate: 1_790_001_800,
+      data: { distance: 5230, calories: 311.6 },
+      ...over,
+    });
+
+    const exerciseRows = () =>
+      withHouseholdContext(db, householdId, async (tx) => {
+        const events = await tx
+          .select()
+          .from(healthEvents)
+          .where(and(eq(healthEvents.householdId, householdId), eq(healthEvents.type, "exercise")));
+        const details = events.length
+          ? await tx.select().from(healthExerciseDetails).where(inArray(healthExerciseDetails.eventId, events.map((e) => e.id)))
+          : [];
+        return { events, details };
+      });
+
+    it("imports a workout as an exercise entry, once, with Withings as its source", async () => {
+      const link = await makeLink({ scope: "user.metrics,user.activity" });
+      const fw = fakeWithings({ pages: [{ measuregrps: [], more: 0, updatetime: 1_790_000_000 }], workouts: [{ series: [run1()], more: 0, offset: 0 }] });
+      await run(link.id, fw.impl);
+
+      const { events, details } = await exerciseRows();
+      expect(events).toHaveLength(1);
+      expect(decryptSensitive(events[0]!.title, KEY)).toBe("Running");
+      expect(events[0]!.endedAt?.toISOString()).toBe(new Date(1_790_001_800 * 1000).toISOString());
+      expect(details).toHaveLength(1);
+      expect(details[0]).toMatchObject({ externalSource: "withings", externalId: "5001", distanceUnit: "km" });
+      expect(decryptSensitive(details[0]!.durationMinutes!, KEY)).toBe("30");
+      expect(decryptSensitive(details[0]!.distance!, KEY)).toBe("5.23");
+      expect(decryptSensitive(details[0]!.caloriesEstimated!, KEY)).toBe("312");
+
+      // Backfill asks by date; a repeat of the same workout changes nothing.
+      expect(fw.workoutCalls()[0]!.form.get("startdateymd")).toBe("2025-12-31");
+      await withHouseholdContext(db, householdId, (tx) =>
+        tx.update(healthWithingsLinks).set({ syncRequestedAt: new Date(NOW.getTime() - 1) }).where(eq(healthWithingsLinks.id, link.id)),
+      );
+      const again = fakeWithings({ pages: [{ measuregrps: [], more: 0, updatetime: 1_790_000_100 }], workouts: [{ series: [run1()], more: 0, offset: 0 }] });
+      await run(link.id, again.impl, new Date(NOW.getTime() + 60_000));
+      expect((await exerciseRows()).events).toHaveLength(1);
+      expect(again.workoutCalls()[0]!.form.get("lastupdate")).toBe("1790000000");
+    });
+
+    it("does not bring back a workout the user deleted", async () => {
+      const link = await makeLink({ scope: "user.metrics,user.activity" });
+      const fw = () => fakeWithings({ pages: [{ measuregrps: [], more: 0, updatetime: 1 }], workouts: [{ series: [run1()], more: 0, offset: 0 }] });
+      await run(link.id, fw().impl);
+      const { events } = await exerciseRows();
+      await withHouseholdContext(db, householdId, (tx) => tx.delete(healthEvents).where(eq(healthEvents.id, events[0]!.id)));
+      await withHouseholdContext(db, householdId, (tx) =>
+        tx.update(healthWithingsLinks).set({ syncRequestedAt: new Date(NOW.getTime() - 1), backfillDoneAt: null, lastUpdate: null }).where(eq(healthWithingsLinks.id, link.id)),
+      );
+      await run(link.id, fw().impl, new Date(NOW.getTime() + 60_000));
+      expect((await exerciseRows()).events).toHaveLength(0);
+    });
+
+    it("never asks Withings for workouts on a link without the activity scope", async () => {
+      const link = await makeLink({ scope: "user.metrics" });
+      const fw = fakeWithings({ pages: [{ measuregrps: [], more: 0, updatetime: 1 }], workouts: [{ series: [run1()], more: 0, offset: 0 }] });
+      await run(link.id, fw.impl);
+      expect(fw.workoutCalls()).toHaveLength(0);
+      expect((await exerciseRows()).events).toHaveLength(0);
     });
   });
 

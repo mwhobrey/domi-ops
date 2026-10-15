@@ -15,6 +15,8 @@ export interface WithingsLink {
   lastSyncedAt: string | null;
   lastError: string | null;
   syncPending: boolean;
+  /** Activity access was approved, so workouts import. False for links made before it was asked for. */
+  workouts: boolean;
 }
 
 export interface WithingsStatus {
