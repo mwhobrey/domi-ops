@@ -465,6 +465,31 @@ maybeDescribe("Withings sync (integration)", () => {
       expect(again.workoutCalls()[0]!.form.get("lastupdate")).toBe(String(1_790_000_000 - 86_400));
     });
 
+    it("resumes workouts from the newest workout's own modified time, not the measurement clock", async () => {
+      const link = await makeLink({ scope: "user.metrics,user.activity" });
+      const first = fakeWithings({
+        pages: [{ measuregrps: [], more: 0, updatetime: 1_790_000_000 }],
+        workouts: [{ series: [run1({ modified: 1_790_500_000 }), run1({ id: 5002, modified: 1_790_400_000 })], more: 0, offset: 0 }],
+      });
+      await run(link.id, first.impl);
+      const stored = await withHouseholdContext(db, householdId, (tx) =>
+        tx.select().from(healthWithingsLinks).where(eq(healthWithingsLinks.id, link.id)),
+      );
+      expect(stored[0]!.workoutsLastUpdate).toBe(1_790_500_000);
+
+      await withHouseholdContext(db, householdId, (tx) =>
+        tx.update(healthWithingsLinks).set({ syncRequestedAt: new Date(NOW.getTime() - 1) }).where(eq(healthWithingsLinks.id, link.id)),
+      );
+      // getmeas' clock is a month ahead of the workout clock; the workout pull must not care.
+      const again = fakeWithings({ pages: [{ measuregrps: [], more: 0, updatetime: 1_793_000_000 }], workouts: [{ series: [], more: 0, offset: 0 }] });
+      await run(link.id, again.impl, new Date(NOW.getTime() + 60_000));
+      expect(again.workoutCalls()[0]!.form.get("lastupdate")).toBe(String(1_790_500_000 - 1));
+      const kept = await withHouseholdContext(db, householdId, (tx) =>
+        tx.select().from(healthWithingsLinks).where(eq(healthWithingsLinks.id, link.id)),
+      );
+      expect(kept[0]!.workoutsLastUpdate).toBe(1_790_500_000);
+    });
+
     it("does not bring back a workout the user deleted", async () => {
       const link = await makeLink({ scope: "user.metrics,user.activity" });
       const fw = () => fakeWithings({ pages: [{ measuregrps: [], more: 0, updatetime: 1 }], workouts: [{ series: [run1()], more: 0, offset: 0 }] });

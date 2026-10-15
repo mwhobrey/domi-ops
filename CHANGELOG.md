@@ -10,6 +10,8 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Fixed
 
+- **Withings workouts have their own sync watermark** (WHO-462). Workout pulls reused the blood pressure watermark minus a day, which would skip a workout if Withings' two clocks drifted apart by more than that. The link now remembers the newest workout change it has seen and resumes from there. Requires `npm run db:migrate` (migration 0095, one nullable column; the hosted deploy applies it automatically). No new environment variables.
+
 - **Hosted deploys no longer fill the droplet's disk** (WHO-464). `deploy/deploy-hosted.sh` only pruned dangling layers, so tagged images from old releases piled up until a pull failed with "no space left on device". It now removes old Domi Ops images before pulling (keeping what is running), refuses to pull with less than 8 GB free, and after the restart keeps only the current and previous build. See [deploy/HOSTED_OPS.md](deploy/HOSTED_OPS.md). No migration, no new required environment variables.
 
 ### Changed

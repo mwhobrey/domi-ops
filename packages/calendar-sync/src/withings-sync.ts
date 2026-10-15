@@ -474,10 +474,10 @@ async function importGroup(
 
 const WORKOUTS_URL = "https://wbsapi.withings.net/v2/measure";
 /**
- * Workouts share the measurement watermark (`link.lastUpdate`, from `getmeas`), and Withings does not
- * say whether its `updatetime` and a workout's `modified` are the same clock. Reading a day further back
- * costs nothing, since `workout:<id>` dedupes, and covers a skew of up to a day. A larger one would still
- * skip a workout; a workout-specific watermark (WHO-462) removes the assumption.
+ * Workouts keep their own watermark (`link.workoutsLastUpdate`, the greatest workout `modified` seen),
+ * because Withings does not say that its `getmeas` `updatetime` and a workout's `modified` are one clock.
+ * Until a workout has been seen there is nothing to resume from, so the pull falls back to the measurement
+ * watermark minus a day. That costs nothing, since `workout:<id>` dedupes.
  */
 const WORKOUT_OVERLAP_SEC = 24 * 60 * 60;
 const WORKOUT_FIELDS = "calories,distance,steps,hr_average";
@@ -490,6 +490,8 @@ export type WithingsWorkout = {
   category?: number;
   startdate: number;
   enddate: number;
+  /** When Withings last changed this workout (unix seconds). The workout watermark follows it. */
+  modified?: number;
   data?: { calories?: number; distance?: number; steps?: number; hr_average?: number };
 };
 
@@ -644,17 +646,28 @@ async function syncWorkouts(
   now: Date,
   backfilling: boolean,
   fetchImpl: FetchLike,
-): Promise<number> {
+): Promise<{ imported: number; lastUpdate: number | null }> {
+  // Resuming from the watermark minus one second: `lastupdate` is exclusive and several workouts can
+  // share a second; the dedupe key makes the re-read free.
   const range = backfilling
     ? {
         startdateymd: ymd(new Date(link.backfillFrom.getTime() - 86_400_000)),
         enddateymd: ymd(new Date(now.getTime() + 86_400_000)),
       }
-    : { lastupdate: Math.max(0, link.lastUpdate! - WORKOUT_OVERLAP_SEC) };
+    : {
+        lastupdate: Math.max(
+          0,
+          link.workoutsLastUpdate != null ? link.workoutsLastUpdate - 1 : link.lastUpdate! - WORKOUT_OVERLAP_SEC,
+        ),
+      };
   let imported = 0;
+  let newest = link.workoutsLastUpdate;
   let offset = 0;
   for (let page = 0; page < MAX_PAGES; page += 1) {
     const result = await getWorkoutsPage(accessToken, range, offset, fetchImpl);
+    for (const w of result.workouts) {
+      if (Number.isFinite(w.modified) && (newest == null || w.modified! > newest)) newest = w.modified!;
+    }
     imported += await inHousehold(async (tx) => {
       const ids = result.workouts.map((w) => ({ grpid: workoutKey(w.id) }) as WithingsMeasureGroup);
       const seen = await loadSeenGroups(tx, link, ids);
@@ -664,7 +677,7 @@ async function syncWorkouts(
       }
       return n;
     });
-    if (!result.more) return imported;
+    if (!result.more) return { imported, lastUpdate: newest };
     offset = result.offset;
   }
   throw new WithingsError("transient", "Withings workout history is larger than one sync can page through");
@@ -740,7 +753,7 @@ export async function syncWithingsLink(
   accessToken: string,
   now: Date,
   fetchImpl: FetchLike = fetch,
-): Promise<{ imported: number; backfilled: boolean; lastUpdate: number }> {
+): Promise<{ imported: number; backfilled: boolean; lastUpdate: number; workoutsLastUpdate: number | null }> {
   const nowSec = Math.floor(now.getTime() / 1000);
   const backfilling = link.backfillDoneAt == null || link.lastUpdate == null;
   const range = backfilling
@@ -748,6 +761,7 @@ export async function syncWithingsLink(
     : { lastupdate: link.lastUpdate! };
 
   let imported = 0;
+  let workoutsLastUpdate = link.workoutsLastUpdate;
   let watermark: number | null = null;
   let offset = 0;
   for (let page = 0; page < MAX_PAGES; page += 1) {
@@ -764,9 +778,11 @@ export async function syncWithingsLink(
     if (!result.more) {
       // Workouts need the activity scope, which a link made before it existed does not have.
       if (withingsScopeAllowsWorkouts(link.scope)) {
-        imported += await syncWorkouts(inHousehold, env, link, accessToken, now, backfilling, fetchImpl);
+        const workouts = await syncWorkouts(inHousehold, env, link, accessToken, now, backfilling, fetchImpl);
+        imported += workouts.imported;
+        workoutsLastUpdate = workouts.lastUpdate;
       }
-      return { imported, backfilled: backfilling, lastUpdate: watermark ?? nowSec };
+      return { imported, backfilled: backfilling, lastUpdate: watermark ?? nowSec, workoutsLastUpdate };
     }
     offset = result.offset;
   }
@@ -818,6 +834,7 @@ export async function processWithingsLink(
           attempts: 0,
           nextAttemptAt: null,
           lastUpdate: result.lastUpdate,
+          workoutsLastUpdate: result.workoutsLastUpdate,
           backfillDoneAt: link.backfillDoneAt ?? now,
           updatedAt: now,
         })
