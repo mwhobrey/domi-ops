@@ -462,7 +462,7 @@ maybeDescribe("Withings sync (integration)", () => {
       const again = fakeWithings({ pages: [{ measuregrps: [], more: 0, updatetime: 1_790_000_100 }], workouts: [{ series: [run1()], more: 0, offset: 0 }] });
       await run(link.id, again.impl, new Date(NOW.getTime() + 60_000));
       expect((await exerciseRows()).events).toHaveLength(1);
-      expect(again.workoutCalls()[0]!.form.get("lastupdate")).toBe("1790000000");
+      expect(again.workoutCalls()[0]!.form.get("lastupdate")).toBe(String(1_790_000_000 - 86_400));
     });
 
     it("does not bring back a workout the user deleted", async () => {

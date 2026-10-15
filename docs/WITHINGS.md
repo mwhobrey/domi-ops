@@ -127,7 +127,7 @@ configured on the server (`GET /api/health/withings` says `enabled: false`) or t
   in `external_id`. Dedupe and "deleted stays deleted" use the same table as measure groups, under the key
   `workout:<id>`. A link made before the scope existed keeps importing readings but not workouts: the panel
   says so, and the fix is to unlink and connect again. The backfill asks for workouts by date (with a day
-  of slack each side), later pulls by `lastupdate`.
+  of slack each side), later pulls by `lastupdate`, taken from the measurement watermark minus one day: Withings does not say the two are one clock, and an overlap only re-reads (the workout key dedupes).
 - **Backfill size.** One pull pages up to 200 pages. A history larger than that fails and retries, which
   is cheap because everything already imported is recognised.
 

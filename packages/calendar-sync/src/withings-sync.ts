@@ -473,6 +473,12 @@ async function importGroup(
 // --- Workouts ---------------------------------------------------------------------------------
 
 const WORKOUTS_URL = "https://wbsapi.withings.net/v2/measure";
+/**
+ * Workouts share the measurement watermark (`link.lastUpdate`, from `getmeas`), and Withings does not
+ * say whether its `updatetime` and a workout's `modified` are the same clock. Reading a day further back
+ * costs nothing, since `workout:<id>` dedupes, and means a skew can only re-read, never skip.
+ */
+const WORKOUT_OVERLAP_SEC = 24 * 60 * 60;
 const WORKOUT_FIELDS = "calories,distance,steps,hr_average";
 /** Keeps a workout's id apart from a measure group's in the shared dedupe table. */
 const workoutKey = (id: string | number) => `workout:${id}`;
@@ -643,7 +649,7 @@ async function syncWorkouts(
         startdateymd: ymd(new Date(link.backfillFrom.getTime() - 86_400_000)),
         enddateymd: ymd(new Date(now.getTime() + 86_400_000)),
       }
-    : { lastupdate: link.lastUpdate! };
+    : { lastupdate: Math.max(0, link.lastUpdate! - WORKOUT_OVERLAP_SEC) };
   let imported = 0;
   let offset = 0;
   for (let page = 0; page < MAX_PAGES; page += 1) {
