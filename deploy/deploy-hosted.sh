@@ -100,6 +100,64 @@ COMPOSE=(
   --profile demo
 )
 
+# Image retention (WHO-464). v0.9.0's hosted deploy died pulling images with "no space left on
+# device": 54 images, ~40 GB unused. Policy: keep every image a container of this stack is
+# running now, plus the ones it was running before this deploy (the rollback target). Everything
+# else under ghcr.io/mwhobrey/domi-ops-* goes, before the pull (to make room) and after the
+# restart. The pre-pull prune keeps only what is running; the previous deploy's images are what
+# it drops, because the one in use is the rollback target for this deploy.
+MIN_FREE_GB="${DOMI_OPS_MIN_FREE_GB:-8}"
+if [[ ! "$MIN_FREE_GB" =~ ^[1-9][0-9]{0,3}$ ]]; then
+  echo "ERROR: DOMI_OPS_MIN_FREE_GB must be a whole number of GB between 1 and 9999 (got '$MIN_FREE_GB')." >&2
+  exit 1
+fi
+
+stack_image_ids() {
+  local cid
+  while read -r cid; do
+    [[ -n "$cid" ]] && docker inspect --format '{{.Image}}' "$cid" 2>/dev/null || true
+  done < <("${COMPOSE[@]}" ps -a -q 2>/dev/null || true)
+}
+
+# prune_old_images <keep-ids-file>: untag and remove domi-ops GHCR images whose id is not in the
+# file. Each tag is removed on its own: `docker rmi <id>` refuses an image that carries several tags.
+# Never forced, so an image a container still uses survives. Failures are reported, not hidden.
+prune_old_images() {
+  local keep_file="$1" ref id
+  while read -r ref id; do
+    [[ -z "$ref" || "$ref" == *"<none>"* ]] && continue
+    grep -qxF "$id" "$keep_file" && continue
+    docker rmi "$ref" >/dev/null || echo "WARNING: could not remove $ref" >&2
+  done < <(docker images --no-trunc --format '{{.Repository}}:{{.Tag}} {{.ID}}' --filter 'reference=ghcr.io/mwhobrey/domi-ops-*')
+}
+
+# Give every kept rollback image a tag of its own. Once `latest` moves to the new build the old one
+# is untagged ("dangling"), and `docker image prune` would delete exactly the image we promise to keep.
+tag_rollback_images() {
+  local keep_file="$1" id
+  while read -r id; do
+    [[ -z "$id" ]] && continue
+    # No tag means the image can go dangling after the pull and be pruned: abort before touching anything.
+    docker tag "$id" "ghcr.io/mwhobrey/domi-ops-rollback:${id#sha256:}" || {
+      echo "ABORTING deploy: could not tag rollback image $id. Containers were NOT touched." >&2
+      return 1
+    }
+  done < "$keep_file"
+}
+
+check_free_disk() {
+  local root free_kb
+  root="$(docker info --format '{{.DockerRootDir}}' 2>/dev/null || echo /var/lib/docker)"
+  free_kb="$(df -Pk "$root" 2>/dev/null | awk 'NR==2 {print $4}')"
+  [[ -z "$free_kb" ]] && { echo "WARNING: could not read free disk space for $root, skipping the check" >&2; return 0; }
+  if (( free_kb < MIN_FREE_GB * 1024 * 1024 )); then
+    echo "ABORTING deploy: only $(( free_kb / 1024 / 1024 )) GB free on $root, need at least ${MIN_FREE_GB} GB to pull images." >&2
+    echo "         Containers were NOT touched. Free space (docker system df; docker image prune -a)," >&2
+    echo "         or lower DOMI_OPS_MIN_FREE_GB if you know the pull is small." >&2
+    exit 1
+  fi
+}
+
 if [[ ! -f .env ]]; then
   echo "Missing .env in $REPO_ROOT — see deploy/HOSTED_BETA_SETUP.md." >&2
   exit 1
@@ -120,6 +178,15 @@ set +a
 export DOMI_OPS_IMAGE_TAG="${DOMI_OPS_IMAGE_TAG:-latest}"
 
 echo "==> Domi Ops hosted update (tag: ${DOMI_OPS_IMAGE_TAG})"
+
+PREV_IDS="$(mktemp)"
+trap 'rm -f "$PREV_IDS"' EXIT
+stack_image_ids | sort -u > "$PREV_IDS"
+tag_rollback_images "$PREV_IDS" || exit 1
+
+echo "==> freeing space from old images, then checking disk"
+prune_old_images "$PREV_IDS"
+check_free_disk
 
 echo "==> docker compose pull"
 "${COMPOSE[@]}" pull
@@ -199,12 +266,14 @@ if command -v curl >/dev/null 2>&1 && [[ -n "${PUBLIC_MARKETING_URL:-}" ]]; then
   fi
 fi
 
-echo "==> pruning dangling images"
-# Every deploy pulls a new tag under the same "latest" name, leaving the previous image's layers
-# dangling (untagged, unused) — dangling-only, never touches tagged/in-use images (confirmed live
-# 2026-08-28: reclaimed 43.8GB after a run of deploys with no prune in between filled the disk to
-# 99%, which then failed the api/worker image pull mid-deploy). Safe to run unconditionally.
+echo "==> pruning old images (keeping this deploy and the previous one for rollback)"
+# Dangling layers first (every deploy re-points "latest" and orphans the last build), then any
+# tagged domi-ops image that is neither running now nor was running before this deploy.
 docker image prune -f
+KEEP_IDS="$(mktemp)"
+{ cat "$PREV_IDS"; stack_image_ids; } | sort -u > "$KEEP_IDS"
+prune_old_images "$KEEP_IDS"
+rm -f "$KEEP_IDS"
 
 echo "==> container status"
 "${COMPOSE[@]}" ps
