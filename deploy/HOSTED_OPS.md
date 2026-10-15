@@ -107,6 +107,12 @@ site. `.env` and `Caddyfile` are untracked and untouched by `git pull`.
 
 To pin a specific build instead of `latest`: `DOMI_OPS_IMAGE_TAG=<sha> deploy/deploy-hosted.sh`.
 
+**Disk and image retention (WHO-464).** Before pulling, the script removes every `ghcr.io/mwhobrey/domi-ops-*`
+image no container of the stack is running, then aborts (containers untouched) if the Docker root has less
+than 8 GB free (`DOMI_OPS_MIN_FREE_GB` to change it). After the restart it prunes again but keeps the images
+the stack was running *before* this deploy, so exactly one previous build stays on disk as the rollback target.
+Rolling back further than that means pulling the older tag again (`DOMI_OPS_IMAGE_TAG=<sha>`).
+
 ## Incidents
 
 ### Bad deploy

@@ -8,6 +8,14 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+### Fixed
+
+- **Hosted deploys no longer fill the droplet's disk** (WHO-464). `deploy/deploy-hosted.sh` only pruned dangling layers, so tagged images from old releases piled up until a pull failed with "no space left on device". It now removes old Domi Ops images before pulling (keeping what is running), refuses to pull with less than 8 GB free, and after the restart keeps only the current and previous build. See [deploy/HOSTED_OPS.md](deploy/HOSTED_OPS.md). No migration, no new required environment variables.
+
+### Changed
+
+- `npm run dev` through Turborepo now builds workspace dependencies first, like `build`, `lint`, `typecheck` and `test` already do.
+
 ## [0.9.0] - 2026-10-15
 
 Withings blood pressure cuff and watch sync (requires `npm run db:migrate`, migration 0094; the hosted deploy applies it automatically). Set `WITHINGS_CLIENT_ID` and `WITHINGS_CLIENT_SECRET` to turn it on; no manual steps otherwise. Self-hosters can also set `DB_POOL_MAX`.
