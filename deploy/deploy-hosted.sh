@@ -137,7 +137,11 @@ tag_rollback_images() {
   local keep_file="$1" id
   while read -r id; do
     [[ -z "$id" ]] && continue
-    docker tag "$id" "ghcr.io/mwhobrey/domi-ops-rollback:${id#sha256:}" 2>/dev/null || true
+    # No tag means the image can go dangling after the pull and be pruned: abort before touching anything.
+    docker tag "$id" "ghcr.io/mwhobrey/domi-ops-rollback:${id#sha256:}" || {
+      echo "ABORTING deploy: could not tag rollback image $id. Containers were NOT touched." >&2
+      return 1
+    }
   done < "$keep_file"
 }
 
@@ -178,7 +182,7 @@ echo "==> Domi Ops hosted update (tag: ${DOMI_OPS_IMAGE_TAG})"
 PREV_IDS="$(mktemp)"
 trap 'rm -f "$PREV_IDS"' EXIT
 stack_image_ids | sort -u > "$PREV_IDS"
-tag_rollback_images "$PREV_IDS"
+tag_rollback_images "$PREV_IDS" || exit 1
 
 echo "==> freeing space from old images, then checking disk"
 prune_old_images "$PREV_IDS"
