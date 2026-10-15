@@ -77,7 +77,7 @@ function PersonRow({
       {!link ? (
         <div className="space-y-2">
           <p className="text-sm text-[var(--color-text-muted)]">
-            You&apos;ll sign in to Withings and approve access to blood pressure readings. Pick how far back to
+            You&apos;ll sign in to Withings and approve access to health readings and workouts. Pick how far back to
             import.
           </p>
           <div className="flex flex-wrap items-center gap-2">
@@ -130,6 +130,12 @@ function PersonRow({
             <Alert variant="error">
               Syncing with Withings failed several times in a row{link.lastError ? ` (${link.lastError})` : ""}. Choose
               Sync now to try again.
+            </Alert>
+          ) : null}
+          {link.status === "active" && !link.workouts ? (
+            <Alert variant="info">
+              Workouts are not coming across yet: this link was made before Domi Ops asked for activity access. Unlink,
+              then connect again and approve it to include workouts. Readings keep importing either way.
             </Alert>
           ) : null}
           {link.status === "active" && link.lastError ? (
@@ -277,11 +283,11 @@ export function WithingsPanel({
   return (
     <Card>
       <CardBody className="space-y-4">
-        <SectionHeader title="Blood pressure cuff (Withings)" />
+        <SectionHeader title="Blood pressure cuff and watch (Withings)" />
         <p className="text-sm text-[var(--color-text-muted)]">
-          Connect a Withings cuff and readings arrive on their own, no typing, and fill scheduled blood pressure checks
-          that fall near them. Only blood pressure and pulse are imported, and only into Domi Ops: nothing is sent back
-          to Withings.
+          Connect a Withings cuff or watch and readings arrive on their own, no typing, and fill scheduled checks that
+          fall near them. Blood pressure, pulse, blood oxygen, body temperature and workouts are imported, and only
+          into Domi Ops: nothing is sent back to Withings.
         </p>
         <p className="text-sm text-[var(--color-text-muted)]">
           <strong className="text-[var(--color-text)]">Withings+ for new accounts.</strong> For a Withings account

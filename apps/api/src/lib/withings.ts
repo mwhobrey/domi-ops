@@ -1,7 +1,7 @@
 import type { Env } from "@domi-ops/config";
 import { healthMedPushActionSecret, mintWithingsWebhookToken } from "@domi-ops/crypto";
 import type { healthWithingsLinks } from "@domi-ops/db";
-import { WITHINGS_MAX_BACKFILL_DAYS, WITHINGS_DEFAULT_BACKFILL_DAYS } from "@domi-ops/calendar-sync";
+import { WITHINGS_MAX_BACKFILL_DAYS, WITHINGS_DEFAULT_BACKFILL_DAYS, withingsScopeAllowsWorkouts } from "@domi-ops/calendar-sync";
 
 export const WITHINGS_OAUTH_PREFIX = "oauth:withings";
 
@@ -61,5 +61,7 @@ export function serializeWithingsLink(row: LinkRow) {
     lastSyncedAt: row.lastSyncedAt?.toISOString() ?? null,
     lastError: row.lastError,
     syncPending: row.syncRequestedAt != null,
+    /** Whether the person approved activity access, which workouts need. Links made before it existed have not. */
+    workouts: withingsScopeAllowsWorkouts(row.scope),
   };
 }

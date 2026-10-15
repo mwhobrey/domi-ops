@@ -3,6 +3,7 @@ import { decryptSensitive, encryptSensitive } from "@domi-ops/crypto";
 import type { Database } from "@domi-ops/db";
 import {
   healthEvents,
+  healthExerciseDetails,
   healthVitalsReadings,
   healthWithingsLinks,
   healthWithingsMeasureGroups,
@@ -23,9 +24,22 @@ const TOKEN_URL = "https://wbsapi.withings.net/v2/oauth2";
 const MEASURE_URL = "https://wbsapi.withings.net/measure";
 const NOTIFY_URL = "https://wbsapi.withings.net/notify";
 
-export const WITHINGS_SCOPE = "user.metrics";
+/**
+ * `user.metrics` covers every `getmeas` reading (blood pressure, SpO2, temperature, heart rate);
+ * `user.activity` is what `getworkouts` needs. A link made before the second scope existed keeps
+ * working without workouts until the person reconnects.
+ */
+export const WITHINGS_SCOPE = "user.metrics,user.activity";
+export const WITHINGS_ACTIVITY_SCOPE = "user.activity";
+
+/** Whether the scope Withings granted this link includes workouts. */
+export function withingsScopeAllowsWorkouts(scope: string | null | undefined): boolean {
+  return (scope ?? "").split(/[,\s]+/).includes(WITHINGS_ACTIVITY_SCOPE);
+}
 /** Notify category 4: blood pressure and heart rate. */
 export const WITHINGS_APPLI_BLOOD_PRESSURE = 4;
+/** Notify application for activity and workouts. */
+export const WITHINGS_APPLI_ACTIVITY = 16;
 
 export const WITHINGS_DEFAULT_BACKFILL_DAYS = 365;
 export const WITHINGS_MAX_BACKFILL_DAYS = 3650;
@@ -209,23 +223,28 @@ async function withingsRefresh(
   return parseTokens(body);
 }
 
-/** Ask Withings to POST to `callbackUrl` when this user has new blood pressure data. */
-export async function withingsSubscribe(accessToken: string, callbackUrl: string, fetchImpl: FetchLike = fetch): Promise<void> {
-  await callWithings(
-    NOTIFY_URL,
-    { action: "subscribe", callbackurl: callbackUrl, appli: String(WITHINGS_APPLI_BLOOD_PRESSURE) },
-    accessToken,
-    fetchImpl,
-  );
+/**
+ * Ask Withings to POST to `callbackUrl` when this user has new blood pressure data, and new workouts
+ * too when the link may read them. The workout subscription is best effort: the six hour safety net
+ * picks up whatever it misses.
+ */
+export async function withingsSubscribe(
+  accessToken: string,
+  callbackUrl: string,
+  fetchImpl: FetchLike = fetch,
+  opts: { workouts?: boolean } = {},
+): Promise<void> {
+  const call = (appli: number) =>
+    callWithings(NOTIFY_URL, { action: "subscribe", callbackurl: callbackUrl, appli: String(appli) }, accessToken, fetchImpl);
+  await call(WITHINGS_APPLI_BLOOD_PRESSURE);
+  if (opts.workouts) await call(WITHINGS_APPLI_ACTIVITY).catch(() => undefined);
 }
 
 export async function withingsUnsubscribe(accessToken: string, callbackUrl: string, fetchImpl: FetchLike = fetch): Promise<void> {
-  await callWithings(
-    NOTIFY_URL,
-    { action: "revoke", callbackurl: callbackUrl, appli: String(WITHINGS_APPLI_BLOOD_PRESSURE) },
-    accessToken,
-    fetchImpl,
-  );
+  const call = (appli: number) =>
+    callWithings(NOTIFY_URL, { action: "revoke", callbackurl: callbackUrl, appli: String(appli) }, accessToken, fetchImpl);
+  await call(WITHINGS_APPLI_BLOOD_PRESSURE);
+  await call(WITHINGS_APPLI_ACTIVITY).catch(() => undefined);
 }
 
 // --- Measure groups ---------------------------------------------------------------------------
@@ -251,46 +270,70 @@ export type WithingsMeasureGroup = {
  */
 const UNATTRIBUTED_ATTRIBS = new Set([1, 4]);
 
-export type BloodPressureMetric = "blood_pressure_systolic" | "blood_pressure_diastolic" | "heart_rate";
-export type ShapedBloodPressure = {
+export type VitalsMetric = "blood_pressure_systolic" | "blood_pressure_diastolic" | "heart_rate" | "blood_oxygen" | "temperature";
+export type ShapedVitals = {
   grpid: string;
   measuredAt: Date;
-  readings: Array<{ metric: BloodPressureMetric; value: number; unit: "mmHg" | "bpm" }>;
+  /** "Blood pressure" when the group has one, else "Vitals". */
+  title: string;
+  readings: Array<{ metric: VitalsMetric; value: number; unit: "mmHg" | "bpm" | "%" | "°F" }>;
 };
 
-/** Withings measure types: 9 diastolic, 10 systolic, 11 heart pulse. */
-const MEASURE_TYPE_TO_METRIC: Record<number, { metric: BloodPressureMetric; unit: "mmHg" | "bpm" }> = {
+type MeasureSpec = { metric: VitalsMetric; unit: ShapedVitals["readings"][number]["unit"]; convert?: (v: number) => number };
+
+/**
+ * Withings measure types: 9 diastolic, 10 systolic, 11 heart pulse, 54 SpO2 (%), 71 body temperature
+ * (Celsius, kept in the app's default Fahrenheit). Skin temperature (73) is deliberately left out:
+ * it is a different quantity and would sit beside real fever readings as a number that means less.
+ */
+const MEASURE_TYPE_TO_METRIC: Record<number, MeasureSpec> = {
   9: { metric: "blood_pressure_diastolic", unit: "mmHg" },
   10: { metric: "blood_pressure_systolic", unit: "mmHg" },
   11: { metric: "heart_rate", unit: "bpm" },
+  54: { metric: "blood_oxygen", unit: "%" },
+  71: { metric: "temperature", unit: "°F", convert: (c) => (c * 9) / 5 + 32 },
 };
-const MEASURE_TYPES_PARAM = "9,10,11";
+const MEASURE_TYPES_PARAM = Object.keys(MEASURE_TYPE_TO_METRIC).join(",");
+const VITALS_ORDER: VitalsMetric[] = [
+  "blood_pressure_systolic",
+  "blood_pressure_diastolic",
+  "heart_rate",
+  "blood_oxygen",
+  "temperature",
+];
 
 /**
- * Pure: one Withings measure group -> one blood pressure entry, or null when it is not one. A group
- * counts only when it carries both systolic and diastolic; a lone pulse (a scale, say) is not a
- * blood pressure reading. A measure is `value * 10^unit`.
+ * Pure: one Withings measure group -> one vitals entry, or null when it holds nothing we keep. Blood
+ * pressure counts only with both systolic and diastolic; a half pair is dropped and the rest of the
+ * group (a pulse, say) is still kept. A measure is `value * 10^unit`.
  */
-export function shapeBloodPressureGroup(group: WithingsMeasureGroup): ShapedBloodPressure | null {
+export function shapeVitalsGroup(group: WithingsMeasureGroup): ShapedVitals | null {
   if (group.grpid == null || !Number.isFinite(group.date) || group.date <= 0) return null;
   if (group.attrib != null && UNATTRIBUTED_ATTRIBS.has(group.attrib)) return null;
-  const byMetric = new Map<BloodPressureMetric, { value: number; unit: "mmHg" | "bpm" }>();
+  const byMetric = new Map<VitalsMetric, { value: number; unit: MeasureSpec["unit"] }>();
   for (const m of group.measures ?? []) {
     const spec = MEASURE_TYPE_TO_METRIC[m.type];
     if (!spec || !Number.isFinite(m.value) || !Number.isFinite(m.unit)) continue;
-    const value = Math.round(m.value * 10 ** m.unit * 100) / 100;
+    const raw = m.value * 10 ** m.unit;
+    const value = Math.round((spec.convert ? spec.convert(raw) : raw) * 100) / 100;
     if (!(value > 0)) continue;
     byMetric.set(spec.metric, { value, unit: spec.unit });
   }
-  if (!byMetric.has("blood_pressure_systolic") || !byMetric.has("blood_pressure_diastolic")) return null;
-  const order: BloodPressureMetric[] = ["blood_pressure_systolic", "blood_pressure_diastolic", "heart_rate"];
+  const hasBp = byMetric.has("blood_pressure_systolic") && byMetric.has("blood_pressure_diastolic");
+  if (!hasBp) {
+    byMetric.delete("blood_pressure_systolic");
+    byMetric.delete("blood_pressure_diastolic");
+  }
+  const readings = VITALS_ORDER.flatMap((metric) => {
+    const hit = byMetric.get(metric);
+    return hit ? [{ metric, value: hit.value, unit: hit.unit }] : [];
+  });
+  if (readings.length === 0) return null;
   return {
     grpid: String(group.grpid),
     measuredAt: new Date(group.date * 1000),
-    readings: order.flatMap((metric) => {
-      const hit = byMetric.get(metric);
-      return hit ? [{ metric, value: hit.value, unit: hit.unit }] : [];
-    }),
+    title: hasBp ? "Blood pressure" : "Vitals",
+    readings,
   };
 }
 
@@ -325,7 +368,6 @@ type LinkRow = typeof healthWithingsLinks.$inferSelect;
 
 type ImportOutcome = "imported" | "seen" | "ignored";
 
-const EVENT_TITLE = "Blood pressure";
 const EVENT_NOTES = "Imported from Withings";
 
 function requireKey(env: Pick<Env, "ENCRYPTION_KEY">): string {
@@ -373,7 +415,7 @@ async function loadSeenGroups(
 /**
  * One group -> one `vitals` entry, exactly once. The `(member, Withings user, grpid)` row is both the
  * dedupe and, once its entry is deleted, a tombstone (event_id goes null) that keeps a backfill from
- * re-creating it. Groups that are not blood pressure, or that Withings could not attribute, leave no
+ * re-creating it. Groups with nothing we keep, or that Withings could not attribute, leave no
  * row, so they are looked at again if they come back changed.
  */
 async function importGroup(
@@ -387,7 +429,7 @@ async function importGroup(
   if (!grpid) return "ignored";
   if (seen.has(grpid)) return "seen";
 
-  const shaped = shapeBloodPressureGroup(group);
+  const shaped = shapeVitalsGroup(group);
   if (!shaped) return "ignored";
 
   const key = requireKey(env);
@@ -398,7 +440,7 @@ async function importGroup(
         householdId: link.householdId,
         memberId: link.memberId,
         type: "vitals",
-        title: encryptSensitive(EVENT_TITLE, key),
+        title: encryptSensitive(shaped.title, key),
         notes: encryptSensitive(EVENT_NOTES, key),
         startedAt: shaped.measuredAt,
         visibility: "private",
@@ -426,6 +468,206 @@ async function importGroup(
   });
   seen.set(grpid, null);
   return "imported";
+}
+
+// --- Workouts ---------------------------------------------------------------------------------
+
+const WORKOUTS_URL = "https://wbsapi.withings.net/v2/measure";
+/**
+ * Workouts share the measurement watermark (`link.lastUpdate`, from `getmeas`), and Withings does not
+ * say whether its `updatetime` and a workout's `modified` are the same clock. Reading a day further back
+ * costs nothing, since `workout:<id>` dedupes, and covers a skew of up to a day. A larger one would still
+ * skip a workout; a workout-specific watermark (WHO-462) removes the assumption.
+ */
+const WORKOUT_OVERLAP_SEC = 24 * 60 * 60;
+const WORKOUT_FIELDS = "calories,distance,steps,hr_average";
+/** Keeps a workout's id apart from a measure group's in the shared dedupe table. */
+const workoutKey = (id: string | number) => `workout:${id}`;
+
+export type WithingsWorkout = {
+  id: number | string;
+  /** Withings workout category (1 walk, 2 run, 6 bicycling, ...). */
+  category?: number;
+  startdate: number;
+  enddate: number;
+  data?: { calories?: number; distance?: number; steps?: number; hr_average?: number };
+};
+
+/** From Withings' published category list; anything else is just a "Workout". */
+const WORKOUT_NAMES: Record<number, string> = {
+  1: "Walking",
+  2: "Running",
+  3: "Hiking",
+  4: "Skating",
+  6: "Cycling",
+  7: "Swimming",
+  8: "Surfing",
+  12: "Tennis",
+  13: "Table tennis",
+  14: "Squash",
+  15: "Badminton",
+  16: "Weight training",
+  17: "Calisthenics",
+  18: "Elliptical",
+  19: "Pilates",
+  20: "Basketball",
+  21: "Soccer",
+  22: "Football",
+  27: "Golf",
+  28: "Yoga",
+  29: "Dancing",
+  30: "Boxing",
+  33: "Martial arts",
+  34: "Skiing",
+  35: "Snowboarding",
+  187: "Rowing",
+  188: "Zumba",
+  195: "Climbing",
+  306: "Walking (indoor)",
+  307: "Running (indoor)",
+  308: "Cycling (indoor)",
+};
+
+export type ShapedWorkout = {
+  key: string;
+  id: string;
+  activity: string;
+  startedAt: Date;
+  endedAt: Date;
+  durationMinutes: number;
+  distanceKm: number | null;
+  calories: number | null;
+};
+
+/** Pure: one Withings workout -> what an exercise entry needs, or null when it has no usable span. */
+export function shapeWorkout(workout: WithingsWorkout): ShapedWorkout | null {
+  if (workout.id == null || !Number.isFinite(workout.startdate) || !Number.isFinite(workout.enddate)) return null;
+  if (workout.startdate <= 0 || workout.enddate <= workout.startdate) return null;
+  const positive = (n: unknown) => (typeof n === "number" && Number.isFinite(n) && n > 0 ? n : null);
+  const distanceM = positive(workout.data?.distance);
+  const calories = positive(workout.data?.calories);
+  return {
+    key: workoutKey(workout.id),
+    id: String(workout.id),
+    activity: (workout.category != null && WORKOUT_NAMES[workout.category]) || "Workout",
+    startedAt: new Date(workout.startdate * 1000),
+    endedAt: new Date(workout.enddate * 1000),
+    durationMinutes: Math.max(1, Math.round((workout.enddate - workout.startdate) / 60)),
+    distanceKm: distanceM == null ? null : Math.round(distanceM / 10) / 100,
+    calories: calories == null ? null : Math.round(calories),
+  };
+}
+
+type WorkoutPage = { workouts: WithingsWorkout[]; more: boolean; offset: number };
+
+/** `YYYY-MM-DD` of an instant in UTC. Callers pad a day either side, since Withings reads these in the user's own zone. */
+const ymd = (d: Date) => d.toISOString().slice(0, 10);
+
+async function getWorkoutsPage(
+  accessToken: string,
+  range: { startdateymd: string; enddateymd: string } | { lastupdate: number },
+  offset: number,
+  fetchImpl: FetchLike,
+): Promise<WorkoutPage> {
+  const form: Record<string, string> = {
+    action: "getworkouts",
+    data_fields: WORKOUT_FIELDS,
+    ...Object.fromEntries(Object.entries(range).map(([k, v]) => [k, String(v)])),
+  };
+  if (offset > 0) form.offset = String(offset);
+  const body = await callWithings(WORKOUTS_URL, form, accessToken, fetchImpl);
+  return {
+    workouts: Array.isArray(body.series) ? (body.series as WithingsWorkout[]) : [],
+    more: body.more === 1 || body.more === true,
+    offset: typeof body.offset === "number" ? body.offset : 0,
+  };
+}
+
+/** One workout -> one `exercise` entry, exactly once (same dedupe and tombstone as a measure group). */
+async function importWorkout(
+  db: Database,
+  env: Pick<Env, "ENCRYPTION_KEY">,
+  link: Pick<LinkRow, "householdId" | "memberId" | "withingsUserId" | "linkedByUserId">,
+  workout: WithingsWorkout,
+  seen: SeenGroups,
+): Promise<ImportOutcome> {
+  const shaped = shapeWorkout(workout);
+  if (!shaped) return "ignored";
+  if (seen.has(shaped.key)) return "seen";
+
+  const key = requireKey(env);
+  await db.transaction(async (tx) => {
+    const [event] = await tx
+      .insert(healthEvents)
+      .values({
+        householdId: link.householdId,
+        memberId: link.memberId,
+        type: "exercise",
+        title: encryptSensitive(shaped.activity, key),
+        notes: encryptSensitive(EVENT_NOTES, key),
+        startedAt: shaped.startedAt,
+        endedAt: shaped.endedAt,
+        visibility: "private",
+        createdByUserId: link.linkedByUserId,
+      })
+      .returning({ id: healthEvents.id });
+    await tx.insert(healthExerciseDetails).values({
+      eventId: event!.id,
+      activity: encryptSensitive(shaped.activity, key),
+      durationMinutes: encryptSensitive(String(shaped.durationMinutes), key),
+      distance: shaped.distanceKm == null ? null : encryptSensitive(String(shaped.distanceKm), key),
+      distanceUnit: shaped.distanceKm == null ? null : "km",
+      caloriesEstimated: shaped.calories == null ? null : encryptSensitive(String(shaped.calories), key),
+      externalSource: "withings",
+      externalId: shaped.id,
+    });
+    await tx
+      .insert(healthWithingsMeasureGroups)
+      .values({
+        householdId: link.householdId,
+        memberId: link.memberId,
+        withingsUserId: link.withingsUserId,
+        grpid: shaped.key,
+        eventId: event!.id,
+      })
+      .onConflictDoNothing();
+  });
+  seen.set(shaped.key, null);
+  return "imported";
+}
+
+async function syncWorkouts(
+  inHousehold: InHousehold,
+  env: Pick<Env, "ENCRYPTION_KEY">,
+  link: LinkRow,
+  accessToken: string,
+  now: Date,
+  backfilling: boolean,
+  fetchImpl: FetchLike,
+): Promise<number> {
+  const range = backfilling
+    ? {
+        startdateymd: ymd(new Date(link.backfillFrom.getTime() - 86_400_000)),
+        enddateymd: ymd(new Date(now.getTime() + 86_400_000)),
+      }
+    : { lastupdate: Math.max(0, link.lastUpdate! - WORKOUT_OVERLAP_SEC) };
+  let imported = 0;
+  let offset = 0;
+  for (let page = 0; page < MAX_PAGES; page += 1) {
+    const result = await getWorkoutsPage(accessToken, range, offset, fetchImpl);
+    imported += await inHousehold(async (tx) => {
+      const ids = result.workouts.map((w) => ({ grpid: workoutKey(w.id) }) as WithingsMeasureGroup);
+      const seen = await loadSeenGroups(tx, link, ids);
+      let n = 0;
+      for (const workout of result.workouts) {
+        if ((await importWorkout(tx, env, link, workout, seen)) === "imported") n += 1;
+      }
+      return n;
+    });
+    if (!result.more) return imported;
+    offset = result.offset;
+  }
+  throw new WithingsError("transient", "Withings workout history is larger than one sync can page through");
 }
 
 // --- Sync -------------------------------------------------------------------------------------
@@ -520,6 +762,10 @@ export async function syncWithingsLink(
       return n;
     });
     if (!result.more) {
+      // Workouts need the activity scope, which a link made before it existed does not have.
+      if (withingsScopeAllowsWorkouts(link.scope)) {
+        imported += await syncWorkouts(inHousehold, env, link, accessToken, now, backfilling, fetchImpl);
+      }
       return { imported, backfilled: backfilling, lastUpdate: watermark ?? nowSec };
     }
     offset = result.offset;

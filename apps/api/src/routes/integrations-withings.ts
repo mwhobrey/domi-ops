@@ -5,6 +5,7 @@ import {
   WithingsError,
   encryptWithingsSecret,
   withingsExchangeCode,
+  withingsScopeAllowsWorkouts,
   withingsSubscribe,
 } from "@domi-ops/calendar-sync";
 import { healthMedPushActionSecret, verifyWithingsWebhookToken } from "@domi-ops/crypto";
@@ -135,7 +136,11 @@ export function integrationsWithingsRoutes(db: Database, env: Env) {
     // within seconds, and "Sync now" works either way.
     try {
       const callback = withingsWebhookUrl(env, link!);
-      if (callback) await withingsSubscribe(tokens.accessToken, callback);
+      if (callback) {
+        await withingsSubscribe(tokens.accessToken, callback, undefined, {
+          workouts: withingsScopeAllowsWorkouts(tokens.scope),
+        });
+      }
     } catch (e) {
       console.error("[withings] webhook subscribe failed", e instanceof Error ? e.message : e);
     }

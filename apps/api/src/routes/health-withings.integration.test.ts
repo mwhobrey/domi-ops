@@ -221,7 +221,7 @@ maybeDescribe("withings routes (integration)", () => {
       const url = new URL(res.json.authorizeUrl);
       expect(url.origin + url.pathname).toBe("https://account.withings.com/oauth2_user/authorize2");
       expect(url.searchParams.get("redirect_uri")).toBe("https://app.test.example/api/integrations/withings/callback");
-      expect(url.searchParams.get("scope")).toBe("user.metrics");
+      expect(url.searchParams.get("scope")).toBe("user.metrics,user.activity");
 
       const [, prefix, state, payload, ttlSec] = vi.mocked(setOAuthState).mock.calls[0] as unknown as [string, string, string, Record<string, unknown>, number];
       expect(prefix).toBe(WITHINGS_OAUTH_PREFIX);

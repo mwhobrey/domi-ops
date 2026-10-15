@@ -176,7 +176,7 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
             . OAuth tokens are encrypted at rest on the instance.
           </li>
           <li>
-            <strong>Withings</strong>: optional blood pressure cuff import, only if you connect a
+            <strong>Withings</strong>: optional blood pressure cuff and watch import, only if you connect a
             Withings account. See{" "}
             <a
               href="https://www.withings.com/us/en/legal/privacy-policy"
@@ -234,11 +234,12 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
         <p>
           <strong className="text-[var(--color-text)]">Withings (optional).</strong> If you connect
           a household member to a Withings account, Domi Ops imports that person&apos;s blood
-          pressure readings (systolic, diastolic, pulse, and when each was taken) as ordinary
-          health entries, including past readings from the period you choose when you connect, and
-          new ones as the cuff syncs. They are protected like any other health entry. Withings&apos;
-          permission for this covers body measurements generally; Domi Ops reads only blood
-          pressure and pulse and ignores the rest. Nothing about the person is sent to Withings:
+          pressure readings (systolic, diastolic, pulse), blood oxygen, body temperature and
+          workouts (the activity, how long, and distance and calories when Withings has them), with
+          when each was taken, as ordinary health entries, including past ones from the period you
+          choose when you connect, and new ones as the cuff or watch syncs. They are protected like
+          any other health entry. Withings&apos; permission for this covers body measurements and
+          activity generally; Domi Ops reads only the readings listed here and ignores the rest. Nothing about the person is sent to Withings:
           Domi Ops only asks Withings to notify it when there is new data. Readings Withings cannot
           attribute to one person, such as on a cuff shared by a household, are left out until
           they are assigned in the Withings app. The connection is stored as encrypted
@@ -336,7 +337,7 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
           >
             Google Account
           </a>
-          , disconnect a Withings cuff from Health (Checks), disable Web Push, turn off optional
+          , disconnect a Withings cuff or watch from Health (Checks), disable Web Push, turn off optional
           modules (within what the instance enables), and
           turn anonymized metrics on or off. See also the <a href={termsHref}>Terms of Service</a>.
         </p>

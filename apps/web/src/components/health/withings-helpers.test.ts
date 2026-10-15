@@ -16,6 +16,7 @@ const link = (over: Partial<WithingsLink> = {}): WithingsLink => ({
   backfillDone: true,
   lastSyncedAt: "2026-10-13T12:05:00.000Z",
   lastError: null,
+  workouts: true,
   syncPending: false,
   ...over,
 });

@@ -6,7 +6,9 @@ Operator and developer notes for the Withings integration. Linear: WHO-452 (API 
 
 A household member can be linked to one Withings account. Blood pressure readings from their Withings
 cuff (BPM Connect, BPM Core, BPM Vision) become normal `vitals` entries with systolic, diastolic and,
-when the cuff recorded it, pulse. One way only: Withings to Domi Ops.
+when the cuff recorded it, pulse. A Withings watch (ScanWatch) adds blood oxygen, body temperature and
+spot heart rate as `vitals` entries, and its workouts as `exercise` entries. One way only: Withings to
+Domi Ops. Steps, daily activity and sleep are not imported yet.
 
 There is no matcher for scheduled checks. A slot counts as answered when a reading falls inside its
 30 minute window ([HEALTH_CHECKS.md](./HEALTH_CHECKS.md)), and an imported reading is a reading, so a
@@ -61,7 +63,7 @@ safety net keep links working until they are re-subscribed.
 
 ## The screen
 
-Health, **Checks** tab, panel **Blood pressure cuff (Withings)** (`apps/web/src/components/health/WithingsPanel.tsx`).
+Health, **Checks** tab, panel **Blood pressure cuff and watch (Withings)** (`apps/web/src/components/health/WithingsPanel.tsx`).
 The same panel is also on **Settings** and **Profile**, below the MyAllyFile card (`WithingsSettings.tsx`, which
 loads the roster and the viewer's permissions the way `MyAllyFileSettings` does). A member who can't open Settings
 still reaches it from Profile. Connecting from any of the three returns to Health, Checks with the result banner.
@@ -113,8 +115,19 @@ configured on the server (`GET /api/health/withings` says `enabled: false`) or t
 - **Readings that miss a scheduled check.** A reading fills a slot on its own within 30 minutes. One taken
   earlier or later is offered inline on the nearest open check (see "attach prompt" in
   [HEALTH_CHECKS.md](./HEALTH_CHECKS.md)): the person taps Attach or Not this one.
-- **Only blood pressure.** A group needs both systolic and diastolic. A lone pulse (a scale, say) is
-  skipped. Entries are private to the person and their `events` grantees, like any health entry.
+- **What a group becomes.** Each Withings measure group is one `vitals` entry titled "Blood pressure"
+  (it has systolic and diastolic) or "Vitals". Measure types kept: 9/10 diastolic/systolic, 11 pulse,
+  54 blood oxygen (%), 71 body temperature (Celsius from Withings, stored in Fahrenheit like a typed
+  entry). Half a blood pressure pair is dropped; anything else in the group is kept. Skin temperature (73)
+  is deliberately not imported: it is not a fever reading. Entries are private to the person and their
+  `events` grantees, like any health entry.
+- **Workouts.** `getworkouts` needs the `user.activity` scope, which the connect now asks for along with
+  `user.metrics`. Each workout becomes an `exercise` entry (title and activity from the Withings category,
+  start and end, minutes, distance in km, calories) with `external_source = 'withings'` and the workout id
+  in `external_id`. Dedupe and "deleted stays deleted" use the same table as measure groups, under the key
+  `workout:<id>`. A link made before the scope existed keeps importing readings but not workouts: the panel
+  says so, and the fix is to unlink and connect again. The backfill asks for workouts by date (with a day
+  of slack each side), later pulls by `lastupdate`, taken from the measurement watermark minus one day: Withings does not say the two are one clock, and the overlap covers a skew of up to a day and only re-reads (the workout key dedupes). A bigger skew would skip a workout; a workout-specific watermark (WHO-462) removes the assumption.
 - **Backfill size.** One pull pages up to 200 pages. A history larger than that fails and retries, which
   is cheap because everything already imported is recognised.
 
@@ -147,6 +160,11 @@ Checked against Withings' published OpenAPI spec and error table:
 
 Not verified, and worth watching on first real use:
 
+- The `getworkouts` request and response shape, the `data_fields` we ask for, and the workout category
+  names, all written from Withings' documentation without a real watch to test against. A workout of an
+  unlisted category imports as "Workout". Notify application 16 (activity) is subscribed best effort; the
+  six hour safety net covers a miss. Blood oxygen and temperature have no subscription of their own, so
+  they arrive on the next webhook or the safety net.
 - Status `401` and `293` are mapped to "token will never work again" from memory; they are not in the
   table I could read. `342` ("credentials absent or incorrect") is deliberately not mapped, because it can
   mean our own app secret is wrong and that must not flip every link to "reconnect": it retries, then the
