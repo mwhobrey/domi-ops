@@ -107,6 +107,10 @@ COMPOSE=(
 # restart. The pre-pull prune keeps only what is running; the previous deploy's images are what
 # it drops, because the one in use is the rollback target for this deploy.
 MIN_FREE_GB="${DOMI_OPS_MIN_FREE_GB:-8}"
+if [[ ! "$MIN_FREE_GB" =~ ^[1-9][0-9]{0,3}$ ]]; then
+  echo "ERROR: DOMI_OPS_MIN_FREE_GB must be a whole number of GB between 1 and 9999 (got '$MIN_FREE_GB')." >&2
+  exit 1
+fi
 
 stack_image_ids() {
   local cid
@@ -115,14 +119,26 @@ stack_image_ids() {
   done < <("${COMPOSE[@]}" ps -a -q 2>/dev/null || true)
 }
 
-# prune_old_images <keep-ids-file>: remove domi-ops GHCR images whose id is not in the file.
+# prune_old_images <keep-ids-file>: untag and remove domi-ops GHCR images whose id is not in the
+# file. Each tag is removed on its own: `docker rmi <id>` refuses an image that carries several tags.
+# Never forced, so an image a container still uses survives. Failures are reported, not hidden.
 prune_old_images() {
+  local keep_file="$1" ref id
+  while read -r ref id; do
+    [[ -z "$ref" || "$ref" == *"<none>"* ]] && continue
+    grep -qxF "$id" "$keep_file" && continue
+    docker rmi "$ref" >/dev/null || echo "WARNING: could not remove $ref" >&2
+  done < <(docker images --no-trunc --format '{{.Repository}}:{{.Tag}} {{.ID}}' --filter 'reference=ghcr.io/mwhobrey/domi-ops-*')
+}
+
+# Give every kept rollback image a tag of its own. Once `latest` moves to the new build the old one
+# is untagged ("dangling"), and `docker image prune` would delete exactly the image we promise to keep.
+tag_rollback_images() {
   local keep_file="$1" id
   while read -r id; do
     [[ -z "$id" ]] && continue
-    grep -qxF "$id" "$keep_file" && continue
-    docker rmi "$id" >/dev/null 2>&1 || true
-  done < <(docker images --no-trunc --format '{{.ID}}' --filter 'reference=ghcr.io/mwhobrey/domi-ops-*' | sort -u)
+    docker tag "$id" "ghcr.io/mwhobrey/domi-ops-rollback:${id#sha256:}" 2>/dev/null || true
+  done < "$keep_file"
 }
 
 check_free_disk() {
@@ -162,6 +178,7 @@ echo "==> Domi Ops hosted update (tag: ${DOMI_OPS_IMAGE_TAG})"
 PREV_IDS="$(mktemp)"
 trap 'rm -f "$PREV_IDS"' EXIT
 stack_image_ids | sort -u > "$PREV_IDS"
+tag_rollback_images "$PREV_IDS"
 
 echo "==> freeing space from old images, then checking disk"
 prune_old_images "$PREV_IDS"
