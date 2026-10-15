@@ -8,6 +8,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-15
+
+Withings blood pressure cuff and watch sync (requires `npm run db:migrate`, migration 0094; the hosted deploy applies it automatically). Set `WITHINGS_CLIENT_ID` and `WITHINGS_CLIENT_SECRET` to turn it on; no manual steps otherwise. Self-hosters can also set `DB_POOL_MAX`.
+
 ### Added
 
 - **Withings watch data: workouts, blood oxygen, temperature and pulse** (WHO-461). A linked Withings watch (ScanWatch) now brings its workouts in as exercise entries (activity, duration, distance, calories) and its blood oxygen, body temperature and spot heart rate as vitals entries, alongside blood pressure. The connect step now also asks for activity access; a link made earlier keeps working for readings and the panel says how to add workouts (unlink and connect again). Steps, daily activity and sleep are not imported yet. See [docs/WITHINGS.md](docs/WITHINGS.md).
