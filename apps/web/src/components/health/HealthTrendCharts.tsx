@@ -37,18 +37,23 @@ export function VitalsTrendSection({ vitalsTrend }: { vitalsTrend: VitalsTrendEn
           </h3>
           <div className="print:hidden">
             <TrendLineChart
-              data={chart.rows.map((row) => ({ ...row, date: formatReportDate(row.date) }))}
+              data={chart.rows.map((row) => ({
+                ...row,
+                date: formatReportDate(row.date),
+                whenLabel: row.whenLabel ?? formatReportDate(row.date),
+              }))}
               series={chart.series}
               valueFormatter={(v) => `${v} ${chart.unit}`.trim()}
               height={180}
               autoScaleY
               dedupeXLabels
+              tooltipLabelKey="whenLabel"
             />
           </div>
           <ReportTable
-            columns={["Date", ...chart.series.map((s) => (chart.series.length > 1 ? s.label : "Value"))]}
+            columns={["When", ...chart.series.map((s) => (chart.series.length > 1 ? s.label : "Value"))]}
             rows={chart.rows.map((row) => [
-              formatReportDate(row.date),
+              row.whenLabel ?? formatReportDate(row.date),
               ...chart.series.map((s) => (row[s.key] != null ? `${row[s.key]} ${chart.unit}`.trim() : "—")),
             ])}
           />

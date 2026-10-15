@@ -69,7 +69,16 @@ export interface VitalsTrendEntry {
   /** Present when the report covers more than one member (series are per member). */
   memberId?: string;
   metricLabel: string;
-  points: { eventId: string; date: string; value: number; unit: string }[];
+  points: {
+    eventId: string;
+    date: string;
+    /** When the reading was taken (ISO instant); orders readings within a day. */
+    at?: string;
+    /** The same moment as the household reads it: "Oct 14, 8:56 AM". */
+    whenLabel?: string;
+    value: number;
+    unit: string;
+  }[];
 }
 
 export interface ExerciseTrendPoint {

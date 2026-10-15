@@ -7,17 +7,27 @@ export function ChartTooltip({
   label,
   payload,
   valueFormatter,
+  labelKey,
 }: {
   active?: boolean;
   label?: string | number;
-  payload?: Array<{ name?: string; value?: number | string; color?: string }>;
+  payload?: Array<{
+    name?: string;
+    value?: number | string;
+    color?: string;
+    payload?: Record<string, unknown>;
+  }>;
   valueFormatter?: (value: number | string, name?: string) => string;
+  /** Row field to show as the heading instead of `label`. */
+  labelKey?: string;
 }) {
   if (!active || !payload || payload.length === 0) return null;
+  const rowLabel = labelKey ? payload[0]?.payload?.[labelKey] : undefined;
+  const heading = typeof rowLabel === "string" && rowLabel ? rowLabel : label;
   return (
     <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-elevated)] px-3 py-2 text-xs shadow-[var(--shadow-elevated)]">
-      {label != null ? (
-        <p className="mb-1 font-medium text-[var(--color-text)]">{label}</p>
+      {heading != null ? (
+        <p className="mb-1 font-medium text-[var(--color-text)]">{heading}</p>
       ) : null}
       <ul className="space-y-1">
         {payload.map((entry, i) => (

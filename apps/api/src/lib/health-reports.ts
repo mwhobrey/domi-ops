@@ -676,12 +676,14 @@ export async function buildHealthReports(
       metric: string;
       metricLabel: string;
       unit: string;
-      points: { eventId: string; date: string; value: number; unit: string }[];
+      points: { eventId: string; date: string; at: string; whenLabel: string; value: number; unit: string }[];
     }
   >();
   for (const event of vitalsEventsInRange) {
     const anchor = event.startedAt ?? event.createdAt;
     const date = localDateOfInstant(anchor, timezone);
+    const at = new Date(anchor).toISOString();
+    const whenLabel = formatHealthWhenLabel(anchor, timezone);
     for (const reading of vitalsReadingsByEvent.get(event.id) ?? []) {
       if (reading.value == null) continue;
       const bucketKey = `${event.memberId}::${reading.metric}::${reading.unit}`;
@@ -692,7 +694,7 @@ export async function buildHealthReports(
         unit: reading.unit,
         points: [],
       };
-      bucket.points.push({ eventId: event.id, date, value: reading.value, unit: reading.unit });
+      bucket.points.push({ eventId: event.id, date, at, whenLabel, value: reading.value, unit: reading.unit });
       vitalsTrendBuckets.set(bucketKey, bucket);
     }
   }
@@ -719,7 +721,7 @@ export async function buildHealthReports(
           vitalsMembers.size > 1
             ? `${unitLabel} — ${memberLabel.get(bucket.memberId) ?? "Member"}`
             : unitLabel,
-        points: bucket.points.sort((a, b) => a.date.localeCompare(b.date)),
+        points: bucket.points.sort((a, b) => a.at.localeCompare(b.at)),
       };
     })
     .sort((a, b) => a.metricLabel.localeCompare(b.metricLabel));

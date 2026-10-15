@@ -17,6 +17,7 @@ export function TrendLineChart({
   valueFormatter,
   autoScaleY = false,
   dedupeXLabels = false,
+  tooltipLabelKey,
 }: {
   data: Array<Record<string, string | number | null>>;
   series: TrendSeries[];
@@ -27,6 +28,8 @@ export function TrendLineChart({
   autoScaleY?: boolean;
   /** Several points can share a date; label the date once instead of on every point. */
   dedupeXLabels?: boolean;
+  /** Row field shown as the tooltip heading instead of the x value (a date with its time, say). */
+  tooltipLabelKey?: string;
 }) {
   if (data.length === 0 || series.length === 0) return null;
 
@@ -64,7 +67,7 @@ export function TrendLineChart({
             domain={autoScaleY ? ["auto", "auto"] : undefined}
           />
           <Tooltip
-            content={<ChartTooltip valueFormatter={valueFormatter} />}
+            content={<ChartTooltip valueFormatter={valueFormatter} labelKey={tooltipLabelKey} />}
             cursor={{ stroke: CHART_GRID_COLOR }}
           />
           {series.length > 1 ? (
