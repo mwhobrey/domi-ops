@@ -8,6 +8,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+### Added
+
+- **Reconnect for a Withings link** (WHO-463). A revoked link, or one made before workouts were supported, used to need unlink and connect again. **Reconnect** now renews it in place: new tokens and permissions, same history window and sync position, nothing imported twice. Signing in to a different Withings account is refused and changes nothing. No migration, no new environment variables.
+
 ### Fixed
 
 - **Withings workouts have their own sync watermark** (WHO-462). Workout pulls reused the blood pressure watermark minus a day, which would skip a workout if Withings' two clocks drifted apart by more than that. The link now remembers the newest workout change it has seen and resumes from there. Requires `npm run db:migrate` (migration 0095, one nullable column; the hosted deploy applies it automatically). No new environment variables.

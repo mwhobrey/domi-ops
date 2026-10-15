@@ -19,6 +19,8 @@ export type WithingsOAuthState = {
   householdId: string;
   memberId: string;
   backfillDays: number;
+  /** Set by Reconnect: the existing link to renew in place instead of creating one (WHO-463). */
+  reconnectLinkId?: string;
 };
 
 /** The redirect URI registered with the Withings app: this deployment's public URL plus a fixed path. */

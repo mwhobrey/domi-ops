@@ -74,19 +74,25 @@ export function healthWithingsRoutes(db: Database, env: Env) {
       .from(healthWithingsLinks)
       .where(eq(healthWithingsLinks.memberId, memberId))
       .limit(1);
-    if (existing) return c.json({ error: "already_linked" }, 409);
+    const body = await c.req
+      .json<{ backfillDays?: unknown; reconnect?: unknown }>()
+      .catch(() => ({}) as { backfillDays?: unknown; reconnect?: unknown });
+    // Reconnect renews the link that is there; a plain connect never touches one.
+    const reconnect = body.reconnect === true;
+    if (reconnect && !existing) return c.json({ error: "not_linked" }, 404);
+    if (!reconnect && existing) return c.json({ error: "already_linked" }, 409);
 
     // Server config is only worth reporting to someone who is allowed to link.
     if (!env.ENCRYPTION_KEY) return c.json({ error: "encryption_key_required" }, 503);
     if (!env.REDIS_URL) return c.json({ error: "redis_required" }, 503);
 
-    const body = await c.req.json<{ backfillDays?: unknown }>().catch(() => ({}) as { backfillDays?: unknown });
     const state = randomBytes(24).toString("hex");
     const payload: WithingsOAuthState = {
       userId: auth.userId,
       householdId: auth.householdId,
       memberId,
       backfillDays: normalizeBackfillDays(body.backfillDays),
+      ...(reconnect ? { reconnectLinkId: existing!.id } : {}),
     };
     await setOAuthState(env.REDIS_URL, WITHINGS_OAUTH_PREFIX, state, payload, WITHINGS_OAUTH_STATE_TTL_SEC);
     return c.json({ authorizeUrl: withingsAuthorizeUrl(env, { redirectUri: withingsRedirectUri(env), state }) });

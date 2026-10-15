@@ -109,6 +109,56 @@ export function integrationsWithingsRoutes(db: Database, env: Env) {
     }
 
     const now = new Date();
+
+    if (saved.reconnectLinkId) {
+      const [current] = await db
+        .select()
+        .from(healthWithingsLinks)
+        .where(
+          and(
+            eq(healthWithingsLinks.id, saved.reconnectLinkId),
+            eq(healthWithingsLinks.householdId, auth.householdId),
+            eq(healthWithingsLinks.memberId, saved.memberId),
+          ),
+        )
+        .limit(1);
+      // Unlinked while the person was at Withings: nothing to renew.
+      if (!current) return back("error");
+      // The link's history belongs to one Withings person. A different one is refused, and its tokens
+      // are dropped without being stored.
+      if (tokens.userId !== current.withingsUserId) return back("different_account");
+
+      // Tokens, scope and health are renewed in place. The backfill window and both watermarks stay,
+      // so nothing already imported is read again from the beginning.
+      await db
+        .update(healthWithingsLinks)
+        .set({
+          accessTokenEncrypted: encryptWithingsSecret(tokens.accessToken, env),
+          refreshTokenEncrypted: encryptWithingsSecret(tokens.refreshToken, env),
+          tokenExpiresAt: new Date(now.getTime() + tokens.expiresInSec * 1000),
+          scope: tokens.scope,
+          status: "active",
+          lastError: null,
+          attempts: 0,
+          nextAttemptAt: null,
+          syncRequestedAt: now,
+          updatedAt: now,
+        })
+        .where(eq(healthWithingsLinks.id, current.id));
+      try {
+        const callback = withingsWebhookUrl(env, current);
+        if (callback) {
+          await withingsSubscribe(tokens.accessToken, callback, undefined, {
+            workouts: withingsScopeAllowsWorkouts(tokens.scope),
+            resubscribe: true,
+          });
+        }
+      } catch (e) {
+        console.error("[withings] webhook resubscribe failed", e instanceof Error ? e.message : e);
+      }
+      return back("reconnected");
+    }
+
     let link;
     try {
       [link] = await db

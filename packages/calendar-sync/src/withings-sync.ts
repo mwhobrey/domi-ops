@@ -232,11 +232,14 @@ export async function withingsSubscribe(
   accessToken: string,
   callbackUrl: string,
   fetchImpl: FetchLike = fetch,
-  opts: { workouts?: boolean } = {},
+  opts: { workouts?: boolean; resubscribe?: boolean } = {},
 ): Promise<void> {
   const call = (appli: number) =>
     callWithings(NOTIFY_URL, { action: "subscribe", callbackurl: callbackUrl, appli: String(appli) }, accessToken, fetchImpl);
-  await call(WITHINGS_APPLI_BLOOD_PRESSURE);
+  // Reconnect subscribes again to a URL Withings may already hold. Whatever it answers to that must not
+  // stop the workout subscription, which is the one a reconnect usually exists to add.
+  if (opts.resubscribe) await call(WITHINGS_APPLI_BLOOD_PRESSURE).catch(() => undefined);
+  else await call(WITHINGS_APPLI_BLOOD_PRESSURE);
   if (opts.workouts) await call(WITHINGS_APPLI_ACTIVITY).catch(() => undefined);
 }
 

@@ -254,6 +254,19 @@ maybeDescribe("withings routes (integration)", () => {
       expect(days).toEqual([3650, 1, 365]);
     });
 
+    it("reconnect renews the existing link, and needs one", async () => {
+      const url = `/withings/links/${people.ally!.memberId}/connect`;
+      const none = await call("mom", "POST", url, { reconnect: true });
+      expect(none.status).toBe(404);
+      expect(none.json.error).toBe("not_linked");
+
+      const link = await makeLink();
+      const res = await call("mom", "POST", url, { reconnect: true });
+      expect(res.status).toBe(200);
+      expect(vi.mocked(setOAuthState).mock.calls.at(-1)![3]).toMatchObject({ reconnectLinkId: link.id, memberId: people.ally!.memberId });
+      expect((await call("reader", "POST", url, { reconnect: true })).status).toBe(403);
+    });
+
     it("will not start a second link for a member", async () => {
       await makeLink();
       const res = await call("mom", "POST", `/withings/links/${people.ally!.memberId}/connect`, {});
@@ -335,6 +348,67 @@ maybeDescribe("withings routes (integration)", () => {
       expect(res.status).toBe(302);
       expect(res.headers.get("location")).toBe(`https://app.test.example/health?withings=${reason}`);
       expect(withingsExchangeCode).not.toHaveBeenCalled();
+    });
+
+    describe("reconnect", () => {
+      const reconnectState = (linkId: string) => ({ ...state.get(), reconnectLinkId: linkId });
+
+      it("renews tokens, scope and status in place, keeping the window and watermarks", async () => {
+        const link = await makeLink({
+          status: "revoked",
+          lastError: "token_invalid",
+          attempts: 8,
+          scope: "user.metrics",
+          backfillDoneAt: new Date("2026-02-01T00:00:00Z"),
+          lastUpdate: 1_790_000_000,
+          workoutsLastUpdate: 1_790_100_000,
+        });
+        vi.mocked(consumeOAuthState).mockResolvedValueOnce(reconnectState(link.id));
+        vi.mocked(withingsExchangeCode).mockResolvedValueOnce({ ...tokens, scope: "user.metrics,user.activity" });
+
+        const res = await call("mom", "GET", "/integrations/callback?code=abc&state=xyz");
+        expect(res.headers.get("location")).toBe("https://app.test.example/health?withings=reconnected");
+
+        const rows = await withHouseholdContext(baseDb, householdId, (tx) => tx.select().from(healthWithingsLinks));
+        expect(rows).toHaveLength(1);
+        const after = rows[0]!;
+        expect(after.id).toBe(link.id);
+        expect(decryptSensitive(after.accessTokenEncrypted, KEY)).toBe("access-9");
+        expect(decryptSensitive(after.refreshTokenEncrypted, KEY)).toBe("refresh-9");
+        expect(after).toMatchObject({ status: "active", lastError: null, attempts: 0, scope: "user.metrics,user.activity" });
+        expect(after.syncRequestedAt).not.toBeNull();
+        expect(after.backfillFrom.toISOString()).toBe(link.backfillFrom.toISOString());
+        expect(after.backfillDoneAt?.toISOString()).toBe("2026-02-01T00:00:00.000Z");
+        expect(after.lastUpdate).toBe(1_790_000_000);
+        expect(after.workoutsLastUpdate).toBe(1_790_100_000);
+
+        const [, , , opts] = vi.mocked(withingsSubscribe).mock.calls[0] as unknown as [string, string, unknown, { workouts: boolean; resubscribe: boolean }];
+        expect(opts).toEqual({ workouts: true, resubscribe: true });
+      });
+
+      it("refuses a different Withings user and stores nothing from it", async () => {
+        const link = await makeLink({ status: "revoked" });
+        vi.mocked(consumeOAuthState).mockResolvedValueOnce(reconnectState(link.id));
+        vi.mocked(withingsExchangeCode).mockResolvedValueOnce({ ...tokens, userId: "4242" });
+
+        const res = await call("mom", "GET", "/integrations/callback?code=abc&state=xyz");
+        expect(res.headers.get("location")).toContain("withings=different_account");
+
+        const after = (await reload(link.id))!;
+        expect(after).toMatchObject({ status: "revoked", withingsUserId: "9001" });
+        expect(decryptSensitive(after.accessTokenEncrypted, KEY)).toBe("access-1");
+        expect(withingsSubscribe).not.toHaveBeenCalled();
+      });
+
+      it("reports an error when the link was removed while the person was at Withings", async () => {
+        const link = await makeLink();
+        await withHouseholdContext(baseDb, householdId, (tx) => tx.delete(healthWithingsLinks).where(eq(healthWithingsLinks.id, link.id)));
+        vi.mocked(consumeOAuthState).mockResolvedValueOnce(reconnectState(link.id));
+        vi.mocked(withingsExchangeCode).mockResolvedValueOnce(tokens);
+        const res = await call("mom", "GET", "/integrations/callback?code=abc&state=xyz");
+        expect(res.headers.get("location")).toContain("withings=error");
+        expect(await withHouseholdContext(baseDb, householdId, (tx) => tx.select().from(healthWithingsLinks))).toHaveLength(0);
+      });
     });
 
     it("reports a second link for the same member instead of failing", async () => {

@@ -122,8 +122,8 @@ function PersonRow({
 
           {link.status === "revoked" ? (
             <Alert variant="info">
-              Withings access was withdrawn (or has lapsed), so nothing more will import. Unlink, then connect again.
-              Readings already imported stay.
+              Withings access was withdrawn (or has lapsed), so nothing more will import. Choose Reconnect and sign in
+              to the same Withings account. Readings already imported stay.
             </Alert>
           ) : null}
           {link.status === "error" ? (
@@ -134,8 +134,8 @@ function PersonRow({
           ) : null}
           {link.status === "active" && !link.workouts ? (
             <Alert variant="info">
-              Workouts are not coming across yet: this link was made before Domi Ops asked for activity access. Unlink,
-              then connect again and approve it to include workouts. Readings keep importing either way.
+              Workouts are not coming across yet: this link was made before Domi Ops asked for activity access. Choose
+              Reconnect and approve it to include workouts. Readings keep importing either way.
             </Alert>
           ) : null}
           {link.status === "active" && link.lastError ? (
@@ -167,6 +167,24 @@ function PersonRow({
                 </Button>
               </>
             ) : null}
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={busy}
+              onClick={() =>
+                onAction(
+                  async () => {
+                    const { authorizeUrl } = await apiClient.post<{ authorizeUrl: string }>(`${base}/connect`, {
+                      reconnect: true,
+                    });
+                    window.location.assign(authorizeUrl);
+                  },
+                  { keepBusy: true },
+                )
+              }
+            >
+              Reconnect
+            </Button>
             <Button size="sm" variant="secondary" disabled={busy} onClick={() => setConfirmUnlink(true)}>
               Unlink
             </Button>
