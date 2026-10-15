@@ -7,7 +7,7 @@ export type VitalsChart = {
   readingCount: number;
   series: { key: string; label: string }[];
   /** One row per logged event (x = date); series values may be null. */
-  rows: Array<{ date: string } & Record<string, string | number | null>>;
+  rows: Array<{ date: string; at?: string; whenLabel?: string } & Record<string, string | number | null>>;
 };
 
 const SYSTOLIC = "blood_pressure_systolic";
@@ -37,17 +37,26 @@ export function buildVitalsCharts(trends: VitalsTrendEntry[]): VitalsChart[] {
     if (!dia) continue;
     pairedBp.add(sys);
     pairedBp.add(dia);
-    const byEvent = new Map<string, { date: string; systolic: number | null; diastolic: number | null }>();
+    const byEvent = new Map<
+      string,
+      { date: string; at?: string; whenLabel?: string; systolic: number | null; diastolic: number | null }
+    >();
     for (const p of sys.points) {
-      byEvent.set(p.eventId, { date: p.date, systolic: p.value, diastolic: null });
+      byEvent.set(p.eventId, { date: p.date, at: p.at, whenLabel: p.whenLabel, systolic: p.value, diastolic: null });
     }
     for (const p of dia.points) {
-      const row = byEvent.get(p.eventId) ?? { date: p.date, systolic: null, diastolic: null };
+      const row = byEvent.get(p.eventId) ?? {
+        date: p.date,
+        at: p.at,
+        whenLabel: p.whenLabel,
+        systolic: null,
+        diastolic: null,
+      };
       row.diastolic = p.value;
       byEvent.set(p.eventId, row);
     }
     const suffix = memberSuffix(sys.metricLabel);
-    const rows = [...byEvent.values()].sort((a, b) => a.date.localeCompare(b.date));
+    const rows = [...byEvent.values()].sort((a, b) => (a.at ?? a.date).localeCompare(b.at ?? b.date));
     charts.push({
       key: `bp::${sys.memberId ?? ""}`,
       title: suffix ? `Blood pressure — ${suffix}` : "Blood pressure",
@@ -69,7 +78,12 @@ export function buildVitalsCharts(trends: VitalsTrendEntry[]): VitalsChart[] {
       unit: t.points[0]?.unit ?? "",
       readingCount: t.points.length,
       series: [{ key: "value", label: t.metricLabel }],
-      rows: t.points.map((p) => ({ date: p.date, value: p.value })),
+      rows: t.points.map((p) => ({
+        date: p.date,
+        ...(p.at ? { at: p.at } : {}),
+        ...(p.whenLabel ? { whenLabel: p.whenLabel } : {}),
+        value: p.value,
+      })),
     });
   }
 

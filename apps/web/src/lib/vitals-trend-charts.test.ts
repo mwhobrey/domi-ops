@@ -46,4 +46,29 @@ describe("buildVitalsCharts", () => {
     ]);
     expect(charts.map((c) => c.title)).toEqual(["BP systolic — A", "BP diastolic — B"]);
   });
+  it("orders readings from one day by the time they were taken and keeps the time label", () => {
+    const at = (eventId: string, date: string, time: string, value: number) => ({
+      eventId,
+      date,
+      at: `${date}T${time}:00.000Z`,
+      whenLabel: `${date} ${time}`,
+      value,
+      unit: "mmHg",
+    });
+    const charts = buildVitalsCharts([
+      {
+        metric: "blood_pressure_systolic",
+        memberId: "a",
+        metricLabel: "BP systolic",
+        points: [at("e2", "2026-09-22", "20:15", 131), at("e1", "2026-09-22", "08:05", 118)],
+      },
+      {
+        metric: "blood_pressure_diastolic",
+        memberId: "a",
+        metricLabel: "BP diastolic",
+        points: [at("e2", "2026-09-22", "20:15", 84), at("e1", "2026-09-22", "08:05", 76)],
+      },
+    ]);
+    expect(charts[0]!.rows.map((r) => r.whenLabel)).toEqual(["2026-09-22 08:05", "2026-09-22 20:15"]);
+  });
 });
