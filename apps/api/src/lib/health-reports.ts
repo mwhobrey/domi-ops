@@ -926,8 +926,9 @@ export async function buildHealthReports(
     medRows = medRows.filter((row) => row.scheduleKind === scheduleKindFilter);
   }
   // Soft-deleted meds (WHO-338) stay in reports for the period they were in use.
-  const rangeStart = new Date(`${from}T00:00:00.000Z`);
-  medRows = medRows.filter((row) => !row.deletedAt || row.deletedAt >= rangeStart);
+  // Compared by the household's local date: in a zone ahead of UTC, a deletion early on the first report day is
+  // still before 00:00 UTC of that date, and would drop the medication before its stop marker is built.
+  medRows = medRows.filter((row) => !row.deletedAt || localDateOfInstant(row.deletedAt, timezone) >= from);
 
   const medIds = medRows.map((m) => m.id);
   const pausesByMed = await loadMedicationPausesMap(db, medIds);

@@ -61,7 +61,8 @@ export type BeforeAfter = {
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
 /**
- * The mean of each series over the window before the marker's date and from it onward. It is a
+ * The mean of each series over the `windowDays` days before the marker's date and the same number from it onward
+ * (the marker's own day is the first day after). It is a
  * description, not a finding: nothing here says the medication caused the difference.
  */
 export function beforeAfter(
@@ -78,7 +79,7 @@ export function beforeAfter(
       const v = row[s.key];
       if (typeof v !== "number") continue;
       if (row.date >= beforeFrom && row.date < markerDate) before.push(v);
-      else if (row.date >= markerDate && row.date <= afterTo) after.push(v);
+      else if (row.date >= markerDate && row.date < afterTo) after.push(v);
     }
     const mean = (xs: number[]) => (xs.length ? round1(xs.reduce((a, b) => a + b, 0) / xs.length) : null);
     return {
