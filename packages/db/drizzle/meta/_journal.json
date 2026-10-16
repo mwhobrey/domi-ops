@@ -680,6 +680,13 @@
       "when": 1791772800000,
       "tag": "0096_withings_daily_activity",
       "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1791859200000,
+      "tag": "0097_withings_sleep",
+      "breakpoints": true
     }
   ]
 }

@@ -13,6 +13,7 @@ import type {
   NutritionTrendPoint,
   PainByRegionEntry,
   PainTrendEntry,
+  SleepTrendEntry,
   VitalsTrendEntry,
 } from "../../lib/health-report-export";
 import { BodyPainMap } from "./BodyPainMap";
@@ -154,6 +155,59 @@ export function ActivityStepsSection({ trend }: { trend: ActivityTrendEntry[] })
                 p.distanceKm != null ? `${p.distanceKm} km` : "—",
                 p.activeMinutes != null ? `${p.activeMinutes} min` : "—",
               ])}
+            />
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
+/** "7 h 05 min" from minutes. */
+export function formatSleepDuration(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = Math.round(minutes - h * 60);
+  return h === 0 ? `${m} min` : `${h} h ${String(m).padStart(2, "0")} min`;
+}
+
+/** Nightly sleep from a linked Withings watch or sleep mat, one chart per person (WHO-466). */
+export function SleepSection({ trend }: { trend: SleepTrendEntry[] }) {
+  const entries = trend.filter((t) => t.points.length > 0);
+  if (entries.length === 0) return null;
+  const withName = entries.length > 1;
+  return (
+    <section className="space-y-4">
+      <SectionHeader title="Sleep" />
+      {entries.map((entry) => {
+        const average = Math.round(entry.points.reduce((sum, p) => sum + p.totalMinutes, 0) / entry.points.length);
+        const hasStages = entry.points.some((p) => p.deepMinutes != null || p.remMinutes != null);
+        return (
+          <div key={entry.memberId} className="space-y-2">
+            <h3 className="text-sm font-medium text-[var(--color-text)]">
+              {withName ? `${entry.memberLabel} · ` : ""}
+              {formatSleepDuration(average)} a night on average
+              <span className="ml-2 font-normal text-[var(--color-text-muted)]">
+                ({entry.points.length} night{entry.points.length === 1 ? "" : "s"})
+              </span>
+            </h3>
+            <div className="print:hidden">
+              <TrendLineChart
+                data={entry.points.map((p) => ({ date: formatReportDate(p.date), value: Math.round((p.totalMinutes / 60) * 10) / 10 }))}
+                series={[{ key: "value", label: "Hours asleep" }]}
+                valueFormatter={(v) => `${v} h`}
+                height={180}
+                autoScaleY
+              />
+            </div>
+            <ReportTable
+              columns={hasStages ? ["Night", "Asleep", "Deep", "REM", "Light", "Awake", "Score"] : ["Night", "Asleep", "Score"]}
+              rows={entry.points.map((p) => {
+                const min = (v: number | null) => (v != null ? formatSleepDuration(v) : "—");
+                const score = p.score != null ? p.score : "—";
+                return hasStages
+                  ? [formatReportDate(p.date), formatSleepDuration(p.totalMinutes), min(p.deepMinutes), min(p.remMinutes), min(p.lightMinutes), min(p.awakeMinutes), score]
+                  : [formatReportDate(p.date), formatSleepDuration(p.totalMinutes), score];
+              })}
             />
           </div>
         );
