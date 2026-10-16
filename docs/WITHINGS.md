@@ -8,8 +8,7 @@ A household member can be linked to one Withings account. Blood pressure reading
 cuff (BPM Connect, BPM Core, BPM Vision) become normal `vitals` entries with systolic, diastolic and,
 when the cuff recorded it, pulse. A Withings watch (ScanWatch) adds blood oxygen, body temperature and
 spot heart rate as `vitals` entries, and its workouts as `exercise` entries. Its daily steps and activity
-are kept in their own table and charted on the Health Trends tab. One way only: Withings to Domi Ops.
-Sleep is not imported yet.
+and its sleep are kept in their own tables and charted on the Health Trends tab. One way only: Withings to Domi Ops.
 
 There is no matcher for scheduled checks. A slot counts as answered when a reading falls inside its
 30 minute window ([HEALTH_CHECKS.md](./HEALTH_CHECKS.md)), and an imported reading is a reading, so a
@@ -149,6 +148,14 @@ configured on the server (`GET /api/health/withings` says `enabled: false`) or t
   date. It uses the activity scope the workouts already need, so a link that imports workouts imports steps. A failing
   activity pull is logged and retried on the next one; it never fails the blood pressure or workout import. Visible to
   the person and to anyone with an `events` grant on them, like the rest of their imported entries.
+- **Sleep.** Sleep v2 `getsummary` returns one series per night (`startdate`, `enddate`, a `date`, `modified` and a
+  `data` object in seconds). Each series id is one row in `health_withings_sleep` (total asleep, time in bed,
+  light, deep and REM, awake, wake count, score; durations and score encrypted, the night's start and end not),
+  updated in place if Withings changes it. A night from an outside source has only `asleepduration`, which becomes
+  the total with no stage split. The report shows each date once with its longest sleep, so a nap or a second device
+  is not added to the night. Its own watermark is `sleep_last_update`. Withings documents a call as covering at most
+  7 days, so the backfill goes a week at a time and starts at most a year back (53 calls), whatever history window
+  was picked. Same scope, same visibility and the same isolation from the other imports as daily activity.
 - **Backfill size.** One pull pages up to 200 pages. A history larger than that fails and retries, which
   is cheap because everything already imported is recognised.
 
@@ -156,7 +163,7 @@ configured on the server (`GET /api/health/withings` says `enabled: false`) or t
 
 | Area | Files |
 |------|-------|
-| Tables | `packages/db/src/schema/health.ts` (`health_withings_links`, `health_withings_measure_groups`), migrations `0094`, `0095` (workout watermark), `0096` (daily activity) |
+| Tables | `packages/db/src/schema/health.ts` (`health_withings_links`, `health_withings_measure_groups`), migrations `0094`, `0095` (workout watermark), `0096` (daily activity), `0097` (sleep) |
 | Client, import, sync | `packages/calendar-sync/src/withings-sync.ts` |
 | Jobs | `withings.sync.scan` (30 s tick), `withings.sync.household`; `queue.ts`, `sync.ts`, `apps/worker/src/index.ts` |
 | Routes | `apps/api/src/routes/health-withings.ts` (signed in), `integrations-withings.ts` (callback, webhook) |
@@ -193,6 +200,11 @@ Not verified, and worth watching on first real use:
 - Daily activity: the `getactivity` request and the field units were read from Withings' published OpenAPI spec, not
   checked against a real ScanWatch. Steps arrive on the activity notification (application 16), subscribed best effort;
   the six hour safety net covers a miss.
+- Sleep: the `getsummary` request, field units and the 7 day window are from the OpenAPI spec, not a real watch. The
+  sleep notification (application 44) is from memory of Withings' notification list and is subscribed best effort;
+  the six hour safety net covers it being wrong. Whether `user.activity` alone grants sleep data is unconfirmed: the
+  spec lists a separate `user.sleepevents` scope without saying what it covers. If sleep stays empty on a real watch
+  after a reconnect, that is the first thing to check.
 - That the webhook's `userid` arrives form-encoded as documented.
 - Whether a blood pressure monitor that reports a computed best value (`attrib` 5) also reports the
   individual readings as separate groups. If so, one session would import as several entries.

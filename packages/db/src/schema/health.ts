@@ -575,6 +575,8 @@ export const healthWithingsLinks = pgTable(
     workoutsLastUpdate: bigint("workouts_last_update", { mode: "number" }),
     /** Greatest `modified` of any daily activity row imported so far (WHO-465); its own clock, like the workout one. */
     activityLastUpdate: bigint("activity_last_update", { mode: "number" }),
+    /** Greatest `modified` of any sleep night imported so far (WHO-466); its own clock. */
+    sleepLastUpdate: bigint("sleep_last_update", { mode: "number" }),
     lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
     lastError: text("last_error"),
     syncRequestedAt: timestamp("sync_requested_at", { withTimezone: true }),
@@ -649,6 +651,41 @@ export const healthWithingsDailyActivity = pgTable(
   (t) => [
     primaryKey({ columns: [t.memberId, t.withingsUserId, t.date, t.deviceKey] }),
     index("health_withings_daily_activity_member_date_idx").on(t.memberId, t.date),
+  ],
+);
+
+/**
+ * Withings sleep (WHO-466): one row per Withings sleep series id, so an edited or re-delivered night updates in
+ * place. Durations and the score are encrypted text; the start and end are not, they place the night on a timeline.
+ */
+export const healthWithingsSleep = pgTable(
+  "health_withings_sleep",
+  {
+    householdId: uuid("household_id")
+      .notNull()
+      .references(() => households.id, { onDelete: "cascade" }),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => householdMembers.id, { onDelete: "cascade" }),
+    withingsUserId: text("withings_user_id").notNull(),
+    sleepId: text("sleep_id").notNull(),
+    date: date("date").notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+    endedAt: timestamp("ended_at", { withTimezone: true }).notNull(),
+    totalSleepMinutes: text("total_sleep_minutes"),
+    inBedMinutes: text("in_bed_minutes"),
+    lightMinutes: text("light_minutes"),
+    deepMinutes: text("deep_minutes"),
+    remMinutes: text("rem_minutes"),
+    awakeMinutes: text("awake_minutes"),
+    wakeCount: text("wake_count"),
+    sleepScore: text("sleep_score"),
+    sourceModified: bigint("source_modified", { mode: "number" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.memberId, t.withingsUserId, t.sleepId] }),
+    index("health_withings_sleep_member_date_idx").on(t.memberId, t.date),
   ],
 );
 
