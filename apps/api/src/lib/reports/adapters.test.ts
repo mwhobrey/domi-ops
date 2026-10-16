@@ -48,6 +48,7 @@ const sample = {
   eventsByMember: [{ memberId: "a", label: "Alex", count: 1 }],
   medicationMarkers: [],
   activityTrend: [],
+  sleepTrend: [],
   medicationAdherence: [
     {
       medicationId: "m1",

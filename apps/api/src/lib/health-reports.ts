@@ -27,6 +27,7 @@ import {
 } from "./health-access.js";
 import { decryptHealthFieldOrPassthrough } from "./health-crypto.js";
 import { loadActivityTrend } from "./health-activity-trend.js";
+import { loadSleepTrend } from "./health-sleep-trend.js";
 import { excludeInactiveInstants, loadMedicationPausesMap } from "./health-med-pauses.js";
 import {
   loadExerciseDetailsForEvents,
@@ -1057,6 +1058,8 @@ export async function buildHealthReports(
     memberFilter,
   );
 
+  const sleepTrend = await loadSleepTrend(db, env, auth, { from, to }, memberLabel, memberFilter);
+
   const prnFrequency = buildPrnFrequencyByDay({
     logs: logsInLocalRange,
     medById,
@@ -1193,6 +1196,7 @@ export async function buildHealthReports(
     medicationAdherence,
     medicationMarkers,
     activityTrend,
+    sleepTrend,
     prnFrequency,
     medications: medicationList,
     eventHistory,

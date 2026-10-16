@@ -8,6 +8,7 @@ import {
   healthWithingsLinks,
   healthWithingsDailyActivity,
   healthWithingsMeasureGroups,
+  healthWithingsSleep,
   withHouseholdContext,
 } from "@domi-ops/db";
 import { and, eq, inArray, isNotNull, isNull, lt, lte, or } from "drizzle-orm";
@@ -41,6 +42,8 @@ export function withingsScopeAllowsWorkouts(scope: string | null | undefined): b
 export const WITHINGS_APPLI_BLOOD_PRESSURE = 4;
 /** Notify application for activity and workouts. */
 export const WITHINGS_APPLI_ACTIVITY = 16;
+/** Notify application for sleep. */
+export const WITHINGS_APPLI_SLEEP = 44;
 
 export const WITHINGS_DEFAULT_BACKFILL_DAYS = 365;
 export const WITHINGS_MAX_BACKFILL_DAYS = 3650;
@@ -241,7 +244,10 @@ export async function withingsSubscribe(
   // stop the workout subscription, which is the one a reconnect usually exists to add.
   if (opts.resubscribe) await call(WITHINGS_APPLI_BLOOD_PRESSURE).catch(() => undefined);
   else await call(WITHINGS_APPLI_BLOOD_PRESSURE);
-  if (opts.workouts) await call(WITHINGS_APPLI_ACTIVITY).catch(() => undefined);
+  if (opts.workouts) {
+    await call(WITHINGS_APPLI_ACTIVITY).catch(() => undefined);
+    await call(WITHINGS_APPLI_SLEEP).catch(() => undefined);
+  }
 }
 
 export async function withingsUnsubscribe(accessToken: string, callbackUrl: string, fetchImpl: FetchLike = fetch): Promise<void> {
@@ -249,6 +255,7 @@ export async function withingsUnsubscribe(accessToken: string, callbackUrl: stri
     callWithings(NOTIFY_URL, { action: "revoke", callbackurl: callbackUrl, appli: String(appli) }, accessToken, fetchImpl);
   await call(WITHINGS_APPLI_BLOOD_PRESSURE);
   await call(WITHINGS_APPLI_ACTIVITY).catch(() => undefined);
+  await call(WITHINGS_APPLI_SLEEP).catch(() => undefined);
 }
 
 // --- Measure groups ---------------------------------------------------------------------------
@@ -853,6 +860,203 @@ async function syncDailyActivity(
   throw new WithingsError("transient", "Withings activity history is larger than one sync can page through");
 }
 
+// --- Sleep ------------------------------------------------------------------------------------
+
+const SLEEP_URL = "https://wbsapi.withings.net/v2/sleep";
+const SLEEP_FIELDS =
+  "total_timeinbed,total_sleep_time,asleepduration,lightsleepduration,remsleepduration,deepsleepduration,wakeupduration,wakeupcount,sleep_score";
+/** Withings documents a `getsummary` call as covering at most 7 days, so a date-range pull goes a week at a time. */
+const SLEEP_WINDOW_DAYS = 7;
+/** A year of nights is 53 calls; more would run into Withings' rate limit for little use. */
+const SLEEP_MAX_BACKFILL_DAYS = 365;
+
+/**
+ * `getsummary` series (WHO-466). Field names and units are from Withings' published OpenAPI spec (durations in
+ * seconds, `modified` unix seconds), not yet checked against a real ScanWatch.
+ */
+export type WithingsSleepSeries = {
+  id: number | string;
+  timezone?: string;
+  startdate: number;
+  enddate: number;
+  /** `YYYY-MM-DD`: the night's date. */
+  date: string;
+  modified?: number;
+  data?: {
+    total_timeinbed?: number;
+    total_sleep_time?: number;
+    asleepduration?: number;
+    lightsleepduration?: number;
+    remsleepduration?: number;
+    deepsleepduration?: number;
+    wakeupduration?: number;
+    wakeupcount?: number;
+    sleep_score?: number;
+  };
+};
+
+export type ShapedSleep = {
+  sleepId: string;
+  date: string;
+  startedAt: Date;
+  endedAt: Date;
+  totalSleepMinutes: number | null;
+  inBedMinutes: number | null;
+  lightMinutes: number | null;
+  deepMinutes: number | null;
+  remMinutes: number | null;
+  awakeMinutes: number | null;
+  wakeCount: number | null;
+  sleepScore: number | null;
+  modified: number | null;
+};
+
+/** Pure: one Withings sleep series -> what a sleep row needs, or null when it has no usable span or date. */
+export function shapeSleep(series: WithingsSleepSeries): ShapedSleep | null {
+  if (series.id == null || typeof series.date !== "string" || !DATE_RE.test(series.date)) return null;
+  if (!Number.isFinite(series.startdate) || !Number.isFinite(series.enddate)) return null;
+  if (series.startdate <= 0 || series.enddate <= series.startdate) return null;
+  const d = series.data ?? {};
+  const num = (n: unknown) => (typeof n === "number" && Number.isFinite(n) && n >= 0 ? n : null);
+  const minutes = (sec: unknown) => {
+    const n = num(sec);
+    return n == null ? null : Math.round(n / 60);
+  };
+  // A night from an outside source has `asleepduration` and no stage split.
+  const total = minutes(d.total_sleep_time) ?? minutes(d.asleepduration);
+  const shaped: ShapedSleep = {
+    sleepId: String(series.id),
+    date: series.date,
+    startedAt: new Date(series.startdate * 1000),
+    endedAt: new Date(series.enddate * 1000),
+    totalSleepMinutes: total,
+    inBedMinutes: minutes(d.total_timeinbed),
+    lightMinutes: minutes(d.lightsleepduration),
+    deepMinutes: minutes(d.deepsleepduration),
+    remMinutes: minutes(d.remsleepduration),
+    awakeMinutes: minutes(d.wakeupduration),
+    wakeCount: num(d.wakeupcount) == null ? null : Math.round(num(d.wakeupcount)!),
+    sleepScore: num(d.sleep_score) == null ? null : Math.round(num(d.sleep_score)!),
+    modified: typeof series.modified === "number" && Number.isFinite(series.modified) ? series.modified : null,
+  };
+  return total == null && shaped.inBedMinutes == null ? null : shaped;
+}
+
+type SleepPage = { series: WithingsSleepSeries[]; more: boolean; offset: number };
+
+async function getSleepPage(
+  accessToken: string,
+  range: { startdateymd: string; enddateymd: string } | { lastupdate: number },
+  offset: number,
+  fetchImpl: FetchLike,
+): Promise<SleepPage> {
+  const form: Record<string, string> = {
+    action: "getsummary",
+    data_fields: SLEEP_FIELDS,
+    ...Object.fromEntries(Object.entries(range).map(([k, v]) => [k, String(v)])),
+  };
+  if (offset > 0) form.offset = String(offset);
+  const body = await callWithings(SLEEP_URL, form, accessToken, fetchImpl);
+  return {
+    series: Array.isArray(body.series) ? (body.series as WithingsSleepSeries[]) : [],
+    more: body.more === 1 || body.more === true,
+    offset: typeof body.offset === "number" ? body.offset : 0,
+  };
+}
+
+/** Pull sleep and keep each night current. Returns the greatest `modified` seen, which becomes the watermark. */
+async function syncSleep(
+  inHousehold: InHousehold,
+  env: Pick<Env, "ENCRYPTION_KEY">,
+  link: LinkRow,
+  accessToken: string,
+  now: Date,
+  backfilling: boolean,
+  fetchImpl: FetchLike,
+): Promise<{ lastUpdate: number | null }> {
+  const key = requireKey(env);
+  const enc = (n: number | null) => (n == null ? null : encryptSensitive(String(n), key));
+  let newest = link.sleepLastUpdate;
+
+  const ranges: Array<{ startdateymd: string; enddateymd: string } | { lastupdate: number }> = [];
+  if (backfilling) {
+    const dayMs = 86_400_000;
+    const earliest = Math.max(link.backfillFrom.getTime() - dayMs, now.getTime() - SLEEP_MAX_BACKFILL_DAYS * dayMs);
+    const end = now.getTime() + dayMs;
+    for (let start = earliest; start < end; start += SLEEP_WINDOW_DAYS * dayMs) {
+      ranges.push({ startdateymd: ymd(new Date(start)), enddateymd: ymd(new Date(Math.min(start + (SLEEP_WINDOW_DAYS - 1) * dayMs, end))) });
+    }
+  } else {
+    ranges.push({
+      lastupdate: Math.max(
+        0,
+        link.sleepLastUpdate != null ? link.sleepLastUpdate - 1 : link.lastUpdate! - WORKOUT_OVERLAP_SEC,
+      ),
+    });
+  }
+
+  for (const range of ranges) {
+    let offset = 0;
+    for (let page = 0; ; page += 1) {
+      if (page >= MAX_PAGES) throw new WithingsError("transient", "Withings sleep history is larger than one sync can page through");
+      const result = await getSleepPage(accessToken, range, offset, fetchImpl);
+      const shaped = result.series.map(shapeSleep).filter((s): s is ShapedSleep => s != null);
+      for (const s of shaped) {
+        if (s.modified != null && (newest == null || s.modified > newest)) newest = s.modified;
+      }
+      if (shaped.length > 0) {
+        await inHousehold(async (tx) => {
+          for (const s of shaped) {
+            const values = {
+              householdId: link.householdId,
+              memberId: link.memberId,
+              withingsUserId: link.withingsUserId,
+              sleepId: s.sleepId,
+              date: s.date,
+              startedAt: s.startedAt,
+              endedAt: s.endedAt,
+              totalSleepMinutes: enc(s.totalSleepMinutes),
+              inBedMinutes: enc(s.inBedMinutes),
+              lightMinutes: enc(s.lightMinutes),
+              deepMinutes: enc(s.deepMinutes),
+              remMinutes: enc(s.remMinutes),
+              awakeMinutes: enc(s.awakeMinutes),
+              wakeCount: enc(s.wakeCount),
+              sleepScore: enc(s.sleepScore),
+              sourceModified: s.modified,
+              updatedAt: now,
+            };
+            await tx
+              .insert(healthWithingsSleep)
+              .values(values)
+              .onConflictDoUpdate({
+                target: [healthWithingsSleep.memberId, healthWithingsSleep.withingsUserId, healthWithingsSleep.sleepId],
+                set: {
+                  date: values.date,
+                  startedAt: values.startedAt,
+                  endedAt: values.endedAt,
+                  totalSleepMinutes: values.totalSleepMinutes,
+                  inBedMinutes: values.inBedMinutes,
+                  lightMinutes: values.lightMinutes,
+                  deepMinutes: values.deepMinutes,
+                  remMinutes: values.remMinutes,
+                  awakeMinutes: values.awakeMinutes,
+                  wakeCount: values.wakeCount,
+                  sleepScore: values.sleepScore,
+                  sourceModified: values.sourceModified,
+                  updatedAt: now,
+                },
+              });
+          }
+        });
+      }
+      if (!result.more) break;
+      offset = result.offset;
+    }
+  }
+  return { lastUpdate: newest };
+}
+
 // --- Sync -------------------------------------------------------------------------------------
 
 function accessTokenIsFresh(link: Pick<LinkRow, "tokenExpiresAt">, now: Date): boolean {
@@ -929,6 +1133,7 @@ export async function syncWithingsLink(
   lastUpdate: number;
   workoutsLastUpdate: number | null;
   activityLastUpdate: number | null;
+  sleepLastUpdate: number | null;
 }> {
   const nowSec = Math.floor(now.getTime() / 1000);
   const backfilling = link.backfillDoneAt == null || link.lastUpdate == null;
@@ -939,6 +1144,7 @@ export async function syncWithingsLink(
   let imported = 0;
   let workoutsLastUpdate = link.workoutsLastUpdate;
   let activityLastUpdate = link.activityLastUpdate;
+  let sleepLastUpdate = link.sleepLastUpdate;
   let watermark: number | null = null;
   let offset = 0;
   for (let page = 0; page < MAX_PAGES; page += 1) {
@@ -967,8 +1173,16 @@ export async function syncWithingsLink(
           if (e instanceof WithingsError && (e.code === "token_invalid" || e.code === "rate_limited" || e.code === "not_configured")) throw e;
           console.error("[withings] daily activity pull failed", e instanceof Error ? e.message : e);
         }
+        // Same for sleep: its own pull, its own watermark, and no way to fail the rest.
+        try {
+          const sleep = await syncSleep(inHousehold, env, link, accessToken, now, backfilling, fetchImpl);
+          sleepLastUpdate = sleep.lastUpdate;
+        } catch (e) {
+          if (e instanceof WithingsError && (e.code === "token_invalid" || e.code === "rate_limited" || e.code === "not_configured")) throw e;
+          console.error("[withings] sleep pull failed", e instanceof Error ? e.message : e);
+        }
       }
-      return { imported, backfilled: backfilling, lastUpdate: watermark ?? nowSec, workoutsLastUpdate, activityLastUpdate };
+      return { imported, backfilled: backfilling, lastUpdate: watermark ?? nowSec, workoutsLastUpdate, activityLastUpdate, sleepLastUpdate };
     }
     offset = result.offset;
   }
@@ -1022,6 +1236,7 @@ export async function processWithingsLink(
           lastUpdate: result.lastUpdate,
           workoutsLastUpdate: result.workoutsLastUpdate,
           activityLastUpdate: result.activityLastUpdate,
+          sleepLastUpdate: result.sleepLastUpdate,
           backfillDoneAt: link.backfillDoneAt ?? now,
           updatedAt: now,
         })
