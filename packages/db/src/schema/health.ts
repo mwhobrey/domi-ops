@@ -567,6 +567,12 @@ export const healthWithingsLinks = pgTable(
     backfillDoneAt: timestamp("backfill_done_at", { withTimezone: true }),
     /** Withings `updatetime` (unix seconds) of the last pull; null until the backfill finishes. */
     lastUpdate: bigint("last_update", { mode: "number" }),
+    /**
+     * Greatest `modified` (unix seconds) of any workout imported so far (WHO-462). Workouts have their own
+     * clock, so they do not ride on `lastUpdate`. Null until a workout has been seen; the pull then falls back
+     * to `lastUpdate` minus a day.
+     */
+    workoutsLastUpdate: bigint("workouts_last_update", { mode: "number" }),
     lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
     lastError: text("last_error"),
     syncRequestedAt: timestamp("sync_requested_at", { withTimezone: true }),

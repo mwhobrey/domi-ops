@@ -127,7 +127,7 @@ configured on the server (`GET /api/health/withings` says `enabled: false`) or t
   in `external_id`. Dedupe and "deleted stays deleted" use the same table as measure groups, under the key
   `workout:<id>`. A link made before the scope existed keeps importing readings but not workouts: the panel
   says so, and the fix is to unlink and connect again. The backfill asks for workouts by date (with a day
-  of slack each side), later pulls by `lastupdate`, taken from the measurement watermark minus one day: Withings does not say the two are one clock, and the overlap covers a skew of up to a day and only re-reads (the workout key dedupes). A bigger skew would skip a workout; a workout-specific watermark (WHO-462) removes the assumption.
+  of slack each side), later pulls by `lastupdate`, taken from the link's own workout watermark (`workouts_last_update`, the greatest workout `modified` seen, minus one second since the parameter is exclusive). Withings does not say its measurement `updatetime` and a workout's `modified` are one clock, so the two are never mixed. Until a workout has been seen the watermark is empty and the pull falls back to the measurement watermark minus one day (re-reads only; the workout key dedupes). Whether `modified` is present on real ScanWatch workouts is unverified: without it the watermark never fills and the fallback stays in use.
 - **Backfill size.** One pull pages up to 200 pages. A history larger than that fails and retries, which
   is cheap because everything already imported is recognised.
 
@@ -135,7 +135,7 @@ configured on the server (`GET /api/health/withings` says `enabled: false`) or t
 
 | Area | Files |
 |------|-------|
-| Tables | `packages/db/src/schema/health.ts` (`health_withings_links`, `health_withings_measure_groups`), migration `0094` |
+| Tables | `packages/db/src/schema/health.ts` (`health_withings_links`, `health_withings_measure_groups`), migrations `0094`, `0095` (workout watermark) |
 | Client, import, sync | `packages/calendar-sync/src/withings-sync.ts` |
 | Jobs | `withings.sync.scan` (30 s tick), `withings.sync.household`; `queue.ts`, `sync.ts`, `apps/worker/src/index.ts` |
 | Routes | `apps/api/src/routes/health-withings.ts` (signed in), `integrations-withings.ts` (callback, webhook) |
