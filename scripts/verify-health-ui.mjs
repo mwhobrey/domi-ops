@@ -19,6 +19,14 @@ let rosterDelay = 0;
 let failReport = false;
 let staleFailure = false;
 let medicationsOnly = false;
+let smokeFailurePath = null;
+const smokeRoutes = [
+  { route: "/goals", apiPath: "/api/goals", ready: "No goals yet" },
+  { route: "/shopping", apiPath: "/api/core/shopping", ready: "List is empty" },
+  { route: "/chores", apiPath: "/api/core/chores", ready: "No open chores" },
+  { route: "/expenses", apiPath: "/api/core/expenses", ready: "No expenses" },
+  { route: "/school/records", apiPath: "/api/school/records/students", ready: "No students yet" },
+];
 const requests = [];
 const labels = { overview: "Events", trends: "Trends", "medications-today": "Today's doses", medications: "Dose history", "medication-list": "Medication list", exercise: "Exercise", pain: "Pain", nutrition: "Nutrition", "check-adherence": "Check adherence", "blood-pressure": "Blood pressure" };
 const members = [{ memberId: "a", label: "Alex" }, { memberId: "b", label: "Bailey" }];
@@ -52,7 +60,7 @@ const api = createServer((req, res) => {
   requests.push(url.pathname + url.search);
   let delay = 0;
   let status = 200;
-  let data = { notifications: [], notices: [], unreadCount: 0, items: [], recurring: [], expenses: [], chores: [], members: [], goals: [], rewards: [], students: [] };
+  let data = { notifications: [], notices: [], unreadCount: 0, items: [], recurring: [], expenses: [], budgets: [], suggestions: [], chores: [], members: [], goals: [], rewards: [], students: [] };
   if (url.pathname === "/auth/session") data = session;
   if (url.pathname === "/api/core/household/roster") { data = { members }; delay = rosterDelay; }
   if (url.pathname === "/api/core/reports/catalog") data = { catalog: [{ module: "health", moduleLabel: "Health", kinds: Object.entries(labels).map(([id, label]) => ({ id, label })) }] };
@@ -70,6 +78,10 @@ const api = createServer((req, res) => {
   if (url.pathname === "/api/health/check-groups") data = { groups: [] };
   if (url.pathname === "/api/health/medications") data = { medications: [] };
   if (url.pathname === "/api/health/withings") data = { enabled: false, links: [] };
+  if (smokeRoutes.some((route) => route.apiPath === url.pathname)) {
+    delay = 600;
+    if (smokeFailurePath === url.pathname) { status = 500; data = { error: "fixture_smoke_failure" }; }
+  }
   setTimeout(() => { res.writeHead(status, { "Content-Type": "application/json" }); res.end(JSON.stringify(data)); }, delay);
 });
 
@@ -134,12 +146,16 @@ try {
   assert.equal(await page.getByRole("heading", { name: "Alex medication", exact: true }).count(), 0);
   await page.getByRole("heading", { name: "Bailey medication", exact: true }).waitFor();
   // Start a slower failing request, then a newer successful one.
+  const isStaleReport = (url) => url.pathname === "/api/health/reports" && url.searchParams.get("memberId") === "a";
+  const staleRequest = page.waitForRequest((request) => isStaleReport(new URL(request.url())));
+  const staleResponse = page.waitForResponse((response) => isStaleReport(new URL(response.url())) && response.status() === 500);
   await member.selectOption("a");
-  await page.getByRole("status", { name: "Loading trends", exact: true }).waitFor();
+  await staleRequest;
   reportDelay = 80;
   await member.selectOption("b");
   await page.getByRole("heading", { name: "Bailey medication", exact: true }).waitFor();
-  await new Promise((resolve) => setTimeout(resolve, 1000));
+  assert.equal(await (await staleResponse).finished(), null);
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   assert.equal(await page.locator("main").filter({ visible: true }).getByRole("alert").count(), 0);
   assert.equal(await page.getByRole("heading", { name: "Bailey medication", exact: true }).count(), 1);
   staleFailure = false;
@@ -175,11 +191,19 @@ try {
   await page.goto(`${origin}/health/reports`);
   await page.getByRole("button", { name: "Trends", exact: true }).click();
   await page.getByRole("heading", { name: "Vitals and medications", exact: true }).waitFor();
-  for (const route of ["/goals", "/shopping", "/chores", "/expenses", "/school/records"]) {
+  for (const { route, ready } of smokeRoutes) {
     await page.goto(`${origin}${route}`);
-    await page.locator("main").filter({ visible: true }).waitFor();
+    await page.locator("main").filter({ visible: true }).getByText(ready, { exact: true }).waitFor();
     assert.equal(await page.locator("main").filter({ visible: true }).getByRole("alert").count(), 0, `Unexpected error at ${route}`);
   }
+  smokeFailurePath = "/api/goals";
+  await page.goto(`${origin}/goals`, { waitUntil: "commit" });
+  await page.locator("main").filter({ visible: true }).getByRole("alert").filter({ hasText: "API 500" }).waitFor();
+  assert.equal(await page.getByText("No goals yet", { exact: true }).count(), 0);
+  smokeFailurePath = null;
+  await page.getByRole("link", { name: "Retry", exact: true }).click();
+  await page.locator("main").filter({ visible: true }).getByText("No goals yet", { exact: true }).waitFor();
+  assert.equal(await page.locator("main").filter({ visible: true }).getByRole("alert").count(), 0);
   assert.deepEqual(errors, []);
   console.log(`PASS: route smoke checks and no uncaught browser errors. Screenshots: ${out}`);
 } catch (error) {
