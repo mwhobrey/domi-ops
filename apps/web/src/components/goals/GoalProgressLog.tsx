@@ -1,5 +1,7 @@
 "use client";
 
+import { ContentSkeleton } from "../ContentSkeleton";
+
 import { useState } from "react";
 import { ApiError, apiClient } from "../../lib/client-api";
 import type { GoalDto, ProgressEventDto } from "../../lib/goals-types";
@@ -112,7 +114,7 @@ export function GoalProgressLog({
       </Button>
       {historyOpen ? (
         historyLoading ? (
-          <p className="text-xs text-[var(--color-text-muted)]">Loading…</p>
+          <ContentSkeleton />
         ) : (
           <ul className="space-y-1">
             {(history ?? []).map((e) => (

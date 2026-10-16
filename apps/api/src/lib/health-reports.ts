@@ -500,6 +500,47 @@ export function computeExpectedScheduledAdherence(input: {
   };
 }
 
+export function buildDailyMedicationDoses(input: {
+  expected: Date[] | null;
+  logs: { scheduledAt: Date | null; loggedAt: Date; status: string }[];
+  from: string;
+  to: string;
+  timeZone: string;
+  now: Date;
+}) {
+  const days = new Map<string, { expected: Date[]; logs: typeof input.logs }>();
+  const day = (date: string) => {
+    if (!days.has(date)) days.set(date, { expected: [], logs: [] });
+    return days.get(date)!;
+  };
+  for (const at of input.expected ?? []) day(localDateOfInstant(at, input.timeZone)).expected.push(at);
+  for (const log of input.logs) day(localDateOfInstant(log.scheduledAt ?? log.loggedAt, input.timeZone)).logs.push(log);
+  return [...days.entries()].filter(([date]) => date >= input.from && date <= input.to)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, group]) => {
+      const scheduled = group.logs.filter((l) => l.scheduledAt != null);
+      const counts = input.expected === null ? {
+        taken: scheduled.filter((l) => l.status === "taken").length,
+        skipped: scheduled.filter((l) => l.status === "skipped").length,
+        missed: scheduled.filter((l) => l.status === "missed").length,
+        pending: 0,
+      } : computeExpectedScheduledAdherence({ expected: group.expected, logs: group.logs, now: input.now });
+      if (input.expected !== null) {
+        const expectedTimes = new Set(group.expected.map((at) => at.toISOString()));
+        for (const log of scheduled) {
+          if (expectedTimes.has(log.scheduledAt!.toISOString())) continue;
+          if (log.status === "taken") counts.taken += 1;
+          else if (log.status === "skipped") counts.skipped += 1;
+          else if (log.status === "missed") counts.missed += 1;
+        }
+      }
+      return {
+        date, taken: counts.taken, skipped: counts.skipped, missed: counts.missed, pending: counts.pending,
+        prn: group.logs.filter((l) => l.scheduledAt == null && (l.status === "taken" || l.status === "prn")).length,
+      };
+    }).filter((point) => point.taken + point.skipped + point.missed + point.pending + point.prn > 0);
+}
+
 export function buildPrnFrequencyByDay(input: {
   logs: { medicationId: string; loggedAt: Date; scheduledAt: Date | null }[];
   medById: Map<string, { memberId: string }>;
@@ -964,6 +1005,10 @@ export async function buildHealthReports(
     logsByMed.set(log.medicationId, list);
   }
 
+  const medicationDoseTrend: {
+    medicationId: string; name: string; memberId: string; scheduleKind: string;
+    points: ReturnType<typeof buildDailyMedicationDoses>;
+  }[] = [];
   const medicationAdherence = medRows.map((med) => {
     const name = decryptHealthFieldOrPassthrough(med.name, env) ?? "Medication";
     const logs = logsByMed.get(med.id) ?? [];
@@ -987,6 +1032,10 @@ export async function buildHealthReports(
         logs: logs.map((l) => ({ scheduledAt: l.scheduledAt, status: l.status })),
         now,
       });
+      medicationDoseTrend.push({
+        medicationId: med.id, name, memberId: med.memberId, scheduleKind: med.scheduleKind,
+        points: buildDailyMedicationDoses({ expected, logs, from, to, timeZone: timezone, now }),
+      });
       return {
         medicationId: med.id,
         name,
@@ -1004,6 +1053,10 @@ export async function buildHealthReports(
       };
     }
 
+    medicationDoseTrend.push({
+      medicationId: med.id, name, memberId: med.memberId, scheduleKind: med.scheduleKind,
+      points: buildDailyMedicationDoses({ expected: null, logs, from, to, timeZone: timezone, now }),
+    });
     let taken = 0;
     let skipped = 0;
     let missed = 0;
@@ -1195,6 +1248,7 @@ export async function buildHealthReports(
       count,
     })),
     medicationAdherence,
+    medicationDoseTrend,
     medicationMarkers,
     activityTrend,
     sleepTrend,

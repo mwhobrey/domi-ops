@@ -1,6 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createLatestGate } from "../../lib/latest-request";
+import { ContentSkeleton } from "../ContentSkeleton";
+import { HealthTrendsTab } from "../health/HealthTrendsTab";
 import { ApiError, apiClient } from "../../lib/client-api";
 import { ReportExportSheet } from "./ReportExportSheet";
 import { HealthCheckReportPanel } from "./HealthCheckReportPanel";
@@ -9,7 +12,7 @@ import {
   HealthOverviewReportBody,
   todayIsoDate,
 } from "./HealthOverviewReportBody";
-import { Alert, Button, Input, Select, Spinner } from "../ui";
+import { Alert, Button, Input, Select } from "../ui";
 import {
   HEALTH_REPORT_EVENT_TYPES,
   HEALTH_REPORT_FOCUS_OPTIONS,
@@ -48,9 +51,18 @@ export function HealthOverviewReportSection({
   const [medicationId, setMedicationId] = useState("");
   const [scheduleKind, setScheduleKind] = useState("");
   const [members, setMembers] = useState<NoteShareMember[]>(membersProp ?? []);
-  const [report, setReport] = useState<HealthReportExport | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [membersLoading, setMembersLoading] = useState(membersProp === undefined);
+  const [membersError, setMembersError] = useState(false);
+  const [currentMemberId, setCurrentMemberId] = useState("");
+  const requestKey = JSON.stringify([from, to, memberId, eventType, groupBy, medicationId, scheduleKind, focus, today]);
+  const [fetchedReport, setReport] = useState<HealthReportExport | null>(null);
+  const [settledKey, setSettledKey] = useState("");
+  const [pending, setLoading] = useState(true);
+  const [loadError, setError] = useState<string | null>(null);
+  const report = settledKey === requestKey ? fetchedReport : null;
+  const error = settledKey === requestKey ? loadError : null;
+  const loading = pending || settledKey !== requestKey;
+  const gate = useRef(createLatestGate());
   const [exportOpen, setExportOpen] = useState(false);
 
   const [medOptions, setMedOptions] = useState<
@@ -65,16 +77,29 @@ export function HealthOverviewReportSection({
     focus === "nutrition";
   const usesMedFilters = focus === "medications" || focus === "medications-today";
 
-  useEffect(() => {
-    if (membersProp?.length) {
+  const loadMembers = useCallback(async () => {
+    if (membersProp !== undefined) {
       setMembers(membersProp);
+      setMembersLoading(false);
       return;
     }
-    void apiClient
-      .get<{ members: NoteShareMember[] }>("/api/core/household/roster")
-      .then((data) => setMembers(data.members ?? []))
-      .catch(() => setMembers([]));
+    setMembersLoading(true);
+    setMembersError(false);
+    try {
+      const [data, session] = await Promise.all([
+        apiClient.get<{ members: NoteShareMember[] }>("/api/core/household/roster"),
+        apiClient.get<{ user?: { memberId?: string } }>("/auth/session").catch(() => null),
+      ]);
+      setMembers(data.members ?? []);
+      setCurrentMemberId(session?.user?.memberId ?? "");
+    } catch {
+      setMembersError(true);
+    } finally {
+      setMembersLoading(false);
+    }
   }, [membersProp]);
+
+  useEffect(() => { void loadMembers(); }, [loadMembers]);
 
   useEffect(() => {
     void apiClient
@@ -107,7 +132,8 @@ export function HealthOverviewReportSection({
   const checkReportFocus = focus === "check-adherence" || focus === "blood-pressure" ? focus : null;
 
   const load = useCallback(async () => {
-    if (checkReportFocus) return;
+    const id = gate.current.next();
+    if (checkReportFocus || focus === "trends") return;
     setLoading(true);
     setError(null);
     try {
@@ -119,18 +145,27 @@ export function HealthOverviewReportSection({
       if (medicationId && usesMedFilters) params.set("medicationId", medicationId);
       if (scheduleKind && usesMedFilters) params.set("scheduleKind", scheduleKind);
       const data = await apiClient.get<HealthReportExport>(`/api/health/reports?${params}`);
+      if (!gate.current.isCurrent(id)) return;
       setReport(data);
+      setSettledKey(requestKey);
     } catch (err) {
+      if (!gate.current.isCurrent(id)) return;
       setError(err instanceof ApiError ? err.message : "Failed to load reports");
       setReport(null);
+      setSettledKey(requestKey);
     } finally {
-      setLoading(false);
+      if (gate.current.isCurrent(id)) setLoading(false);
     }
-  }, [from, to, memberId, eventType, groupBy, medicationId, scheduleKind, focus, today, usesMedFilters, checkReportFocus]);
+  }, [from, to, memberId, eventType, groupBy, medicationId, scheduleKind, focus, today, usesMedFilters, checkReportFocus, requestKey]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    const current = gate.current;
+    return () => current.cancel();
+  }, []);
 
   const exportKind: ReportKind =
     focus === "medications"
@@ -207,7 +242,9 @@ export function HealthOverviewReportSection({
         />
       ) : null}
 
-      <div className={checkReportFocus ? "hidden" : "no-print flex flex-wrap items-end gap-3"}>
+      {focus === "trends" ? membersLoading ? <ContentSkeleton variant="report" label="Loading trends" /> : membersError ? <Alert variant="error">Could not load people for trends. <Button size="sm" variant="ghost" onClick={() => void loadMembers()}>Retry</Button></Alert> : members.length ? <HealthTrendsTab members={members} currentMemberId={currentMemberId} /> : <p>No household members are available.</p> : null}
+
+      <div className={checkReportFocus || focus === "trends" ? "hidden" : "no-print flex flex-wrap items-end gap-3"}>
         {usesRange ? (
           <>
             <label className="space-y-1 text-sm">
@@ -293,14 +330,12 @@ export function HealthOverviewReportSection({
         ) : null}
       </div>
 
-      {error && !checkReportFocus ? <Alert variant="error">{error}</Alert> : null}
-      {loading && !report && !checkReportFocus ? (
-        <div className="flex justify-center py-12">
-          <Spinner />
-        </div>
+      {error && !checkReportFocus && focus !== "trends" ? <Alert variant="error">{error}</Alert> : null}
+      {loading && !report && !checkReportFocus && focus !== "trends" ? (
+        <ContentSkeleton variant="report" label="Loading health report" />
       ) : null}
 
-      {report && !checkReportFocus ? <HealthOverviewReportBody report={report} focus={focus} /> : null}
+      {report && !checkReportFocus && focus !== "trends" ? <HealthOverviewReportBody report={report} focus={focus} /> : null}
 
       <ReportExportSheet
         open={exportOpen}

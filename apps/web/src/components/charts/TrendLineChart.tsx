@@ -19,6 +19,10 @@ export function TrendLineChart({
   dedupeXLabels = false,
   tooltipLabelKey,
   markers,
+  xDomain,
+  xTicks,
+  xTickFormatter,
+  onPointSelect,
 }: {
   data: Array<Record<string, string | number | null>>;
   series: TrendSeries[];
@@ -32,7 +36,11 @@ export function TrendLineChart({
   /** Row field shown as the tooltip heading instead of the x value (a date with its time, say). */
   tooltipLabelKey?: string;
   /** Dashed vertical lines at an x value with a short label, for events that explain the line (a medication started). */
-  markers?: Array<{ x: string; label: string }>;
+  markers?: Array<{ x: string | number; label: string }>;
+  xDomain?: [number, number];
+  xTicks?: number[];
+  xTickFormatter?: (value: string | number) => string;
+  onPointSelect?: (row: Record<string, string | number | null>) => void;
 }) {
   if (data.length === 0 || series.length === 0) return null;
 
@@ -53,13 +61,17 @@ export function TrendLineChart({
           <CartesianGrid stroke={CHART_GRID_COLOR} strokeDasharray="0" vertical={false} />
           <XAxis
             dataKey={xKey}
+            type={xDomain ? "number" : "category"}
+            domain={xDomain}
+            ticks={xTicks}
+            allowDataOverflow={Boolean(xDomain)}
             tick={CHART_AXIS_TICK_STYLE}
             axisLine={{ stroke: CHART_GRID_COLOR }}
             tickLine={false}
             tickFormatter={
-              dedupeXLabels
+              xTickFormatter ?? (dedupeXLabels
                 ? (value: string | number) => (String(value).includes("​") ? "" : String(value))
-                : undefined
+                : undefined)
             }
           />
           <YAxis
@@ -85,7 +97,33 @@ export function TrendLineChart({
               label={{ value: m.label, position: "top", fill: CHART_AXIS_COLOR, fontSize: 11 }}
             />
           ))}
-          {series.map((s, i) => (
+          {series.map((s, i) => {
+            const selectableDot = (props: { cx?: number; cy?: number; index?: number; payload?: Record<string, string | number | null> }) => (
+              <circle
+                key={props.index}
+                className="recharts-line-dot cursor-pointer"
+                cx={props.cx}
+                cy={props.cy}
+                r={5}
+                fill={seriesColor(i)}
+                stroke={CHART_SURFACE_COLOR}
+                strokeWidth={2}
+                role="button"
+                tabIndex={0}
+                aria-label={`${props.payload?.[tooltipLabelKey ?? xKey] ?? "Reading"}: ${s.label} ${props.payload?.[s.key] ?? ""}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (props.payload) onPointSelect?.(props.payload);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    if (props.payload) onPointSelect?.(props.payload);
+                  }
+                }}
+              />
+            );
+            return (
             <Line
               key={s.key}
               type="monotone"
@@ -93,12 +131,13 @@ export function TrendLineChart({
               name={s.label}
               stroke={seriesColor(i)}
               strokeWidth={2}
-              dot={{ r: 4, fill: seriesColor(i), stroke: CHART_SURFACE_COLOR, strokeWidth: 2 }}
-              activeDot={{ r: 5, fill: seriesColor(i), stroke: CHART_SURFACE_COLOR, strokeWidth: 2 }}
+              dot={onPointSelect ? selectableDot : { r: 4, fill: seriesColor(i), stroke: CHART_SURFACE_COLOR, strokeWidth: 2 }}
+              activeDot={onPointSelect ? selectableDot : { r: 5, fill: seriesColor(i), stroke: CHART_SURFACE_COLOR, strokeWidth: 2 }}
               connectNulls
               isAnimationActive={false}
             />
-          ))}
+            );
+          })}
         </LineChart>
       </ResponsiveContainer>
     </div>

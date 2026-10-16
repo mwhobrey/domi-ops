@@ -1,5 +1,7 @@
 "use client";
 
+import { ContentSkeleton } from "./ContentSkeleton";
+
 import { Bell, Megaphone } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -336,7 +338,7 @@ export function NoticeBoardActions({
           )}
 
           {loading ? (
-            <p className="text-sm text-[var(--color-text-muted)]">Loading…</p>
+            <ContentSkeleton />
           ) : tab === "notices" ? (
             <>
               {noticeUnread > 0 && (

@@ -1,5 +1,7 @@
 "use client";
 
+import { ContentSkeleton } from "../ContentSkeleton";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, apiClient } from "../../lib/client-api";
 import { Alert, Badge, Button, Card, CardBody, Checkbox, ConfirmDialog, EmptyState } from "../ui";
@@ -149,7 +151,7 @@ export function PharmaciesSection({
           ) : null}
 
           {loading ? (
-            <p className="text-sm text-[var(--color-text-muted)]">Loading…</p>
+            <ContentSkeleton />
           ) : visible.length === 0 ? (
             <EmptyState
               title={archivedCount > 0 ? "No active pharmacies" : "No pharmacies yet"}

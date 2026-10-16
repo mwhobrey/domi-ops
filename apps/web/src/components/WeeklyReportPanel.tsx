@@ -1,5 +1,7 @@
 "use client";
 
+import { ContentSkeleton } from "./ContentSkeleton";
+
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
@@ -16,7 +18,7 @@ import {
   type WeeklyScopeMode,
 } from "../lib/weekly-week-utils";
 import { ReportExportSheet } from "./reports/ReportExportSheet";
-import { Alert, Button, EmptyState, IconButton, Input, Select, Spinner } from "./ui";
+import { Alert, Button, EmptyState, IconButton, Input, Select } from "./ui";
 import { useHouseholdToday } from "./HouseholdTimeProvider";
 
 function ReportGroupTable({
@@ -319,9 +321,7 @@ export function WeeklyReportPanel({
       ) : null}
 
       {loading ? (
-        <div className="flex justify-center py-10">
-          <Spinner />
-        </div>
+        <ContentSkeleton variant="report" label="Loading report" />
       ) : scopeMode === "week" && weekReport ? (
         <div className="report-print space-y-4">
           <p className="text-sm text-[var(--color-text-muted)]">

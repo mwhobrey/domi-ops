@@ -1,5 +1,7 @@
 "use client";
 
+import { ContentSkeleton } from "../ContentSkeleton";
+
 import { Badge, Button, Card, CardBody, SectionHeader } from "../ui";
 import { HealthRow } from "./TodayTabRows";
 import {
@@ -262,7 +264,7 @@ export function TodayChecksCard({
           }
         />
         {loading ? (
-          <p className="text-sm text-[var(--color-text-muted)]">Loading…</p>
+          <ContentSkeleton />
         ) : (
           <div className="space-y-2">
             {entries.map((entry) =>

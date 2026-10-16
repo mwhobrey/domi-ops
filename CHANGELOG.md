@@ -8,6 +8,20 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-10-16
+
+Health report navigation, medication/vitals comparisons and loading-state fixes. No migrations, new environment variables or manual steps.
+
+### Fixed
+
+- Health report types after Medication list now keep their selection and open the matching report instead of resetting to Events. Older report requests cannot overwrite a newer selection or flash a stale error.
+- Page, report, chart and panel loads use accessible skeleton placeholders, including missing Reports, Goals and school records route fallbacks. Health's route fallback no longer starts live data requests with an empty roster.
+
+### Changed
+
+- Trends is available from both Health and Reports. Vitals and daily medication doses share a date axis, with medication filters, seven-, fourteen- and thirty-day timeline windows, and a day inspector for readings, taken/skipped/missed/pending doses, dose times and medication changes. Individual readings remain visible, and before/after comparisons describe available data without attributing cause.
+- Trends shows medication adherence bars and a medication-change timeline, with activity, sleep and other charts in cards. Raw data is folded into bounded expandable tables. Medication-only history no longer shows an empty trends message.
+
 ## [0.10.0] - 2026-10-15
 
 Withings steps and sleep, Reconnect, and the vitals and medications report (requires `npm run db:migrate`, migrations 0095 to 0097; the hosted deploy applies them automatically). No new environment variables and no manual steps. Sleep needs a linked Withings watch; if it stays empty after connecting, reconnecting once may be needed (see [docs/WITHINGS.md](docs/WITHINGS.md)).

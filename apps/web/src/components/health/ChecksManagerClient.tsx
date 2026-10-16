@@ -1,5 +1,7 @@
 "use client";
 
+import { ContentSkeleton } from "../ContentSkeleton";
+
 import { ClipboardCheck } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, apiClient } from "../../lib/client-api";
@@ -164,7 +166,7 @@ export function ChecksManagerClient({
       </div>
 
       {loading ? (
-        <p className="text-sm text-[var(--color-text-muted)]">Loading…</p>
+        <ContentSkeleton />
       ) : checks.length === 0 ? (
         <EmptyState
           icon={<ClipboardCheck className="h-8 w-8" aria-hidden />}

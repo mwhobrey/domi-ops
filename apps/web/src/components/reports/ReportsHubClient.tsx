@@ -5,15 +5,16 @@ import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ApiError, apiClient } from "../../lib/client-api";
 import type { ReportCatalogEntry, ReportKind, ReportModule } from "../../lib/reports";
+import { parseReportKind } from "../../lib/reports";
+import { HEALTH_REPORT_FOCUS_OPTIONS } from "../../lib/health-report-export";
+import { ContentSkeleton } from "../ContentSkeleton";
 import { WeeklyReportPanel } from "../WeeklyReportPanel";
-import { Alert, Card, CardBody, Select, Spinner } from "../ui";
+import { Alert, Card, CardBody, Select } from "../ui";
 
 // Code-split per module — several of these pull in recharts (apps/web/src/components/charts),
 // which shouldn't be in every report tab's initial bundle just because one tab uses it.
 const loading = () => (
-  <div className="flex justify-center py-12">
-    <Spinner />
-  </div>
+  <ContentSkeleton variant="report" />
 );
 const ChoresCompletionReportSection = dynamic(
   () => import("./ChoresCompletionReportSection").then((m) => m.ChoresCompletionReportSection),
@@ -54,22 +55,6 @@ function parseModule(value: string | null): ReportModule | null {
   return null;
 }
 
-function parseKind(value: string | null): ReportKind | null {
-  if (
-    value === "weekly" ||
-    value === "overview" ||
-    value === "medications" ||
-    value === "medications-today" ||
-    value === "medication-list" ||
-    value === "school-grades" ||
-    value === "school-open-work" ||
-    value === "school-transcript"
-  ) {
-    return value;
-  }
-  return null;
-}
-
 function defaultKindForModule(module: ReportModule): ReportKind {
   if (module === "school") return "school-grades";
   if (module === "health") return "overview";
@@ -85,7 +70,7 @@ export function ReportsHubClient() {
   const [error, setError] = useState<string | null>(null);
 
   const moduleParam = parseModule(searchParams.get("module"));
-  const kindParam = parseKind(searchParams.get("kind"));
+  const kindParam = parseReportKind(searchParams.get("kind"));
   const term = searchParams.get("term");
   const month = searchParams.get("month");
 
@@ -178,13 +163,7 @@ export function ReportsHubClient() {
       return (
         <HealthOverviewReportSection
           driveEnabled={driveEnabled}
-          focus={
-            activeKind === "medications" ||
-            activeKind === "medications-today" ||
-            activeKind === "medication-list"
-              ? activeKind
-              : "overview"
-          }
+          focus={HEALTH_REPORT_FOCUS_OPTIONS.find((option) => option.id === activeKind)?.id ?? "overview"}
         />
       );
     }
@@ -192,11 +171,7 @@ export function ReportsHubClient() {
   }, [activeModule, activeKind, driveEnabled, term, month]);
 
   if (catalogLoading) {
-    return (
-      <div className="flex justify-center py-16">
-        <Spinner />
-      </div>
-    );
+    return <ContentSkeleton variant="report" />;
   }
 
   if (error) {

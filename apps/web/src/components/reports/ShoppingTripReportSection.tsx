@@ -1,10 +1,12 @@
 "use client";
 
+import { ContentSkeleton } from "../ContentSkeleton";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, apiClient } from "../../lib/client-api";
 import { defaultDateRange } from "./ChoresCompletionReportSection";
 import { ReportExportSheet } from "./ReportExportSheet";
-import { Alert, Button, Input, Spinner } from "../ui";
+import { Alert, Button, Input } from "../ui";
 
 interface ReportTrip {
   id: string;
@@ -102,10 +104,7 @@ export function ShoppingTripReportSection({ driveEnabled = true }: { driveEnable
       </form>
 
       {loading && !report ? (
-        <div className="flex items-center justify-center gap-2 py-12 text-sm text-[var(--color-text-muted)]">
-          <Spinner className="h-5 w-5" />
-          Loading reports…
-        </div>
+        <ContentSkeleton variant="report" label="Loading report" />
       ) : null}
 
       {report && !loading ? (

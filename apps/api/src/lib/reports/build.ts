@@ -26,6 +26,7 @@ import {
   expensesOverviewToCanonical,
   goalsOverviewToCanonical,
   healthOverviewToCanonical,
+  healthTrendsToCanonical,
   healthMedicationsToCanonical,
   healthTodayToCanonical,
   healthMedicationListToCanonical,
@@ -219,6 +220,7 @@ export async function buildCanonicalReport(
     const isNutrition = kind === "nutrition";
     if (
       kind !== "overview" &&
+      kind !== "trends" &&
       kind !== "medications" &&
       !isToday &&
       !isList &&
@@ -265,6 +267,7 @@ export async function buildCanonicalReport(
       },
     );
     if (kind === "medications") return healthMedicationsToCanonical(data);
+    if (kind === "trends") return healthTrendsToCanonical(data);
     if (kind === "medications-today") return healthTodayToCanonical(data);
     if (kind === "medication-list") return healthMedicationListToCanonical(data);
     if (kind === "exercise") return healthExerciseToCanonical(data);
@@ -327,6 +330,7 @@ const MODULE_KINDS: Record<ReportModule, ReportKind[]> = {
   goals: ["overview"],
   health: [
     "overview",
+    "trends",
     "medications-today",
     "medications",
     "medication-list",

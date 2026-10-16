@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useContext, type ReactNode } from "react";
+import { TrendPresentation } from "../health/TrendPresentation";
 import type {
   HealthReportExport,
   HealthReportEventItem,
@@ -66,10 +67,11 @@ export function ReportTable({
   rows: ReactNode[][];
   empty?: string;
 }) {
+  const compact = useContext(TrendPresentation);
   if (rows.length === 0) {
     return empty ? <p className="text-sm text-[var(--color-text-muted)]">{empty}</p> : null;
   }
-  return (
+  const table = (
     <div className="overflow-x-auto rounded-[var(--radius-lg)] border border-[var(--color-border)] print:overflow-visible print:border-black/20">
       {/* A min width only helps wide tables; 2–3 columns fit a phone and shouldn't scroll. */}
       <table
@@ -98,6 +100,12 @@ export function ReportTable({
       </table>
     </div>
   );
+  return compact ? (
+    <details className="rounded-[var(--radius-md)] border border-[var(--color-border)] p-3 text-sm">
+      <summary className="cursor-pointer text-[var(--color-text-muted)]">View data ({rows.length} rows)</summary>
+      <div className="mt-3 max-h-72 overflow-auto">{table}</div>
+    </details>
+  ) : table;
 }
 
 function printTitle(focus: HealthReportFocus): string {

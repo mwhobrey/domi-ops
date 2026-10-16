@@ -6,7 +6,11 @@ import { ApiError, apiClient } from "../../lib/client-api";
 import type { HealthReportExport } from "../../lib/health-report-export";
 import type { NoteShareMember } from "../NoteSharePicker";
 import { defaultHealthReportRange } from "../reports/HealthOverviewReportBody";
-import { Alert, EmptyState, Input, Select, Spinner } from "../ui";
+import { Alert, Button, EmptyState, Input, Select } from "../ui";
+import { ContentSkeleton } from "../ContentSkeleton";
+import { MedicationTrendsSection } from "./MedicationTrendsSection";
+import { TrendPresentation } from "./TrendPresentation";
+import { VitalsMedicationExplorer } from "./VitalsMedicationExplorer";
 import {
   ExerciseByActivitySection,
   ExerciseWeeklyVolumeSection,
@@ -14,14 +18,12 @@ import {
   NutritionMacrosSection,
   PainByRegionSection,
   PainSeverityTrendSection,
-  VitalsTrendSection,
   ActivityStepsSection,
   SleepSection,
 } from "./HealthTrendCharts";
 
 /**
- * Leaner than the full Reports page — charts only, no event history, no export chrome, no
- * medication adherence (WHO-303). Same `GET /api/health/reports` data as Reports; no new endpoint.
+ * Shared visual trends view for Health and Reports. Uses the existing health report endpoint.
  */
 export function HealthTrendsTab({
   members,
@@ -33,13 +35,15 @@ export function HealthTrendsTab({
   const defaults = defaultHealthReportRange();
   const [from, setFrom] = useState(defaults.from);
   const [to, setTo] = useState(defaults.to);
-  const [memberId, setMemberId] = useState(currentMemberId);
+  const [memberId, setMemberId] = useState(currentMemberId || members[0]?.memberId || "");
   const [fetchedReport, setReport] = useState<HealthReportExport | null>(null);
-  const [reportMemberId, setReportMemberId] = useState<string | null>(null);
-  // Never show one member's charts under another member's name while a switch is loading.
-  const report = reportMemberId === memberId ? fetchedReport : null;
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const requestKey = JSON.stringify([memberId, from, to]);
+  const [settledKey, setSettledKey] = useState("");
+  const report = settledKey === requestKey ? fetchedReport : null;
+  const [pending, setLoading] = useState(true);
+  const loading = pending || settledKey !== requestKey;
+  const [loadError, setError] = useState<string | null>(null);
+  const error = settledKey === requestKey ? loadError : null;
   const fetchGen = useRef(0);
 
   const load = useCallback(async () => {
@@ -47,23 +51,27 @@ export function HealthTrendsTab({
     setLoading(true);
     setError(null);
     try {
+      if (!memberId) throw new Error("No member selected");
       const params = new URLSearchParams({ from, to, groupBy: "date", memberId });
       const data = await apiClient.get<HealthReportExport>(`/api/health/reports?${params}`);
       if (generation !== fetchGen.current) return;
       setReport(data);
-      setReportMemberId(memberId);
+      setSettledKey(requestKey);
     } catch (err) {
       if (generation !== fetchGen.current) return;
       setError(err instanceof ApiError ? err.message : "Failed to load trends");
       setReport(null);
+      setSettledKey(requestKey);
     } finally {
       if (generation === fetchGen.current) setLoading(false);
     }
-  }, [from, to, memberId]);
+  }, [from, to, memberId, requestKey]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => () => { fetchGen.current += 1; }, []);
 
   const hasAnyData =
     (report?.vitalsTrend ?? []).length > 0 ||
@@ -71,7 +79,10 @@ export function HealthTrendsTab({
     (report?.painByRegion ?? []).length > 0 ||
     (report?.nutritionTrend?.points ?? []).length > 0 ||
     (report?.activityTrend ?? []).length > 0 ||
-    (report?.sleepTrend ?? []).length > 0;
+    (report?.sleepTrend ?? []).some((t) => t.points.length > 0) ||
+    (report?.medicationAdherence ?? []).length > 0 ||
+    (report?.medicationMarkers ?? []).length > 0 ||
+    (report?.prnFrequency ?? []).length > 0;
 
   return (
     <div className="space-y-6">
@@ -99,29 +110,25 @@ export function HealthTrendsTab({
         </label>
       </div>
 
-      {error ? <Alert variant="error">{error}</Alert> : null}
+      {error ? <Alert variant="error">{error} <Button variant="ghost" size="sm" onClick={() => void load()}>Retry</Button></Alert> : null}
 
       {loading && !report ? (
-        <div className="flex justify-center py-12">
-          <Spinner />
-        </div>
+        <ContentSkeleton variant="report" label="Loading trends" />
       ) : null}
 
       {report && !loading && !hasAnyData ? (
         <EmptyState
           icon={<TrendingUp className="h-8 w-8" aria-hidden />}
           title="No trends yet"
-          description="Log vitals, exercise, pain, or meals to see trends here."
+          description="Log medication doses, vitals, exercise, pain, or meals, or sync watch activity and sleep to see trends here."
         />
       ) : null}
 
       {report ? (
-        <>
-          <VitalsTrendSection
-            vitalsTrend={report.vitalsTrend ?? []}
-            medicationMarkers={report.medicationMarkers ?? []}
-            medicationAdherence={report.medicationAdherence ?? []}
-          />
+        <TrendPresentation.Provider value={true}>
+          <VitalsMedicationExplorer report={report} />
+          <MedicationTrendsSection report={report} />
+          <div className="grid items-start gap-6 xl:grid-cols-2 [&>section]:min-w-0 [&>section]:rounded-[var(--radius-lg)] [&>section]:border [&>section]:border-[var(--color-border)] [&>section]:bg-[var(--color-surface)] [&>section]:p-4">
           <ActivityStepsSection trend={report.activityTrend ?? []} />
           <SleepSection trend={report.sleepTrend ?? []} />
           <ExerciseWeeklyVolumeSection points={report.exerciseTrend?.points ?? []} />
@@ -130,7 +137,8 @@ export function HealthTrendsTab({
           <PainSeverityTrendSection trend={report.painTrend ?? []} />
           <NutritionCaloriesSection points={report.nutritionTrend?.points ?? []} />
           <NutritionMacrosSection points={report.nutritionTrend?.points ?? []} />
-        </>
+          </div>
+        </TrendPresentation.Provider>
       ) : null}
     </div>
   );

@@ -37,12 +37,13 @@ export default async function HealthSharingPage() {
         </LinkButton>
       }
     >
-      {loadError ? <Alert variant="error">{loadError}</Alert> : null}
+      {loadError ? <Alert variant="error">{loadError} <a href="/health/sharing">Retry</a></Alert> : (
       <HealthSharingClient
         members={members}
         currentMemberId={currentMemberId}
         householdRole={householdRole}
       />
+      )}
     </AppShell>
   );
 }

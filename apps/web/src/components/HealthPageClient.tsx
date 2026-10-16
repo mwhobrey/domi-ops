@@ -1,5 +1,7 @@
 "use client";
 
+import { ContentSkeleton } from "./ContentSkeleton";
+
 import { ChevronDown, ChevronRight, Heart } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -889,7 +891,7 @@ export function HealthPageClient({
                 }
               />
               {loading ? (
-                <p className="text-sm text-[var(--color-text-muted)]">Loading…</p>
+                <ContentSkeleton />
               ) : pendingDoses.length === 0 && pendingGroupDoses.length === 0 ? (
                 <p className="text-sm text-[var(--color-text-muted)]">No pending doses today.</p>
               ) : (

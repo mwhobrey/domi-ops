@@ -1,5 +1,7 @@
 "use client";
 
+import { ContentSkeleton } from "../ContentSkeleton";
+
 import { useCallback, useEffect, useState } from "react";
 import { apiClient } from "../../lib/client-api";
 import { Button, ColorField, Input } from "../ui";
@@ -120,7 +122,7 @@ export function CalendarCategoriesPanel({ active }: { active: boolean }) {
           </div>
 
           {loading && calCategories.length === 0 ? (
-            <p className="text-sm text-[var(--color-text-muted)]">Loading…</p>
+            <ContentSkeleton />
           ) : (
             <ul className="space-y-2">
               {calCategories.map((c) => (

@@ -1,5 +1,7 @@
 "use client";
 
+import { ContentSkeleton } from "./ContentSkeleton";
+
 import { FileText, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiClient } from "../lib/client-api";
@@ -37,10 +39,15 @@ export function SchoolRecordsClient({ students }: { students: RecordStudent[] })
   const rangeFrom = from ?? year.from;
   const rangeTo = to ?? year.to;
 
-  const [records, setRecords] = useState<StudentRecords | null>(null);
+  const requestKey = JSON.stringify([studentId, rangeFrom, rangeTo]);
+  const [fetchedRecords, setRecords] = useState<StudentRecords | null>(null);
+  const [settledKey, setSettledKey] = useState("");
+  const records = settledKey === requestKey ? fetchedRecords : null;
   const [settings, setSettings] = useState<RecordsSettings | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [pending, setLoading] = useState(true);
+  const [loadError, setError] = useState<string | null>(null);
+  const loading = pending || settledKey !== requestKey;
+  const error = settledKey === requestKey ? loadError : null;
 
   const loadSettings = useCallback(async () => {
     try {
@@ -63,13 +70,20 @@ export function SchoolRecordsClient({ students }: { students: RecordStudent[] })
       const res = await apiClient.get<StudentRecords>(
         `/api/school/records/${studentId}?from=${rangeFrom}&to=${rangeTo}`,
       );
-      if (sequence === loadSequence.current) setRecords(res);
+      if (sequence === loadSequence.current) {
+        setRecords(res);
+        setSettledKey(requestKey);
+      }
     } catch {
-      if (sequence === loadSequence.current) setError("Could not load records");
+      if (sequence === loadSequence.current) {
+        setError("Could not load records");
+        setRecords(null);
+        setSettledKey(requestKey);
+      }
     } finally {
       if (sequence === loadSequence.current) setLoading(false);
     }
-  }, [studentId, rangeFrom, rangeTo]);
+  }, [studentId, rangeFrom, rangeTo, requestKey]);
 
   useEffect(() => {
     void load();
@@ -132,6 +146,8 @@ export function SchoolRecordsClient({ students }: { students: RecordStudent[] })
       </div>
 
       {error && <Alert variant="error">{error}</Alert>}
+
+      {loading && !records ? <ContentSkeleton variant="report" label="Loading school records" /> : null}
 
       {records && (
         <div className={loading ? "opacity-60 transition" : "transition"}>

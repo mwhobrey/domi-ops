@@ -46,7 +46,7 @@ export default async function HealthPage({
 
   return (
     <AppShell title="Health" description="Symptoms, appointments, and medications">
-      {loadError ? <Alert variant="error">{loadError}</Alert> : null}
+      {loadError ? <Alert variant="error">{loadError} <a href="/health">Retry</a></Alert> : (
       <HealthPageClient
         members={members}
         currentMemberId={currentMemberId}
@@ -75,6 +75,7 @@ export default async function HealthPage({
             : undefined
         }
       />
+      )}
     </AppShell>
   );
 }

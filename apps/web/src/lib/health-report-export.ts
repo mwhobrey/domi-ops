@@ -12,6 +12,7 @@ export function rangeEndingOn(today: string, days = 30): { from: string; to: str
 
 export type HealthReportFocus =
   | "overview"
+  | "trends"
   | "medications"
   | "medications-today"
   | "medication-list"
@@ -197,6 +198,13 @@ export interface HealthReportExport {
     adherencePct: number | null;
   }[];
   medicationMarkers?: MedicationMarker[];
+  medicationDoseTrend?: {
+    medicationId: string;
+    name: string;
+    memberId: string;
+    scheduleKind: string;
+    points: { date: string; taken: number; skipped: number; missed: number; pending: number; prn: number }[];
+  }[];
   prnFrequency?: { date: string; memberId: string; memberLabel: string; count: number }[];
   medications?: HealthMedicationListItem[];
   eventHistory: HealthReportEventItem[];
@@ -207,6 +215,8 @@ export interface HealthReportExport {
   }[];
   medicationLogHistory: {
     id: string;
+    medicationId?: string;
+    memberId?: string;
     medicationName: string;
     memberLabel: string;
     status: string;
@@ -245,6 +255,7 @@ export const HEALTH_REPORT_SCHEDULE_KINDS: { value: string; label: string }[] = 
 
 export const HEALTH_REPORT_FOCUS_OPTIONS: { id: HealthReportFocus; label: string }[] = [
   { id: "overview", label: "Events" },
+  { id: "trends", label: "Trends" },
   { id: "medications-today", label: "Today's doses" },
   { id: "medications", label: "Dose history" },
   { id: "medication-list", label: "Medication list" },
