@@ -124,6 +124,19 @@ export interface MedicationMarker {
   kind: "start" | "stop" | "pause" | "resume";
 }
 
+/** One person's daily steps and activity from a linked Withings watch or phone (WHO-465). */
+export interface ActivityTrendEntry {
+  memberId: string;
+  memberLabel: string;
+  points: {
+    date: string;
+    steps: number;
+    distanceKm: number | null;
+    activeMinutes: number | null;
+    caloriesActive: number | null;
+  }[];
+}
+
 export interface HealthReportExport {
   from: string;
   to: string;
@@ -150,6 +163,7 @@ export interface HealthReportExport {
   painTrend?: PainTrendEntry[];
   painByRegion?: PainByRegionEntry[];
   nutritionTrend?: { points: NutritionTrendPoint[] };
+  activityTrend?: ActivityTrendEntry[];
   medicationAdherence: {
     medicationId: string;
     name: string;

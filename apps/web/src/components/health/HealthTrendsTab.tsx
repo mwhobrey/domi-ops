@@ -15,6 +15,7 @@ import {
   PainByRegionSection,
   PainSeverityTrendSection,
   VitalsTrendSection,
+  ActivityStepsSection,
 } from "./HealthTrendCharts";
 
 /**
@@ -67,7 +68,8 @@ export function HealthTrendsTab({
     (report?.vitalsTrend ?? []).length > 0 ||
     (report?.exerciseTrend?.points ?? []).length > 0 ||
     (report?.painByRegion ?? []).length > 0 ||
-    (report?.nutritionTrend?.points ?? []).length > 0;
+    (report?.nutritionTrend?.points ?? []).length > 0 ||
+    (report?.activityTrend ?? []).length > 0;
 
   return (
     <div className="space-y-6">
@@ -118,6 +120,7 @@ export function HealthTrendsTab({
             medicationMarkers={report.medicationMarkers ?? []}
             medicationAdherence={report.medicationAdherence ?? []}
           />
+          <ActivityStepsSection trend={report.activityTrend ?? []} />
           <ExerciseWeeklyVolumeSection points={report.exerciseTrend?.points ?? []} />
           <ExerciseByActivitySection byActivity={report.exerciseByActivity ?? []} />
           <PainByRegionSection byRegion={report.painByRegion ?? []} />

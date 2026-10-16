@@ -10,6 +10,7 @@ import {
   healthEvents,
   healthExerciseDetails,
   healthVitalsReadings,
+  healthWithingsDailyActivity,
   healthWithingsLinks,
   healthWithingsMeasureGroups,
   householdMembers,
@@ -41,6 +42,9 @@ function fakeWithings(opts: {
   pages?: Array<Record<string, unknown>>;
   /** Pages of `getworkouts`, in order. */
   workouts?: Array<Record<string, unknown>>;
+  /** Pages of `getactivity`, in order. A status other than 0 makes every `getactivity` call fail with it. */
+  activities?: Array<Record<string, unknown>>;
+  activityStatus?: number;
   measureStatus?: number;
   token?: Record<string, unknown>;
   tokenStatus?: number;
@@ -48,11 +52,18 @@ function fakeWithings(opts: {
   const calls: FetchCall[] = [];
   let page = 0;
   let workoutPage = 0;
+  let activityPage = 0;
   const impl = vi.fn(async (url: string, init?: RequestInit) => {
     const form = new URLSearchParams(String(init?.body ?? ""));
     calls.push({ url, form, auth: new Headers(init?.headers).get("authorization") });
     if (url.includes("/v2/oauth2")) {
       return new Response(JSON.stringify({ status: opts.tokenStatus ?? 0, body: opts.token ?? {} }), { status: 200 });
+    }
+    if (url.includes("/v2/measure") && form.get("action") === "getactivity") {
+      if (opts.activityStatus) return new Response(JSON.stringify({ status: opts.activityStatus, body: {} }), { status: 200 });
+      const body = opts.activities?.[Math.min(activityPage, opts.activities.length - 1)] ?? { activities: [], more: 0, offset: 0 };
+      activityPage += 1;
+      return new Response(JSON.stringify({ status: 0, body }), { status: 200 });
     }
     if (url.includes("/v2/measure")) {
       const body = opts.workouts?.[Math.min(workoutPage, opts.workouts.length - 1)] ?? { series: [], more: 0, offset: 0 };
@@ -71,7 +82,8 @@ function fakeWithings(opts: {
     impl,
     calls,
     measureCalls: () => calls.filter((c) => c.url.includes("/measure") && !c.url.includes("/v2/")),
-    workoutCalls: () => calls.filter((c) => c.url.includes("/v2/measure")),
+    workoutCalls: () => calls.filter((c) => c.url.includes("/v2/measure") && c.form.get("action") === "getworkouts"),
+    activityCalls: () => calls.filter((c) => c.url.includes("/v2/measure") && c.form.get("action") === "getactivity"),
   };
 }
 
@@ -173,6 +185,7 @@ maybeDescribe("Withings sync (integration)", () => {
     await withHouseholdContext(db, householdId, async (tx) => {
       // The dedupe rows belong to the person, not the link, so deleting links does not clear them.
       await tx.delete(healthWithingsMeasureGroups).where(eq(healthWithingsMeasureGroups.householdId, householdId));
+      await tx.delete(healthWithingsDailyActivity).where(eq(healthWithingsDailyActivity.householdId, householdId));
       await tx.delete(healthWithingsLinks).where(eq(healthWithingsLinks.householdId, householdId));
       await tx.delete(healthChecks).where(eq(healthChecks.householdId, householdId));
       await tx.delete(healthEvents).where(eq(healthEvents.householdId, householdId));
@@ -509,6 +522,99 @@ maybeDescribe("Withings sync (integration)", () => {
       await run(link.id, fw.impl);
       expect(fw.workoutCalls()).toHaveLength(0);
       expect((await exerciseRows()).events).toHaveLength(0);
+    });
+  });
+
+  describe("daily activity", () => {
+    const day = (over: Record<string, unknown> = {}) => ({
+      date: "2026-09-10",
+      timezone: "America/Chicago",
+      deviceid: "watch-1",
+      is_tracker: true,
+      modified: 1_790_300_000,
+      steps: 8421,
+      distance: 6230.4,
+      active: 2400,
+      calories: 310.4,
+      totalcalories: 2105.9,
+      ...over,
+    });
+    const rows = () =>
+      withHouseholdContext(db, householdId, (tx) =>
+        tx.select().from(healthWithingsDailyActivity).where(eq(healthWithingsDailyActivity.memberId, memberId)),
+      );
+    const scoped = { scope: "user.metrics,user.activity" };
+    const quiet = { pages: [{ measuregrps: [], more: 0, updatetime: 1_790_000_000 }] };
+
+    it("stores a day per device, encrypted, and asks by date on the backfill", async () => {
+      const link = await makeLink(scoped);
+      const fw = fakeWithings({ ...quiet, activities: [{ activities: [day(), day({ deviceid: "phone-1", is_tracker: false, steps: 5000 })], more: 0, offset: 0 }] });
+      await run(link.id, fw.impl);
+
+      const stored = await rows();
+      expect(stored).toHaveLength(2);
+      const watch = stored.find((r) => r.deviceKey === "watch-1")!;
+      expect(watch).toMatchObject({ date: "2026-09-10", isTracker: true, sourceModified: 1_790_300_000 });
+      expect(watch.steps!.startsWith("enc:v1:")).toBe(true);
+      expect(decryptSensitive(watch.steps!, KEY)).toBe("8421");
+      expect(decryptSensitive(watch.distanceM!, KEY)).toBe("6230");
+      expect(decryptSensitive(watch.activeMinutes!, KEY)).toBe("40");
+      expect(decryptSensitive(watch.caloriesActive!, KEY)).toBe("310");
+      expect(decryptSensitive(watch.caloriesTotal!, KEY)).toBe("2106");
+
+      const ask = fw.activityCalls()[0]!.form;
+      expect(ask.get("startdateymd")).toBe("2025-12-31");
+      expect(ask.get("data_fields")).toBe("steps,distance,active,calories,totalcalories");
+      expect((await reload(link.id)).activityLastUpdate).toBe(1_790_300_000);
+    });
+
+    it("updates a day in place as the numbers grow, resuming from its own watermark", async () => {
+      const link = await makeLink(scoped);
+      await run(link.id, fakeWithings({ ...quiet, activities: [{ activities: [day()], more: 0, offset: 0 }] }).impl);
+      await withHouseholdContext(db, householdId, (tx) =>
+        tx.update(healthWithingsLinks).set({ syncRequestedAt: new Date(NOW.getTime() - 1) }).where(eq(healthWithingsLinks.id, link.id)),
+      );
+
+      const later = fakeWithings({
+        pages: [{ measuregrps: [], more: 0, updatetime: 1_793_000_000 }],
+        activities: [{ activities: [day({ steps: 9100, modified: 1_790_400_000 })], more: 0, offset: 0 }],
+      });
+      await run(link.id, later.impl, new Date(NOW.getTime() + 60_000));
+
+      expect(later.activityCalls()[0]!.form.get("lastupdate")).toBe(String(1_790_300_000 - 1));
+      const stored = await rows();
+      expect(stored).toHaveLength(1);
+      expect(decryptSensitive(stored[0]!.steps!, KEY)).toBe("9100");
+      expect((await reload(link.id)).activityLastUpdate).toBe(1_790_400_000);
+    });
+
+    it("never asks for activity on a link without the activity scope", async () => {
+      const link = await makeLink({ scope: "user.metrics" });
+      const fw = fakeWithings({ ...quiet, activities: [{ activities: [day()], more: 0, offset: 0 }] });
+      await run(link.id, fw.impl);
+      expect(fw.activityCalls()).toHaveLength(0);
+      expect(await rows()).toHaveLength(0);
+    });
+
+    it("does not let a failing activity pull block blood pressure or the sync", async () => {
+      const link = await makeLink(scoped);
+      const fw = fakeWithings({
+        pages: [{ measuregrps: [grp(1, "2026-09-01T13:00:00Z")], more: 0, updatetime: 1_790_000_000 }],
+        activityStatus: 503,
+      });
+      const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+      expect(await run(link.id, fw.impl)).toBe("synced");
+      spy.mockRestore();
+      expect(await vitalsEvents()).toHaveLength(1);
+      expect((await reload(link.id)).activityLastUpdate).toBeNull();
+    });
+
+    it("skips rows with a bad date or no numbers", async () => {
+      const link = await makeLink(scoped);
+      const empty = { date: "2026-09-11", deviceid: "watch-1" };
+      const fw = fakeWithings({ ...quiet, activities: [{ activities: [day({ date: "yesterday" }), empty], more: 0, offset: 0 }] });
+      await run(link.id, fw.impl);
+      expect(await rows()).toHaveLength(0);
     });
   });
 

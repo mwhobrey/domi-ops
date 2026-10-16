@@ -6,6 +6,7 @@ import { beforeAfter, chartMarkerLines, MARKER_VERB, markersForChart, OVERLAY_WI
 import { SectionHeader } from "../ui";
 import { formatReportDate, ReportTable } from "../reports/HealthOverviewReportBody";
 import type {
+  ActivityTrendEntry,
   ExerciseByActivityEntry,
   MedicationMarker,
   ExerciseTrendPoint,
@@ -111,6 +112,50 @@ export function VitalsTrendSection({
             ])}
           />
         </div>
+        );
+      })}
+    </section>
+  );
+}
+
+/** Daily steps from a linked Withings watch or phone, one chart per person (WHO-465). */
+export function ActivityStepsSection({ trend }: { trend: ActivityTrendEntry[] }) {
+  const entries = trend.filter((t) => t.points.length > 0);
+  if (entries.length === 0) return null;
+  const withName = entries.length > 1;
+  return (
+    <section className="space-y-4">
+      <SectionHeader title="Daily steps" />
+      {entries.map((entry) => {
+        const total = entry.points.reduce((sum, p) => sum + p.steps, 0);
+        const average = Math.round(total / entry.points.length);
+        return (
+          <div key={entry.memberId} className="space-y-2">
+            <h3 className="text-sm font-medium text-[var(--color-text)]">
+              {withName ? `${entry.memberLabel} · ` : ""}
+              {average.toLocaleString()} steps a day on average
+              <span className="ml-2 font-normal text-[var(--color-text-muted)]">
+                ({entry.points.length} day{entry.points.length === 1 ? "" : "s"})
+              </span>
+            </h3>
+            <div className="print:hidden">
+              <TrendLineChart
+                data={entry.points.map((p) => ({ date: formatReportDate(p.date), value: p.steps }))}
+                series={[{ key: "value", label: "Steps" }]}
+                valueFormatter={(v) => `${Number(v).toLocaleString()} steps`}
+                height={180}
+              />
+            </div>
+            <ReportTable
+              columns={["Date", "Steps", "Distance", "Active"]}
+              rows={entry.points.map((p) => [
+                formatReportDate(p.date),
+                p.steps.toLocaleString(),
+                p.distanceKm != null ? `${p.distanceKm} km` : "—",
+                p.activeMinutes != null ? `${p.activeMinutes} min` : "—",
+              ])}
+            />
+          </div>
         );
       })}
     </section>

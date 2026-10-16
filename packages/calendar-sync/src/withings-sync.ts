@@ -6,6 +6,7 @@ import {
   healthExerciseDetails,
   healthVitalsReadings,
   healthWithingsLinks,
+  healthWithingsDailyActivity,
   healthWithingsMeasureGroups,
   withHouseholdContext,
 } from "@domi-ops/db";
@@ -686,6 +687,172 @@ async function syncWorkouts(
   throw new WithingsError("transient", "Withings workout history is larger than one sync can page through");
 }
 
+// --- Daily activity ---------------------------------------------------------------------------
+
+/**
+ * `getactivity` rows (WHO-465), one per date and device. Request fields and units are from Withings' published
+ * OpenAPI spec: distance in meters, `active` in seconds (intense plus moderate), `calories` active kcal,
+ * `totalcalories` active plus resting kcal, `modified` unix seconds. Not yet seen against a real ScanWatch.
+ */
+export type WithingsActivity = {
+  /** `YYYY-MM-DD`, in the user's own zone (`timezone`). */
+  date: string;
+  timezone?: string;
+  deviceid?: string | null;
+  hash_deviceid?: string | null;
+  is_tracker?: boolean;
+  modified?: number;
+  steps?: number;
+  distance?: number;
+  active?: number;
+  calories?: number;
+  totalcalories?: number;
+};
+
+const ACTIVITY_FIELDS = "steps,distance,active,calories,totalcalories";
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+export type ShapedActivity = {
+  date: string;
+  deviceKey: string;
+  isTracker: boolean;
+  steps: number | null;
+  distanceM: number | null;
+  activeMinutes: number | null;
+  caloriesActive: number | null;
+  caloriesTotal: number | null;
+  modified: number | null;
+};
+
+/** Pure: one Withings activity row -> what a daily activity row needs, or null when it carries nothing usable. */
+export function shapeActivity(row: WithingsActivity): ShapedActivity | null {
+  if (typeof row.date !== "string" || !DATE_RE.test(row.date)) return null;
+  const num = (n: unknown) => (typeof n === "number" && Number.isFinite(n) && n >= 0 ? n : null);
+  const steps = num(row.steps);
+  const distanceM = num(row.distance);
+  const activeSec = num(row.active);
+  const caloriesActive = num(row.calories);
+  const caloriesTotal = num(row.totalcalories);
+  if (steps == null && distanceM == null && activeSec == null && caloriesActive == null && caloriesTotal == null) return null;
+  return {
+    date: row.date,
+    deviceKey: row.hash_deviceid || row.deviceid || "",
+    isTracker: row.is_tracker === true,
+    steps: steps == null ? null : Math.round(steps),
+    distanceM: distanceM == null ? null : Math.round(distanceM),
+    activeMinutes: activeSec == null ? null : Math.round(activeSec / 60),
+    caloriesActive: caloriesActive == null ? null : Math.round(caloriesActive),
+    caloriesTotal: caloriesTotal == null ? null : Math.round(caloriesTotal),
+    modified: typeof row.modified === "number" && Number.isFinite(row.modified) ? row.modified : null,
+  };
+}
+
+type ActivityPage = { activities: WithingsActivity[]; more: boolean; offset: number };
+
+async function getActivityPage(
+  accessToken: string,
+  range: { startdateymd: string; enddateymd: string } | { lastupdate: number },
+  offset: number,
+  fetchImpl: FetchLike,
+): Promise<ActivityPage> {
+  const form: Record<string, string> = {
+    action: "getactivity",
+    data_fields: ACTIVITY_FIELDS,
+    ...Object.fromEntries(Object.entries(range).map(([k, v]) => [k, String(v)])),
+  };
+  if (offset > 0) form.offset = String(offset);
+  const body = await callWithings(WORKOUTS_URL, form, accessToken, fetchImpl);
+  return {
+    activities: Array.isArray(body.activities) ? (body.activities as WithingsActivity[]) : [],
+    more: body.more === 1 || body.more === true,
+    offset: typeof body.offset === "number" ? body.offset : 0,
+  };
+}
+
+/**
+ * Pull daily activity and keep each (date, device) row current. A day's numbers change until it ends, so
+ * rows are updated in place rather than imported once. Returns the greatest `modified` seen, which becomes
+ * the watermark; with nothing seen it stays where it was.
+ */
+async function syncDailyActivity(
+  inHousehold: InHousehold,
+  env: Pick<Env, "ENCRYPTION_KEY">,
+  link: LinkRow,
+  accessToken: string,
+  now: Date,
+  backfilling: boolean,
+  fetchImpl: FetchLike,
+): Promise<{ lastUpdate: number | null }> {
+  const key = requireKey(env);
+  const enc = (n: number | null) => (n == null ? null : encryptSensitive(String(n), key));
+  const range = backfilling
+    ? {
+        startdateymd: ymd(new Date(link.backfillFrom.getTime() - 86_400_000)),
+        enddateymd: ymd(new Date(now.getTime() + 86_400_000)),
+      }
+    : {
+        // Exclusive on Withings' side, and several rows can share a second; re-reading one second is free.
+        lastupdate: Math.max(
+          0,
+          link.activityLastUpdate != null ? link.activityLastUpdate - 1 : link.lastUpdate! - WORKOUT_OVERLAP_SEC,
+        ),
+      };
+  let newest = link.activityLastUpdate;
+  let offset = 0;
+  for (let page = 0; page < MAX_PAGES; page += 1) {
+    const result = await getActivityPage(accessToken, range, offset, fetchImpl);
+    const shaped = result.activities.map(shapeActivity).filter((s): s is ShapedActivity => s != null);
+    for (const s of shaped) {
+      if (s.modified != null && (newest == null || s.modified > newest)) newest = s.modified;
+    }
+    if (shaped.length > 0) {
+      await inHousehold(async (tx) => {
+        for (const s of shaped) {
+          const values = {
+            householdId: link.householdId,
+            memberId: link.memberId,
+            withingsUserId: link.withingsUserId,
+            date: s.date,
+            deviceKey: s.deviceKey,
+            isTracker: s.isTracker,
+            steps: enc(s.steps),
+            distanceM: enc(s.distanceM),
+            activeMinutes: enc(s.activeMinutes),
+            caloriesActive: enc(s.caloriesActive),
+            caloriesTotal: enc(s.caloriesTotal),
+            sourceModified: s.modified,
+            updatedAt: now,
+          };
+          await tx
+            .insert(healthWithingsDailyActivity)
+            .values(values)
+            .onConflictDoUpdate({
+              target: [
+                healthWithingsDailyActivity.memberId,
+                healthWithingsDailyActivity.withingsUserId,
+                healthWithingsDailyActivity.date,
+                healthWithingsDailyActivity.deviceKey,
+              ],
+              set: {
+                isTracker: values.isTracker,
+                steps: values.steps,
+                distanceM: values.distanceM,
+                activeMinutes: values.activeMinutes,
+                caloriesActive: values.caloriesActive,
+                caloriesTotal: values.caloriesTotal,
+                sourceModified: values.sourceModified,
+                updatedAt: now,
+              },
+            });
+        }
+      });
+    }
+    if (!result.more) return { lastUpdate: newest };
+    offset = result.offset;
+  }
+  throw new WithingsError("transient", "Withings activity history is larger than one sync can page through");
+}
+
 // --- Sync -------------------------------------------------------------------------------------
 
 function accessTokenIsFresh(link: Pick<LinkRow, "tokenExpiresAt">, now: Date): boolean {
@@ -756,7 +923,13 @@ export async function syncWithingsLink(
   accessToken: string,
   now: Date,
   fetchImpl: FetchLike = fetch,
-): Promise<{ imported: number; backfilled: boolean; lastUpdate: number; workoutsLastUpdate: number | null }> {
+): Promise<{
+  imported: number;
+  backfilled: boolean;
+  lastUpdate: number;
+  workoutsLastUpdate: number | null;
+  activityLastUpdate: number | null;
+}> {
   const nowSec = Math.floor(now.getTime() / 1000);
   const backfilling = link.backfillDoneAt == null || link.lastUpdate == null;
   const range = backfilling
@@ -765,6 +938,7 @@ export async function syncWithingsLink(
 
   let imported = 0;
   let workoutsLastUpdate = link.workoutsLastUpdate;
+  let activityLastUpdate = link.activityLastUpdate;
   let watermark: number | null = null;
   let offset = 0;
   for (let page = 0; page < MAX_PAGES; page += 1) {
@@ -784,8 +958,17 @@ export async function syncWithingsLink(
         const workouts = await syncWorkouts(inHousehold, env, link, accessToken, now, backfilling, fetchImpl);
         imported += workouts.imported;
         workoutsLastUpdate = workouts.lastUpdate;
+        // Daily activity is the same scope and never blocks blood pressure or workouts: a failure here is
+        // logged and retried on the next pull, from the watermark that did not move.
+        try {
+          const activity = await syncDailyActivity(inHousehold, env, link, accessToken, now, backfilling, fetchImpl);
+          activityLastUpdate = activity.lastUpdate;
+        } catch (e) {
+          if (e instanceof WithingsError && (e.code === "token_invalid" || e.code === "rate_limited" || e.code === "not_configured")) throw e;
+          console.error("[withings] daily activity pull failed", e instanceof Error ? e.message : e);
+        }
       }
-      return { imported, backfilled: backfilling, lastUpdate: watermark ?? nowSec, workoutsLastUpdate };
+      return { imported, backfilled: backfilling, lastUpdate: watermark ?? nowSec, workoutsLastUpdate, activityLastUpdate };
     }
     offset = result.offset;
   }
@@ -838,6 +1021,7 @@ export async function processWithingsLink(
           nextAttemptAt: null,
           lastUpdate: result.lastUpdate,
           workoutsLastUpdate: result.workoutsLastUpdate,
+          activityLastUpdate: result.activityLastUpdate,
           backfillDoneAt: link.backfillDoneAt ?? now,
           updatedAt: now,
         })
