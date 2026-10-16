@@ -53,6 +53,17 @@ API says so (`enabled: false`). It also needs `ENCRYPTION_KEY` (tokens are store
    household; the job pulls what changed since the watermark.
 5. **Safety net.** A link not pulled for six hours is pulled anyway, so a missed webhook heals itself.
 
+### Reconnect
+
+**Reconnect** (WHO-463) renews a link in place: a revoked one, one made before the activity scope existed, or any
+link whose consent needs refreshing. `POST .../connect` with `{ "reconnect": true }` needs an existing link (404
+`not_linked` otherwise) and parks its id in the OAuth state; a plain connect on a linked member is still 409. The
+callback exchanges the code, and if Withings reports a **different Withings user id** than the link's it redirects
+with `different_account` and stores nothing. Otherwise it replaces the tokens and scope, sets `status` to `active`,
+clears `last_error`, `attempts` and `next_attempt_at`, queues a pull, and subscribes again (workouts included when
+the new scope allows them). The backfill window, `last_update` and `workouts_last_update` are kept, so nothing is
+re-imported. The refused account still gets a grant at Withings' side, which the person can remove in their Withings app.
+
 ### Webhook security
 
 Withings does not sign notifications. The URL we subscribe with carries an HMAC token naming one link
@@ -87,7 +98,7 @@ configured on the server (`GET /api/health/withings` says `enabled: false`) or t
 |----------|---------|-----------------|
 | `active` | Syncing | n/a |
 | `error` | Eight failures in a row | Fix the cause, then **Sync now** |
-| `revoked` | Withings rejected the token (user withdrew access, or the refresh token lapsed) | Unlink, connect again |
+| `revoked` | Withings rejected the token (user withdrew access, or the refresh token lapsed) | **Reconnect** (below), or unlink and connect again |
 
 ## Behaviour worth knowing
 
@@ -126,7 +137,7 @@ configured on the server (`GET /api/health/withings` says `enabled: false`) or t
   start and end, minutes, distance in km, calories) with `external_source = 'withings'` and the workout id
   in `external_id`. Dedupe and "deleted stays deleted" use the same table as measure groups, under the key
   `workout:<id>`. A link made before the scope existed keeps importing readings but not workouts: the panel
-  says so, and the fix is to unlink and connect again. The backfill asks for workouts by date (with a day
+  says so, and the fix is **Reconnect**. The backfill asks for workouts by date (with a day
   of slack each side), later pulls by `lastupdate`, taken from the link's own workout watermark (`workouts_last_update`, the greatest workout `modified` seen, minus one second since the parameter is exclusive). Withings does not say its measurement `updatetime` and a workout's `modified` are one clock, so the two are never mixed. Until a workout has been seen the watermark is empty and the pull falls back to the measurement watermark minus one day (re-reads only; the workout key dedupes). Whether `modified` is present on real ScanWatch workouts is unverified: without it the watermark never fills and the fallback stays in use.
 - **Backfill size.** One pull pages up to 200 pages. A history larger than that fails and retries, which
   is cheap because everything already imported is recognised.

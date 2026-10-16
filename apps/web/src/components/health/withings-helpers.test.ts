@@ -74,6 +74,8 @@ describe("withingsResultNotice", () => {
   it.each([
     ["connected", "success"],
     ["denied", "info"],
+    ["reconnected", "success"],
+    ["different_account", "error"],
     ["already_linked", "info"],
     ["expired", "error"],
     ["forbidden", "error"],

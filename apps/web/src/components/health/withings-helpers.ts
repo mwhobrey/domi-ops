@@ -83,6 +83,14 @@ export function withingsResultNotice(result: string | undefined): WithingsNotice
       return { variant: "error", message: "That Withings sign-in took too long and expired (it has to finish within 30 minutes). Choose Connect Withings to start again." };
     case "forbidden":
       return { variant: "error", message: "You don't have permission to connect a cuff for that person." };
+    case "reconnected":
+      return { variant: "success", message: "Withings is reconnected. Syncing now; nothing already imported is read again." };
+    case "different_account":
+      return {
+        variant: "error",
+        message:
+          "That is a different Withings account from the one linked to this person, so nothing changed. Sign in to the original account, or unlink and connect the new one.",
+      };
     case "already_linked":
       return { variant: "info", message: "That person is already connected to a Withings account." };
     case "unavailable":
