@@ -606,6 +606,59 @@ export function eventOverlapsReportRange(
   return false;
 }
 
+export type MedicationMarkerKind = "start" | "stop" | "pause" | "resume";
+
+export type MedicationMarker = {
+  medicationId: string;
+  name: string;
+  memberId: string;
+  memberLabel: string;
+  /** Local (household time zone) calendar date, YYYY-MM-DD. */
+  date: string;
+  kind: MedicationMarkerKind;
+};
+
+/**
+ * Dates a medication began, ended, paused or resumed inside the report range (WHO-460), to be drawn
+ * over the vitals trend charts. Only what the data records: a dose change is an edit in place, with no
+ * history behind it, so it cannot appear here.
+ */
+export function buildMedicationMarkers(input: {
+  meds: Array<{
+    id: string;
+    name: string;
+    memberId: string;
+    memberLabel: string;
+    startDate: string | null;
+    endDate: string | null;
+    deletedAt: Date | null;
+  }>;
+  pausesByMed: Map<string, Array<{ pausedAt: Date; resumedAt: Date | null }>>;
+  from: string;
+  to: string;
+  timeZone: string;
+}): MedicationMarker[] {
+  const { from, to, timeZone } = input;
+  const inRange = (date: string) => date >= from && date <= to;
+  const markers: MedicationMarker[] = [];
+  for (const med of input.meds) {
+    const base = { medicationId: med.id, name: med.name, memberId: med.memberId, memberLabel: med.memberLabel };
+    if (med.startDate && inRange(med.startDate)) markers.push({ ...base, date: med.startDate, kind: "start" });
+    // A medication taken off by deleting it stopped on the day it was deleted, unless it has an end date.
+    const stopDate = med.endDate ?? (med.deletedAt ? localDateOfInstant(med.deletedAt, timeZone) : null);
+    if (stopDate && inRange(stopDate)) markers.push({ ...base, date: stopDate, kind: "stop" });
+    for (const pause of input.pausesByMed.get(med.id) ?? []) {
+      const pausedOn = localDateOfInstant(pause.pausedAt, timeZone);
+      if (inRange(pausedOn)) markers.push({ ...base, date: pausedOn, kind: "pause" });
+      if (pause.resumedAt) {
+        const resumedOn = localDateOfInstant(pause.resumedAt, timeZone);
+        if (inRange(resumedOn)) markers.push({ ...base, date: resumedOn, kind: "resume" });
+      }
+    }
+  }
+  return markers.sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name));
+}
+
 export async function buildHealthReports(
   db: Database,
   env: Env,
@@ -978,6 +1031,22 @@ export async function buildHealthReports(
 
   medicationAdherence.sort((a, b) => b.scheduledTotal + b.prn - (a.scheduledTotal + a.prn));
 
+  const medicationMarkers = buildMedicationMarkers({
+    meds: medRows.map((m) => ({
+      id: m.id,
+      name: decryptHealthFieldOrPassthrough(m.name, env) ?? "Medication",
+      memberId: m.memberId,
+      memberLabel: memberLabel.get(m.memberId) ?? "Member",
+      startDate: m.startDate,
+      endDate: m.endDate,
+      deletedAt: m.deletedAt,
+    })),
+    pausesByMed,
+    from,
+    to,
+    timeZone: timezone,
+  });
+
   const prnFrequency = buildPrnFrequencyByDay({
     logs: logsInLocalRange,
     medById,
@@ -1112,6 +1181,7 @@ export async function buildHealthReports(
       count,
     })),
     medicationAdherence,
+    medicationMarkers,
     prnFrequency,
     medications: medicationList,
     eventHistory,

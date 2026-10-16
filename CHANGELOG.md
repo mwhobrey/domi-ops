@@ -10,6 +10,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Added
 
+- **Medication changes on the vitals trend charts** (WHO-460). The Trends tab and the Health report now draw a dashed marker on each person's vitals chart where one of their medications started, stopped, paused or resumed, with a table of the average reading in the 14 days before and after each change and the medication's adherence for the range beside it. The comparison describes what happened next to the change; it does not say the medication caused it. Dose changes are not shown: editing a dose overwrites it and keeps no history. No migration, no new environment variables.
+
+### Added
+
 - **Reconnect for a Withings link** (WHO-463). A revoked link, or one made before workouts were supported, used to need unlink and connect again. **Reconnect** now renews it in place: new tokens and permissions, same history window and sync position, nothing imported twice. Signing in to a different Withings account is refused and changes nothing. No migration, no new environment variables.
 
 ### Fixed

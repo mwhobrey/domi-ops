@@ -114,6 +114,16 @@ export interface NutritionTrendPoint {
   entryCount: number;
 }
 
+/** A medication began, ended, paused or resumed on this local date (WHO-460). Dose changes are not recorded, so are not here. */
+export interface MedicationMarker {
+  medicationId: string;
+  name: string;
+  memberId: string;
+  memberLabel: string;
+  date: string;
+  kind: "start" | "stop" | "pause" | "resume";
+}
+
 export interface HealthReportExport {
   from: string;
   to: string;
@@ -155,6 +165,7 @@ export interface HealthReportExport {
     scheduledTotal: number;
     adherencePct: number | null;
   }[];
+  medicationMarkers?: MedicationMarker[];
   prnFrequency?: { date: string; memberId: string; memberLabel: string; count: number }[];
   medications?: HealthMedicationListItem[];
   eventHistory: HealthReportEventItem[];

@@ -2,10 +2,12 @@
 
 import { LazyCategoryBarChart as CategoryBarChart, LazyTrendLineChart as TrendLineChart } from "../charts/lazy";
 import { buildVitalsCharts } from "../../lib/vitals-trend-charts";
+import { beforeAfter, chartMarkerLines, MARKER_VERB, markersForChart, OVERLAY_WINDOW_DAYS } from "../../lib/vitals-medication-overlay";
 import { SectionHeader } from "../ui";
 import { formatReportDate, ReportTable } from "../reports/HealthOverviewReportBody";
 import type {
   ExerciseByActivityEntry,
+  MedicationMarker,
   ExerciseTrendPoint,
   NutritionTrendPoint,
   PainByRegionEntry,
@@ -21,13 +23,38 @@ import type { HealthPainBodyRegion } from "./health-types";
  * `/health` Trends tab — same data, same charts, two different surfaces (WHO-303).
  */
 
-export function VitalsTrendSection({ vitalsTrend }: { vitalsTrend: VitalsTrendEntry[] }) {
+export type VitalsAdherenceRow = {
+  medicationId: string;
+  name: string;
+  memberId?: string;
+  scheduleKind: string;
+  adherencePct: number | null;
+  taken: number;
+  missed: number;
+};
+
+export function VitalsTrendSection({
+  vitalsTrend,
+  medicationMarkers = [],
+  medicationAdherence = [],
+}: {
+  vitalsTrend: VitalsTrendEntry[];
+  /** When given, medication starts, stops and pauses are drawn on each chart and compared before and after (WHO-460). */
+  medicationMarkers?: MedicationMarker[];
+  medicationAdherence?: VitalsAdherenceRow[];
+}) {
   if (vitalsTrend.length === 0) return null;
   const charts = buildVitalsCharts(vitalsTrend);
   return (
     <section className="space-y-4">
       <SectionHeader title="Vitals trend" />
-      {charts.map((chart) => (
+      {charts.map((chart) => {
+        const chartMarkers = markersForChart(chart, medicationMarkers);
+        const lines = chartMarkerLines(chart, chartMarkers);
+        const adherence = medicationAdherence.filter(
+          (a) => a.memberId === chart.memberId && a.scheduleKind !== "prn" && a.adherencePct != null,
+        );
+        return (
         <div key={chart.key} className="space-y-2">
           <h3 className="text-sm font-medium text-[var(--color-text)]">
             {chart.title}
@@ -48,8 +75,34 @@ export function VitalsTrendSection({ vitalsTrend }: { vitalsTrend: VitalsTrendEn
               autoScaleY
               dedupeXLabels
               tooltipLabelKey="whenLabel"
+              markers={lines.map((l) => ({ x: formatReportDate(l.date), label: l.label }))}
             />
           </div>
+          {chartMarkers.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-xs text-[var(--color-text-muted)]">
+                Average of the {OVERLAY_WINDOW_DAYS} days before and after each change. This shows what happened next to what
+                changed; it does not show the medication caused it.
+              </p>
+              <ReportTable
+                columns={["Change", "Reading", "Before", "After"]}
+                rows={chartMarkers.flatMap((m) =>
+                  beforeAfter(chart, m.date).map((b, i) => [
+                    i === 0 ? `${formatReportDate(m.date)}: ${MARKER_VERB[m.kind]} ${m.name}` : "",
+                    b.seriesLabel,
+                    b.before != null ? `${b.before} ${chart.unit} (${b.beforeCount})`.trim() : "No readings",
+                    b.after != null ? `${b.after} ${chart.unit} (${b.afterCount})`.trim() : "No readings",
+                  ]),
+                )}
+              />
+            </div>
+          ) : null}
+          {adherence.length > 0 ? (
+            <p className="text-xs text-[var(--color-text-muted)]">
+              Adherence in this range:{" "}
+              {adherence.map((a) => `${a.name} ${a.adherencePct}% (${a.taken} taken, ${a.missed} missed)`).join(" · ")}
+            </p>
+          ) : null}
           <ReportTable
             columns={["When", ...chart.series.map((s) => (chart.series.length > 1 ? s.label : "Value"))]}
             rows={chart.rows.map((row) => [
@@ -58,7 +111,8 @@ export function VitalsTrendSection({ vitalsTrend }: { vitalsTrend: VitalsTrendEn
             ])}
           />
         </div>
-      ))}
+        );
+      })}
     </section>
   );
 }

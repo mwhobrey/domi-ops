@@ -2,6 +2,8 @@ import type { VitalsTrendEntry } from "./health-report-export";
 
 export type VitalsChart = {
   key: string;
+  /** Whose readings these are; medication markers are matched on it. */
+  memberId?: string;
   title: string;
   unit: string;
   readingCount: number;
@@ -59,6 +61,7 @@ export function buildVitalsCharts(trends: VitalsTrendEntry[]): VitalsChart[] {
     const rows = [...byEvent.values()].sort((a, b) => (a.at ?? a.date).localeCompare(b.at ?? b.date));
     charts.push({
       key: `bp::${sys.memberId ?? ""}`,
+      ...(sys.memberId ? { memberId: sys.memberId } : {}),
       title: suffix ? `Blood pressure — ${suffix}` : "Blood pressure",
       unit: sys.points[0]?.unit ?? "mmHg",
       readingCount: rows.length,
@@ -74,6 +77,7 @@ export function buildVitalsCharts(trends: VitalsTrendEntry[]): VitalsChart[] {
     if (pairedBp.has(t)) continue;
     charts.push({
       key: `${t.metric}::${t.memberId ?? ""}::${t.points[0]?.unit ?? ""}`,
+      ...(t.memberId ? { memberId: t.memberId } : {}),
       title: t.metricLabel,
       unit: t.points[0]?.unit ?? "",
       readingCount: t.points.length,

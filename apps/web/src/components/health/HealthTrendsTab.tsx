@@ -113,7 +113,11 @@ export function HealthTrendsTab({
 
       {report ? (
         <>
-          <VitalsTrendSection vitalsTrend={report.vitalsTrend ?? []} />
+          <VitalsTrendSection
+            vitalsTrend={report.vitalsTrend ?? []}
+            medicationMarkers={report.medicationMarkers ?? []}
+            medicationAdherence={report.medicationAdherence ?? []}
+          />
           <ExerciseWeeklyVolumeSection points={report.exerciseTrend?.points ?? []} />
           <ExerciseByActivitySection byActivity={report.exerciseByActivity ?? []} />
           <PainByRegionSection byRegion={report.painByRegion ?? []} />
