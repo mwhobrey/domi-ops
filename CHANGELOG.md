@@ -8,6 +8,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-10-16
+
+Health report navigation, medication/vitals comparisons and loading-state fixes. No migrations, new environment variables or manual steps.
+
 ### Fixed
 
 - Health report types after Medication list now keep their selection and open the matching report instead of resetting to Events. Older report requests cannot overwrite a newer selection or flash a stale error.

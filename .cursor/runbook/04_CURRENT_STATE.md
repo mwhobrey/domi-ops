@@ -4,7 +4,7 @@
 
 ## What is working (implemented paths)
 
-### Health reports and loading (unreleased)
+### Health reports and loading (0.10.1)
 
 - `ReportsHubClient` parses report kinds from `REPORT_KIND_LABELS` and maps Health panes through `HEALTH_REPORT_FOCUS_OPTIONS`; the API catalog and UI are checked together by `reports.test.ts`. Keep new kinds in both catalogs.
 - Health and Reports share `HealthTrendsTab`. `VitalsMedicationExplorer` aligns individual readings and daily dose cells on household dates, defaults to a seven-day window, and scopes doses/changes to the chart's member. Daily scheduled doses reuse expected-slot adherence after pause/deletion exclusions; interval/PRN gaps are unknown, not inferred misses. Expectations reflect the saved schedule, not versioned dose edits. Exact dose-time details retain the existing 500-log cap; daily aggregates use all fetched logs.
