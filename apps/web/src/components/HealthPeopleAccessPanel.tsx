@@ -1,5 +1,7 @@
 "use client";
 
+import { ContentSkeleton } from "./ContentSkeleton";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
 import type { NoteShareMember } from "./NoteSharePicker";
@@ -211,7 +213,7 @@ export function HealthPeopleAccessPanel({
           Could not determine your household member. Try refreshing the page.
         </p>
       ) : loading ? (
-        <p className="text-sm text-[var(--color-text-muted)]">Loading…</p>
+        <ContentSkeleton />
       ) : grantees.length === 0 ? (
         <p className="text-sm text-[var(--color-text-muted)]">No other household members.</p>
       ) : (

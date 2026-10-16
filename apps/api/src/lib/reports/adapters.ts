@@ -73,6 +73,29 @@ export function weeklyRangeToCanonical(
 
 type HealthReportData = Awaited<ReturnType<typeof import("../health-reports.js").buildHealthReports>>;
 
+export function healthTrendsToCanonical(data: HealthReportData): CanonicalReport {
+  return {
+    title: `Health trends — ${data.from} to ${data.to}`, module: "health", kind: "trends",
+    generatedAt: new Date().toISOString(), timezone: data.timezone,
+    sections: [{
+      key: "trends", label: "Vitals and medication history",
+      tables: [
+        ...(data.vitalsTrend ?? []).map((t) => ({
+          key: `vitals-${t.memberId}-${t.metric}`, label: t.metricLabel,
+          columns: ["When", "Value", "Unit"],
+          rows: t.points.map((p) => [p.whenLabel ?? p.date, p.value, p.unit]),
+        })),
+        ...(data.medicationDoseTrend ?? []).map((m) => ({
+          key: `doses-${m.medicationId}`, label: m.name,
+          columns: ["Date", "Taken", "Skipped", "Missed", "Pending", "As needed"],
+          rows: m.points.map((p) => [p.date, p.taken, p.skipped, p.missed, p.pending, p.prn]),
+        })),
+        { key: "changes", label: "Medication changes", columns: ["Date", "Medication", "Member", "Change"], rows: (data.medicationMarkers ?? []).map((m) => [m.date, m.name, m.memberLabel, m.kind]) },
+      ],
+    }],
+  };
+}
+
 export function healthOverviewToCanonical(data: HealthReportData): CanonicalReport {
   const sections: CanonicalReportSection[] = [
     {

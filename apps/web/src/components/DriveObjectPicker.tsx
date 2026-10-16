@@ -1,5 +1,7 @@
 "use client";
 
+import { ContentSkeleton } from "./ContentSkeleton";
+
 import { FileText, FolderOpen, Link2, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, apiClient } from "../lib/client-api";
@@ -175,7 +177,7 @@ export function DriveObjectPicker({
         </div>
 
         {loading && objects.length === 0 ? (
-          <p className="text-sm text-[var(--color-text-muted)]">Loading…</p>
+          <ContentSkeleton />
         ) : selectable.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-8 text-center text-sm text-[var(--color-text-muted)]">
             <FolderOpen className="h-8 w-8 opacity-50" aria-hidden />

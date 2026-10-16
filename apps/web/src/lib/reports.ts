@@ -3,6 +3,7 @@ export type ReportModule = "school" | "chores" | "shopping" | "expenses" | "heal
 export type ReportKind =
   | "weekly"
   | "overview"
+  | "trends"
   | "medications"
   | "medications-today"
   | "medication-list"
@@ -51,6 +52,7 @@ export interface ReportCatalogEntry {
 export const REPORT_KIND_LABELS: Record<ReportKind, string> = {
   weekly: "Weekly schedule",
   overview: "Overview",
+  trends: "Trends",
   medications: "Dose history",
   "medications-today": "Today's doses",
   "medication-list": "Medication list",
@@ -72,6 +74,10 @@ export const REPORT_MODULE_LABELS: Record<ReportModule, string> = {
   health: "Health",
   goals: "Goals",
 };
+
+export function parseReportKind(value: string | null): ReportKind | null {
+  return value && Object.hasOwn(REPORT_KIND_LABELS, value) ? value as ReportKind : null;
+}
 
 export function reportExportBody(params: ReportExportParams): Record<string, unknown> {
   const body: Record<string, unknown> = {

@@ -1,5 +1,7 @@
 "use client";
 
+import { ContentSkeleton } from "../ContentSkeleton";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError, apiClient } from "../../lib/client-api";
@@ -675,7 +677,7 @@ export function MedicationManagerClient({
       ) : null}
 
       {loading ? (
-        <p className="text-sm text-[var(--color-text-muted)]">Loading…</p>
+        <ContentSkeleton />
       ) : (
         <>
           <Card>

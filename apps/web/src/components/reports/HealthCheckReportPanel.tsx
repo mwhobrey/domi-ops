@@ -1,8 +1,10 @@
 "use client";
 
+import { ContentSkeleton } from "../ContentSkeleton";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, apiClient } from "../../lib/client-api";
-import { Alert, Button, Input, Select, Spinner } from "../ui";
+import { Alert, Button, Input, Select } from "../ui";
 import type { NoteShareMember } from "../NoteSharePicker";
 import { rangeEndingOn } from "../../lib/health-report-export";
 import { createLatestGate } from "../../lib/latest-request";
@@ -52,9 +54,14 @@ export function HealthCheckReportPanel({
   const [to, setTo] = useState(initialTo);
   const [memberId, setMemberId] = useState("");
   const [members, setMembers] = useState<NoteShareMember[]>(membersProp ?? []);
-  const [report, setReport] = useState<CanonicalReportData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const requestKey = JSON.stringify([kind, from, to, memberId]);
+  const [fetchedReport, setReport] = useState<CanonicalReportData | null>(null);
+  const [settledKey, setSettledKey] = useState("");
+  const [pending, setLoading] = useState(true);
+  const [loadError, setError] = useState<string | null>(null);
+  const report = settledKey === requestKey ? fetchedReport : null;
+  const error = settledKey === requestKey ? loadError : null;
+  const loading = pending || settledKey !== requestKey;
   const [exportOpen, setExportOpen] = useState(false);
 
   useEffect(() => {
@@ -82,14 +89,16 @@ export function HealthCheckReportPanel({
       const data = await apiClient.get<{ report: CanonicalReportData }>(`/api/core/reports?${params}`);
       if (!gate.current.isCurrent(id)) return;
       setReport(data.report);
+      setSettledKey(requestKey);
     } catch (err) {
       if (!gate.current.isCurrent(id)) return;
       setError(reportErrorMessage(err));
       setReport(null);
+      setSettledKey(requestKey);
     } finally {
       if (gate.current.isCurrent(id)) setLoading(false);
     }
-  }, [kind, from, to, memberId]);
+  }, [kind, from, to, memberId, requestKey]);
 
   useEffect(() => {
     void load();
@@ -142,9 +151,7 @@ export function HealthCheckReportPanel({
 
       {error ? <Alert variant="error">{error}</Alert> : null}
       {loading && !report ? (
-        <div className="flex justify-center py-12">
-          <Spinner />
-        </div>
+        <ContentSkeleton variant="report" label="Loading report" />
       ) : null}
       {report ? <CanonicalReportView report={report} /> : null}
 

@@ -1,5 +1,7 @@
 "use client";
 
+import { ContentSkeleton } from "../ContentSkeleton";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, apiClient } from "../../lib/client-api";
 import type { NoteShareMember } from "../NoteSharePicker";
@@ -163,7 +165,7 @@ export function OrganizerSection({
           {error ? <Alert variant="error">{error}</Alert> : null}
 
           {!loaded ? (
-            <p className="text-sm text-[var(--color-text-muted)]">Loading…</p>
+            <ContentSkeleton />
           ) : !plan ? (
             <EmptyState
               title="No pill organizer set up"

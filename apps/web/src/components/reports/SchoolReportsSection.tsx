@@ -1,11 +1,13 @@
 "use client";
 
+import { ContentSkeleton } from "../ContentSkeleton";
+
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ApiError, apiClient } from "../../lib/client-api";
 import type { SchoolReportsData } from "../../lib/school-reports";
 import { SchoolReports } from "../SchoolReports";
-import { Alert, Spinner } from "../ui";
+import { Alert } from "../ui";
 
 import type { ReportKind } from "../../lib/reports";
 import type { SchoolReportView } from "../../lib/school-reports";
@@ -59,9 +61,7 @@ export function SchoolReportsSection({
 
   if (loading && !reports) {
     return (
-      <div className="flex justify-center py-12">
-        <Spinner />
-      </div>
+      <ContentSkeleton variant="report" label="Loading report" />
     );
   }
 

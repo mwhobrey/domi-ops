@@ -1,10 +1,12 @@
 "use client";
 
+import { ContentSkeleton } from "../ContentSkeleton";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, apiClient } from "../../lib/client-api";
 import { formatDateLocal } from "../../lib/calendar-utils";
 import { ReportExportSheet } from "./ReportExportSheet";
-import { Alert, Button, Input, Spinner } from "../ui";
+import { Alert, Button, Input } from "../ui";
 import { LazyCategoryBarChart as CategoryBarChart } from "../charts/lazy";
 
 interface ChoreMemberReport {
@@ -132,10 +134,7 @@ export function ChoresCompletionReportSection({ driveEnabled = true }: { driveEn
       </form>
 
       {loading && !report ? (
-        <div className="flex items-center justify-center gap-2 py-12 text-sm text-[var(--color-text-muted)]">
-          <Spinner className="h-5 w-5" />
-          Loading reports…
-        </div>
+        <ContentSkeleton variant="report" label="Loading report" />
       ) : null}
 
       {report && !loading ? (

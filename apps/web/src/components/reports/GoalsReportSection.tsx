@@ -1,8 +1,10 @@
 "use client";
 
+import { ContentSkeleton } from "../ContentSkeleton";
+
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, apiClient } from "../../lib/client-api";
-import { Alert, Button, Spinner } from "../ui";
+import { Alert, Button } from "../ui";
 import { ReportExportSheet } from "./ReportExportSheet";
 
 type CanonicalSection = {
@@ -62,9 +64,7 @@ export function GoalsReportSection({ driveEnabled = true }: { driveEnabled?: boo
       </div>
 
       {loading && !report ? (
-        <div className="flex justify-center py-12">
-          <Spinner />
-        </div>
+        <ContentSkeleton variant="report" label="Loading report" />
       ) : null}
 
       {report ? (

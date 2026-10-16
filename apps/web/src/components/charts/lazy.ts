@@ -1,6 +1,10 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { createElement } from "react";
+import { ContentSkeleton } from "../ContentSkeleton";
+
+const loading = () => createElement(ContentSkeleton, { variant: "chart", label: "Loading chart" });
 
 /**
  * recharts is ~130KB gzipped — load it only on the client, only when a chart actually
@@ -10,10 +14,10 @@ import dynamic from "next/dynamic";
  */
 export const LazyCategoryBarChart = dynamic(
   () => import("./CategoryBarChart").then((m) => m.CategoryBarChart),
-  { ssr: false },
+  { ssr: false, loading },
 );
 
 export const LazyTrendLineChart = dynamic(
   () => import("./TrendLineChart").then((m) => m.TrendLineChart),
-  { ssr: false },
+  { ssr: false, loading },
 );

@@ -1,5 +1,7 @@
 "use client";
 
+import { ContentSkeleton } from "./ContentSkeleton";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiClient } from "../lib/client-api";
 import {
@@ -114,7 +116,7 @@ export function SchoolAttendanceCard({
         </p>
         {error && <Alert variant="error">{error}</Alert>}
         {loading ? (
-          <p className="text-sm text-[var(--color-text-muted)]">Loading…</p>
+          <ContentSkeleton />
         ) : visible.length === 0 ? (
           <p className="text-sm text-[var(--color-text-muted)]">
             {canEdit ? "Enroll a student to take attendance." : "No attendance recorded for this day."}

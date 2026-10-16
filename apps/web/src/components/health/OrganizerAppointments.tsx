@@ -1,5 +1,7 @@
 "use client";
 
+import { ContentSkeleton } from "../ContentSkeleton";
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiClient } from "../../lib/client-api";
 import { Alert, Badge, Button } from "../ui";
@@ -47,7 +49,7 @@ export function OrganizerAppointments({
   const groups = useMemo(() => groupAppointments(list?.appointments ?? []), [list]);
 
   if (error) return <Alert variant="error">{error}</Alert>;
-  if (!list) return <p className="text-sm text-[var(--color-text-muted)]">Loading appointments…</p>;
+  if (!list) return <ContentSkeleton />;
   if (list.appointments.length === 0) return null;
 
   const row = (a: Appointment) => {

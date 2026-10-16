@@ -1,5 +1,7 @@
 "use client";
 
+import { ContentSkeleton } from "./ContentSkeleton";
+
 import { Share2, Users } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -130,7 +132,7 @@ export function HealthSharingClient({
       {tab === "with-me" ? (
         <div className="space-y-6">
           {loading ? (
-            <p className="text-sm text-[var(--color-text-muted)]">Loading…</p>
+            <ContentSkeleton />
           ) : sharedWithMeEvents.length === 0 && sharedWithMeMeds.length === 0 ? (
             <EmptyState
               icon={<Share2 className="h-8 w-8" aria-hidden />}
@@ -199,7 +201,7 @@ export function HealthSharingClient({
       {tab === "by-me" ? (
         <div className="space-y-6">
           {loading ? (
-            <p className="text-sm text-[var(--color-text-muted)]">Loading…</p>
+            <ContentSkeleton />
           ) : sharedByMeEvents.length === 0 && sharedByMeMeds.length === 0 ? (
             <EmptyState
               icon={<Users className="h-8 w-8" aria-hidden />}

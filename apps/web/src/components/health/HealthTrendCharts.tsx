@@ -2,8 +2,11 @@
 
 import { LazyCategoryBarChart as CategoryBarChart, LazyTrendLineChart as TrendLineChart } from "../charts/lazy";
 import { buildVitalsCharts } from "../../lib/vitals-trend-charts";
+import type { VitalsChart } from "../../lib/vitals-trend-charts";
+import { useContext, useState } from "react";
+import { TrendPresentation } from "./TrendPresentation";
 import { beforeAfter, chartMarkerLines, MARKER_VERB, markersForChart, OVERLAY_WINDOW_DAYS } from "../../lib/vitals-medication-overlay";
-import { SectionHeader } from "../ui";
+import { SectionHeader, Select } from "../ui";
 import { formatReportDate, ReportTable } from "../reports/HealthOverviewReportBody";
 import type {
   ActivityTrendEntry,
@@ -35,6 +38,37 @@ export type VitalsAdherenceRow = {
   missed: number;
 };
 
+export function MedicationComparison({ chart, markers }: { chart: VitalsChart; markers: MedicationMarker[] }) {
+  const key = (m: MedicationMarker) => `${m.medicationId}:${m.date}:${m.kind}`;
+  const [selected, setSelected] = useState("");
+  const marker = markers.find((m) => key(m) === selected) ?? markers[0];
+  if (!marker) return null;
+  const comparisons = beforeAfter(chart, marker.date);
+  const maximum = Math.max(1, ...comparisons.flatMap((c) => [Math.abs(c.before ?? 0), Math.abs(c.after ?? 0)]));
+  return (
+    <div className="space-y-3 rounded-[var(--radius-md)] bg-[var(--color-surface-subtle)] p-3">
+      <label className="block space-y-1 text-sm">
+        <span className="font-medium">Compare around a medication change</span>
+        <Select value={key(marker)} onChange={(e) => setSelected(e.target.value)}>
+          {markers.map((m) => <option key={key(m)} value={key(m)}>{formatReportDate(m.date)} · {MARKER_VERB[m.kind]} {m.name}</option>)}
+        </Select>
+      </label>
+      {comparisons.map((c) => (
+        <div key={c.seriesKey} className="space-y-2 text-xs">
+          <p className="font-medium">{c.seriesLabel}</p>
+          {([{ label: "Before", value: c.before, count: c.beforeCount, color: "var(--chart-series-1)" }, { label: "After", value: c.after, count: c.afterCount, color: "var(--chart-series-2)" }]).map((p) => (
+            <div key={p.label} className="space-y-1">
+              <div className="flex flex-wrap justify-between gap-1"><span>{p.label}</span><span>{p.value == null ? "No readings" : `${p.value} ${chart.unit} · ${p.count} readings`}</span></div>
+              <div aria-hidden="true" className="h-2 rounded-full bg-[var(--color-border)]"><div className="h-2 rounded-full" style={{ width: `${Math.abs(p.value ?? 0) / maximum * 100}%`, background: p.color }} /></div>
+            </div>
+          ))}
+        </div>
+      ))}
+      <p className="text-xs text-[var(--color-text-muted)]">Averages of available readings within {OVERLAY_WINDOW_DAYS} days on each side, limited to the selected range.</p>
+    </div>
+  );
+}
+
 export function VitalsTrendSection({
   vitalsTrend,
   medicationMarkers = [],
@@ -45,6 +79,7 @@ export function VitalsTrendSection({
   medicationMarkers?: MedicationMarker[];
   medicationAdherence?: VitalsAdherenceRow[];
 }) {
+  const compact = useContext(TrendPresentation);
   if (vitalsTrend.length === 0) return null;
   const charts = buildVitalsCharts(vitalsTrend);
   return (
@@ -73,14 +108,14 @@ export function VitalsTrendSection({
               }))}
               series={chart.series}
               valueFormatter={(v) => `${v} ${chart.unit}`.trim()}
-              height={180}
+              height={240}
               autoScaleY
               dedupeXLabels
               tooltipLabelKey="whenLabel"
               markers={lines.map((l) => ({ x: formatReportDate(l.date), label: l.label }))}
             />
           </div>
-          {chartMarkers.length > 0 ? (
+          {compact ? <MedicationComparison chart={chart} markers={chartMarkers} /> : chartMarkers.length > 0 ? (
             <div className="space-y-2">
               <p className="text-xs text-[var(--color-text-muted)]">
                 Average of the {OVERLAY_WINDOW_DAYS} days before and after each change. This shows what happened next to what
@@ -99,7 +134,7 @@ export function VitalsTrendSection({
               />
             </div>
           ) : null}
-          {adherence.length > 0 ? (
+          {!compact && adherence.length > 0 ? (
             <p className="text-xs text-[var(--color-text-muted)]">
               Adherence in this range:{" "}
               {adherence.map((a) => `${a.name} ${a.adherencePct}% (${a.taken} taken, ${a.missed} missed)`).join(" · ")}

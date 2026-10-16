@@ -8,6 +8,7 @@ import {
   healthOverviewToCanonical,
   healthPainToCanonical,
   healthTodayToCanonical,
+  healthTrendsToCanonical,
 } from "./adapters.js";
 
 const sample = {
@@ -47,6 +48,7 @@ const sample = {
   eventsByType: [{ type: "appointment", label: "Appointment", count: 1 }],
   eventsByMember: [{ memberId: "a", label: "Alex", count: 1 }],
   medicationMarkers: [],
+  medicationDoseTrend: [],
   activityTrend: [],
   sleepTrend: [],
   medicationAdherence: [
@@ -139,6 +141,15 @@ const sample = {
 };
 
 describe("health canonical adapters", () => {
+  it("keeps trend readings and daily dose status in the trends report", () => {
+    const report = healthTrendsToCanonical({ ...sample,
+      vitalsTrend: [{ metric: "heart_rate", metricLabel: "Heart rate", memberId: "a", points: [{ eventId: "v1", date: "2026-07-10", at: "2026-07-10T14:00:00Z", whenLabel: "Jul 10, 9 AM", value: 95, unit: "bpm" }] }],
+      medicationDoseTrend: [{ medicationId: "m1", memberId: "a", name: "Amoxicillin", scheduleKind: "scheduled", points: [{ date: "2026-07-10", taken: 1, skipped: 0, missed: 1, pending: 0, prn: 0 }] }],
+    });
+    expect(report.kind).toBe("trends");
+    expect(report.sections[0]!.tables![0]!.rows).toEqual([["Jul 10, 9 AM", 95, "bpm"]]);
+    expect(report.sections[0]!.tables![1]!.rows).toEqual([["2026-07-10", 1, 0, 1, 0, 0]]);
+  });
   it("keeps events overview free of medication log dumps", () => {
     const report = healthOverviewToCanonical(sample);
     expect(report.kind).toBe("overview");
