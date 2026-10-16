@@ -16,6 +16,7 @@ import {
   normalizeHealthEventType,
   normalizeHealthReportGroupBy,
   type HealthReportEventItem,
+  buildMedicationMarkers,
 } from "./health-reports.js";
 
 describe("eventOverlapsReportRange", () => {
@@ -345,5 +346,49 @@ describe("today dose rows", () => {
     expect(rows).toMatchObject([
       { status: "prn", statusLabel: "PRN taken", loggedAtLabel: "Jul 1, 2026, 3:40 PM" },
     ]);
+  });
+});
+
+describe("buildMedicationMarkers", () => {
+  const med = (over: Record<string, unknown> = {}) => ({
+    id: "m1",
+    name: "Lisinopril",
+    memberId: "mem1",
+    memberLabel: "Ally",
+    startDate: null as string | null,
+    endDate: null as string | null,
+    deletedAt: null as Date | null,
+    ...over,
+  });
+  const range = { from: "2026-10-01", to: "2026-10-31", timeZone: "America/Denver" };
+
+  it("marks start and stop dates that fall inside the range, oldest first", () => {
+    const markers = buildMedicationMarkers({
+      meds: [med({ startDate: "2026-10-10", endDate: "2026-10-20" }), med({ id: "m2", name: "Aspirin", startDate: "2026-09-01" })],
+      pausesByMed: new Map(),
+      ...range,
+    });
+    expect(markers.map((m) => [m.date, m.kind, m.name])).toEqual([
+      ["2026-10-10", "start", "Lisinopril"],
+      ["2026-10-20", "stop", "Lisinopril"],
+    ]);
+  });
+
+  it("treats a deleted medication as stopped on the day it was deleted, unless it has an end date", () => {
+    const deletedAt = new Date("2026-10-15T20:00:00Z");
+    const deleted = buildMedicationMarkers({ meds: [med({ deletedAt })], pausesByMed: new Map(), ...range });
+    expect(deleted).toMatchObject([{ date: "2026-10-15", kind: "stop" }]);
+    const ended = buildMedicationMarkers({ meds: [med({ deletedAt, endDate: "2026-10-12" })], pausesByMed: new Map(), ...range });
+    expect(ended).toMatchObject([{ date: "2026-10-12", kind: "stop" }]);
+  });
+
+  it("marks pauses and resumes in the household's time zone", () => {
+    const markers = buildMedicationMarkers({
+      meds: [med()],
+      // 03:00 UTC on the 6th is still the evening of the 5th in Denver.
+      pausesByMed: new Map([["m1", [{ pausedAt: new Date("2026-10-06T03:00:00Z"), resumedAt: new Date("2026-11-02T12:00:00Z") }]]]),
+      ...range,
+    });
+    expect(markers).toMatchObject([{ date: "2026-10-05", kind: "pause" }]);
   });
 });

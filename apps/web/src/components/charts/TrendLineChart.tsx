@@ -1,7 +1,7 @@
 "use client";
 
-import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { CHART_AXIS_TICK_STYLE, CHART_GRID_COLOR, CHART_LEGEND_TEXT_STYLE, CHART_SURFACE_COLOR, seriesColor } from "./chartTheme";
+import { CartesianGrid, Legend, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { CHART_AXIS_COLOR, CHART_AXIS_TICK_STYLE, CHART_GRID_COLOR, CHART_LEGEND_TEXT_STYLE, CHART_SURFACE_COLOR, seriesColor } from "./chartTheme";
 import { ChartTooltip } from "./ChartTooltip";
 
 export type TrendSeries = { key: string; label: string };
@@ -18,6 +18,7 @@ export function TrendLineChart({
   autoScaleY = false,
   dedupeXLabels = false,
   tooltipLabelKey,
+  markers,
 }: {
   data: Array<Record<string, string | number | null>>;
   series: TrendSeries[];
@@ -30,6 +31,8 @@ export function TrendLineChart({
   dedupeXLabels?: boolean;
   /** Row field shown as the tooltip heading instead of the x value (a date with its time, say). */
   tooltipLabelKey?: string;
+  /** Dashed vertical lines at an x value with a short label, for events that explain the line (a medication started). */
+  markers?: Array<{ x: string; label: string }>;
 }) {
   if (data.length === 0 || series.length === 0) return null;
 
@@ -46,7 +49,7 @@ export function TrendLineChart({
   return (
     <div style={{ width: "100%", height }}>
       <ResponsiveContainer>
-        <LineChart data={plotted} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
+        <LineChart data={plotted} margin={{ top: markers?.length ? 22 : 8, right: 12, bottom: 0, left: 0 }}>
           <CartesianGrid stroke={CHART_GRID_COLOR} strokeDasharray="0" vertical={false} />
           <XAxis
             dataKey={xKey}
@@ -73,6 +76,15 @@ export function TrendLineChart({
           {series.length > 1 ? (
             <Legend wrapperStyle={CHART_LEGEND_TEXT_STYLE} iconType="circle" iconSize={8} />
           ) : null}
+          {(markers ?? []).map((m) => (
+            <ReferenceLine
+              key={`${m.x}::${m.label}`}
+              x={m.x}
+              stroke={CHART_AXIS_COLOR}
+              strokeDasharray="4 3"
+              label={{ value: m.label, position: "top", fill: CHART_AXIS_COLOR, fontSize: 11 }}
+            />
+          ))}
           {series.map((s, i) => (
             <Line
               key={s.key}

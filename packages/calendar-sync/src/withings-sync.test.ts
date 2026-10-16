@@ -3,6 +3,7 @@ import {
   WithingsError,
   encryptWithingsSecret,
   shapeVitalsGroup,
+  shapeActivity,
   shapeWorkout,
   withingsScopeAllowsWorkouts,
   withingsUnsubscribe,
@@ -279,5 +280,46 @@ describe("shapeWorkout", () => {
   it("rejects a workout with no usable span", () => {
     expect(shapeWorkout(workout({ enddate: 1_791_000_000 }))).toBeNull();
     expect(shapeWorkout(workout({ id: undefined }))).toBeNull();
+  });
+});
+
+describe("shapeActivity", () => {
+  const row = (over: Record<string, unknown> = {}) => ({
+    date: "2026-09-10",
+    deviceid: "watch-1",
+    is_tracker: true,
+    modified: 1_790_300_000,
+    steps: 8421.4,
+    distance: 6230.6,
+    active: 2430,
+    calories: 310.4,
+    totalcalories: 2105.9,
+    ...over,
+  });
+
+  it("rounds to whole units and turns active seconds into minutes", () => {
+    expect(shapeActivity(row())).toEqual({
+      date: "2026-09-10",
+      deviceKey: "watch-1",
+      isTracker: true,
+      steps: 8421,
+      distanceM: 6231,
+      activeMinutes: 41,
+      caloriesActive: 310,
+      caloriesTotal: 2106,
+      modified: 1_790_300_000,
+    });
+  });
+
+  it("prefers the hashed device id, and tolerates a row without one", () => {
+    expect(shapeActivity(row({ hash_deviceid: "h1" }))!.deviceKey).toBe("h1");
+    expect(shapeActivity(row({ deviceid: undefined }))!.deviceKey).toBe("");
+  });
+
+  it("keeps a zero-step day, and drops what has no usable numbers or date", () => {
+    expect(shapeActivity({ date: "2026-09-10", steps: 0 })).toMatchObject({ steps: 0 });
+    expect(shapeActivity({ date: "2026-09-10" })).toBeNull();
+    expect(shapeActivity(row({ date: "10/09/2026" }))).toBeNull();
+    expect(shapeActivity(row({ steps: -5, distance: undefined, active: undefined, calories: undefined, totalcalories: undefined }))).toBeNull();
   });
 });

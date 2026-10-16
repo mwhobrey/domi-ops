@@ -46,6 +46,8 @@ const sample = {
   },
   eventsByType: [{ type: "appointment", label: "Appointment", count: 1 }],
   eventsByMember: [{ memberId: "a", label: "Alex", count: 1 }],
+  medicationMarkers: [],
+  activityTrend: [],
   medicationAdherence: [
     {
       medicationId: "m1",

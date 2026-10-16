@@ -207,7 +207,11 @@ export function HealthOverviewReportBody({
               />
             </section>
           ) : null}
-          <VitalsTrendSection vitalsTrend={report.vitalsTrend ?? []} />
+          <VitalsTrendSection
+            vitalsTrend={report.vitalsTrend ?? []}
+            medicationMarkers={report.medicationMarkers ?? []}
+            medicationAdherence={report.medicationAdherence}
+          />
           {eventGroups.length > 0 ? (
             <section className="space-y-4">
               <SectionHeader title={historyTitle} />
