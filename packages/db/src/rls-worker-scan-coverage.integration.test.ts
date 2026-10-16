@@ -16,6 +16,7 @@ const maybeDescribe = TEST_URL ? describe : describe.skip;
  *   are due, so `health_withings_links` keeps a read-only worker_scan policy and this table gets none.
  * - health_withings_daily_activity (WHO-465): imported Withings daily activity. Written by the per-household sync
  *   job and read by the report, both under withHouseholdContext; no cross-tenant scan needs it.
+ * - health_withings_sleep (WHO-466): imported Withings sleep nights, same access pattern as daily activity.
  * - health_member_acl: read by the health reminder jobs, but those run per household under
  *   withHouseholdContext (see health-reminder-fanout.ts), so they never need cross-tenant access to
  *   who may see someone's health data. Keep it that way: do not give the worker a policy here.
@@ -41,6 +42,7 @@ const NOT_READ_BY_WORKER_SCANS = new Set([
   "health_supply_settings",
   "health_withings_daily_activity",
   "health_withings_measure_groups",
+  "health_withings_sleep",
   "school_assignment_materials",
   "school_hours_log",
   "school_instruction_days",

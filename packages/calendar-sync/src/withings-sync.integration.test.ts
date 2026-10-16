@@ -13,6 +13,7 @@ import {
   healthWithingsDailyActivity,
   healthWithingsLinks,
   healthWithingsMeasureGroups,
+  healthWithingsSleep,
   householdMembers,
   households,
   users,
@@ -45,6 +46,9 @@ function fakeWithings(opts: {
   /** Pages of `getactivity`, in order. A status other than 0 makes every `getactivity` call fail with it. */
   activities?: Array<Record<string, unknown>>;
   activityStatus?: number;
+  /** Pages of Sleep v2 `getsummary`, in order. */
+  sleep?: Array<Record<string, unknown>>;
+  sleepStatus?: number;
   measureStatus?: number;
   token?: Record<string, unknown>;
   tokenStatus?: number;
@@ -53,11 +57,18 @@ function fakeWithings(opts: {
   let page = 0;
   let workoutPage = 0;
   let activityPage = 0;
+  let sleepPage = 0;
   const impl = vi.fn(async (url: string, init?: RequestInit) => {
     const form = new URLSearchParams(String(init?.body ?? ""));
     calls.push({ url, form, auth: new Headers(init?.headers).get("authorization") });
     if (url.includes("/v2/oauth2")) {
       return new Response(JSON.stringify({ status: opts.tokenStatus ?? 0, body: opts.token ?? {} }), { status: 200 });
+    }
+    if (url.includes("/v2/sleep")) {
+      if (opts.sleepStatus) return new Response(JSON.stringify({ status: opts.sleepStatus, body: {} }), { status: 200 });
+      const body = opts.sleep?.[Math.min(sleepPage, opts.sleep.length - 1)] ?? { series: [], more: 0, offset: 0 };
+      sleepPage += 1;
+      return new Response(JSON.stringify({ status: 0, body }), { status: 200 });
     }
     if (url.includes("/v2/measure") && form.get("action") === "getactivity") {
       if (opts.activityStatus) return new Response(JSON.stringify({ status: opts.activityStatus, body: {} }), { status: 200 });
@@ -83,6 +94,7 @@ function fakeWithings(opts: {
     calls,
     measureCalls: () => calls.filter((c) => c.url.includes("/measure") && !c.url.includes("/v2/")),
     workoutCalls: () => calls.filter((c) => c.url.includes("/v2/measure") && c.form.get("action") === "getworkouts"),
+    sleepCalls: () => calls.filter((c) => c.url.includes("/v2/sleep")),
     activityCalls: () => calls.filter((c) => c.url.includes("/v2/measure") && c.form.get("action") === "getactivity"),
   };
 }
@@ -186,6 +198,7 @@ maybeDescribe("Withings sync (integration)", () => {
       // The dedupe rows belong to the person, not the link, so deleting links does not clear them.
       await tx.delete(healthWithingsMeasureGroups).where(eq(healthWithingsMeasureGroups.householdId, householdId));
       await tx.delete(healthWithingsDailyActivity).where(eq(healthWithingsDailyActivity.householdId, householdId));
+      await tx.delete(healthWithingsSleep).where(eq(healthWithingsSleep.householdId, householdId));
       await tx.delete(healthWithingsLinks).where(eq(healthWithingsLinks.householdId, householdId));
       await tx.delete(healthChecks).where(eq(healthChecks.householdId, householdId));
       await tx.delete(healthEvents).where(eq(healthEvents.householdId, householdId));
@@ -615,6 +628,114 @@ maybeDescribe("Withings sync (integration)", () => {
       const fw = fakeWithings({ ...quiet, activities: [{ activities: [day({ date: "yesterday" }), empty], more: 0, offset: 0 }] });
       await run(link.id, fw.impl);
       expect(await rows()).toHaveLength(0);
+    });
+  });
+
+  describe("sleep", () => {
+    const night = (over: Record<string, unknown> = {}) => ({
+      id: 7001,
+      timezone: "America/Chicago",
+      startdate: 1_790_200_000,
+      enddate: 1_790_200_000 + 8 * 3600,
+      date: "2026-09-10",
+      modified: 1_790_300_000,
+      data: {
+        total_timeinbed: 28_800,
+        total_sleep_time: 25_200,
+        lightsleepduration: 14_400,
+        deepsleepduration: 5_400,
+        remsleepduration: 5_400,
+        wakeupduration: 3_600,
+        wakeupcount: 2,
+        sleep_score: 81,
+      },
+      ...over,
+    });
+    const rows = () =>
+      withHouseholdContext(db, householdId, (tx) =>
+        tx.select().from(healthWithingsSleep).where(eq(healthWithingsSleep.memberId, memberId)),
+      );
+    const scoped = { scope: "user.metrics,user.activity" };
+    const quiet = { pages: [{ measuregrps: [], more: 0, updatetime: 1_790_000_000 }] };
+
+    it("stores a night encrypted, and asks week by week on the backfill", async () => {
+      const link = await makeLink({ ...scoped, backfillFrom: new Date(NOW.getTime() - 20 * 86_400_000) });
+      const fw = fakeWithings({ ...quiet, sleep: [{ series: [night()], more: 0, offset: 0 }] });
+      await run(link.id, fw.impl);
+
+      const stored = await rows();
+      expect(stored).toHaveLength(1);
+      const n = stored[0]!;
+      expect(n).toMatchObject({ sleepId: "7001", date: "2026-09-10", sourceModified: 1_790_300_000 });
+      expect(n.endedAt.getTime() - n.startedAt.getTime()).toBe(8 * 3600 * 1000);
+      expect(n.totalSleepMinutes!.startsWith("enc:v1:")).toBe(true);
+      expect(decryptSensitive(n.totalSleepMinutes!, KEY)).toBe("420");
+      expect(decryptSensitive(n.inBedMinutes!, KEY)).toBe("480");
+      expect(decryptSensitive(n.deepMinutes!, KEY)).toBe("90");
+      expect(decryptSensitive(n.remMinutes!, KEY)).toBe("90");
+      expect(decryptSensitive(n.lightMinutes!, KEY)).toBe("240");
+      expect(decryptSensitive(n.awakeMinutes!, KEY)).toBe("60");
+      expect(decryptSensitive(n.wakeCount!, KEY)).toBe("2");
+      expect(decryptSensitive(n.sleepScore!, KEY)).toBe("81");
+
+      // A 20 day window (plus a day of slack each side) is asked for in weeks, none longer than 7 days.
+      const calls = fw.sleepCalls();
+      expect(calls.length).toBeGreaterThanOrEqual(3);
+      for (const c of calls) {
+        const days = (Date.parse(c.form.get("enddateymd")!) - Date.parse(c.form.get("startdateymd")!)) / 86_400_000;
+        expect(days).toBeLessThanOrEqual(6);
+      }
+      expect(calls[0]!.form.get("data_fields")).toContain("total_sleep_time");
+      expect((await reload(link.id)).sleepLastUpdate).toBe(1_790_300_000);
+    });
+
+    it("updates the same night in place and resumes from its own watermark", async () => {
+      const link = await makeLink({ ...scoped, backfillFrom: new Date(NOW.getTime() - 3 * 86_400_000) });
+      await run(link.id, fakeWithings({ ...quiet, sleep: [{ series: [night()], more: 0, offset: 0 }] }).impl);
+      await withHouseholdContext(db, householdId, (tx) =>
+        tx.update(healthWithingsLinks).set({ syncRequestedAt: new Date(NOW.getTime() - 1) }).where(eq(healthWithingsLinks.id, link.id)),
+      );
+
+      const later = fakeWithings({
+        pages: [{ measuregrps: [], more: 0, updatetime: 1_793_000_000 }],
+        sleep: [{ series: [night({ modified: 1_790_400_000, data: { total_sleep_time: 27_000, total_timeinbed: 28_800 } })], more: 0, offset: 0 }],
+      });
+      await run(link.id, later.impl, new Date(NOW.getTime() + 60_000));
+
+      expect(later.sleepCalls()).toHaveLength(1);
+      expect(later.sleepCalls()[0]!.form.get("lastupdate")).toBe(String(1_790_300_000 - 1));
+      const stored = await rows();
+      expect(stored).toHaveLength(1);
+      expect(decryptSensitive(stored[0]!.totalSleepMinutes!, KEY)).toBe("450");
+      expect((await reload(link.id)).sleepLastUpdate).toBe(1_790_400_000);
+    });
+
+    it("counts a night from an outside source by its asleep time, with no stage split", async () => {
+      const link = await makeLink({ ...scoped, backfillFrom: new Date(NOW.getTime() - 3 * 86_400_000) });
+      const external = night({ data: { asleepduration: 21_600 } });
+      await run(link.id, fakeWithings({ ...quiet, sleep: [{ series: [external], more: 0, offset: 0 }] }).impl);
+      const [n] = await rows();
+      expect(decryptSensitive(n!.totalSleepMinutes!, KEY)).toBe("360");
+      expect(n!.deepMinutes).toBeNull();
+    });
+
+    it("does not let a failing sleep pull block blood pressure, and never runs without the scope", async () => {
+      const link = await makeLink({ ...scoped, backfillFrom: new Date(NOW.getTime() - 3 * 86_400_000) });
+      const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const fw = fakeWithings({
+        pages: [{ measuregrps: [grp(1, "2026-09-01T13:00:00Z")], more: 0, updatetime: 1_790_000_000 }],
+        sleepStatus: 503,
+      });
+      expect(await run(link.id, fw.impl)).toBe("synced");
+      spy.mockRestore();
+      expect(await vitalsEvents()).toHaveLength(1);
+      expect((await reload(link.id)).sleepLastUpdate).toBeNull();
+
+      await withHouseholdContext(db, householdId, (tx) => tx.delete(healthWithingsLinks).where(eq(healthWithingsLinks.id, link.id)));
+      const bare = await makeLink({ scope: "user.metrics" });
+      const none = fakeWithings({ ...quiet, sleep: [{ series: [night()], more: 0, offset: 0 }] });
+      await run(bare.id, none.impl);
+      expect(none.sleepCalls()).toHaveLength(0);
     });
   });
 
