@@ -64,6 +64,18 @@ describe("beforeAfter", () => {
     expect(dia).toMatchObject({ before: 94, after: 83 });
   });
 
+  it("compares equal windows: 14 days either side, the marker's day counting as the first after", () => {
+    const rows = [
+      { date: "2026-09-26", systolic: 100 }, // 14 days before 10-10: in
+      { date: "2026-09-25", systolic: 900 }, // 15 days before: out
+      { date: "2026-10-10", systolic: 120 }, // marker day: after
+      { date: "2026-10-23", systolic: 140 }, // 13 days after: in
+      { date: "2026-10-24", systolic: 900 }, // 14 days after: out
+    ];
+    const [sys] = beforeAfter(chart({ rows: rows as VitalsChart["rows"] }), "2026-10-10");
+    expect(sys).toMatchObject({ before: 100, beforeCount: 1, after: 130, afterCount: 2 });
+  });
+
   it("leaves a side empty rather than inventing it", () => {
     expect(beforeAfter(chart(), "2026-10-01")[0]).toMatchObject({ before: null, beforeCount: 0 });
     expect(beforeAfter(chart(), "2026-10-25")[0]).toMatchObject({ after: null, afterCount: 0 });
