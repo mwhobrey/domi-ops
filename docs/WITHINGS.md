@@ -7,8 +7,9 @@ Operator and developer notes for the Withings integration. Linear: WHO-452 (API 
 A household member can be linked to one Withings account. Blood pressure readings from their Withings
 cuff (BPM Connect, BPM Core, BPM Vision) become normal `vitals` entries with systolic, diastolic and,
 when the cuff recorded it, pulse. A Withings watch (ScanWatch) adds blood oxygen, body temperature and
-spot heart rate as `vitals` entries, and its workouts as `exercise` entries. One way only: Withings to
-Domi Ops. Steps, daily activity and sleep are not imported yet.
+spot heart rate as `vitals` entries, and its workouts as `exercise` entries. Its daily steps and activity
+are kept in their own table and charted on the Health Trends tab. One way only: Withings to Domi Ops.
+Sleep is not imported yet.
 
 There is no matcher for scheduled checks. A slot counts as answered when a reading falls inside its
 30 minute window ([HEALTH_CHECKS.md](./HEALTH_CHECKS.md)), and an imported reading is a reading, so a
@@ -139,6 +140,15 @@ configured on the server (`GET /api/health/withings` says `enabled: false`) or t
   `workout:<id>`. A link made before the scope existed keeps importing readings but not workouts: the panel
   says so, and the fix is **Reconnect**. The backfill asks for workouts by date (with a day
   of slack each side), later pulls by `lastupdate`, taken from the link's own workout watermark (`workouts_last_update`, the greatest workout `modified` seen, minus one second since the parameter is exclusive). Withings does not say its measurement `updatetime` and a workout's `modified` are one clock, so the two are never mixed. Until a workout has been seen the watermark is empty and the pull falls back to the measurement watermark minus one day (re-reads only; the workout key dedupes). Whether `modified` is present on real ScanWatch workouts is unverified: without it the watermark never fills and the fallback stays in use.
+- **Daily activity (steps).** `getactivity` returns one row per date *and device*, so a watch and a phone can both
+  report the same day. Each device keeps its own row in `health_withings_daily_activity` (steps, distance in meters,
+  active minutes from the `active` seconds, active and total kcal, all encrypted), updated in place because a day's
+  numbers grow until it ends. The report counts a day once: the tracker's row if there is one, then the device with
+  the most steps. It has its own watermark, `activity_last_update` (the greatest row `modified`, minus one second on
+  the next pull), and falls back to the measurement watermark minus a day until a row has been seen. Backfill asks by
+  date. It uses the activity scope the workouts already need, so a link that imports workouts imports steps. A failing
+  activity pull is logged and retried on the next one; it never fails the blood pressure or workout import. Visible to
+  the person and to anyone with an `events` grant on them, like the rest of their imported entries.
 - **Backfill size.** One pull pages up to 200 pages. A history larger than that fails and retries, which
   is cheap because everything already imported is recognised.
 
@@ -146,7 +156,7 @@ configured on the server (`GET /api/health/withings` says `enabled: false`) or t
 
 | Area | Files |
 |------|-------|
-| Tables | `packages/db/src/schema/health.ts` (`health_withings_links`, `health_withings_measure_groups`), migrations `0094`, `0095` (workout watermark) |
+| Tables | `packages/db/src/schema/health.ts` (`health_withings_links`, `health_withings_measure_groups`), migrations `0094`, `0095` (workout watermark), `0096` (daily activity) |
 | Client, import, sync | `packages/calendar-sync/src/withings-sync.ts` |
 | Jobs | `withings.sync.scan` (30 s tick), `withings.sync.household`; `queue.ts`, `sync.ts`, `apps/worker/src/index.ts` |
 | Routes | `apps/api/src/routes/health-withings.ts` (signed in), `integrations-withings.ts` (callback, webhook) |
@@ -180,6 +190,9 @@ Not verified, and worth watching on first real use:
   table I could read. `342` ("credentials absent or incorrect") is deliberately not mapped, because it can
   mean our own app secret is wrong and that must not flip every link to "reconnect": it retries, then the
   link lands in `error`, which Sync now recovers.
+- Daily activity: the `getactivity` request and the field units were read from Withings' published OpenAPI spec, not
+  checked against a real ScanWatch. Steps arrive on the activity notification (application 16), subscribed best effort;
+  the six hour safety net covers a miss.
 - That the webhook's `userid` arrives form-encoded as documented.
 - Whether a blood pressure monitor that reports a computed best value (`attrib` 5) also reports the
   individual readings as separate groups. If so, one session would import as several entries.

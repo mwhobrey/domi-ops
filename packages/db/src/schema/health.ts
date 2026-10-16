@@ -573,6 +573,8 @@ export const healthWithingsLinks = pgTable(
      * to `lastUpdate` minus a day.
      */
     workoutsLastUpdate: bigint("workouts_last_update", { mode: "number" }),
+    /** Greatest `modified` of any daily activity row imported so far (WHO-465); its own clock, like the workout one. */
+    activityLastUpdate: bigint("activity_last_update", { mode: "number" }),
     lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
     lastError: text("last_error"),
     syncRequestedAt: timestamp("sync_requested_at", { withTimezone: true }),
@@ -615,6 +617,38 @@ export const healthWithingsMeasureGroups = pgTable(
     index("health_withings_measure_groups_event_idx")
       .on(t.eventId)
       .where(sql`${t.eventId} is not null`),
+  ],
+);
+
+/**
+ * Withings daily activity (WHO-465): one row per member, Withings user, date and device. A phone and a watch
+ * can both report the same day, and an incremental pull returns only the device that changed, so every device
+ * keeps its own row and the report picks the best one per date. Numbers are encrypted text, like other health data.
+ */
+export const healthWithingsDailyActivity = pgTable(
+  "health_withings_daily_activity",
+  {
+    householdId: uuid("household_id")
+      .notNull()
+      .references(() => households.id, { onDelete: "cascade" }),
+    memberId: uuid("member_id")
+      .notNull()
+      .references(() => householdMembers.id, { onDelete: "cascade" }),
+    withingsUserId: text("withings_user_id").notNull(),
+    date: date("date").notNull(),
+    deviceKey: text("device_key").notNull(),
+    isTracker: boolean("is_tracker").notNull().default(false),
+    steps: text("steps"),
+    distanceM: text("distance_m"),
+    activeMinutes: text("active_minutes"),
+    caloriesActive: text("calories_active"),
+    caloriesTotal: text("calories_total"),
+    sourceModified: bigint("source_modified", { mode: "number" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.memberId, t.withingsUserId, t.date, t.deviceKey] }),
+    index("health_withings_daily_activity_member_date_idx").on(t.memberId, t.date),
   ],
 );
 

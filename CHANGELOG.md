@@ -10,6 +10,8 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Added
 
+- **Daily steps from a Withings watch** (WHO-465). A linked ScanWatch (or the phone's step count in the Withings app) now brings in a day's steps, distance, active minutes and calories, and the Health Trends tab charts the steps per person. A phone and a watch reporting the same day are not added together: the watch's count is used. It needs no new permission beyond the activity access workouts already ask for. Sleep is still to come. Requires `npm run db:migrate` (migration 0096; the hosted deploy applies it automatically). No new environment variables.
+
 - **Medication changes on the vitals trend charts** (WHO-460). The Trends tab and the Health report now draw a dashed marker on each person's vitals chart where one of their medications started, stopped, paused or resumed, with a table of the average reading in the 14 days before and after each change and the medication's adherence for the range beside it. The comparison describes what happened next to the change; it does not say the medication caused it. Dose changes are not shown: editing a dose overwrites it and keeps no history. No migration, no new environment variables.
 
 ### Added

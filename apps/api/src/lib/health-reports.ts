@@ -26,6 +26,7 @@ import {
   healthMedicationReportsVisibleWhere,
 } from "./health-access.js";
 import { decryptHealthFieldOrPassthrough } from "./health-crypto.js";
+import { loadActivityTrend } from "./health-activity-trend.js";
 import { excludeInactiveInstants, loadMedicationPausesMap } from "./health-med-pauses.js";
 import {
   loadExerciseDetailsForEvents,
@@ -1047,6 +1048,15 @@ export async function buildHealthReports(
     timeZone: timezone,
   });
 
+  const activityTrend = await loadActivityTrend(
+    db,
+    env,
+    auth,
+    { from, to },
+    memberLabel,
+    memberFilter,
+  );
+
   const prnFrequency = buildPrnFrequencyByDay({
     logs: logsInLocalRange,
     medById,
@@ -1182,6 +1192,7 @@ export async function buildHealthReports(
     })),
     medicationAdherence,
     medicationMarkers,
+    activityTrend,
     prnFrequency,
     medications: medicationList,
     eventHistory,
