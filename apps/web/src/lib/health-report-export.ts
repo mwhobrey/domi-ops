@@ -137,6 +137,22 @@ export interface ActivityTrendEntry {
   }[];
 }
 
+/** One person's nightly sleep from a linked Withings watch or sleep mat (WHO-466). */
+export interface SleepTrendEntry {
+  memberId: string;
+  memberLabel: string;
+  points: {
+    date: string;
+    totalMinutes: number;
+    inBedMinutes: number | null;
+    lightMinutes: number | null;
+    deepMinutes: number | null;
+    remMinutes: number | null;
+    awakeMinutes: number | null;
+    score: number | null;
+  }[];
+}
+
 export interface HealthReportExport {
   from: string;
   to: string;
@@ -164,6 +180,7 @@ export interface HealthReportExport {
   painByRegion?: PainByRegionEntry[];
   nutritionTrend?: { points: NutritionTrendPoint[] };
   activityTrend?: ActivityTrendEntry[];
+  sleepTrend?: SleepTrendEntry[];
   medicationAdherence: {
     medicationId: string;
     name: string;

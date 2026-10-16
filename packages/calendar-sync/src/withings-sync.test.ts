@@ -4,6 +4,7 @@ import {
   encryptWithingsSecret,
   shapeVitalsGroup,
   shapeActivity,
+  shapeSleep,
   shapeWorkout,
   withingsScopeAllowsWorkouts,
   withingsUnsubscribe,
@@ -202,7 +203,7 @@ describe("Withings client", () => {
     expect(calls[0]!.auth).toBe("Bearer tok");
   });
 
-  it("also subscribes for workouts when the link may read them, and tolerates that one failing", async () => {
+  it("also subscribes for workouts, activity and sleep when the link may read them, and tolerates that one failing", async () => {
     const calls: string[] = [];
     const fn = (async (_u: unknown, init: { body: string }) => {
       const appli = new URLSearchParams(init.body).get("appli")!;
@@ -210,10 +211,10 @@ describe("Withings client", () => {
       return new Response(JSON.stringify(appli === "16" ? { status: 293 } : { status: 0, body: {} }), { status: 200 });
     }) as never;
     await withingsSubscribe("tok", "https://app.example/hook", fn, { workouts: true });
-    expect(calls).toEqual(["4", "16"]);
+    expect(calls).toEqual(["4", "16", "44"]);
     calls.length = 0;
     await withingsUnsubscribe("tok", "https://app.example/hook", fn);
-    expect(calls).toEqual(["4", "16"]);
+    expect(calls).toEqual(["4", "16", "44"]);
   });
 
   it.each([
@@ -321,5 +322,57 @@ describe("shapeActivity", () => {
     expect(shapeActivity({ date: "2026-09-10" })).toBeNull();
     expect(shapeActivity(row({ date: "10/09/2026" }))).toBeNull();
     expect(shapeActivity(row({ steps: -5, distance: undefined, active: undefined, calories: undefined, totalcalories: undefined }))).toBeNull();
+  });
+});
+
+describe("shapeSleep", () => {
+  const series = (over: Record<string, unknown> = {}) => ({
+    id: 7001,
+    startdate: 1_790_200_000,
+    enddate: 1_790_228_800,
+    date: "2026-09-10",
+    modified: 1_790_300_000,
+    data: {
+      total_timeinbed: 28_800,
+      total_sleep_time: 25_230,
+      lightsleepduration: 14_400,
+      deepsleepduration: 5_400,
+      remsleepduration: 5_400,
+      wakeupduration: 3_600,
+      wakeupcount: 2,
+      sleep_score: 81,
+    },
+    ...over,
+  });
+
+  it("turns seconds into whole minutes and keeps the night's span", () => {
+    expect(shapeSleep(series())).toEqual({
+      sleepId: "7001",
+      date: "2026-09-10",
+      startedAt: new Date(1_790_200_000 * 1000),
+      endedAt: new Date(1_790_228_800 * 1000),
+      totalSleepMinutes: 421,
+      inBedMinutes: 480,
+      lightMinutes: 240,
+      deepMinutes: 90,
+      remMinutes: 90,
+      awakeMinutes: 60,
+      wakeCount: 2,
+      sleepScore: 81,
+      modified: 1_790_300_000,
+    });
+  });
+
+  it("falls back to asleepduration for a night from an outside source", () => {
+    const shaped = shapeSleep(series({ data: { asleepduration: 21_600 } }))!;
+    expect(shaped.totalSleepMinutes).toBe(360);
+    expect(shaped.deepMinutes).toBeNull();
+  });
+
+  it("drops a night with no span, no date, or nothing measured", () => {
+    expect(shapeSleep(series({ enddate: 1_790_200_000 }))).toBeNull();
+    expect(shapeSleep(series({ date: "yesterday" }))).toBeNull();
+    expect(shapeSleep(series({ data: {} }))).toBeNull();
+    expect(shapeSleep(series({ id: undefined }))).toBeNull();
   });
 });
