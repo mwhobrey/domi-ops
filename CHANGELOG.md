@@ -8,17 +8,19 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
-### Added
+## [0.10.0] - 2026-10-15
 
-- **Sleep from a Withings watch** (WHO-466). A linked ScanWatch or sleep mat now brings in each night's sleep (time asleep, time in bed, deep, REM and light sleep, time awake, and the Withings score), and the Health Trends tab charts it per person. If a night shows up from two sources, the longer sleep is shown instead of adding them. The first import goes back at most a year. Requires `npm run db:migrate` (migration 0097; the hosted deploy applies it automatically). No new environment variables. If sleep does not appear after connecting, reconnecting the watch may be needed; see [docs/WITHINGS.md](docs/WITHINGS.md).
-
-- **Daily steps from a Withings watch** (WHO-465). A linked ScanWatch (or the phone's step count in the Withings app) now brings in a day's steps, distance, active minutes and calories, and the Health Trends tab charts the steps per person. A phone and a watch reporting the same day are not added together: the watch's count is used. It needs no new permission beyond the activity access workouts already ask for. Sleep is still to come. Requires `npm run db:migrate` (migration 0096; the hosted deploy applies it automatically). No new environment variables.
-
-- **Medication changes on the vitals trend charts** (WHO-460). The Trends tab and the Health report now draw a dashed marker on each person's vitals chart where one of their medications started, stopped, paused or resumed, with a table of the average reading in the 14 days before and after each change and the medication's adherence for the range beside it. The comparison describes what happened next to the change; it does not say the medication caused it. Dose changes are not shown: editing a dose overwrites it and keeps no history. No migration, no new environment variables.
+Withings steps and sleep, Reconnect, and the vitals and medications report (requires `npm run db:migrate`, migrations 0095 to 0097; the hosted deploy applies them automatically). No new environment variables and no manual steps. Sleep needs a linked Withings watch; if it stays empty after connecting, reconnecting once may be needed (see [docs/WITHINGS.md](docs/WITHINGS.md)).
 
 ### Added
 
 - **Reconnect for a Withings link** (WHO-463). A revoked link, or one made before workouts were supported, used to need unlink and connect again. **Reconnect** now renews it in place: new tokens and permissions, same history window and sync position, nothing imported twice. Signing in to a different Withings account is refused and changes nothing. No migration, no new environment variables.
+
+- **Medication changes on the vitals trend charts** (WHO-460). The Trends tab and the Health report now draw a dashed marker on each person's vitals chart where one of their medications started, stopped, paused or resumed, with a table of the average reading in the 14 days before and after each change and the medication's adherence for the range beside it. The comparison describes what happened next to the change; it does not say the medication caused it. Dose changes are not shown: editing a dose overwrites it and keeps no history. No migration, no new environment variables.
+
+- **Daily steps from a Withings watch** (WHO-465). A linked ScanWatch (or the phone's step count in the Withings app) now brings in a day's steps, distance, active minutes and calories, and the Health Trends tab charts the steps per person. A phone and a watch reporting the same day are not added together: the watch's count is used. It needs no new permission beyond the activity access workouts already ask for. Sleep is still to come. Requires `npm run db:migrate` (migration 0096; the hosted deploy applies it automatically). No new environment variables.
+
+- **Sleep from a Withings watch** (WHO-466). A linked ScanWatch or sleep mat now brings in each night's sleep (time asleep, time in bed, deep, REM and light sleep, time awake, and the Withings score), and the Health Trends tab charts it per person. If a night shows up from two sources, the longer sleep is shown instead of adding them. The first import goes back at most a year. Requires `npm run db:migrate` (migration 0097; the hosted deploy applies it automatically). No new environment variables. If sleep does not appear after connecting, reconnecting the watch may be needed; see [docs/WITHINGS.md](docs/WITHINGS.md).
 
 ### Fixed
 
@@ -29,6 +31,8 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 ### Changed
 
 - `npm run dev` through Turborepo now builds workspace dependencies first, like `build`, `lint`, `typecheck` and `test` already do.
+
+- **Dependency updates.** Next.js and eslint-config-next 16.4.0, firebase 12.19 (the version the native sign-in plugin supports; 13 is not yet), and a batch of patch bumps: AWS S3 client, isomorphic-dompurify 4.5, Playwright 1.64, Turborepo 2.11.7 and the Capacitor packages. No behaviour change intended.
 
 ## [0.9.0] - 2026-10-15
 
