@@ -330,7 +330,9 @@ export function billingRoutes(db: Database, env: Env, stripeFactory = makeStripe
 
   // Check current identity/provider before a native client opens a store charge.
   app.get("/purchase-access", async (c) => {
-    if (!isHostedDeployment(env) || env.DEMO_MODE || !env.REVENUECAT_WEBHOOK_SECRET) return c.json({ error: "store_not_configured" }, 404);
+    if (!isHostedDeployment(env) || env.DEMO_MODE || !env.REVENUECAT_WEBHOOK_SECRET ||
+        !env.REVENUECAT_ALLOWED_PRODUCT_IDS?.split(",").some((id) => id.trim()) ||
+        !env.REVENUECAT_ALLOWED_APP_IDS?.split(",").some((id) => id.trim())) return c.json({ error: "store_not_configured" }, 404);
     const auth = c.get("auth"), userId = c.get("userId");
     if (!userId) return c.json({ error: "unauthorized" }, 401);
     if (auth && auth.role !== "owner") return c.json({ error: "owner_required", message: "Only the household owner can manage store purchases." }, 403);

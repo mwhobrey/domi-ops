@@ -44,6 +44,7 @@ maybeDescribe("hosted billing integrity", () => {
     STRIPE_SECRET_KEY: "sk_test_synthetic", STRIPE_WEBHOOK_SECRET: secret,
     STRIPE_PRICE_STARTER_MONTHLY: "price_monthly", STRIPE_PRICE_STARTER_ANNUAL: "price_annual",
     REVENUECAT_WEBHOOK_SECRET: "synthetic-store-secret",
+    REVENUECAT_ALLOWED_PRODUCT_IDS: "synthetic-monthly,synthetic-annual", REVENUECAT_ALLOWED_APP_IDS: "synthetic-app",
     PUBLIC_APP_URL: "https://app.test", PUBLIC_MARKETING_URL: "https://www.test", SESSION_SECRET: "synthetic-session-secret-32-characters",
     MODULES_ENABLED: ["core", "school", "health", "drive", "calendar_sync", "goals"],
   } as Env;
@@ -185,6 +186,18 @@ maybeDescribe("hosted billing integrity", () => {
     expect((await app.request("/api/billing/purchase-access", { headers: { "x-as": "admin" } })).status).toBe(403);
     expect((await app.request("/api/billing/purchase-access", { headers: { "x-as": "owner" } })).status).toBe(409);
     expect((await app.request("/api/billing/purchase-access?action=restore", { headers: { "x-as": "owner" } })).status).toBe(409);
+  });
+
+  it("blocks store purchase and restore when webhook product or app allowlists are missing", async () => {
+    for (const missing of [{ REVENUECAT_ALLOWED_PRODUCT_IDS: undefined }, { REVENUECAT_ALLOWED_APP_IDS: " , " }]) {
+      const unconfigured = new Hono<{ Variables: AppVariables }>();
+      unconfigured.use("*", async (c, next) => { c.set("userId", pendingUserId); c.set("auth", null); await next(); });
+      unconfigured.route("/api/billing", billingRoutes(db, { ...env, ...missing }, () => fake));
+      for (const action of ["purchase", "restore"]) {
+        const response = await unconfigured.request(`/api/billing/purchase-access?action=${action}`);
+        expect(response.status).toBe(404); expect(await response.json()).toEqual({ error: "store_not_configured" });
+      }
+    }
   });
 
   it("keeps data readable, stops writes and jobs after cancellation, and blocks abandoned billing on deletion", async () => {

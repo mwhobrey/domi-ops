@@ -30,8 +30,9 @@
   - `SESSION_SECRET` < 32 chars
   - `ENCRYPTION_KEY` missing
   - `AUTH_REQUIRED` disabled
-  - `calendar_sync` enabled without Google OAuth creds  
   (see `packages/config/src/index.ts` `superRefine`).
+- `calendar_sync` also gates the standalone calendar. It can be enabled without
+  Google credentials; connecting Google is optional and checked by its own routes.
 - `AUTH_REQUIRED=false` only meaningful in development — pairs with `requireAuth` bypass and middleware dev fallback.
 
 ## Error handling

@@ -77,3 +77,30 @@ guides: [archives](HOUSEHOLD_ARCHIVES.md), [storage](UPLOAD_STORAGE_MAINTENANCE.
   key. Receipt: `minio-archive-receipt.json` in the dated Codex audit directory.
 - No production database, storage object,
   billing subscription, or OAuth configuration has been modified.
+
+## Review after the pause checkpoints
+
+The original audit, persisted task context and committed diff were compared again
+on 2026-10-17. A01-A16 and the additional privacy, portability, onboarding, demo,
+marketing, positioning, reuse, measurement and Google rows above each retain an
+implementation/evidence path or an explicit external acceptance gate.
+
+The second pass found and corrected three gaps:
+
+- CI did not supply the separate archive restore database, which would have skipped
+  its three integration tests. The workflow now migrates an unseeded destination
+  and creates its restricted application role.
+- Native purchase preflight required a webhook secret but not the product/app
+  allowlists that webhook entitlement handling requires. It now blocks purchase
+  and restore until both lists are nonempty. The 11-test restricted-role billing
+  suite and API typecheck pass after the correction.
+- The hosted environment template and runbook repeated an obsolete requirement
+  for Google credentials to enable `calendar_sync`. The current implementation
+  supports a standalone calendar without Google. The template includes all six
+  modules; a production configuration regression verifies that behavior. The older
+  competitor survey now points to the current positioning decision.
+
+These corrections are included in draft PR #283. CI and the local test receipts
+remain distinct from deployed acceptance. Google approval, live provider setup,
+legacy maintenance, retention, devices and customer evidence are still required
+as listed in the launch checklist.

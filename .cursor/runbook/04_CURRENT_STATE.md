@@ -7,7 +7,7 @@
 ### Hosted audit remediation (unreleased)
 
 - Coverage and remaining acceptance gates: `docs/HOSTED_AUDIT_REMEDIATION.md`.
-- This is local, unreleased work on `fix/hosted-audit-remediation`; deployment and
+- This is unreleased work on `fix/hosted-audit-remediation` (draft PR #283); deployment and
   provider acceptance remain separate. Follow `docs/HOSTED_LAUNCH_ACCEPTANCE.md`.
 - Migrations 0099-0101 add billing lifecycle/intents, adult invitations with retained
   revoked-member history, and missing Goals/recurring-bill tenant policies.
@@ -31,6 +31,9 @@
   active formats to download. Existing objects require a legacy ACL review.
 - Operator dry-run/apply tools and reconciliation limits:
   `docs/UPLOAD_STORAGE_MAINTENANCE.md`. No production maintenance is implied.
+- Second-pass review corrected the hosted template to include the standalone
+  calendar without Google credentials, required native purchase preflight to have
+  webhook product/app allowlists, and added an empty archive restore database to CI.
 
 ### Health reports and loading (0.10.1)
 

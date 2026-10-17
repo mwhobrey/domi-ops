@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import {
   deployAvailableModules,
   envSchema,
@@ -8,6 +9,22 @@ import {
 } from "./index.js";
 
 describe("loadEnv", () => {
+  it("keeps every hosted module available without optional Google credentials", () => {
+    const template = readFileSync(new URL("../../../.env.hosted-prod.example", import.meta.url), "utf8");
+    const modules = template.match(/^MODULES_ENABLED=(.+)$/m)?.[1]?.trim();
+    expect(modules?.split(",")).toEqual([...KNOWN_HOUSEHOLD_MODULES]);
+    const parsed = envSchema.parse({
+      NODE_ENV: "production", DEPLOYMENT_MODE: "shared", MODULES_ENABLED: modules,
+      PUBLIC_APP_URL: "https://app.example.test", API_URL: "http://api:4000",
+      DATABASE_URL: "postgresql://fixture:fixture@localhost:5432/fixture",
+      SESSION_SECRET: "x".repeat(32), ENCRYPTION_KEY: "y".repeat(32),
+      STRIPE_SECRET_KEY: "sk_test_fixture", STRIPE_WEBHOOK_SECRET: "whsec_fixture",
+    });
+    expect(parsed.MODULES_ENABLED).toContain("calendar_sync");
+    expect(parsed.GOOGLE_OAUTH_CLIENT_ID).toBeUndefined();
+    expect(parsed.GOOGLE_OAUTH_CLIENT_SECRET).toBeUndefined();
+  });
+
   it("rejects production without SESSION_SECRET and ENCRYPTION_KEY", () => {
     resetEnvCache();
     const parsed = envSchema.safeParse({

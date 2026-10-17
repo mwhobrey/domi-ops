@@ -16,7 +16,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
   restart a canceled subscription without a second trial; account deletion protects
   active household billing and last ownership.
 - Native purchase/restore checks current owner and billing provider before opening
-  the store. A missing selected interval cannot charge a different package.
+  the store, and refuses purchases when webhook product/app allowlists are missing.
+  A missing selected interval cannot charge a different package.
+- The hosted production template includes the standalone calendar without requiring
+  optional Google credentials.
 - Nested database scopes restore the caller's tenant/privilege settings. Goals and
   recurring bills now have tenant policies and parent-reference checks. School
   enrollment includes its first/last household calendar date.
