@@ -107,7 +107,8 @@ as listed in the launch checklist.
 
 The first CI run also exposed a fresh-image dependency gap: the web Dockerfile
 must compile `@domi-ops/config` before Next builds the shared diagnostics import.
-It now does so explicitly. The archive restore rehearsal ran and passed in CI.
+It now does so explicitly and copies the root TypeScript configuration that the
+workspace extends. The archive restore rehearsal ran and passed in CI.
 The upload cleanup integration case exceeded the default five-second unit-test
 budget on the runner; against the same seeded schema locally its assertions pass
 and the case takes about 2.5 seconds. Only that multi-step database/S3 case receives
@@ -119,3 +120,9 @@ cannot erase provenance or release quota without a confirmed object deletion.
 The cleanup regression checks that missing credentials retain charged bytes and
 the same dry-run inventory. Storage guidance now distinguishes referenced consumed
 uploads from consumed orphans.
+
+CI follow-up at `a3f5108` passed all 48 hosted files / 803 tests (including the
+three archive restore tests) and 174 regular files / 1,419 tests after a fresh
+Node 22 install. Root typecheck, lint and build also passed. The later storage
+failure-path regression passed locally against the seeded restricted-role database;
+the PR's latest-revision checks remain the final CI acceptance receipt.
