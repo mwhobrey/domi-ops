@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { resolveAuthContext, type WhomeBetterAuth } from "@domi-ops/auth";
-import { filterActiveHouseholdModules } from "@domi-ops/config";
+import { filterActiveHouseholdModules, isHostedDeployment, subscriptionAllowsWork } from "@domi-ops/config";
 import type { Env } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
 import { households, householdMembers } from "@domi-ops/db";
@@ -44,10 +44,11 @@ export function whomeSessionRoutes(db: Database, env: Env, auth: WhomeBetterAuth
       .where(eq(households.id, authCtx.householdId))
       .limit(1);
 
-    const { modules, modulesEntitled } = await getHouseholdModuleContext(db, authCtx.householdId);
+    const { modules, modulesEntitled, subscription } = await getHouseholdModuleContext(db, authCtx.householdId);
 
     return c.json({
       authenticated: true,
+      subscriptionReadOnly: isHostedDeployment(env) && !subscriptionAllowsWork(subscription),
       modulesEnabled: filterActiveHouseholdModules(env, modules, modulesEntitled),
       modulesEntitled,
       telemetryOptIn: householdRow?.telemetryOptIn ?? false,

@@ -169,6 +169,7 @@ export function serializeMaterial(
     displayName: row.displayName,
     sortOrder: row.sortOrder,
     driveObjectId: row.driveObjectId,
+    fileUrl: row.driveObjectId ? `/api/school/assignments/${row.assignmentId}/materials/${row.id}/file` : null,
     externalUrl: row.externalUrl,
     isTest: row.isTest,
     strictContentCheck: row.strictContentCheck,

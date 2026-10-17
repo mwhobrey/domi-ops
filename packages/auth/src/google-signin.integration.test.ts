@@ -6,6 +6,7 @@ import { baAccounts, closeDb, createDb, householdMembers, households, users, wit
 import type { Database } from "@domi-ops/db";
 import { resolveAuthContext } from "./bootstrap.js";
 import { createBetterAuth } from "./better-auth.js";
+import { symmetricDecrypt } from "better-auth/crypto";
 
 /**
  * Google sign-in through Better Auth's real handler (WHO-449): the sign-in request, then the callback Google would send the
@@ -131,6 +132,22 @@ maybeDescribe("Google sign-in (integration)", () => {
   const accountsOf = (userId: string) =>
     withSystemContext(db, (tx) => tx.select().from(baAccounts).where(eq(baAccounts.userId, userId)));
 
+  it("defers self-host auto-join while an invitation controls the pending account's role", async () => {
+    let invitationCookie: string | null = null;
+    const auth = createBetterAuth(db, { ...env, DEPLOYMENT_MODE: "single" }, {
+      deferHouseholdMembership: async (headers) => { invitationCookie = headers.get("cookie"); return true; },
+    });
+    const email = `invite-signup-${randomUUID()}@example.test`;
+    const response = await auth.handler(new Request(`${BASE_URL}/auth/sign-up/email`, {
+      method: "POST", headers: { "content-type": "application/json", origin: BASE_URL, cookie: "domi_household_invitation=synthetic-token" },
+      body: JSON.stringify({ email, name: "Invited synthetic guest", password: "SyntheticPassword123!" }),
+    }));
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    if (user) createdUserIds.push(user.id);
+    expect(response.status).toBe(200); expect(invitationCookie).toContain("synthetic-token");
+    expect(await withSystemContext(db, (tx) => tx.select().from(householdMembers).where(eq(householdMembers.userId, user.id)))).toHaveLength(0);
+  });
+
   function expectSignedIn(res: Response) {
     const where = res.headers.get("location") ?? "";
     expect(res.status, `callback answered ${res.status} to ${where}`).toBe(302);
@@ -155,6 +172,12 @@ maybeDescribe("Google sign-in (integration)", () => {
     const res = await signInWithGoogle({ sub, email });
     expectSignedIn(res);
     await expectSessionUser(res, userId);
+    const [account] = await accountsOf(userId);
+    expect(account.accessToken).not.toBe("ya29.test-access-token");
+    expect(account.refreshToken).not.toBe("test-refresh-token");
+    expect(await symmetricDecrypt({ key: env.SESSION_SECRET!, data: account.accessToken! })).toBe("ya29.test-access-token");
+    expect(await symmetricDecrypt({ key: env.SESSION_SECRET!, data: account.refreshToken! })).toBe("test-refresh-token");
+    expect(account.idToken).toBeNull();
     expect((await accountsOf(userId)).filter((a) => a.providerId === "google")).toHaveLength(1);
   });
 

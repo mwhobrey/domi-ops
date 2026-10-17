@@ -25,6 +25,7 @@ import {
   inferGoogleCategories,
   listGoogleCalendars,
   materializeRecurringForHousehold,
+  householdSubscriptionAllowsWork,
   normalizeCategorySourceKey,
 } from "@domi-ops/calendar-sync";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
@@ -1240,7 +1241,7 @@ export function calendarRoutes(db: Database, env: Env) {
   app.get("/event-categories", async (c) => {
     const auth = c.get("auth")!;
     const calendarId = c.req.query("calendarId")?.trim();
-    await ensureDefaultCategoriesForHousehold(
+    if (await householdSubscriptionAllowsWork(db, env, auth.householdId)) await ensureDefaultCategoriesForHousehold(
       db,
       auth.householdId,
       calendarId || undefined,

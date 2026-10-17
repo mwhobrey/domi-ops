@@ -1,7 +1,7 @@
 import type { Env } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
-import { pushSubscriptions, userNotifications } from "@domi-ops/db";
-import { and, eq, inArray } from "drizzle-orm";
+import { householdMembers, pushSubscriptions, userNotifications } from "@domi-ops/db";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import webpush from "web-push";
 import { deliverWebPush, type WebPushPayload } from "./push-delivery.js";
 
@@ -20,6 +20,14 @@ function anyPushConfigured(env: Env): boolean {
   return webPushConfigured(env) || nativePushConfigured(env);
 }
 
+async function activeRecipientIds(db: Database, householdId: string, userIds: string[]) {
+  if (!userIds.length) return [];
+  const rows = await db.select({ userId: householdMembers.userId }).from(householdMembers).where(and(
+    eq(householdMembers.householdId, householdId), inArray(householdMembers.userId, userIds), isNull(householdMembers.accessRevokedAt),
+  ));
+  return rows.map((r) => r.userId);
+}
+
 /** Persist in-app notification rows (always, even when push is unavailable). */
 export async function persistUserNotifications(
   db: Database,
@@ -32,7 +40,7 @@ export async function persistUserNotifications(
     tag?: string;
   },
 ): Promise<void> {
-  const uniqueIds = [...new Set(input.userIds)];
+  const uniqueIds = await activeRecipientIds(db, input.householdId, [...new Set(input.userIds)]);
   if (uniqueIds.length === 0) return;
   await db.insert(userNotifications).values(
     uniqueIds.map((userId) => ({
@@ -58,6 +66,7 @@ export async function persistUserNotificationOnce(
     tag: string;
   },
 ): Promise<boolean> {
+  if (!(await activeRecipientIds(db, input.householdId, [input.userId])).length) return false;
   const [existing] = await db
     .select({ id: userNotifications.id })
     .from(userNotifications)
@@ -98,7 +107,7 @@ export async function deliverUserNotification(
     tag: string;
   },
 ): Promise<void> {
-  const uniqueIds = [...new Set(input.userIds)];
+  const uniqueIds = await activeRecipientIds(db, input.householdId, [...new Set(input.userIds)]);
   if (uniqueIds.length === 0) return;
 
   await persistUserNotifications(db, input);
@@ -145,6 +154,7 @@ export async function deliverUserNotificationToSubscriptions(
     actions?: WebPushPayload["actions"];
   },
 ): Promise<void> {
+  if (!(await activeRecipientIds(db, input.householdId, [input.userId])).length) return;
   await persistUserNotificationOnce(db, {
     userId: input.userId,
     householdId: input.householdId,

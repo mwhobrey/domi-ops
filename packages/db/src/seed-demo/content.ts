@@ -712,7 +712,7 @@ export async function seedDemoContent(
   // —— Drive ——
   const [schoolFolder] = await db
     .insert(driveFolders)
-    .values({ householdId, name: "School/2026" })
+    .values({ householdId, name: `School/${schoolTerm}` })
     .returning({ id: driveFolders.id });
 
   await db.insert(driveObjects).values([

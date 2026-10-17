@@ -1,0 +1,26 @@
+import { afterEach, expect, it, vi } from "vitest";
+vi.mock("web-vitals", () => ({ onCLS() {}, onINP() {}, onLCP() {}, onFCP() {}, onTTFB() {} }));
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.resetModules(); });
+it("drops queued metrics on opt-out, rotates identity and avoids duplicate listeners on re-opt-in", async () => {
+  vi.useFakeTimers();
+  const storage = new Map<string, string>();
+  const browser = Object.assign(new EventTarget(), { location: { pathname: "/health/private-id" } });
+  vi.stubGlobal("window", browser); vi.stubGlobal("document", Object.assign(new EventTarget(), { visibilityState: "visible" }));
+  vi.stubGlobal("localStorage", { getItem: (k: string) => storage.get(k), setItem: (k: string, v: string) => storage.set(k, v), removeItem: (k: string) => storage.delete(k) });
+  const fetch = vi.fn(async (_url: string, _init: { body: string }) => ({ ok: true })); vi.stubGlobal("fetch", fetch);
+  const { initTelemetry, disableTelemetry, trackEvent, submitBugReport } = await import("./telemetry.js");
+  const opts = { endpoint: "https://collector.test", deploymentMode: "shared" };
+  initTelemetry(opts); browser.dispatchEvent(new Event("error"));
+  await vi.advanceTimersByTimeAsync(10000);
+  const first = JSON.parse(fetch.mock.calls[0][1].body) as { events: { anonId: string; name: string; path: string }[] };
+  expect(first.events).toHaveLength(1); expect(first.events[0]).toMatchObject({ name: "browser_error", path: "/health" });
+  trackEvent("usage", "page.viewed"); disableTelemetry();
+  browser.dispatchEvent(new Event("error")); await vi.advanceTimersByTimeAsync(20000); expect(fetch).toHaveBeenCalledTimes(1);
+  initTelemetry(opts); browser.dispatchEvent(new Event("error")); await vi.advanceTimersByTimeAsync(10000);
+  const next = JSON.parse(fetch.mock.calls[1][1].body) as typeof first;
+  expect(next.events).toHaveLength(1); expect(next.events[0].anonId).not.toBe(first.events[0].anonId);
+  await submitBugReport({ message: "Explicit authored feedback", email: "synthetic@example.test", endpoint: opts.endpoint });
+  const feedback = JSON.parse(fetch.mock.calls[2][1].body) as { anonId: string };
+  expect(feedback.anonId).not.toBe(next.events[0].anonId);
+  disableTelemetry();
+});

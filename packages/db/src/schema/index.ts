@@ -13,3 +13,5 @@ export * from "./health.js";
 export * from "./billing.js";
 export * from "./telemetry.js";
 export * from "./goals.js";
+export * from "./uploads.js";
+export * from "./invitations.js";

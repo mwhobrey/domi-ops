@@ -6,6 +6,7 @@ import { driveObjects, driveShareTokens } from "@domi-ops/db";
 import { eq } from "drizzle-orm";
 import { filenameFromDriveKey } from "../lib/drive.js";
 import { contentTypeFromKey, getObjectBuffer } from "../lib/s3.js";
+import { fileResponseHeaders } from "../lib/file-response.js";
 
 export function drivePublicRoutes(db: Database, env: Env) {
   const app = new Hono();
@@ -58,11 +59,7 @@ export function drivePublicRoutes(db: Database, env: Env) {
     const contentType = row.object.contentType?.trim() || contentTypeFromKey(row.object.s3Key);
     const filename = filenameFromDriveKey(row.object.s3Key);
     return new Response(buf, {
-      headers: {
-        "Content-Type": contentType,
-        "Content-Disposition": `inline; filename="${filename.replace(/"/g, "")}"`,
-        "Cache-Control": "private, max-age=300",
-      },
+      headers: fileResponseHeaders(contentType, filename),
     });
   });
 

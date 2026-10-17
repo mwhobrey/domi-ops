@@ -3,7 +3,7 @@ import type { Env } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
 import { expenseBudgets, expenseRecurring, expenses, householdMembers } from "@domi-ops/db";
 import { and, asc, desc, eq } from "drizzle-orm";
-import { checkHouseholdBudgetAlerts } from "@domi-ops/calendar-sync";
+import { checkHouseholdBudgetAlerts, householdSubscriptionAllowsWork } from "@domi-ops/calendar-sync";
 import {
   buildExpenseReports,
   collectExpenseCategorySuggestions,
@@ -41,6 +41,7 @@ export function expensesRoutes(db: Database, env: Env) {
 
   /** Posts due bills before anything reads spend, so budgets and totals include them. */
   async function postDueBills(householdId: string) {
+    if (!await householdSubscriptionAllowsWork(db, env, householdId)) return;
     const created = await materializeDueBills(db, householdId);
     if (created > 0) void checkHouseholdBudgetAlerts(db, env, householdId).catch(() => {});
   }

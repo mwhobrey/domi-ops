@@ -74,11 +74,13 @@ export function AppChrome({
   user,
   modulesEnabled,
   telemetry,
+  subscriptionReadOnly = false,
   children,
 }: {
   user: ShellUser | null;
   modulesEnabled?: string[];
   telemetry?: ShellTelemetry;
+  subscriptionReadOnly?: boolean;
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -92,13 +94,21 @@ export function AppChrome({
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!telemetry?.enabled) return;
+    let disposed = false;
     // Lazy-import so telemetry.ts (and its web-vitals dependency) never lands in anyone's
     // bundle unless their household actually opted in — same lesson as the chart chunks.
-    void import("../lib/telemetry").then(({ initTelemetry }) =>
-      initTelemetry({ endpoint: telemetry.endpoint, deploymentMode: telemetry.deploymentMode }),
-    );
+    void import("../lib/telemetry").then(({ initTelemetry, disableTelemetry }) => {
+      if (disposed) return;
+      if (telemetry?.enabled) initTelemetry({ endpoint: telemetry.endpoint, deploymentMode: telemetry.deploymentMode });
+      else disableTelemetry();
+    });
+    return () => { disposed = true; void import("../lib/telemetry").then(({ disableTelemetry }) => disableTelemetry()); };
   }, [telemetry?.enabled, telemetry?.endpoint, telemetry?.deploymentMode]);
+
+  const currentPath = usePathname();
+  useEffect(() => {
+    if (telemetry?.enabled) void import("../lib/telemetry").then(({ trackEvent }) => trackEvent("usage", "page.viewed"));
+  }, [telemetry?.enabled, currentPath]);
 
   const closeUserMenu = useCallback(() => setUserOpen(false), []);
   const closeModulesDrawer = useCallback(() => setModulesOpen(false), []);
@@ -366,6 +376,12 @@ export function AppChrome({
 
       <main className="mx-auto max-w-6xl px-4 py-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
         <DemoModeBanner />
+        {subscriptionReadOnly && (
+          <div role="status" className="mb-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-subtle)] p-3 text-sm">
+            Your household is in read-only mode. You can read and export your data.
+            {user?.role === "owner" ? <> <Link href="/settings" className="underline">Manage your subscription</Link>.</> : " Ask your household owner to manage the subscription."}
+          </div>
+        )}
         {user && <ProfileOnboardingBanner name={user.name} memberId={user.memberId} />}
         <Fragment key={contentKey}>{children}</Fragment>
       </main>

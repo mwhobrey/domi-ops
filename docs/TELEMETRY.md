@@ -1,4 +1,4 @@
-# Telemetry — opt-in, anonymized metrics
+# Telemetry — opt-in product metrics
 
 **Off by default on every deployment mode, self-host and hosted alike.** An owner/admin
 turns it on per household in **Settings → Privacy**. This doc is the technical reference;
@@ -10,7 +10,7 @@ since the two need to stay in sync.
 
 - Not tied to any household, user, or account. `telemetry_events` / `telemetry_bug_reports`
   (`packages/db/src/schema/telemetry.ts`) have no `household_id`/`user_id` column at all —
-  that's a structural guarantee, not a query-time filter.
+  that avoids a direct account key, but is not a guarantee of formal anonymization.
 - Not sold, not shared beyond "used to find bugs and decide what to build next" (see the
   Privacy Policy wording — that line is a product commitment, keep code and docs matching it).
 - Not required for the app to function. Every call site fails silently (`.catch(() => {})`)
@@ -42,24 +42,30 @@ not itself enable anything.
 | Kind | Examples | Notes |
 |------|----------|-------|
 | `web_vital` | LCP, CLS, INP, FCP, TTFB | Via `web-vitals` npm package, lazy-imported only when opted in |
-| `error` | `window.onerror`, unhandled promise rejections | Message only, truncated to 256 chars — no full stack today |
+| `error` | `browser_error`, `unhandled_rejection` | Fixed categories; raw messages and reasons are discarded |
 | `usage` | Fixed-taxonomy event names (e.g. `chore.completed`) | Counts/names only — never note/health/expense/event *content* |
 
 Every event also carries: an `anon_id` (random UUID, generated client-side on first opt-in,
 stored in `localStorage` under `domi-ops:telemetry-anon-id` — regenerated if opted out then
-back in, so there's no resumed history), route `path` (path only, never query string or
-full URL), `deployment_mode`, `app_version`.
+back in, so there's no resumed history), coarse module `path` (such as `/school`,
+without record IDs, query strings or full URLs), `deployment_mode`, `app_version`.
 
-**Adding a new usage event:** call `trackEvent("usage", "module.action", { metadata: {...} })`
-from `apps/web/src/lib/telemetry.ts` at the point of the action. Keep `metadata` to small
-structured fields (numbers/strings/booleans, ≤10 keys) — never free text, never anything a
-household member typed. The API route caps and validates this shape server-side regardless
-(`apps/api/src/routes/telemetry.ts`), but don't rely on that as the only guard.
+**Adding a new usage event:** extend the fixed taxonomy in
+`packages/config/src/telemetry-privacy.ts` and call `trackEvent` at the action. The
+shared client/collector policy drops unknown names and arbitrary metadata. Only
+allowlisted Web Vitals ratings survive as metadata. The API caps request bodies at
+64 KiB and batches at 50 events. This is not a substitute for edge abuse controls.
 
-**Instrumentation today is intentionally minimal** — Web Vitals and JS errors are wired up
-everywhere (`AppChrome.tsx` boots collection once per session when opted in); usage-event
-call sites are not yet added at feature action points. That's a deliberate, scoped-down v1,
-not an oversight — add call sites as they become useful, not preemptively everywhere.
+Web Vitals, fixed browser error categories and module page views are wired in
+`AppChrome.tsx` only when opted in. Disabling removes event listeners, drops the
+queue and deletes the browser ID. Explicit feedback uses a new ID per report so
+its optional email is not joined to metrics. Sentry diagnostics are configured
+separately, with shared allowlist scrubbing, no performance traces/breadcrumbs and
+no request bodies, headers, user context, SQL parameters or attachments.
+
+The separate operator activation report uses opted-in hosted households and emits
+monthly counts without IDs or contents, suppressing cohorts under five. See
+[HOSTED_MEASUREMENT.md](HOSTED_MEASUREMENT.md) for population and retention limits.
 
 ## Bug reports are a separate consent, not gated by the toggle
 
@@ -81,8 +87,10 @@ passive background metrics in any future change here.
 
 ## Verified
 
-Typecheck/build/test pass across the monorepo. The ingest route's hand-rolled validation
-(size caps, enum allowlists, metadata field limits) is unit-level defensive coding, not yet
-covered by an automated test — if this route sees real traffic, that's the first gap to close,
-alongside the "no rate limiting anywhere in this codebase yet" gap already flagged for
-`POST /api/billing/checkout`.
+Collector tests verify body bounds, fixed categories, metadata and record-path
+removal, and separately authored feedback. Client tests verify opt-out drops the
+queue, re-opt-in rotates the ID and listeners do not multiply. Shared policy tests
+verify value bounds and taxonomy. A real Sentry SDK test captures an in-memory
+transport envelope and verifies private text, SQL parameters and attachments are
+absent. Production proxy abuse controls, retention and processor configuration
+still require operator receipts; these tests send no live Sentry events.

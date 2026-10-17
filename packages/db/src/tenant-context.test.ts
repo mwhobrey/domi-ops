@@ -12,7 +12,7 @@ import {
 } from "./tenant-context.js";
 
 function mockDb() {
-  const txExecute = vi.fn().mockResolvedValue(undefined);
+  const txExecute = vi.fn().mockResolvedValue([]);
   const transaction = vi.fn(async (fn: (tx: { execute: typeof txExecute }) => Promise<unknown>) =>
     fn({ execute: txExecute }),
   );
@@ -23,7 +23,7 @@ function mockDb() {
 }
 
 function setConfigSql(execute: ReturnType<typeof vi.fn>): string {
-  const call = execute.mock.calls[0]?.[0];
+  const call = execute.mock.calls[1]?.[0];
   if (!call) return "";
   if (typeof call === "string") return call;
   if (Array.isArray(call.queryChunks)) {

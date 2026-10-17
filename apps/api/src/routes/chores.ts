@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { householdSubscriptionAllowsWork } from "@domi-ops/calendar-sync";
 import type { Env } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
 import { chores, choresRecurring } from "@domi-ops/db";
@@ -44,7 +45,7 @@ export function choresRoutes(db: Database, env: Env) {
 
   app.get("/chores/glance", async (c) => {
     const auth = c.get("auth")!;
-    await materializeDueChoreRecurring(db, auth.householdId);
+    if (await householdSubscriptionAllowsWork(db, env, auth.householdId)) await materializeDueChoreRecurring(db, auth.householdId);
     const today = await householdTodayIsoDate(db, auth.householdId);
     const rows = await db
       .select({
@@ -180,7 +181,7 @@ export function choresRoutes(db: Database, env: Env) {
 
   app.get("/chores", async (c) => {
     const auth = c.get("auth")!;
-    await materializeDueChoreRecurring(db, auth.householdId);
+    if (await householdSubscriptionAllowsWork(db, env, auth.householdId)) await materializeDueChoreRecurring(db, auth.householdId);
     const rows = await db
       .select()
       .from(chores)

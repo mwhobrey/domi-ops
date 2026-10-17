@@ -1,11 +1,15 @@
 import { Hono } from "hono";
 import Stripe from "stripe";
-import { and, eq, or } from "drizzle-orm";
+import { createHmac, randomUUID } from "node:crypto";
+import { getCookie, setCookie } from "hono/cookie";
+import { and, eq, isNull, or, sql } from "drizzle-orm";
 import type { Env } from "@domi-ops/config";
-import { isHostedDeployment, isStripeConfigured } from "@domi-ops/config";
+import { HOSTED_HOUSEHOLD_MODULES, isHostedDeployment, isStripeConfigured } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
 import {
   baAccounts,
+  billingCheckoutIntents,
+  getBaseDb,
   households,
   householdMembers,
   householdSubscriptions,
@@ -15,8 +19,9 @@ import {
 } from "@domi-ops/db";
 import { hashPassword } from "@domi-ops/auth";
 import type { AppVariables } from "../middleware/auth.js";
+import { stripeSubscriptionState } from "../lib/stripe-subscription.js";
 
-const ALL_MODULES = JSON.stringify(["core", "school", "calendar_sync", "drive", "health"]);
+const ALL_MODULES = JSON.stringify(HOSTED_HOUSEHOLD_MODULES);
 const STARTER_QUOTA_BYTES = 26_843_545_600; // 25 GB
 
 function makeStripe(secretKey: string) {
@@ -36,13 +41,8 @@ function sessionCustomerEmail(session: Stripe.Checkout.Session): string | null {
   return session.customer_details?.email ?? session.customer_email ?? null;
 }
 
-async function alreadyProcessed(db: Database, eventId: string): Promise<boolean> {
-  const rows = await db.select().from(stripeEvents).where(eq(stripeEvents.id, eventId));
-  return rows.length > 0;
-}
-
-async function markProcessed(db: Database, eventId: string, type: string): Promise<void> {
-  await db.insert(stripeEvents).values({ id: eventId, type }).onConflictDoNothing();
+async function lockBillingIdentity(db: Database, identity: string) {
+  await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`billing:${identity}`}, 0))`);
 }
 
 export async function upsertSubscription(
@@ -53,15 +53,25 @@ export async function upsertSubscription(
     stripeSubscriptionId,
     status,
     trialEndsAt,
+    currentPeriodEnd = null,
+    pastDueSince = null,
+    cancelAtPeriodEnd = false,
+    provider = "stripe",
+    sourceUpdatedAt = new Date(),
   }: {
     householdId: string;
     stripeCustomerId: string;
     stripeSubscriptionId: string;
     status: "trialing" | "active" | "past_due" | "canceled";
     trialEndsAt: Date | null;
+    currentPeriodEnd?: Date | null;
+    pastDueSince?: Date | null;
+    cancelAtPeriodEnd?: boolean;
+    provider?: "stripe" | "revenuecat";
+    sourceUpdatedAt?: Date;
   },
-): Promise<void> {
-  await db
+): Promise<boolean> {
+  const rows = await db
     .insert(householdSubscriptions)
     .values({
       householdId,
@@ -70,6 +80,7 @@ export async function upsertSubscription(
       stripeSubscriptionId,
       status,
       trialEndsAt,
+      currentPeriodEnd, pastDueSince, cancelAtPeriodEnd, provider, sourceUpdatedAt,
     })
     .onConflictDoUpdate({
       target: householdSubscriptions.householdId,
@@ -78,19 +89,18 @@ export async function upsertSubscription(
         stripeSubscriptionId,
         status,
         trialEndsAt,
+        currentPeriodEnd, pastDueSince, cancelAtPeriodEnd, provider, sourceUpdatedAt,
+        modulesEntitled: sql`case when ${householdSubscriptions.modulesEntitled}::jsonb @> '["core","school","calendar_sync","drive","health"]'::jsonb then ${ALL_MODULES} else ${householdSubscriptions.modulesEntitled} end`,
         updatedAt: new Date(),
       },
-      // Only take over the household's subscription row for a re-subscribe (existing row is
-      // canceled) or a replay of the same subscription. If a *different* live subscription
-      // already holds it — two checkout sessions the same user raced through before either
-      // webhook landed (WHO-285) — keep the first; the loser is an unreferenced $0 trial that
-      // expires on its own rather than a row whose customer id the lifecycle handlers would
-      // then act on. Enforcing one checkout per user is the durable fix (follow-up).
+      // A different live subscription must be reconciled by the caller. A trial can
+      // bill automatically; ignoring an external duplicate does not cancel it.
       setWhere: or(
         eq(householdSubscriptions.status, "canceled"),
         eq(householdSubscriptions.stripeSubscriptionId, stripeSubscriptionId),
       ),
-    });
+    }).returning({ id: householdSubscriptions.id });
+  return rows.length > 0;
 }
 
 /**
@@ -119,6 +129,10 @@ export async function resolveOrProvisionHousehold(
   customerEmail: string | null,
   ownerUserId: string | null,
 ): Promise<string> {
+  // These locks live through provisioning + subscription + owner insertion in the
+  // caller's transaction. Never authorize a match using a payer-supplied email.
+  if (ownerUserId) await lockBillingIdentity(db, `owner:${ownerUserId}`);
+  await lockBillingIdentity(db, `customer:${stripeCustomerId}`);
   const [byCustomer] = await db
     .select({ householdId: householdSubscriptions.householdId })
     .from(householdSubscriptions)
@@ -130,7 +144,7 @@ export async function resolveOrProvisionHousehold(
     const [byOwner] = await db
       .select({ householdId: householdMembers.householdId })
       .from(householdMembers)
-      .where(eq(householdMembers.userId, ownerUserId))
+      .where(and(eq(householdMembers.userId, ownerUserId), isNull(householdMembers.accessRevokedAt)))
       .limit(1);
     if (byOwner) return byOwner.householdId;
   }
@@ -154,8 +168,10 @@ export async function resolveOrProvisionHousehold(
   return household.id;
 }
 
-export function billingRoutes(db: Database, env: Env) {
+export function billingRoutes(db: Database, env: Env, stripeFactory = makeStripe) {
   const app = new Hono<{ Variables: AppVariables }>();
+  // Purchase intents must commit independently of any authenticated tenant request.
+  const checkoutDb = getBaseDb(db);
 
   // Only available on hosted deployments with Stripe configured.
   app.post("/webhook", async (c) => {
@@ -163,7 +179,7 @@ export function billingRoutes(db: Database, env: Env) {
       return c.json({ error: "not_found" }, 404);
     }
 
-    const stripe = makeStripe(env.STRIPE_SECRET_KEY!);
+    const stripe = stripeFactory(env.STRIPE_SECRET_KEY!);
     const sig = c.req.header("stripe-signature");
     if (!sig) {
       return c.json({ error: "missing_signature" }, 400);
@@ -177,15 +193,14 @@ export function billingRoutes(db: Database, env: Env) {
       return c.json({ error: "invalid_signature" }, 400);
     }
 
-    // Idempotency — Stripe retries on non-2xx.
-    if (await alreadyProcessed(db, event.id)) {
-      return c.json({ ok: true, skipped: true });
-    }
-
     try {
       // See the comment above resolveOrProvisionHousehold — none of these rows have a
       // household_id context yet, so every write here needs the system_bootstrap RLS policy.
       await withSystemContext(db, async (tx) => {
+        // Claim and effects commit together. Concurrent deliveries block on the PK;
+        // a failed handler rolls back the claim so a genuine retry can run.
+        const claimed = await tx.insert(stripeEvents).values({ id: event.id, type: event.type }).onConflictDoNothing().returning({ id: stripeEvents.id });
+        if (!claimed.length) return;
         switch (event.type) {
           case "checkout.session.completed": {
             const session = event.data.object as Stripe.Checkout.Session;
@@ -207,24 +222,26 @@ export function billingRoutes(db: Database, env: Env) {
               ownerUserId = u?.id ?? null;
             }
 
-            const sub = await stripe.subscriptions.retrieve(subscriptionId);
-            const trialEnd = sub.trial_end ? new Date(sub.trial_end * 1000) : null;
-            const status = sub.status === "trialing" ? "trialing" : sub.status === "active" ? "active" : "trialing";
-
             const householdId = await resolveOrProvisionHousehold(
               tx,
               customerId,
               sessionCustomerEmail(session),
               ownerUserId,
             );
+            const sub = await stripe.subscriptions.retrieve(subscriptionId);
 
-            await upsertSubscription(tx, {
+            const accepted = await upsertSubscription(tx, {
               householdId,
               stripeCustomerId: customerId,
               stripeSubscriptionId: subscriptionId,
-              status,
-              trialEndsAt: trialEnd,
+              ...stripeSubscriptionState(sub),
             });
+            if (!accepted) {
+              // Cancel the known losing subscription, including its automatic renewal.
+              // Retry after an uncertain outcome retrieves current state before writing.
+              if (sub.status !== "canceled") await stripe.subscriptions.cancel(subscriptionId);
+              return;
+            }
 
             // Stamp the household storage quota and tier.
             await tx
@@ -257,59 +274,24 @@ export function billingRoutes(db: Database, env: Env) {
             break;
           }
 
-          case "customer.subscription.updated": {
-            const sub = event.data.object as Stripe.Subscription;
-            const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
-
-            const existing = await tx
-              .select({ householdId: householdSubscriptions.householdId })
-              .from(householdSubscriptions)
-              .where(eq(householdSubscriptions.stripeCustomerId, customerId));
-
-            if (existing.length === 0) break;
-
-            const stripeStatus = sub.status;
-            const mapped =
-              stripeStatus === "trialing" ? "trialing"
-              : stripeStatus === "active" ? "active"
-              : stripeStatus === "past_due" ? "past_due"
-              : "canceled";
-
-            await tx
-              .update(householdSubscriptions)
-              .set({
-                status: mapped,
-                trialEndsAt: sub.trial_end ? new Date(sub.trial_end * 1000) : null,
-                stripeSubscriptionId: sub.id,
-                updatedAt: new Date(),
-              })
-              .where(eq(householdSubscriptions.stripeCustomerId, customerId));
-
-            break;
-          }
-
-          case "customer.subscription.deleted": {
-            const sub = event.data.object as Stripe.Subscription;
-            const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
-
-            await tx
-              .update(householdSubscriptions)
-              .set({ status: "canceled", updatedAt: new Date() })
-              .where(eq(householdSubscriptions.stripeCustomerId, customerId));
-
-            break;
-          }
-
+          case "customer.subscription.created":
+          case "customer.subscription.updated":
+          case "customer.subscription.deleted":
+          case "invoice.paid":
           case "invoice.payment_failed": {
-            const invoice = event.data.object as Stripe.Invoice;
-            const customerId = typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id;
+            const object = event.data.object as Stripe.Subscription | Stripe.Invoice;
+            const customerId = typeof object.customer === "string" ? object.customer : object.customer?.id;
             if (!customerId) break;
-
-            await tx
-              .update(householdSubscriptions)
-              .set({ status: "past_due", updatedAt: new Date() })
-              .where(eq(householdSubscriptions.stripeCustomerId, customerId));
-
+            await lockBillingIdentity(tx, `customer:${customerId}`);
+            const [existing] = await tx.select().from(householdSubscriptions).where(eq(householdSubscriptions.stripeCustomerId, customerId)).limit(1);
+            if (!existing?.stripeSubscriptionId || existing.provider !== "stripe") break;
+            const eventSubscription = object.object === "subscription" ? object.id
+              : object.parent?.subscription_details?.subscription;
+            const eventSubscriptionId = typeof eventSubscription === "string" ? eventSubscription : eventSubscription?.id;
+            // Never let an unrelated invoice or losing duplicate subscription change access.
+            if (eventSubscriptionId !== existing.stripeSubscriptionId) break;
+            const latest = await stripe.subscriptions.retrieve(existing.stripeSubscriptionId);
+            await tx.update(householdSubscriptions).set({ ...stripeSubscriptionState(latest, existing), updatedAt: new Date() }).where(eq(householdSubscriptions.id, existing.id));
             break;
           }
 
@@ -318,12 +300,54 @@ export function billingRoutes(db: Database, env: Env) {
         }
       });
 
-      await markProcessed(db, event.id, event.type);
       return c.json({ ok: true });
     } catch (err) {
       console.error("[billing] webhook handler error:", err);
       return c.json({ error: "handler_error" }, 500);
     }
+  });
+
+  app.post("/portal", async (c) => {
+    const auth = c.get("auth");
+    if (!auth) return c.json({ error: "unauthorized" }, 401);
+    if (auth.role !== "owner") return c.json({ error: "owner_required" }, 403);
+    if (!isHostedDeployment(env) || !isStripeConfigured(env)) return c.json({ error: "not_hosted" }, 404);
+    const ua = (c.req.header("user-agent") ?? "").toLowerCase();
+    if (ua.includes("capacitor") || c.req.header("x-domi-native") === "1") return c.json({ error: "use_store_subscription_management" }, 403);
+    const [subscription] = await db.select().from(householdSubscriptions).where(eq(householdSubscriptions.householdId, auth.householdId)).limit(1);
+    if (!subscription?.stripeCustomerId || subscription.provider !== "stripe") return c.json({ error: "use_store_subscription_management" }, 409);
+    try {
+      const portal = await stripeFactory(env.STRIPE_SECRET_KEY!).billingPortal.sessions.create({
+        customer: subscription.stripeCustomerId,
+        return_url: new URL("/settings", env.PUBLIC_APP_URL).toString(),
+      });
+      return c.redirect(portal.url, 303);
+    } catch (err) {
+      console.error("[billing] portal session creation failed", err);
+      return c.json({ error: "billing_portal_unavailable" }, 503);
+    }
+  });
+
+  // Check current identity/provider before a native client opens a store charge.
+  app.get("/purchase-access", async (c) => {
+    if (!isHostedDeployment(env) || env.DEMO_MODE || !env.REVENUECAT_WEBHOOK_SECRET) return c.json({ error: "store_not_configured" }, 404);
+    const auth = c.get("auth"), userId = c.get("userId");
+    if (!userId) return c.json({ error: "unauthorized" }, 401);
+    if (auth && auth.role !== "owner") return c.json({ error: "owner_required", message: "Only the household owner can manage store purchases." }, 403);
+    const result = await withSystemContext(db, async (tx) => {
+      const [member] = await tx.select().from(householdMembers).where(and(eq(householdMembers.userId, userId), isNull(householdMembers.accessRevokedAt))).limit(1);
+      if (!member) {
+        const [user] = await tx.select({ id: users.id }).from(users).where(eq(users.id, userId)).limit(1);
+        return user ? "ok" : "unauthorized";
+      }
+      if (member.role !== "owner") return "owner_required";
+      const [sub] = await tx.select().from(householdSubscriptions).where(eq(householdSubscriptions.householdId, member.householdId)).limit(1);
+      if (sub?.status !== "canceled" && sub?.provider === "stripe") return "web_subscription_active";
+      if (c.req.query("action") !== "restore" && sub && sub.status !== "canceled") return "subscription_already_active";
+      return "ok";
+    });
+    if (result !== "ok") return c.json({ error: result, message: result === "web_subscription_active" ? "Manage your existing web subscription in a browser before switching billing providers." : result === "subscription_already_active" ? "Manage the existing store subscription instead of starting another purchase." : "The household owner must sign in before purchasing." }, result === "unauthorized" ? 401 : result === "owner_required" ? 403 : 409);
+    return c.json({ userId });
   });
 
   // ---------------------------------------------------------------------------
@@ -370,36 +394,83 @@ export function billingRoutes(db: Database, env: Env) {
     // dedupes repeat attempts (WHO-285). Anonymous checkout from the public pricing page is
     // unchanged.
     const callerUserId = c.get("userId");
+    let reactivation: { householdId: string; customerId: string; subscriptionId: string } | null = null;
 
     if (callerUserId) {
       const [member] = await withSystemContext(db, (tx) =>
         tx
-          .select({ householdId: householdMembers.householdId })
+          .select({ householdId: householdMembers.householdId, role: householdMembers.role })
           .from(householdMembers)
-          .where(eq(householdMembers.userId, callerUserId))
+          .where(and(eq(householdMembers.userId, callerUserId), isNull(householdMembers.accessRevokedAt)))
           .limit(1),
       );
       // Already has a household (and therefore a subscription) — a back-button or double-submit
       // here would start a second, unrelated Stripe customer + subscription that no one manages.
       // Send them to the app instead.
-      if (member) return c.redirect(`${appUrl}/dashboard`, 303);
+      if (member) {
+        const [subscription] = await withSystemContext(db, (tx) => tx.select().from(householdSubscriptions).where(eq(householdSubscriptions.householdId, member.householdId)).limit(1));
+        if (member.role !== "owner" || subscription?.provider !== "stripe" || subscription.status !== "canceled" || !subscription.stripeCustomerId || !subscription.stripeSubscriptionId) return c.redirect(`${appUrl}/settings`, 303);
+        reactivation = { householdId: member.householdId, customerId: subscription.stripeCustomerId, subscriptionId: subscription.stripeSubscriptionId };
+      }
     }
 
     try {
-      const stripe = makeStripe(env.STRIPE_SECRET_KEY!);
-
+      const stripe = stripeFactory(env.STRIPE_SECRET_KEY!);
+      let browserId = getCookie(c, "domi_checkout");
+      if (!browserId || !/^[0-9a-f-]{36}$/.test(browserId)) {
+        browserId = randomUUID();
+        setCookie(c, "domi_checkout", browserId, { httpOnly: true, secure: new URL(appUrl).protocol === "https:", sameSite: "Lax", path: "/api/billing", maxAge: 31536000 });
+      }
+      if (reactivation) {
+        // A stale local canceled row cannot authorize a second active purchase.
+        const current = await stripe.subscriptions.retrieve(reactivation.subscriptionId);
+        if (current.status !== "canceled") return c.redirect(`${appUrl}/settings`, 303);
+      }
+      const principalKey = createHmac("sha256", env.SESSION_SECRET!).update(reactivation ? `reactivate:${reactivation.householdId}:${reactivation.subscriptionId}` : callerUserId ? `user:${callerUserId}` : `browser:${browserId}`).digest("hex");
+      // Commit an intent before external calls. A crash or timeout reuses the same
+      // provider idempotency key rather than replaying an uncertain purchase request.
+      const intent = await withSystemContext(checkoutDb, async (tx) => {
+        await lockBillingIdentity(tx, `checkout:${principalKey}`);
+        const [existing] = await tx.select().from(billingCheckoutIntents).where(eq(billingCheckoutIntents.principalKey, principalKey));
+        if (existing) return existing;
+        const [created] = await tx.insert(billingCheckoutIntents).values({ principalKey, plan, expiresAt: new Date(Date.now() + 86400000) }).returning();
+        return created;
+      });
+      let priorSession: Stripe.Checkout.Session | null = null;
+      if (intent.stripeSessionId) {
+        priorSession = await stripe.checkout.sessions.retrieve(intent.stripeSessionId);
+        if (priorSession.status === "complete") return c.redirect(`${appUrl}/setup?session_id=${encodeURIComponent(priorSession.id)}`, 303);
+        if (priorSession.status === "open" && priorSession.url) return c.redirect(priorSession.url, 303);
+        if (priorSession.status === "expired") {
+          // The provider confirmed this specific attempt cannot complete. Clear it
+          // explicitly; never mint a fresh request merely because a local timer passed.
+          await withSystemContext(checkoutDb, (tx) => tx.delete(billingCheckoutIntents).where(and(eq(billingCheckoutIntents.principalKey, principalKey), eq(billingCheckoutIntents.id, intent.id))));
+          return c.redirect(`${marketingUrl}/pricing?checkout=expired`, 303);
+        }
+      }
+      if (!intent.stripeSessionId && intent.expiresAt.getTime() <= Date.now()) {
+        // Stripe may have accepted an earlier request even if its response was lost.
+        // Do not replay beyond its idempotency retention window; operator reconciliation.
+        return c.json({ error: "checkout_reconciliation_required", message: "Contact support to safely resume this checkout." }, 409);
+      }
+      const customer = reactivation ? { id: reactivation.customerId } : intent.stripeCustomerId ? { id: intent.stripeCustomerId }
+        : await stripe.customers.create({}, { idempotencyKey: `domi-customer:${intent.id}` });
+      await withSystemContext(checkoutDb, (tx) => tx.update(billingCheckoutIntents).set({ stripeCustomerId: customer.id }).where(eq(billingCheckoutIntents.id, intent.id)));
+      const lockedPrice = intent.plan === "annual" ? env.STRIPE_PRICE_STARTER_ANNUAL : env.STRIPE_PRICE_STARTER_MONTHLY;
       const session = await stripe.checkout.sessions.create({
         mode: "subscription",
-        line_items: [{ price: priceId, quantity: 1 }],
+        customer: customer.id,
+        line_items: [{ price: lockedPrice, quantity: 1 }],
         subscription_data: {
-          trial_period_days: 14,
+          ...(!reactivation ? { trial_period_days: 14 } : {}),
           ...(callerUserId ? { metadata: { whomeUserId: callerUserId } } : {}),
         },
         allow_promotion_codes: true,
         ...(callerUserId ? { client_reference_id: callerUserId } : {}),
         success_url: `${appUrl}/setup?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${marketingUrl}/pricing`,
-      });
+      }, { idempotencyKey: `domi-checkout:${intent.id}` });
+      await withSystemContext(checkoutDb, (tx) => tx.update(billingCheckoutIntents).set({ stripeSessionId: session.id }).where(eq(billingCheckoutIntents.id, intent.id)));
 
       if (!session.url) {
         console.error("[billing] checkout: Stripe session created with no URL");

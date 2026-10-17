@@ -9,8 +9,11 @@ import {
   GoogleDocsCredentialsError,
   loadGoogleDocsConnection,
 } from "./google-docs-export.js";
-import { getObjectBuffer, putObject } from "./s3.js";
+import { getObjectBuffer } from "./s3.js";
 import { SchoolMaterialFreezeError } from "./school-material-freeze-errors.js";
+import { downloadPublicHttpsFile } from "./safe-public-download.js";
+import { authorizedMaterialDriveObject } from "./school-route-context.js";
+import { storeSchoolSnapshots } from "./generated-file-storage.js";
 
 function materialSnapshotKeys(householdId: string, materialId: string, ext: string) {
   const base = `school/${householdId}/materials/${materialId}`;
@@ -38,21 +41,6 @@ function hashText(text: string): string {
   return createHash("sha256").update(normalizeTextForHash(text), "utf8").digest("hex");
 }
 
-async function fetchUrlBody(url: string, timeoutMs = 5000): Promise<{ body: Buffer; contentType: string } | null> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, { signal: controller.signal });
-    if (!res.ok) return null;
-    const contentType = res.headers.get("content-type")?.split(";")[0]?.trim() || "application/octet-stream";
-    const buf = Buffer.from(await res.arrayBuffer());
-    return { body: buf, contentType };
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
-}
 
 async function freezeOneMaterial(
   db: Database,
@@ -65,11 +53,7 @@ async function freezeOneMaterial(
   let plainText = "";
 
   if (material.source === "domi_drive_file" && material.driveObjectId) {
-    const [obj] = await db
-      .select()
-      .from(driveObjects)
-      .where(and(eq(driveObjects.id, material.driveObjectId), eq(driveObjects.householdId, householdId)))
-      .limit(1);
+    const obj = await authorizedMaterialDriveObject(db, householdId, material);
     if (obj?.s3Key) {
       const buf = await getObjectBuffer(env, obj.s3Key);
       if (buf) {
@@ -84,7 +68,7 @@ async function freezeOneMaterial(
     (material.source === "domi_drive_link" || material.source === "external_url") &&
     material.externalUrl
   ) {
-    const fetched = await fetchUrlBody(material.externalUrl);
+    const fetched = await downloadPublicHttpsFile(material.externalUrl, env.DRIVE_UPLOAD_MAX_BYTES);
     if (fetched) {
       binaryBody = fetched.body;
       contentType = fetched.contentType;
@@ -93,13 +77,9 @@ async function freezeOneMaterial(
       }
     }
   } else if (material.source === "domi_drive_link" && material.driveObjectId) {
-    const [obj] = await db
-      .select()
-      .from(driveObjects)
-      .where(and(eq(driveObjects.id, material.driveObjectId), eq(driveObjects.householdId, householdId)))
-      .limit(1);
+    const obj = await authorizedMaterialDriveObject(db, householdId, material);
     if (obj?.url) {
-      const fetched = await fetchUrlBody(obj.url);
+      const fetched = await downloadPublicHttpsFile(obj.url, env.DRIVE_UPLOAD_MAX_BYTES);
       if (fetched) {
         binaryBody = fetched.body;
         contentType = fetched.contentType;
@@ -146,23 +126,27 @@ async function freezeOneMaterial(
   }
 
   const keys = materialSnapshotKeys(householdId, material.id, extensionForContentType(contentType));
+  if (!binaryBody && material.source !== "native_test") throw new SchoolMaterialFreezeError("material_freeze_failed", "The source could not be read safely. Use a readable Drive file, connected Google document, or public HTTPS document within the upload limit.");
   let snapshotS3Key: string | null = null;
   let snapshotTextS3Key: string | null = null;
   let snapshotContentHash: string | null = null;
 
+  const files: { key: string; body: Buffer; contentType: string }[] = [];
   if (binaryBody) {
-    await putObject(env, keys.binary, binaryBody, contentType);
+    files.push({ key: keys.binary, body: binaryBody, contentType });
     snapshotS3Key = keys.binary;
   }
 
   if (plainText) {
     const textBuf = Buffer.from(plainText, "utf-8");
-    await putObject(env, keys.text, textBuf, "text/plain; charset=utf-8");
+    // A plain-text binary already occupies snapshot.txt: store it once.
+    if (keys.text !== snapshotS3Key) files.push({ key: keys.text, body: textBuf, contentType: "text/plain; charset=utf-8" });
     snapshotTextS3Key = keys.text;
     snapshotContentHash = hashText(plainText);
   } else if (binaryBody && contentType.startsWith("text/")) {
     snapshotContentHash = hashText(binaryBody.toString("utf-8"));
   }
+  await storeSchoolSnapshots(db, env, householdId, material.id, files);
 
   await db
     .update(schoolAssignmentMaterials)
@@ -192,29 +176,31 @@ export async function freezeAssignmentTestMaterials(
     .limit(1);
   if (!assignment) return;
 
-  const materials = await db
-    .select()
-    .from(schoolAssignmentMaterials)
-    .where(
-      and(
+  await db.transaction(async (transaction) => {
+    const scoped = transaction as unknown as Database;
+    const materials = await scoped
+      .select()
+      .from(schoolAssignmentMaterials)
+      .where(and(
         eq(schoolAssignmentMaterials.assignmentId, assignmentId),
         eq(schoolAssignmentMaterials.isTest, true),
         isNull(schoolAssignmentMaterials.frozenAt),
-      ),
-    );
+      ))
+      .orderBy(schoolAssignmentMaterials.id)
+      .for("update");
 
-  for (const material of materials) {
-    try {
-      await freezeOneMaterial(db, env, assignment.householdId, material);
-    } catch (err) {
-      if (material.source === "google_doc") throw err;
-      console.error("school material freeze failed", material.id, err);
-      await db
-        .update(schoolAssignmentMaterials)
-        .set({ frozenAt: new Date() })
-        .where(eq(schoolAssignmentMaterials.id, material.id));
+    for (const material of materials) {
+      try {
+        await freezeOneMaterial(scoped, env, assignment.householdId, material);
+      } catch (err) {
+        if (err instanceof SchoolMaterialFreezeError) throw err;
+        const message = err instanceof Error && ["quota_exceeded", "file_too_large"].includes(err.message)
+          ? err.message
+          : "The material snapshot could not be stored. Nothing was marked frozen; try again or contact the teacher.";
+        throw new SchoolMaterialFreezeError("material_freeze_failed", message);
+      }
     }
-  }
+  });
 }
 
 export { hashText, normalizeTextForHash };

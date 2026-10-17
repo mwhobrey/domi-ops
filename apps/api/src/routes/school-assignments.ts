@@ -4,6 +4,7 @@ import type { Env } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
 import {
   householdMembers,
+  browserUploads,
   schoolAssignmentMaterials,
   schoolAssignments,
   schoolClasses,
@@ -17,6 +18,8 @@ import {
   users,
 } from "@domi-ops/db";
 import { and, asc, eq, inArray, ne, notInArray, sql } from "drizzle-orm";
+import { claimBrowserUpload, releaseBrowserUpload } from "../lib/browser-uploads.js";
+import { fileResponseHeaders } from "../lib/file-response.js";
 import {
   isEnrollmentActiveNow,
   resolveClassAccess,
@@ -537,7 +540,7 @@ export function schoolAssignmentsRoutes(db: Database, env: Env) {
             studentVisible: m.studentVisible,
             observerVisible: m.observerVisible,
             nativeTestPointsMode: m.nativeTestPointsMode,
-            createdByUserId: auth.userId,
+            createdByUserId: m.createdByUserId,
           })
           .returning();
         if (!newMat || m.source !== "native_test") continue;
@@ -931,6 +934,14 @@ export function schoolAssignmentsRoutes(db: Database, env: Env) {
       url?: string;
       note?: string;
     }>();
+    if (body.url) {
+      try {
+        if (!["https:", "http:"].includes(new URL(body.url).protocol)) throw new Error("invalid_url");
+      } catch { return c.json({ error: "invalid_url" }, 400); }
+    }
+    if (body.s3Key && !await claimBrowserUpload(db, auth, body.s3Key, "school", submissionId)) {
+      return c.json({ error: "invalid_upload" }, 400);
+    }
     const [art] = await db
       .insert(schoolSubmissionArtifacts)
       .values({
@@ -1012,15 +1023,19 @@ export function schoolAssignmentsRoutes(db: Database, env: Env) {
     }
     if (!artifact.s3Key) return c.json({ error: "not_found" }, 404);
 
+    // Legacy artifacts may only use their household's School namespace. Drive keys
+    // must never become an alternate path around Drive's private-object permissions.
+    if (!artifact.s3Key.startsWith(`school/${auth.householdId}/`)) return c.json({ error: "not_found" }, 404);
+    const [upload] = await db.select().from(browserUploads).where(eq(browserUploads.s3Key, artifact.s3Key)).limit(1);
+    if (upload && (upload.householdId !== auth.householdId || upload.purpose !== "school" || upload.state !== "consumed" || upload.claimedBy !== artifact.submissionId)) {
+      return c.json({ error: "not_found" }, 404);
+    }
+
     const buf = await getObjectBuffer(env, artifact.s3Key);
     if (!buf) return c.json({ error: "storage_unavailable" }, 503);
 
     const filename = artifact.s3Key.split("/").pop()?.replace(/^\d+-/, "") ?? "download";
-    return c.body(new Uint8Array(buf), 200, {
-      "Content-Type": contentTypeFromKey(artifact.s3Key),
-      "Content-Disposition": `inline; filename="${filename.replace(/"/g, "")}"`,
-      "Cache-Control": "private, max-age=300",
-    });
+    return c.body(new Uint8Array(buf), 200, fileResponseHeaders(upload?.contentType ?? contentTypeFromKey(artifact.s3Key), filename));
   });
 
   app.delete("/artifacts/:id", async (c) => {
@@ -1044,6 +1059,7 @@ export function schoolAssignmentsRoutes(db: Database, env: Env) {
     if (!canModifySubmissionArtifacts(subCtx)) return c.json({ error: "forbidden" }, 403);
 
     await db.delete(schoolSubmissionArtifacts).where(eq(schoolSubmissionArtifacts.id, id));
+    if (artifact.s3Key) await releaseBrowserUpload(db, env, auth.householdId, artifact.s3Key, artifact.submissionId);
     return c.json({ ok: true });
   });
 

@@ -10,6 +10,7 @@ import { WithingsSettings } from "../../components/health/WithingsSettings";
 import { PendingTourRunner } from "../../components/PendingTourRunner";
 import { ScrollToTopFab } from "../../components/ScrollToTopFab";
 import { HouseholdMembersPanel } from "../../components/HouseholdMembersPanel";
+import { HouseholdInvitationsPanel } from "../../components/HouseholdInvitationsPanel";
 import { HouseholdSettingsEditor } from "../../components/HouseholdSettingsEditor";
 import { SubscriptionPlanCard } from "../../components/SubscriptionPlanCard";
 import { apiFetch } from "../../lib/api";
@@ -20,6 +21,7 @@ import { Alert } from "../../components/ui";
 export default async function SettingsPage() {
   let profile = {
     role: "member" as HouseholdRole,
+    memberId: "",
   };
   let household = {
     name: "Household",
@@ -30,13 +32,16 @@ export default async function SettingsPage() {
     modulesEntitled: null as string[] | null,
     subscriptionStatus: null as "trialing" | "active" | "past_due" | "canceled" | null,
     trialEndsAt: null as string | null,
+    currentPeriodEnd: null as string | null,
+    cancelAtPeriodEnd: false,
+    billingProvider: null as string | null,
     telemetryOptIn: false,
   };
   let integrations: HouseholdIntegrationsStatus | null = null;
   let loadError: string | null = null;
 
   try {
-    profile = await apiFetch<{ role: HouseholdRole }>("/api/core/profile");
+    profile = await apiFetch<{ role: HouseholdRole; memberId: string }>("/api/core/profile");
     if (!canManageHousehold(profile.role)) {
       redirect("/profile");
     }
@@ -66,10 +71,15 @@ export default async function SettingsPage() {
               <SubscriptionPlanCard
                 subscriptionStatus={household.subscriptionStatus}
                 trialEndsAt={household.trialEndsAt}
+                currentPeriodEnd={household.currentPeriodEnd}
+                cancelAtPeriodEnd={household.cancelAtPeriodEnd}
+                billingProvider={household.billingProvider}
+                isOwner={profile.role === "owner"}
               />
             ) : null}
             <HouseholdSettingsEditor initial={household} />
-            <HouseholdMembersPanel canManage actorRole={profile.role} />
+            <HouseholdInvitationsPanel isOwner={profile.role === "owner"} />
+            <HouseholdMembersPanel canManage actorRole={profile.role} actorMemberId={profile.memberId} />
             {integrations ? <HouseholdIntegrationsPanel status={integrations} /> : null}
             <MyAllyFileSettings />
             <WithingsSettings />

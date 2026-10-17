@@ -4,6 +4,7 @@ import { decryptSensitive, encryptSensitive } from "@domi-ops/crypto";
 import type { Database } from "@domi-ops/db";
 import { healthMedications, healthMyallyfileLinks } from "@domi-ops/db";
 import { and, eq, isNotNull, isNull, lte, or } from "drizzle-orm";
+import { householdSubscriptionAllowsWork } from "./subscription-work.js";
 
 /**
  * MyAllyFile medication sync (WHO-356/357/363, ADR 006): Domi Ops -> MyAllyFile, one way.
@@ -397,6 +398,7 @@ export async function scanMyallyfileSync(
     .limit(SCAN_BATCH);
 
   for (const link of due) {
+    if (!await householdSubscriptionAllowsWork(db, env, link.householdId)) continue;
     const result = await processMyallyfileLink(db, env, link, now, fetchImpl);
     tally[result] += 1;
   }

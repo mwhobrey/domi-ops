@@ -129,6 +129,8 @@ export const householdMembers = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     role: memberRoleEnum("role").notNull().default("member"),
+    /** Revokes access without cascading deletion of this person's household history. */
+    accessRevokedAt: timestamp("access_revoked_at", { withTimezone: true }),
     /** Household display name — user-editable in profile */
     name: varchar("name", { length: 128 }),
     /** Deprecated: HomeHub status-board label only */

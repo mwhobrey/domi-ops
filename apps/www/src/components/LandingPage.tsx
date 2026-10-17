@@ -17,7 +17,7 @@ const DAY_TIMELINE = [
   },
   {
     time: "11:30 AM",
-    text: "The in-app quiz scores itself the second it's submitted. You review the misses, not the whole stack.",
+    text: "Choice and short-answer questions can score automatically. You review written answers and adjust grades when needed.",
   },
   {
     time: "1:15 PM",
@@ -41,25 +41,22 @@ export function LandingPage() {
               </h1>
               <p className="max-w-xl text-lg leading-relaxed text-[var(--color-text-muted)]">
                 Classes, assignments, and a real gradebook next to the family calendar, chores, and
-                medications. One login, one household. Self-host free or run on Domi Ops cloud.
+                medications. Each person gets their own login, covered by one Domi Ops Cloud household subscription.
               </p>
               <div className="flex flex-wrap items-center gap-4">
+                <LinkButton href="/pricing" size="lg">See the household plan</LinkButton>
                 {urls.demo ? (
                   <AnchorButton
                     href={urls.demo}
                     size="lg"
-                    className="shadow-[0_0_0_1px_var(--color-accent),0_8px_24px_-4px_var(--color-accent)]"
+                    variant="secondary"
                   >
                     Try the demo
                   </AnchorButton>
                 ) : null}
-                <LinkButton href="/pricing" variant="secondary" size="lg">
-                  See pricing
-                </LinkButton>
               </div>
               <p className="text-xs text-[var(--color-text-muted)]">
-                No setup needed to look around · 14-day trial, then $12/mo · Open source, self-host
-                free
+                Cloud: $12/month or $120/year · 14-day trial, card required · Demo: no card
               </p>
             </div>
 
@@ -76,7 +73,7 @@ export function LandingPage() {
                 style={{ animationDelay: "1.4s" }}
                 aria-hidden
               >
-                School + health, 1 login
+                School + household, together
               </div>
               <ThemeAwareScreenshot
                 {...MARKETING_SCREENSHOTS.schoolGradebook}
@@ -125,7 +122,7 @@ export function LandingPage() {
                   A gradebook with weighted categories, tracked across the whole year instead of
                   resetting every Monday.
                 </li>
-                <li>In-app tests that grade themselves, with an override on any answer.</li>
+                <li>Automatic scoring for choice and short-answer questions; written answers stay yours to review.</li>
                 <li>
                   Tap the days school happened instead of taking roll. Log hours as you go, then print a
                   transcript on your own grading scale.
@@ -176,7 +173,7 @@ export function LandingPage() {
                 </li>
                 <li>Pause a medication and its dose history stays.</li>
                 <li>
-                  Connect a Withings blood pressure cuff and readings arrive on their own, no typing.
+                  Connect compatible Withings devices to import readings, workouts, daily activity and sleep summaries.
                 </li>
                 <li>
                   Medication names, doses, and notes are encrypted at rest, and being able to see a
@@ -299,29 +296,23 @@ export function LandingPage() {
 
       <section className="border-t border-[var(--color-border)]">
         <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
-          <div className="grid items-stretch gap-0 md:grid-cols-[1fr_auto_1fr] md:gap-6">
-            <div className="rounded-[var(--radius-xl)] border border-[var(--color-border)] p-6">
+          <div className="grid items-stretch gap-6 md:grid-cols-2">
+            <div className="order-2 rounded-[var(--radius-xl)] border border-[var(--color-border)] p-6">
               <h3 className="text-lg font-semibold">Self-host</h3>
               <ul className="mt-3 list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-[var(--color-text-muted)]">
                 <li>MIT license: all modules in the OSS bundle</li>
-                <li>Unlimited Drive on your MinIO/S3</li>
+                <li>File storage depends on your server</li>
                 <li>Your Postgres, your rules</li>
                 <li>Docker Compose on a VPS or home server</li>
               </ul>
             </div>
-            <div className="relative my-2 flex items-center justify-center md:my-0">
-              <span className="hidden h-full w-px bg-[var(--color-border)] md:block" aria-hidden />
-              <span className="rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1 text-xs font-semibold text-[var(--color-text-muted)] md:absolute md:top-1/2 md:-translate-y-1/2">
-                OR
-              </span>
-            </div>
-            <div className="rounded-[var(--radius-xl)] border border-[var(--color-border)] p-6">
+            <div className="order-1 rounded-[var(--radius-xl)] border border-[var(--color-accent)] p-6">
               <h3 className="text-lg font-semibold">Domi Ops cloud</h3>
               <ul className="mt-3 list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-[var(--color-text-muted)]">
-                <li>Managed hosting: no server babysitting</li>
-                <li>Stripe subscription; setup wizard after checkout</li>
-                <li>Drive quotas by tier</li>
-                <li>Same app you'd self-host, we just run it</li>
+                <li>$12/month or $120/year for one household</li>
+                <li>Adults and children use their own logins</li>
+                <li>All modules and 25 GB of household file storage</li>
+                <li>Managed hosting and software updates</li>
               </ul>
             </div>
           </div>
@@ -337,15 +328,13 @@ export function LandingPage() {
                 <ShieldCheck className="mt-0.5 h-6 w-6 shrink-0 text-[var(--color-accent)]" aria-hidden />
                 <div>
                   <strong className="block text-base text-[var(--color-text)]">
-                    Self-hosted means self-hosted
+                    Your household controls sharing
                   </strong>
                   <p className="mt-1.5 text-sm leading-relaxed text-[var(--color-text-muted)]">
-                    Run Domi Ops on your own server and your household records stay there. A feature
-                    that calls an outside service, like weather or Google sync, only does so once you
-                    set it up. Telemetry is off unless you opt in, and no vendor holds your family's
-                    calendar hostage. We built the hosted
-                    version because setting up a VPS isn't for everyone, not because self-hosting is
-                    a second-class option.
+                    Give each person their own login and choose what to share. Optional Google and
+                    Withings connections are yours to connect or disconnect. Usage metrics start
+                    off; configured error diagnostics are handled separately. Cloud operators manage
+                    the infrastructure and encryption keys. See the <a href="/privacy" className="underline">privacy policy</a> for access, processors and retention.
                   </p>
                 </div>
               </div>

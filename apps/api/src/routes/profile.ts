@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import type { Env } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
-import { homeStatus, householdMembers, pushSubscriptions, users } from "@domi-ops/db";
-import { and, eq } from "drizzle-orm";
+import { homeStatus, households, householdMembers, householdSubscriptions, pushSubscriptions, users, withSystemContext } from "@domi-ops/db";
+import { and, eq, isNull } from "drizzle-orm";
 import { memberShownLabel } from "@domi-ops/auth";
 import {
   normalizePresence,
@@ -16,6 +16,7 @@ import { deletePushSubscriptionForUser, isAnyPushConfigured } from "../lib/push-
 import { createS3Client, deleteObject, getObjectBuffer, putObject } from "../lib/s3.js";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
+import { readBoundedUpload } from "../lib/browser-uploads.js";
 
 export function profileRoutes(db: Database, env: Env) {
   const app = new Hono<{ Variables: AppVariables }>();
@@ -235,8 +236,12 @@ export function profileRoutes(db: Database, env: Env) {
 
   app.post("/profile/avatar", async (c) => {
     const auth = c.get("auth")!;
-    const body = await c.req.parseBody();
-    const file = body.file;
+    let file: unknown;
+    try {
+      const bytes = await readBoundedUpload(c.req.raw, 2 * 1024 * 1024 + 65536);
+      const form = await new Response(new Uint8Array(bytes), { headers: { "content-type": c.req.header("content-type") ?? "" } }).formData();
+      file = form.get("file");
+    } catch { return c.json({ error: "invalid_or_oversized_upload" }, 400); }
     if (!(file instanceof File)) {
       return c.json({ error: "file_required" }, 400);
     }
@@ -308,13 +313,34 @@ export function profileRoutes(db: Database, env: Env) {
       return c.json({ error: "confirm_required", message: 'Send { "confirm": "DELETE" }' }, 400);
     }
 
+    // Account deletion cascades across all memberships, not only the selected home.
+    // Do not strand a household's subscription after its final owner disappears.
+    const billingBlock = await withSystemContext(db, async (tx) => {
+      const memberships = await tx.select().from(householdMembers).where(and(eq(householdMembers.userId, auth.userId), isNull(householdMembers.accessRevokedAt)));
+      for (const membership of memberships.sort((a, b) => a.householdId.localeCompare(b.householdId))) {
+        await tx.select({ id: households.id }).from(households).where(eq(households.id, membership.householdId)).for("update");
+        const members = await tx.select().from(householdMembers).where(and(eq(householdMembers.householdId, membership.householdId), isNull(householdMembers.accessRevokedAt)));
+        const remainingOwners = members.filter((m) => m.userId !== auth.userId && m.role === "owner");
+        if (membership.role === "owner" && !remainingOwners.length) {
+          const [subscription] = await tx.select().from(householdSubscriptions).where(eq(householdSubscriptions.householdId, membership.householdId)).limit(1);
+          if (subscription && subscription.status !== "canceled") return subscription.provider;
+          if (members.some((m) => m.userId !== auth.userId)) return "sole_owner";
+        }
+      }
+      return null;
+    });
+    if (billingBlock === "sole_owner") return c.json({ error: "sole_owner", message: "Transfer ownership or remove other household members before deleting this account." }, 409);
+    if (billingBlock) return c.json({ error: "active_household_subscription", message: billingBlock === "revenuecat"
+      ? "Manage your subscription in the App Store or Google Play, or transfer household ownership before deleting this account. Contact support if you need account deletion before the subscription ends."
+      : "Cancel the household subscription in Settings or transfer household ownership before deleting this account. Contact support if you need immediate cancellation." }, 409);
+
     const members = await db
       .select({
         userId: householdMembers.userId,
         role: householdMembers.role,
       })
       .from(householdMembers)
-      .where(eq(householdMembers.householdId, auth.householdId));
+      .where(and(eq(householdMembers.householdId, auth.householdId), isNull(householdMembers.accessRevokedAt)));
 
     const others = members.filter((m) => m.userId !== auth.userId);
     const owners = members.filter((m) => m.role === "owner");

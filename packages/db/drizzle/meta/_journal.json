@@ -687,6 +687,34 @@
       "when": 1791859200000,
       "tag": "0097_withings_sleep",
       "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1791945600000,
+      "tag": "0098_browser_uploads",
+      "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1792032000000,
+      "tag": "0099_hosted_billing_integrity",
+      "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1792118400000,
+      "tag": "0100_household_invitations",
+      "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1792204800000,
+      "tag": "0101_goals_recurring_isolation",
+      "breakpoints": true
     }
   ]
 }

@@ -23,9 +23,11 @@ export async function AppShell({
   let modulesEnabled: string[] | undefined;
   let telemetryOptIn = false;
   let householdTimezone: string | null = null;
+  let subscriptionReadOnly = false;
   try {
     const session = await apiFetch<{
       authenticated: boolean;
+      subscriptionReadOnly?: boolean;
       modulesEnabled?: string[];
       telemetryOptIn?: boolean;
       householdTimezone?: string;
@@ -42,6 +44,7 @@ export async function AppShell({
       modulesEnabled = session.modulesEnabled;
       telemetryOptIn = session.telemetryOptIn ?? false;
       householdTimezone = session.householdTimezone ?? null;
+      subscriptionReadOnly = session.subscriptionReadOnly ?? false;
       const u = session.user;
       user = {
         email: u.email,
@@ -72,7 +75,7 @@ export async function AppShell({
 
   return (
     <HouseholdTimeProvider timeZone={householdTimezone}>
-    <AppChrome user={user} modulesEnabled={modulesEnabled} telemetry={telemetry}>
+    <AppChrome user={user} modulesEnabled={modulesEnabled} telemetry={telemetry} subscriptionReadOnly={subscriptionReadOnly}>
       {breadcrumb && breadcrumb.length > 0 && <Breadcrumb items={breadcrumb} />}
       {title ? (
         <PageHeader

@@ -11,6 +11,19 @@ async function setLocalConfig(tx: Database, key: string, value: string): Promise
   await tx.execute(sql`select set_config(${key}, ${value}, true)`);
 }
 
+/** SET LOCAL survives a released savepoint. Restore the caller's scope on success;
+ * transaction/savepoint rollback restores it on failure, including an aborted SQL statement. */
+async function withLocalConfig<T>(db: Database, key: string, value: string, fn: (tx: Database) => Promise<T>): Promise<T> {
+  return db.transaction(async (transaction) => {
+    const tx = transaction as unknown as Database;
+    const [previous] = await tx.execute<{ value: string | null }>(sql`select current_setting(${key}, true) as value`);
+    await setLocalConfig(tx, key, value);
+    const result = await fn(tx);
+    await setLocalConfig(tx, key, previous?.value ?? "");
+    return result;
+  });
+}
+
 /**
  * Run `fn` inside a transaction with `app.current_household_id` set (RLS tenant scope).
  * Use for API handlers (via scoped db middleware) and household-scoped worker jobs.
@@ -20,10 +33,7 @@ export async function withHouseholdContext<T>(
   householdId: string,
   fn: (tx: Database) => Promise<T>,
 ): Promise<T> {
-  return db.transaction(async (tx) => {
-    await setLocalConfig(tx as unknown as Database, TENANT_HOUSEHOLD_SETTING, householdId);
-    return fn(tx as unknown as Database);
-  });
+  return withLocalConfig(db, TENANT_HOUSEHOLD_SETTING, householdId, fn);
 }
 
 /**
@@ -35,10 +45,7 @@ export async function withUserLookupContext<T>(
   userId: string,
   fn: (tx: Database) => Promise<T>,
 ): Promise<T> {
-  return db.transaction(async (tx) => {
-    await setLocalConfig(tx as unknown as Database, AUTH_USER_SETTING, userId);
-    return fn(tx as unknown as Database);
-  });
+  return withLocalConfig(db, AUTH_USER_SETTING, userId, fn);
 }
 
 /**
@@ -49,10 +56,7 @@ export async function withSystemContext<T>(
   db: Database,
   fn: (tx: Database) => Promise<T>,
 ): Promise<T> {
-  return db.transaction(async (tx) => {
-    await setLocalConfig(tx as unknown as Database, SYSTEM_ACCESS_SETTING, "true");
-    return fn(tx as unknown as Database);
-  });
+  return withLocalConfig(db, SYSTEM_ACCESS_SETTING, "true", fn);
 }
 
 /**
@@ -63,8 +67,5 @@ export async function withWorkerScanContext<T>(
   db: Database,
   fn: (tx: Database) => Promise<T>,
 ): Promise<T> {
-  return db.transaction(async (tx) => {
-    await setLocalConfig(tx as unknown as Database, WORKER_SCAN_SETTING, "true");
-    return fn(tx as unknown as Database);
-  });
+  return withLocalConfig(db, WORKER_SCAN_SETTING, "true", fn);
 }

@@ -73,24 +73,32 @@ export type PurchaseResult =
   | { status: "ok" }
   | { status: "cancelled" | "not_available" | "no_offering" | "no_package" | "error"; message?: string };
 
+async function authorizedStoreUser(action: "purchase" | "restore"): Promise<{ userId: string } | { error: string }> {
+  const response = await fetch(`/api/billing/purchase-access?action=${action}`, { credentials: "include", cache: "no-store" });
+  const body = await response.json() as { userId?: string; message?: string };
+  if (!response.ok || !body.userId) return { error: body.message ?? "Store purchases are unavailable for this account. Contact support." };
+  await syncRevenueCatUser(body.userId);
+  return _configuredUid === body.userId ? { userId: body.userId } : { error: "Sign in again before making a store purchase." };
+}
+
 /** Purchase Starter monthly/annual via current RevenueCat offering. */
 export async function purchaseStarterPackage(
   plan: "monthly" | "annual",
 ): Promise<PurchaseResult> {
   if (!ensurePurchasesSync() || !_Purchases) return { status: "not_available" };
   try {
+    const actor = await authorizedStoreUser("purchase");
+    if ("error" in actor) return { status: "error", message: actor.error };
     const offerings = await _Purchases.getOfferings();
     const packages = offerings?.current?.availablePackages ?? [];
     if (packages.length === 0) return { status: "no_offering" };
 
     const want = plan === "monthly" ? "starter_monthly" : "starter_annual";
     const alt = plan === "monthly" ? "monthly" : "annual";
-    const pkg =
-      packages.find((p) => p.identifier === want || p.identifier === alt) ??
-      packages.find((p) => p.product?.identifier?.includes(plan)) ??
-      packages[0];
-    if (!pkg) return { status: "no_package" };
+    const pkg = packages.find((p) => p.identifier === want || p.identifier === alt || p.identifier === `$rc_${alt}`);
+    if (!pkg) return { status: "no_package", message: "The selected billing interval is unavailable. No purchase was started." };
 
+    if (_configuredUid !== actor.userId) return { status: "error", message: "The signed-in account changed. Review the purchase again." };
     await _Purchases.purchasePackage({ aPackage: pkg });
     return { status: "ok" };
   } catch (err) {
@@ -103,6 +111,8 @@ export async function purchaseStarterPackage(
 export async function restorePurchases(): Promise<PurchaseResult> {
   if (!ensurePurchasesSync() || !_Purchases) return { status: "not_available" };
   try {
+    const actor = await authorizedStoreUser("restore");
+    if ("error" in actor) return { status: "error", message: actor.error };
     await _Purchases.restorePurchases();
     return { status: "ok" };
   } catch (err) {

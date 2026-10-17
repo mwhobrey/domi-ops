@@ -24,7 +24,7 @@ export const telemetryEvents = pgTable("telemetry_events", {
    * from any user/household identifier — purely a de-dup/session-correlation handle. */
   anonId: uuid("anon_id").notNull(),
   kind: telemetryEventKindEnum("kind").notNull(),
-  /** Web vital name (LCP/CLS/INP/...), error message (truncated), or usage event name
+  /** Web vital name (LCP/CLS/INP/...), fixed error category, or usage event name
    * (fixed taxonomy, e.g. "chore.completed") — never free text, never record content. */
   name: varchar("name", { length: 256 }).notNull(),
   value: integer("value"),

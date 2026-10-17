@@ -1,7 +1,7 @@
 import type { Env } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
-import { users } from "@domi-ops/db";
-import { eq } from "drizzle-orm";
+import { householdMembers, users } from "@domi-ops/db";
+import { and, eq, isNotNull } from "drizzle-orm";
 import { bootstrapHouseholdOnLogin, resolveAuthContext } from "./bootstrap.js";
 import { getImportedHouseholdId, hasImportRecords } from "./import-records.js";
 import { joinImportedHousehold } from "./join-imported.js";
@@ -32,6 +32,10 @@ export async function ensureHouseholdMembership(
 ): Promise<void> {
   const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   if (!user) return;
+  // A normal login must never undo a household owner's access revocation.
+  const [revoked] = await db.select({ id: householdMembers.id }).from(householdMembers)
+    .where(and(eq(householdMembers.userId, userId), isNotNull(householdMembers.accessRevokedAt))).limit(1);
+  if (revoked) return;
 
   if (await hasImportRecords(db)) {
     const importedHouseholdId = await getImportedHouseholdId(db);

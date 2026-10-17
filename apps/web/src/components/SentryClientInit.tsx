@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { DIAGNOSTIC_DATA_COLLECTION, scrubDiagnosticEvent } from "@domi-ops/config/diagnostics";
 
 // The SDK is imported on demand: every page ships this component, and the SDK is tens of KB
 // gzipped that nothing needs until a DSN resolves (and never, on installs without one).
@@ -36,6 +37,13 @@ function loadBrowserSentry(hint?: string | null): Promise<SentryModule | null> {
         dsn: resolved,
         environment: process.env.NODE_ENV,
         integrations: [Sentry.captureConsoleIntegration({ levels: ["error"] })],
+        sendDefaultPii: false, maxBreadcrumbs: 0, tracesSampleRate: 0, attachStacktrace: true,
+        dataCollection: DIAGNOSTIC_DATA_COLLECTION, enableLogs: false,
+        ignoreSpans: [/.*/],
+        tracePropagationTargets: [],
+        beforeSendLog: () => null, beforeSendMetric: () => null,
+        beforeSendTransaction: () => null,
+        beforeSend: (event, hint) => { hint.attachments = []; return scrubDiagnosticEvent(event); },
       });
     }
     return Sentry;

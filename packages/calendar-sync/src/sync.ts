@@ -1,4 +1,5 @@
 import type { Env } from "@domi-ops/config";
+import { householdSubscriptionAllowsWork } from "./subscription-work.js";
 import type { Database } from "@domi-ops/db";
 import {
   calendarConnections,
@@ -337,6 +338,8 @@ export async function runCalendarSyncJob(
   name: string,
   payload: SyncJobPayload,
 ): Promise<void> {
+  if (payload.householdId && payload.householdId !== "scan" &&
+      !await householdSubscriptionAllowsWork(db, env, payload.householdId)) return;
   switch (name) {
     case "google.calendar.pull":
     case "google.calendar.full_import": {

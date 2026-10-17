@@ -3,8 +3,8 @@
 export const DEMO_TIMEZONE = "America/Chicago";
 
 export function chicagoYmd(offsetDays = 0): string {
-  const base = new Date(Date.now() + offsetDays * 86_400_000);
-  return base.toLocaleDateString("en-CA", { timeZone: DEMO_TIMEZONE });
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: DEMO_TIMEZONE });
+  return addDaysYmd(today, offsetDays);
 }
 
 export function parseYmd(ymd: string): { y: number; m: number; d: number } {
@@ -59,7 +59,5 @@ export function chicagoInstant(ymd: string, hhmm: string): Date {
 
 /** ISO timestamp for assignment due end-of-day Chicago (stored UTC). */
 export function dueAtEndOfDayYmd(ymd: string): Date {
-  const { y, m, d } = parseYmd(ymd);
-  // 23:59 America/Chicago ≈ offset from UTC varies; use noon UTC on that calendar day + fudge for demo
-  return new Date(Date.UTC(y, m - 1, d, 23, 59, 0));
+  return chicagoInstant(ymd, "23:59");
 }

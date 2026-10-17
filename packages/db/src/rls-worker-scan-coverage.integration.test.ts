@@ -22,6 +22,14 @@ const maybeDescribe = TEST_URL ? describe : describe.skip;
  *   who may see someone's health data. Keep it that way: do not give the worker a policy here.
  */
 const NOT_READ_BY_WORKER_SCANS = new Set([
+  // Goals and recurring bills are read/materialized by tenant requests only.
+  "goals", "goal_rewards", "goal_milestones", "goal_progress_events", "goal_reward_redemptions", "expense_recurring",
+  // Upload provenance is used only by tenant requests and explicit tenant-scoped maintenance.
+  "browser_uploads",
+  // Checkout intents are system-scoped only; no cross-tenant reminder reads payment requests.
+  "billing_checkout_intents",
+  // Invitation lookup/acceptance is explicit system work; ordinary management is tenant-scoped.
+  "household_invitations",
   "health_member_acl",
   // WHO-434: pharmacies, supply history, refill events, organizers and their reminders are read by the API and by the
   // per-household reminder job, both under withHouseholdContext. The scheduler's tick only needs to know which households

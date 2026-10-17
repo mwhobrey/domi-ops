@@ -7,7 +7,10 @@
 import type { Env } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
 import { driveObjects, householdMembers, schoolAssignmentMaterials, schoolAssignments, schoolClasses, schoolEnrollments } from "@domi-ops/db";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
+import type { AuthContext } from "@domi-ops/auth";
+import { driveVisibleWhere } from "./drive.js";
+import { downloadPublicHttpsFile } from "./safe-public-download.js";
 import {
   resolveClassAccess,
   resolveSchoolContext,
@@ -32,7 +35,7 @@ export async function memberForUser(
   const [hm] = await db
     .select({ id: householdMembers.id, role: householdMembers.role })
     .from(householdMembers)
-    .where(and(eq(householdMembers.householdId, householdId), eq(householdMembers.userId, userId)))
+    .where(and(eq(householdMembers.householdId, householdId), eq(householdMembers.userId, userId), isNull(householdMembers.accessRevokedAt)))
     .limit(1);
   return hm ?? null;
 }
@@ -181,38 +184,49 @@ export async function loadAssignmentMaterials(
     .where(eq(schoolAssignmentMaterials.assignmentId, assignmentId))
     .orderBy(asc(schoolAssignmentMaterials.sortOrder), asc(schoolAssignmentMaterials.createdAt));
 
-  return rows
+  return Promise.all(rows
     .filter((row) => materialVisibleToViewer(row.material, access.viewMode))
-    .map((row) =>
-      serializeMaterial(row.material, {
+    .map(async (row) => {
+      const authorized = row.driveObject ? await authorizedMaterialDriveObject(db, row.driveObject.householdId, row.material) : null;
+      return serializeMaterial({ ...row.material, externalUrl: row.driveObject && !authorized ? null : row.material.externalUrl }, {
         viewMode: access.viewMode,
-        driveObject: row.driveObject
+        driveObject: authorized
           ? {
-              id: row.driveObject.id,
-              title: row.driveObject.title,
-              kind: row.driveObject.kind,
-              url: row.driveObject.url,
+              id: authorized.id,
+              title: authorized.title,
+              kind: authorized.kind,
+              url: authorized.url,
             }
           : null,
-      }),
-    );
+      });
+    }));
 }
 
 export async function resolveDriveSource(
   db: Database,
-  householdId: string,
+  auth: Pick<AuthContext, "householdId" | "userId" | "memberId">,
   driveObjectId: string,
 ): Promise<{ source: SchoolMaterialSource; externalUrl: string | null } | null> {
   const [obj] = await db
     .select()
     .from(driveObjects)
-    .where(and(eq(driveObjects.id, driveObjectId), eq(driveObjects.householdId, householdId)))
+    .where(and(eq(driveObjects.id, driveObjectId), driveVisibleWhere(db, auth)))
     .limit(1);
   if (!obj) return null;
   if (obj.kind === "link") {
     return { source: "domi_drive_link", externalUrl: obj.url };
   }
   return { source: "domi_drive_file", externalUrl: null };
+}
+
+/** Attaching a readable Drive object is explicit sharing into a class material.
+ * Recheck the attaching member's access for legacy/forged rows and revoked access. */
+export async function authorizedMaterialDriveObject(db: Database, householdId: string, material: { driveObjectId: string | null; createdByUserId: string | null }) {
+  if (!material.driveObjectId || !material.createdByUserId) return null;
+  const member = await memberForUser(db, householdId, material.createdByUserId);
+  if (!member) return null;
+  const [object] = await db.select().from(driveObjects).where(and(eq(driveObjects.id, material.driveObjectId), driveVisibleWhere(db, { householdId, userId: material.createdByUserId, memberId: member.id }))).limit(1);
+  return object ?? null;
 }
 
 export async function staffNativeTestMaterial(
@@ -311,16 +325,7 @@ export async function loadConvertibleSourceMaterial(
     (material.source === "domi_drive_file" || material.source === "domi_drive_link") &&
     material.driveObjectId
   ) {
-    const [obj] = await db
-      .select()
-      .from(driveObjects)
-      .where(
-        and(
-          eq(driveObjects.id, material.driveObjectId),
-          eq(driveObjects.householdId, params.householdId),
-        ),
-      )
-      .limit(1);
+    const obj = await authorizedMaterialDriveObject(db, params.householdId, material);
     if (!obj) return { error: "not_found", message: "Drive object not found" };
 
     if (obj.s3Key) {
@@ -346,11 +351,11 @@ export async function loadConvertibleSourceMaterial(
     }
     if (obj.url) {
       try {
-        const res = await fetch(obj.url);
-        if (!res.ok) {
-          return { error: "export_failed", message: `Could not fetch Drive link (${res.status})` };
+        const res = await downloadPublicHttpsFile(obj.url, env.DRIVE_UPLOAD_MAX_BYTES);
+        if (!res) {
+          return { error: "export_failed", message: "The link must be a reachable public HTTPS document within the upload limit." };
         }
-        const contentType = res.headers.get("content-type")?.split(";")[0]?.trim() ?? "";
+        const contentType = res.contentType;
         if (!contentType.startsWith("text/")) {
           return {
             error: "unsupported_source",
@@ -358,7 +363,7 @@ export async function loadConvertibleSourceMaterial(
               "The link must return a text Content-Type. PDF/image OCR is not supported yet.",
           };
         }
-        const text = await res.text();
+        const text = res.body.toString("utf-8");
         if (!text.trim()) {
           return { error: "empty_document", message: "Drive link has no text content." };
         }

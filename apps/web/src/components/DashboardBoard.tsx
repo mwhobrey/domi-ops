@@ -177,7 +177,7 @@ export function DashboardBoard({
     <div>
       {role ? (
         <div className="mb-6 empty:hidden">
-          <OnboardingChecklist role={role} initialState={onboarding} />
+          <OnboardingChecklist role={role} initialState={onboarding} schoolEnabled={schoolModuleEnabled} healthEnabled={healthModuleEnabled} />
         </div>
       ) : null}
       <PageHeader

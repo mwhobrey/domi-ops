@@ -4,6 +4,34 @@
 
 ## What is working (implemented paths)
 
+### Hosted audit remediation (unreleased)
+
+- Coverage and remaining acceptance gates: `docs/HOSTED_AUDIT_REMEDIATION.md`.
+- This is local, unreleased work on `fix/hosted-audit-remediation`; deployment and
+  provider acceptance remain separate. Follow `docs/HOSTED_LAUNCH_ACCEPTANCE.md`.
+- Migrations 0099-0101 add billing lifecycle/intents, adult invitations with retained
+  revoked-member history, and missing Goals/recurring-bill tenant policies.
+- Hosted writes/background work and recurring materialization stop after expiry;
+  reads and permission-limited reports remain. Owners manage Stripe billing and
+  can restart canceled subscriptions on the existing customer without a new trial.
+- Course reuse creates undated drafts with categories/tests and no student history;
+  bulk due-date changes require preview and reject submitted work or stale previews.
+- Full-household private archives use a separate transfer key and tested empty-target
+  restore. This is operator-assisted, not a private-data override for owners.
+- New identity access/refresh tokens are encrypted; ID tokens are discarded. Legacy
+  identity tokens and production Google approval still need operator acceptance.
+- Cloud-first marketing, useful School/Health onboarding and guided demo entry are
+  implemented. Product metrics and Sentry payloads are scrubbed; aggregate activation
+  reports are opted-in, suppress small cohorts and do not establish paid retention.
+- Migration 0098 adds tenant-isolated browser upload provenance. Browser PUT requires
+  the issuing member's session, stores private objects, enforces bounded bodies and
+  actual-byte quota under a household lock, and allows one attachment claim.
+- School file references require issued School uploads; downloads reject Drive and
+  foreign School namespaces. File responses sandbox untrusted content and force
+  active formats to download. Existing objects require a legacy ACL review.
+- Operator dry-run/apply tools and reconciliation limits:
+  `docs/UPLOAD_STORAGE_MAINTENANCE.md`. No production maintenance is implied.
+
 ### Health reports and loading (0.10.1)
 
 - `ReportsHubClient` parses report kinds from `REPORT_KIND_LABELS` and maps Health panes through `HEALTH_REPORT_FOCUS_OPTIONS`; the API catalog and UI are checked together by `reports.test.ts`. Keep new kinds in both catalogs.

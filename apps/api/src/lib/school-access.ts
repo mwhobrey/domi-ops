@@ -1,3 +1,5 @@
+import { currentHouseholdDate } from "./household-date-context.js";
+
 export const HOUSEHOLD_ADMIN_ROLES = ["owner", "admin"] as const;
 export const STAFF_ENROLLMENT_ROLES = ["teacher", "parent", "aide"] as const;
 
@@ -43,25 +45,19 @@ export function isStaffEnrollmentRole(role: string): boolean {
 export function isEnrollmentActiveNow(
   activeFrom: string | Date | null,
   activeTo: string | Date | null,
+  today = currentHouseholdDate(),
 ): boolean {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  if (activeFrom) {
-    const from = new Date(
-      typeof activeFrom === "string" && !activeFrom.includes("T")
-        ? `${activeFrom}T12:00:00`
-        : activeFrom,
-    );
-    if (from > today) return false;
-  }
-  if (activeTo) {
-    const to = new Date(
-      typeof activeTo === "string" && !activeTo.includes("T")
-        ? `${activeTo}T12:00:00`
-        : activeTo,
-    );
-    if (to < today) return false;
-  }
+  const day = (value: string | Date) => {
+    const result = value instanceof Date ? (Number.isFinite(value.getTime()) ? value.toISOString().slice(0, 10) : "") : value.slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(result)) return null;
+    const parsed = new Date(`${result}T00:00:00Z`);
+    return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === result ? result : null;
+  };
+  const from = activeFrom ? day(activeFrom) : null;
+  const to = activeTo ? day(activeTo) : null;
+  if (!day(today) || (activeFrom && !from) || (activeTo && !to)) return false;
+  if (from && from > today) return false;
+  if (to && to < today) return false;
   return true;
 }
 

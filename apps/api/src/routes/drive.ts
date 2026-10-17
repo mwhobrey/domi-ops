@@ -46,7 +46,8 @@ import {
   getObjectBuffer,
   contentTypeFromKey,
 } from "../lib/s3.js";
-import { browserUploadPutUrl } from "../lib/upload-token.js";
+import { claimBrowserUpload, issueBrowserUpload, releaseBrowserUpload } from "../lib/browser-uploads.js";
+import { fileResponseHeaders } from "../lib/file-response.js";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 
@@ -289,8 +290,8 @@ export function driveRoutes(db: Database, env: Env) {
     const objectId = randomUUID();
     const key = driveObjectKey(auth.householdId, objectId, body.filename.trim());
     const contentType = body.contentType?.trim() || "application/octet-stream";
-    const uploadUrl = browserUploadPutUrl(
-      env,
+    const uploadUrl = await issueBrowserUpload(
+      db, env,
       {
         uploadId: objectId,
         key,
@@ -299,6 +300,7 @@ export function driveRoutes(db: Database, env: Env) {
         contentType,
         maxBytes: byteSize ?? env.DRIVE_UPLOAD_MAX_BYTES,
       },
+      "drive",
       PRESIGN_EXPIRY_SEC,
     );
     return c.json({ uploadUrl, key, objectId });
@@ -691,11 +693,6 @@ export function driveRoutes(db: Database, env: Env) {
       if (body.id && body.id !== keyObjectId) {
         return c.json({ error: "object_id_mismatch" }, 400);
       }
-      if (body.byteSize! > env.DRIVE_UPLOAD_MAX_BYTES) {
-        return c.json({ error: "file_too_large" }, 400);
-      }
-      const quota = await checkDriveUploadQuota(db, env, auth.householdId, body.byteSize!);
-      if (quota === "quota_exceeded") return c.json({ error: "quota_exceeded" }, 400);
     }
 
     const visibility = normalizeDriveVisibility(body.visibility);
@@ -705,6 +702,11 @@ export function driveRoutes(db: Database, env: Env) {
         : kind === "file" && body.s3Key
           ? objectIdFromDriveKey(auth.householdId, body.s3Key.trim())!
           : randomUUID();
+
+    const upload = kind === "file"
+      ? await claimBrowserUpload(db, auth, body.s3Key!.trim(), "drive", objectId)
+      : null;
+    if (kind === "file" && !upload) return c.json({ error: "invalid_upload" }, 400);
 
     const [row] = await db
       .insert(driveObjects)
@@ -717,8 +719,8 @@ export function driveRoutes(db: Database, env: Env) {
         description: body.description?.trim() || null,
         url: kind === "link" ? body.url!.trim() : null,
         s3Key: kind === "file" ? body.s3Key!.trim() : null,
-        contentType: kind === "file" ? body.contentType!.trim() : null,
-        byteSize: kind === "file" ? Math.floor(body.byteSize!) : null,
+        contentType: upload?.contentType ?? null,
+        byteSize: upload?.byteSize ?? null,
         pinned: Boolean(body.pinned),
         tagsJson: serializeDriveTagsJson(body.tags ?? []),
         visibility,
@@ -726,10 +728,6 @@ export function driveRoutes(db: Database, env: Env) {
         createdByDisplayName: posterLabel(auth),
       })
       .returning();
-
-    if (kind === "file" && row.byteSize) {
-      await adjustHouseholdStorage(db, auth.householdId, row.byteSize);
-    }
 
     let sharedMemberIds: string[] = [];
     if (visibility === "private" && Array.isArray(body.sharedMemberIds)) {
@@ -864,9 +862,9 @@ export function driveRoutes(db: Database, env: Env) {
     if (!row) return c.json({ error: "not_found" }, 404);
 
     if (existing.kind === "file" && existing.s3Key) {
-      await deleteObject(env, existing.s3Key);
-      if (existing.byteSize) {
-        await adjustHouseholdStorage(db, auth.householdId, -existing.byteSize);
+      if (!await releaseBrowserUpload(db, env, auth.householdId, existing.s3Key, existing.id)) {
+        await deleteObject(env, existing.s3Key);
+        if (existing.byteSize) await adjustHouseholdStorage(db, auth.householdId, -existing.byteSize);
       }
     }
 
@@ -908,11 +906,7 @@ export function driveRoutes(db: Database, env: Env) {
     const contentType = row.contentType?.trim() || contentTypeFromKey(row.s3Key);
     const filename = filenameFromDriveKey(row.s3Key);
     return new Response(buf, {
-      headers: {
-        "Content-Type": contentType,
-        "Content-Disposition": `inline; filename="${filename.replace(/"/g, "")}"`,
-        "Cache-Control": "private, max-age=3600",
-      },
+      headers: fileResponseHeaders(contentType, filename),
     });
   });
 

@@ -318,3 +318,4 @@ export async function runSyncJob(
   }
   await handler(payload);
 }
+export { householdSubscriptionAllowsWork } from "./subscription-work.js";

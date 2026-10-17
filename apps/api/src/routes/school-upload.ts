@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import type { Env } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
-import { createS3Client, ensureS3ReadyOnce, publicObjectUrl } from "../lib/s3.js";
-import { browserUploadPutUrl } from "../lib/upload-token.js";
+import { createS3Client, ensureS3ReadyOnce } from "../lib/s3.js";
+import { issueBrowserUpload } from "../lib/browser-uploads.js";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireHouseholdModule } from "../lib/household-modules.js";
@@ -31,26 +31,25 @@ export function schoolUploadRoutes(db: Database, env: Env) {
       return c.json({ error: "s3_not_configured" }, 503);
     }
     const safe = body.filename.replace(/[^\w.\-]+/g, "_").slice(0, 200);
-    const key = `school/${auth.householdId}/${Date.now()}-${safe}`;
+    const uploadId = randomUUID();
+    const key = `school/${auth.householdId}/${uploadId}-${safe}`;
     const contentType = body.contentType?.trim() || "application/octet-stream";
 
-    const uploadId = randomUUID();
-    const uploadUrl = browserUploadPutUrl(
-      env,
+    const uploadUrl = await issueBrowserUpload(
+      db, env,
       {
         uploadId,
         key,
         householdId: auth.householdId,
         memberId: auth.memberId,
         contentType,
-        maxBytes: null,
-        public: true,
+        maxBytes: env.DRIVE_UPLOAD_MAX_BYTES,
       },
+      "school",
       PRESIGN_EXPIRY_SEC,
     );
-    const publicUrl = publicObjectUrl(env, key);
 
-    return c.json({ uploadUrl, key, publicUrl });
+    return c.json({ uploadUrl, key });
   });
 
   return app;

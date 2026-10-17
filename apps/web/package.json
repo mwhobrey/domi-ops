@@ -14,6 +14,7 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@domi-ops/marketing-ui": "*",
+    "@domi-ops/config": "*",
     "@sentry/nextjs": "^10.75.0",
     "@tiptap/extension-link": "^3.31.4",
     "@tiptap/markdown": "^3.31.4",

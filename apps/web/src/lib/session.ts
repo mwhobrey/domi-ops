@@ -1,6 +1,7 @@
 /** Shape returned by GET `/auth/session` (web BFF). */
 export type AuthSessionResponse = {
   authenticated?: boolean;
+  subscriptionReadOnly?: boolean;
   modulesEnabled?: string[];
   telemetryOptIn?: boolean;
   /** Readable by every member, unlike `GET /api/core/household/settings` (admin-only). */

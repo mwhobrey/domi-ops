@@ -11,7 +11,7 @@ export const FAQ_ITEMS: FaqItem[] = [
   },
   {
     q: "Do you sell or share my data?",
-    a: "No. Self-hosted, your household records stay on your server, and we don't have access to it. A feature that calls an outside service, like weather or Google sync, only does so once you set it up. On Cloud, it stays in your household's isolated data, and it's never sold to anyone, for any reason.",
+    a: "We do not sell household data. Cloud uses service providers for hosting, storage, transactional email, payments and configured error diagnostics. Optional connections such as Google and Withings exchange the data needed for the feature you enable. Self-host operators choose and configure their own services. See the privacy policy for processors, access and retention details.",
   },
   {
     q: "Is the health module HIPAA-compliant?",
@@ -27,7 +27,7 @@ export const FAQ_ITEMS: FaqItem[] = [
   },
   {
     q: "Does it work with a Withings blood pressure cuff?",
-    a: "Yes, on Domi Ops Cloud. Connect a person's Withings account from Health, then Checks, and choose how far back to import, from the last 30 days up to everything Withings has. After that their readings arrive on their own: systolic, diastolic, and pulse, usually within seconds of the cuff syncing. A reading close to a scheduled check fills it in, so nobody types numbers or gets reminded about a reading already taken. It only goes one way: Domi Ops reads blood pressure and pulse, and nothing is sent back to Withings. Readings Withings can't pin on one person, like a cuff the whole household shares, are left out until you assign them in the Withings app. Unlinking stops new readings and keeps what's already imported; a reading you edit or delete inside the Withings app isn't changed here. One catch from Withings: for a Withings account created after October 12, 2026, Withings requires a Withings+ membership to share data with apps on its Start for Free API plan (an app on an Enterprise plan can be exempt for specific uses). Accounts created earlier aren't affected, and Domi Ops doesn't sell or pay for Withings+. Self-hosting works too, but you register your own Withings developer app and add its keys. Domi Ops is a household tool, not a medical device.",
+    a: "Yes. Connect a person's Withings account from Health and choose the history period to import. Supported data includes blood pressure and pulse, blood oxygen, body temperature, workouts, daily steps/distance/active minutes/calories, and sleep timing, stages, awakenings and score when your devices provide them. Suitable readings can fill scheduled health checks. Domi Ops reads records and registers update notifications; it does not edit your Withings health records. Activity and sleep summaries can update as the source changes. Disconnecting stops future imports and keeps existing Domi Ops records until you delete them. Some Withings accounts need Withings+ for API sharing under Withings' current plan rules; that membership is separate from Domi Ops. Self-host operators register their own Withings developer app. This is a household tool, not a medical device.",
   },
   {
     q: "Can it help me fill a pill organizer and remember refills?",
@@ -43,7 +43,7 @@ export const FAQ_ITEMS: FaqItem[] = [
   },
   {
     q: "Can I use it without the homeschool stuff?",
-    a: "Yes. School is one module among several, off by default until you turn it on. Calendar and chores work fine as a standalone family organizer.",
+    a: "Yes. School is included and enabled when a hosted household is created, but an owner or admin can turn it off in Settings. Calendar, chores and the other enabled modules remain available. Self-host defaults depend on the operator's configuration.",
   },
   {
     q: "Can my kids have their own logins?",
@@ -63,11 +63,11 @@ export const FAQ_ITEMS: FaqItem[] = [
   },
   {
     q: "What happens to my data if I cancel Cloud?",
-    a: "Email us and we delete or anonymize it within a reasonable time, unless we're legally required to hold onto something. There's no lock-in trick where canceling strands your calendar.",
+    a: "Cancel renewal in household Settings; store subscriptions are managed through the store. Scheduled cancellation keeps paid access through the current period. When the subscription ends, you can still read and export records your permissions allow, while changes and background jobs pause. Cancellation does not itself delete household data. See the privacy policy or contact privacy@domi-ops.com to request household deletion.",
   },
   {
     q: "Does it work on my phone?",
-    a: "It's a PWA: install it from the browser on iOS or Android and it behaves like a native app, including push notifications for reminders.",
+    a: "Yes, install Domi Ops from your browser as a web app. On iPhone and iPad, add it to your Home Screen and open that installed app before enabling notifications. Push needs your permission and a supported browser/device; delivery also depends on device and network settings. See Profile to enable notifications on each device.",
   },
   {
     q: "Can I try it before setting anything up?",
