@@ -65,8 +65,11 @@ application role. Run per household, review the receipt, then add `--apply`:
 mise exec -- npx tsx scripts/maintain-upload-storage.mts abandoned
 ```
 
-Consumed uploads are excluded. Never remove referenced objects from this list by
-guessing filenames. For household deletion or a failed database commit after an S3
+Consumed uploads still referenced by their owning record are excluded. Consumed
+uploads whose owning reference is gone can be listed as orphans. Missing storage
+credentials or failed deletion must retain provenance and charged bytes. Never
+remove referenced objects from this list by guessing filenames. For household
+deletion or a failed database commit after an S3
 write, separately reconcile the household's object prefixes with database references;
 S3 and Postgres do not share a transaction. Retain backups and an inventory before
 any deletion. This document and the script do not constitute production execution.

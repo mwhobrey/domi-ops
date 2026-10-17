@@ -112,3 +112,10 @@ The upload cleanup integration case exceeded the default five-second unit-test
 budget on the runner; against the same seeded schema locally its assertions pass
 and the case takes about 2.5 seconds. Only that multi-step database/S3 case receives
 a 15-second test budget; production limits and assertions are unchanged.
+
+Review of the deletion failure path found that the S3 helper silently returned
+when credentials were missing. It now throws instead, so cleanup and file release
+cannot erase provenance or release quota without a confirmed object deletion.
+The cleanup regression checks that missing credentials retain charged bytes and
+the same dry-run inventory. Storage guidance now distinguishes referenced consumed
+uploads from consumed orphans.

@@ -25,6 +25,8 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
   enrollment includes its first/last household calendar date.
 - Generated files use atomic storage accounting; external snapshot/conversion
   downloads reject private networks and enforce redirect, time and byte limits.
+- Missing object-storage credentials cannot silently release file quota or erase
+  upload provenance during deletion and cleanup.
 - Optional product metrics omit raw errors and record paths, clear queued data and
   rotate browser identity on opt-out, and keep feedback identity separate. Sentry
   transport omits private payloads and attachments. New identity access/refresh

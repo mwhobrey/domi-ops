@@ -206,6 +206,10 @@ maybeDescribe("hosted upload authorization and accounting", () => {
     });
     const dry = await run(() => cleanupAbandonedUploads(scoped, env, people.alpha.householdId, new Date(), false));
     expect(dry.some((u) => u.byteSize === 3)).toBe(true);
+    await expect(run(() => cleanupAbandonedUploads(scoped, { ...env, S3_ACCESS_KEY: undefined }, people.alpha.householdId, new Date(), true))).rejects.toThrow("s3_not_configured");
+    const unchanged = await run(() => scoped.select().from(households).where(eq(households.id, people.alpha.householdId)));
+    expect(unchanged[0].storageUsedBytes).toBe(before);
+    expect(await run(() => cleanupAbandonedUploads(scoped, env, people.alpha.householdId, new Date(), false))).toEqual(dry);
     const applied = await run(() => cleanupAbandonedUploads(scoped, env, people.alpha.householdId, new Date(), true));
     expect(applied).toEqual(dry);
     const after = await run(async () => ({

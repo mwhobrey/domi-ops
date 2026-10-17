@@ -132,13 +132,12 @@ export async function putObject(
 
 export async function deleteObject(env: Env, key: string): Promise<void> {
   const client = createS3Client(env);
-  if (!client || !env.S3_BUCKET) return;
-  await client.send(
-    new DeleteObjectCommand({
-      Bucket: env.S3_BUCKET,
-      Key: key,
-    }),
-  );
+  if (!client || !env.S3_BUCKET) throw new Error("s3_not_configured");
+  try {
+    await client.send(new DeleteObjectCommand({ Bucket: env.S3_BUCKET, Key: key }));
+  } finally {
+    client.destroy();
+  }
 }
 
 export async function getObjectBuffer(env: Env, key: string): Promise<Buffer | null> {
