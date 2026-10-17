@@ -215,7 +215,7 @@ maybeDescribe("hosted upload authorization and accounting", () => {
     expect(after.uploads.every((u) => u.state === "consumed")).toBe(true);
     expect(after.household.storageUsedBytes).toBe(before - 3);
     expect(await run(() => cleanupAbandonedUploads(scoped, env, people.alpha.householdId, new Date(), true))).toEqual([]);
-  });
+  }, 15000);
 
   it("counts generated snapshots once on retries and serializes concurrent generated reports", async () => {
     const run = <T>(fn: (tx: Database) => Promise<T>) => withHouseholdContext(db, people.beta.householdId, fn);

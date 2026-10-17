@@ -12,6 +12,7 @@ COPY package.json package-lock.json turbo.json ./
 COPY apps ./apps
 COPY packages ./packages
 RUN npm ci
+RUN npm run build -w @domi-ops/config
 RUN npm run build -w @domi-ops/web
 
 FROM node:24-alpine

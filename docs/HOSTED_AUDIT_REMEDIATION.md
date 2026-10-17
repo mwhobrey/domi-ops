@@ -104,3 +104,11 @@ These corrections are included in draft PR #283. CI and the local test receipts
 remain distinct from deployed acceptance. Google approval, live provider setup,
 legacy maintenance, retention, devices and customer evidence are still required
 as listed in the launch checklist.
+
+The first CI run also exposed a fresh-image dependency gap: the web Dockerfile
+must compile `@domi-ops/config` before Next builds the shared diagnostics import.
+It now does so explicitly. The archive restore rehearsal ran and passed in CI.
+The upload cleanup integration case exceeded the default five-second unit-test
+budget on the runner; against the same seeded schema locally its assertions pass
+and the case takes about 2.5 seconds. Only that multi-step database/S3 case receives
+a 15-second test budget; production limits and assertions are unchanged.
