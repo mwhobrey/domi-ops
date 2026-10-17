@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { and, eq, inArray, like } from "drizzle-orm";
-import { closeDb, createDb, withHouseholdContext, withWorkerScanContext } from "./index.js";
+import { and, eq, inArray } from "drizzle-orm";
+import { closeDb, createDb, withHouseholdContext, withSystemContext, withWorkerScanContext } from "./index.js";
 import {
   healthMedicationDoseQuantities,
   healthMedicationSupplyRevisions,
@@ -28,7 +28,7 @@ const FOREIGN_KEY_VIOLATION = "23503";
 const UNIQUE_VIOLATION = "23505";
 const CHECK_VIOLATION = "23514";
 
-/** Plans carry no name, so this anchor date marks the ones these tests made (and clears leftovers). */
+/** Calendar fixture only; an anchor date must never determine ownership for cleanup. */
 const SENTINEL_ANCHOR = "2001-01-01";
 
 /** SQLSTATE of the Postgres error behind a rejected write, or null when the write succeeded. */
@@ -46,6 +46,8 @@ async function sqlState(write: Promise<unknown>): Promise<string | null> {
 maybeDescribe("health organizer tenant isolation (integration)", () => {
   const marker = `org-iso-${Date.now()}`;
   let db: Database;
+  const ownedHouseholdIds: string[] = [];
+  const ownedUserIds: string[] = [];
 
   type Tenant = {
     householdId: string;
@@ -72,10 +74,14 @@ maybeDescribe("health organizer tenant isolation (integration)", () => {
   });
 
   async function seedTenant(slug: string, label: string): Promise<Tenant> {
-    const [household] = await withWorkerScanContext(db, (tx) =>
-      tx.select({ id: households.id }).from(households).where(eq(households.slug, slug)).limit(1),
-    );
-    if (!household) throw new Error("Run npm run db:seed-hosted-qa before tenant isolation tests");
+    const household = await withSystemContext(db, async (tx) => {
+      const [h] = await tx.insert(households).values({ name: `${marker}-${label}`, slug: `${marker}-${slug}` }).returning();
+      ownedHouseholdIds.push(h.id);
+      const [u] = await tx.insert(users).values({ username: `${marker}-${label}` }).returning();
+      ownedUserIds.push(u.id);
+      await tx.insert(householdMembers).values({ householdId: h.id, userId: u.id, role: "owner" });
+      return h;
+    });
 
     return withHouseholdContext(db, household.id, async (tx) => {
       const [member] = await tx
@@ -130,6 +136,7 @@ maybeDescribe("health organizer tenant isolation (integration)", () => {
   async function seedSecondMember(householdId: string) {
     return withHouseholdContext(db, householdId, async (tx) => {
       const [user] = await tx.insert(users).values({ username: `${marker}-second` }).returning({ id: users.id });
+      ownedUserIds.push(user.id);
       const [member] = await tx.insert(householdMembers).values({ householdId, userId: user!.id }).returning({ id: householdMembers.id });
       const [p] = await tx.insert(healthOrganizerPlans).values(plan(householdId, member!.id)).returning({ id: healthOrganizerPlans.id });
       const [c] = await tx
@@ -141,17 +148,16 @@ maybeDescribe("health organizer tenant isolation (integration)", () => {
   }
 
   async function clearLeftovers() {
-    await withWorkerScanContext(db, async (tx) => {
-      // Children cascade from the plan and the medication.
-      await tx.delete(healthOrganizerPlans).where(eq(healthOrganizerPlans.anchorDate, SENTINEL_ANCHOR));
-      await tx.delete(healthMedications).where(like(healthMedications.name, "org-iso-%"));
+    await withSystemContext(db, async (tx) => {
+      // Exact IDs from this run only. Other suites use the same calendar fixtures.
+      if (ownedHouseholdIds.length) await tx.delete(households).where(inArray(households.id, ownedHouseholdIds));
+      if (ownedUserIds.length) await tx.delete(users).where(inArray(users.id, ownedUserIds));
     });
   }
 
   beforeAll(async () => {
     if (!TEST_URL) return;
     db = createDb(TEST_URL);
-    await clearLeftovers();
     alpha = await seedTenant("alpha-hosted", "alpha");
     beta = await seedTenant("beta-hosted", "beta");
     alphaSecond = await seedSecondMember(alpha.householdId);
@@ -160,12 +166,6 @@ maybeDescribe("health organizer tenant isolation (integration)", () => {
   afterAll(async () => {
     if (!db) return;
     await clearLeftovers();
-    await withWorkerScanContext(db, async (tx) => {
-      if (alphaSecond) {
-        await tx.delete(householdMembers).where(eq(householdMembers.id, alphaSecond.memberId));
-        await tx.delete(users).where(eq(users.id, alphaSecond.userId));
-      }
-    });
     await closeDb(db);
   });
 

@@ -15,6 +15,7 @@ export function onboardingRoutes(db: Database, env: Env) {
   app.use("*", requireAuth(env));
 
   app.get("/", async (c) => {
+    if (env.DEMO_MODE) return c.json({ stepsDone: [], dismissed: true });
     const auth = c.get("auth")!;
     const [row] = await db
       .select({

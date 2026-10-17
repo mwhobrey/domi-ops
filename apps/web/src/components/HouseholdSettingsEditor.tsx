@@ -257,7 +257,7 @@ export function HouseholdSettingsEditor({ initial }: { initial: HouseholdSetting
           <div className="space-y-1">
             <p className="text-sm font-medium">Privacy</p>
             <p className="text-xs text-[var(--color-text-muted)]">
-              Off by default — no data leaves this household unless you turn this on.
+              Optional usage metrics are off by default. Connected services and configured error diagnostics have separate controls.
             </p>
           </div>
           <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] p-3">
@@ -267,9 +267,10 @@ export function HouseholdSettingsEditor({ initial }: { initial: HouseholdSetting
                 <span>
                   <span className="font-medium">Help improve Domi Ops</span>
                   <span className="mt-0.5 block text-xs text-[var(--color-text-muted)]">
-                    Sends anonymized technical and usage metrics (page load speed, errors,
-                    which features get used) — never note/health/expense content, never linked
-                    back to your household or account, never sold. Read more in the{" "}
+                    Sends page load measurements, fixed error categories and module usage with
+                    a random browser id, without record content or account identifiers. Operators
+                    can also count activation for opted-in households in monthly groups of five
+                    or more. Never sold. Read more in the{" "}
                     <a href="/privacy" className="underline">
                       Privacy Policy
                     </a>
@@ -281,6 +282,15 @@ export function HouseholdSettingsEditor({ initial }: { initial: HouseholdSetting
               onChange={(e) => setTelemetryOptIn(e.target.checked)}
             />
           </div>
+          <p className="text-xs text-[var(--color-text-muted)]">When the operator configures Sentry, limited error diagnostics run independently of this toggle. Error content, account identifiers and request bodies are removed before reporting. See the <a href="/privacy" className="underline">Privacy Policy</a> for details.</p>
+          <Button variant="secondary" disabled={loading} onClick={async () => {
+            setLoading(true); setMsg(null);
+            try {
+              await apiClient.patch("/api/core/household/settings", { telemetryOptIn });
+              setMsg("Privacy preference saved"); setVariant("success");
+            } catch { setMsg("Could not save privacy preference"); setVariant("error"); }
+            finally { setLoading(false); }
+          }}>Save privacy preference</Button>
         </div>
 
         <Button

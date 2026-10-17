@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { devCanonicalHostRedirect } from "./lib/canonical-dev-host";
 
-const PUBLIC_PATHS = ["/", "/login", "/setup", "/privacy", "/terms"];
+const PUBLIC_PATHS = ["/", "/login", "/join", "/setup", "/privacy", "/terms"];
 
 const MODULE_ROUTE_PREFIXES: { prefix: string; module: string }[] = [
   { prefix: "/school", module: "school" },
@@ -84,6 +84,7 @@ export const config = {
     "/",
     "/auth/:path*",
     "/login",
+    "/join",
     "/setup",
     "/privacy",
     "/terms",

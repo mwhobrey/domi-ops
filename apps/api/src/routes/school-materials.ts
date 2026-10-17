@@ -38,8 +38,10 @@ import {
   type SchoolQuestionType,
 } from "../lib/school-test-questions.js";
 import { contentTypeFromKey, getObjectBuffer } from "../lib/s3.js";
+import { fileResponseHeaders } from "../lib/file-response.js";
 import {
   assignmentAccessForAuth,
+  authorizedMaterialDriveObject,
   loadAssignmentMaterials,
   loadConvertibleSourceMaterial,
   resolveDriveSource,
@@ -65,6 +67,20 @@ export function schoolMaterialsRoutes(db: Database, env: Env) {
     if (!ctx) return c.json({ error: "not_found" }, 404);
     const materials = await loadAssignmentMaterials(db, id, ctx.access);
     return c.json({ materials, access: ctx.access });
+  });
+
+  app.get("/assignments/:id/materials/:materialId/file", async (c) => {
+    const auth = c.get("auth")!;
+    const assignmentId = c.req.param("id");
+    const ctx = await assignmentAccessForAuth(db, auth, assignmentId);
+    if (!ctx) return c.json({ error: "not_found" }, 404);
+    const [material] = await db.select().from(schoolAssignmentMaterials).where(and(eq(schoolAssignmentMaterials.id, c.req.param("materialId")), eq(schoolAssignmentMaterials.assignmentId, assignmentId))).limit(1);
+    if (!material || !materialVisibleToViewer(material, ctx.access.viewMode)) return c.json({ error: "not_found" }, 404);
+    const object = await authorizedMaterialDriveObject(db, auth.householdId, material);
+    if (!object?.s3Key) return c.json({ error: "not_found" }, 404);
+    const body = await getObjectBuffer(env, object.s3Key);
+    if (!body) return c.json({ error: "not_found" }, 404);
+    return c.body(new Uint8Array(body), 200, fileResponseHeaders(object.contentType ?? contentTypeFromKey(object.s3Key), material.displayName));
   });
 
   app.post("/assignments/:id/materials", async (c) => {
@@ -99,7 +115,7 @@ export function schoolMaterialsRoutes(db: Database, env: Env) {
     let displayName = body.displayName;
 
     if (body.driveObjectId) {
-      const resolved = await resolveDriveSource(db, auth.householdId, body.driveObjectId);
+      const resolved = await resolveDriveSource(db, auth, body.driveObjectId);
       if (!resolved) return c.json({ error: "drive_object_not_found" }, 404);
       source = resolved.source;
       if (resolved.externalUrl) externalUrl = resolved.externalUrl;
@@ -1113,11 +1129,7 @@ export function schoolMaterialsRoutes(db: Database, env: Env) {
     if (!buf) return c.json({ error: "not_found" }, 404);
 
     const filename = row.displayName.replace(/"/g, "") || "snapshot";
-    return c.body(new Uint8Array(buf), 200, {
-      "Content-Type": contentTypeFromKey(row.snapshotS3Key),
-      "Content-Disposition": `inline; filename="${filename}"`,
-      "Cache-Control": "private, max-age=3600",
-    });
+    return c.body(new Uint8Array(buf), 200, fileResponseHeaders(contentTypeFromKey(row.snapshotS3Key), filename));
   });
 
   return app;

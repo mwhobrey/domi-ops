@@ -1,4 +1,5 @@
 "use client";
+import { privateTelemetryFields, telemetryRoute } from "@domi-ops/config/diagnostics";
 
 /**
  * Opt-in, anonymized metrics client. Nothing in this file runs unless a caller has
@@ -30,6 +31,8 @@ let appVersion: string | undefined;
 let queue: TelemetryEvent[] = [];
 let flushTimer: ReturnType<typeof setInterval> | null = null;
 let initialized = false;
+let listeners: AbortController | null = null;
+let vitalsRegistered = false;
 
 function getAnonId(): string {
   if (typeof window === "undefined") return "";
@@ -71,15 +74,17 @@ export function trackEvent(
   opts?: { value?: number; metadata?: Record<string, string | number | boolean> },
 ) {
   if (!initialized || !endpoint) return;
+  const fields = privateTelemetryFields({ kind, name, path: typeof window !== "undefined" ? window.location.pathname : undefined, ...opts });
+  if (!fields) return;
   queue.push({
     anonId: getAnonId(),
     kind,
-    name,
-    value: opts?.value,
-    path: typeof window !== "undefined" ? window.location.pathname : undefined,
+    name: fields.name,
+    value: fields.value ?? undefined,
+    path: fields.path ?? undefined,
     deploymentMode,
     appVersion,
-    metadata: opts?.metadata,
+    metadata: fields.metadata ?? undefined,
   });
   if (queue.length >= MAX_QUEUE_SIZE) flush();
 }
@@ -93,6 +98,8 @@ export function initTelemetry(opts: {
 }) {
   if (initialized || typeof window === "undefined") return;
   initialized = true;
+  listeners = new AbortController();
+  const options = { signal: listeners.signal };
   endpoint = opts.endpoint.replace(/\/$/, "");
   deploymentMode = opts.deploymentMode;
   appVersion = opts.appVersion;
@@ -100,18 +107,15 @@ export function initTelemetry(opts: {
   flushTimer = setInterval(() => flush(), QUEUE_FLUSH_INTERVAL_MS);
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") flush(true);
-  });
-  window.addEventListener("pagehide", () => flush(true));
+  }, options);
+  window.addEventListener("pagehide", () => flush(true), options);
 
-  window.addEventListener("error", (e) => {
-    trackEvent("error", (e.message || "unknown_error").slice(0, 256));
-  });
-  window.addEventListener("unhandledrejection", (e) => {
-    const reason = e.reason instanceof Error ? e.reason.message : String(e.reason ?? "unknown");
-    trackEvent("error", reason.slice(0, 256), { metadata: { type: "unhandledrejection" } });
-  });
+  window.addEventListener("error", () => trackEvent("error", "browser_error"), options);
+  window.addEventListener("unhandledrejection", () => trackEvent("error", "unhandled_rejection"), options);
 
   void import("web-vitals").then(({ onCLS, onINP, onLCP, onFCP, onTTFB }) => {
+    if (!initialized || options.signal.aborted || vitalsRegistered) return;
+    vitalsRegistered = true;
     const report = (metric: { name: string; value: number; rating: string }) => {
       trackEvent("web_vital", metric.name, {
         value: Math.round(metric.value),
@@ -133,6 +137,8 @@ export function disableTelemetry() {
   initialized = false;
   endpoint = null;
   queue = [];
+  listeners?.abort(); listeners = null;
+  try { localStorage.removeItem(ANON_ID_KEY); } catch { /* storage can be disabled */ }
   if (flushTimer) {
     clearInterval(flushTimer);
     flushTimer = null;
@@ -154,12 +160,13 @@ export function submitBugReport(input: {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      anonId: getAnonId(),
+      // Feedback can include an email; never link it to the optional metrics ID.
+      anonId: crypto.randomUUID(),
       message: input.message,
       email: input.email,
       deploymentMode: input.deploymentMode,
       appVersion: input.appVersion,
-      path: typeof window !== "undefined" ? window.location.pathname : undefined,
+      path: typeof window !== "undefined" ? telemetryRoute(window.location.pathname) : undefined,
     }),
   })
     .then((res) => res.ok)

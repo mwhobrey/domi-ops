@@ -1,4 +1,4 @@
-import { Building2, Check, Cloud, Server } from "lucide-react";
+import { Check, Cloud, Server } from "lucide-react";
 import {
   AnchorButton,
   LinkButton,
@@ -11,7 +11,7 @@ import { pageSocial } from "@/lib/og";
 
 const TITLE = "Pricing | Domi Ops";
 const DESCRIPTION =
-  "Self-host free or choose a Domi Ops cloud plan.";
+  "One Domi Ops Cloud subscription for your household: $12/month or $120/year, with a 14-day trial. Self-hosting is also available.";
 
 export const metadata = {
   title: TITLE,
@@ -26,7 +26,6 @@ export const dynamic = "force-dynamic";
 const TIER_ICON: Record<string, typeof Server> = {
   "self-host": Server,
   starter: Cloud,
-  family: Building2,
 };
 
 function TierCta({
@@ -94,20 +93,20 @@ export default function PricingPage() {
           <div className="max-w-2xl space-y-4">
             <p className="text-label text-[var(--color-accent)]">Pricing</p>
             <h1 className="font-display text-4xl font-semibold tracking-tight sm:text-5xl">
-              Pick who runs the server
+              One subscription for your household
             </h1>
             <p className="text-lg text-[var(--color-text-muted)]">
-              Self-host the full bundle for free, forever. Or let us run it: same app, no server to
-              patch at 11pm.
+              Bring homeschool planning, the family calendar, health routines and household work
+              together. Choose monthly or annual billing; everyone joins the same household plan.
             </p>
             {!pricing.hostedCheckoutEnabled && (
               <p className="rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-elevated)] px-4 py-3 text-sm text-[var(--color-text-muted)]">
-                Hosted checkout opens soon. In the meantime, self-host is free and ready today.
+                Cloud access is currently limited. Contact support@domi-ops.com to ask about joining.
               </p>
             )}
           </div>
 
-          <div className="mt-12 grid gap-6 lg:grid-cols-3">
+          <div className="mt-12 grid gap-6 md:grid-cols-2">
             {pricing.tiers.map((tier) => {
               const Icon = TIER_ICON[tier.id] ?? Cloud;
               return (
@@ -121,7 +120,7 @@ export default function PricingPage() {
                 >
                   {tier.highlight ? (
                     <span className="absolute -top-3 left-6 rounded-full bg-[var(--color-accent)] px-3 py-1 text-xs font-semibold text-white">
-                      Most households
+                      Hosted household plan
                     </span>
                   ) : null}
 
@@ -147,7 +146,7 @@ export default function PricingPage() {
 
                   <ul className="mt-6 flex-1 space-y-2.5 border-t border-[var(--color-border)] pt-6">
                     <FeatureRow label={tier.modules} />
-                    <FeatureRow label={`${tier.drive} Drive`} />
+                    <FeatureRow label={tier.drive} />
                     <FeatureRow label={tier.isolation} />
                   </ul>
 
@@ -160,8 +159,8 @@ export default function PricingPage() {
           </div>
 
           <p className="mt-8 text-center text-sm text-[var(--color-text-muted)]">
-            Not sure which one? Self-host if you already run a server. Pick cloud if you'd rather
-            not.
+            Cloud trials require a card and renew automatically. Cancel renewal in household Settings.
+            The shared demo needs no card. For help, <a href="mailto:support@domi-ops.com" className="underline">contact support</a>.
           </p>
         </div>
       </section>

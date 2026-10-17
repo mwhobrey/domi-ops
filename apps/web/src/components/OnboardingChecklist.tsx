@@ -25,6 +25,11 @@ const OWNER_STEPS: Step[] = [
     href: "/settings",
   },
   {
+    key: "first-useful-workflow",
+    label: "Try one useful task",
+    detail: "Start with one class and assignment, or one person's medication or health check. Use your own records; optional Google connections can wait.",
+  },
+  {
     key: "modules",
     label: "Pick your modules",
     detail: "Turn off ones you won't use — keeps navigation simpler for everyone.",
@@ -33,7 +38,7 @@ const OWNER_STEPS: Step[] = [
   {
     key: "invite",
     label: "Bring in your household",
-    detail: "Invite adults by email/Google, or provision username-only logins for kids.",
+    detail: "Email an adult invitation or share a private join link. Give children username-only logins.",
     href: "/settings",
   },
   {
@@ -51,7 +56,7 @@ const OWNER_STEPS: Step[] = [
   {
     key: "install",
     label: "Install on your phone",
-    detail: "Add to Home Screen from your phone's browser — this is what makes push actually arrive.",
+    detail: "On iPhone/iPad, add to Home Screen and open the installed app before enabling notifications. Other devices depend on browser support and permissions.",
   },
 ];
 
@@ -103,9 +108,13 @@ const TOUR_KEYS = new Set<TourKey>(["household-basics", "modules", "invite", "ca
 export function OnboardingChecklist({
   role,
   initialState,
+  schoolEnabled = false,
+  healthEnabled = false,
 }: {
   role: string;
   initialState: OnboardingState | null;
+  schoolEnabled?: boolean;
+  healthEnabled?: boolean;
 }) {
   const [state, setState] = useState<OnboardingState | null>(initialState);
   const router = useRouter();
@@ -171,6 +180,11 @@ export function OnboardingChecklist({
                 <p className="text-sm font-medium">{step.label}</p>
               )}
               <p className="text-xs text-[var(--color-text-muted)]">{step.detail}</p>
+              {step.key === "first-useful-workflow" && <div className="mt-2 flex flex-wrap gap-3 text-sm">
+                {schoolEnabled && <a href="/school" className="underline">Create a class and assignment</a>}
+                {healthEnabled && <a href="/health" className="underline">Set up a health routine</a>}
+                <a href="/settings#members" className="underline">Add a child login</a>
+              </div>}
             </div>
           </div>
         ))}

@@ -1,4 +1,4 @@
-export const LEGAL_LAST_UPDATED = "October 14, 2026";
+export const LEGAL_LAST_UPDATED = "October 16, 2026";
 export const LEGAL_CONTACT_EMAIL = "privacy@domi-ops.com";
 
 const bodyClass =
@@ -73,9 +73,12 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
             connections for sign-in, household data, and Google OAuth flows.
           </li>
           <li>
-            <strong className="text-[var(--color-text)]">At rest (OAuth):</strong> Google OAuth
-            access and refresh tokens stored on your instance are encrypted at rest using the
-            instance <code>ENCRYPTION_KEY</code> before they are written to the database.
+            <strong className="text-[var(--color-text)]">At rest (OAuth):</strong> Optional Google Calendar
+            and Docs connection tokens are encrypted using the instance encryption key.
+            New sign-in access and refresh token writes are encrypted using the authentication secret;
+            provider ID tokens are discarded after callback verification.
+            older sign-in tokens require operator rotation or backfill. These server-held keys
+            protect database storage, rather than providing end-to-end encryption.
           </li>
           <li>
             <strong className="text-[var(--color-text)]">At rest (health):</strong> When the health
@@ -88,7 +91,9 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
             <strong className="text-[var(--color-text)]">Access controls:</strong> Household members
             see only content their role and per-module permissions allow. Private notes, Drive
             objects, and health records are further limited by per-record visibility and segment ACLs.
-            There is no operator back door to read private health data on Cloud.
+            These application controls are separate from infrastructure access: authorized operators
+            with access to the database, stored files and the instance encryption key can access
+            hosted data for service operation and support. Encryption is not end-to-end encryption.
           </li>
           <li>
             <strong className="text-[var(--color-text)]">We do not sell your data</strong> to
@@ -173,7 +178,7 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
             >
               Google&apos;s Privacy Policy
             </a>
-            . OAuth tokens are encrypted at rest on the instance.
+            . See the token storage and legacy-token limits described above.
           </li>
           <li>
             <strong>Withings</strong>: optional blood pressure cuff and watch import, only if you connect a
@@ -207,6 +212,16 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
             <strong>Stripe</strong>: billing, trials, and invoices when hosted checkout is live.
             Card details are handled by Stripe, not stored in Domi Ops.
           </li>
+          <li>
+            <strong>Sentry</strong>: error diagnostics when the operator configures it. This runs
+            independently of optional usage metrics. The application sends error types and code
+            locations, build/platform metadata and limited job categories; it removes error messages,
+            console arguments, account identifiers, request URLs, bodies, headers and local variables.
+            Performance traces and breadcrumbs are disabled. Diagnostic retention depends on the
+            operator&apos;s Sentry project settings; contact us for the hosted configuration. As with
+            other network services, the provider receives connection metadata such as an IP address.
+          </li>
+          <li><strong>RevenueCat, Apple and Google Play</strong>: native store purchase and subscription status when store billing is enabled. Card details remain with the store.</li>
         </ul>
       </section>
 
@@ -235,19 +250,23 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
           <strong className="text-[var(--color-text)]">Withings (optional).</strong> If you connect
           a household member to a Withings account, Domi Ops imports that person&apos;s blood
           pressure readings (systolic, diastolic, pulse), blood oxygen, body temperature and
-          workouts (the activity, how long, and distance and calories when Withings has them), with
+          workouts (the activity, how long, and distance and calories when Withings has them), daily
+          activity summaries (steps, distance, active minutes, active and total calories), and sleep
+          summaries (start/end, time asleep/in bed, stages, awake time/count and sleep score), with
           when each was taken, as ordinary health entries, including past ones from the period you
           choose when you connect, and new ones as the cuff or watch syncs. They are protected like
           any other health entry. Withings&apos; permission for this covers body measurements and
-          activity generally; Domi Ops reads only the readings listed here and ignores the rest. Nothing about the person is sent to Withings:
-          Domi Ops only asks Withings to notify it when there is new data. Readings Withings cannot
+          activity generally. Domi Ops reads these supported categories and registers notifications
+          for new data; it does not upload or edit your Withings health records. Readings Withings cannot
           attribute to one person, such as on a cuff shared by a household, are left out until
           they are assigned in the Withings app. The connection is stored as encrypted
           credentials that you can revoke from either product. Unlinking stops new readings and
           asks Withings to stop notifying Domi Ops; readings already imported stay in Domi Ops
           until you delete them, and Withings keeps its own copy under its own privacy policy.
-          Domi Ops does not change or delete anything at Withings, and a reading removed or edited
-          in the Withings app is not changed in Domi Ops.
+          Domi Ops does not change or delete health records at Withings. Import behavior varies by
+          category: activity and sleep summaries may update when Withings reports a newer version;
+          previously imported individual readings and workouts are deduplicated. Disconnecting
+          stops future imports and leaves existing Domi Ops records until you delete them.
         </p>
       </section>
 
@@ -279,14 +298,14 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
       </section>
 
       <section>
-        <h2>Optional anonymized metrics</h2>
+        <h2>Optional product metrics</h2>
         <p>
           Off by default on every household, self-hosted or Cloud. An owner or admin can turn it on
           in <strong className="text-[var(--color-text)]">Settings → Privacy</strong>. When on, we
           collect:
         </p>
         <ul>
-          <li>Technical health: page load speed, JavaScript errors, API response times</li>
+          <li>Technical health: page load measurements and fixed JavaScript error categories</li>
           <li>
             Feature usage: which modules and actions get used (e.g. &quot;a chore was
             completed&quot;), never the content of what you created
@@ -294,8 +313,8 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
         </ul>
         <p>
           These events carry a randomly generated id stored in your browser (not your account,
-          household, name, or email), and nothing in our metrics storage links back to household
-          data. Turning it off stops collection immediately; turning it on later starts a new random
+          household, name, or email). The event store has no account or household identifier.
+          Turning it off stops new collection and drops queued events; turning it on later starts a new random
           id, not a resumed history.{" "}
           <strong className="text-[var(--color-text)]">
             We do not sell this data, or any data, to anyone, ever
@@ -306,6 +325,12 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
           regardless of this setting. That message (and an optional reply email, if you choose to
           leave one) is sent because you chose to send it, not collected passively.
         </p>
+        <p>Configured Sentry error diagnostics are separate from this opt-in setting, as described under Processors. Turning optional metrics off does not disable connected services, transactional email, billing, or operator diagnostics.</p>
+        <p>Feedback uses a separate random id for each submission, so an optional reply email is
+          not joined to your browser metrics id. Operators can also produce monthly activation
+          counts from opted-in hosted households, using record existence and membership counts,
+          without names or record contents. Cohorts smaller than five are suppressed. Random ids
+          reduce direct identification; they are not a promise of formal anonymization.</p>
       </section>
 
       <section>
@@ -322,8 +347,17 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
         </p>
         <p>
           <strong className="text-[var(--color-text)]">Self-host:</strong> the instance operator
-          exports or deletes data by managing PostgreSQL and object storage directly.
+          manages retention and deletion. An encrypted household archive can be restored to an
+          empty self-host instance with the same schema, including referenced stored files.
         </p>
+        <p>Cloud household archives are operator-assisted because they include other members&apos;
+          private records. Contact the privacy address above; we verify the recipient and affected
+          adults&apos; authorization. The archive uses a separate transfer key; hosted service keys,
+          payment details, login sessions and external-service credentials are excluded. Report
+          exports within your existing permissions remain available in the app.</p>
+        <p>Canceling renewal does not delete records. Backup copies expire through the service&apos;s
+          backup rotation; we confirm the applicable backup and diagnostic retention windows when
+          handling a deletion request. Deleted data must not be reintroduced during disaster recovery.</p>
       </section>
 
       <section>
@@ -426,9 +460,13 @@ export function TermsOfServiceContent({ privacyHref }: { privacyHref: string }) 
         <p>
           Hosted Starter is currently <strong className="text-[var(--color-text)]">$12/month</strong>{" "}
           or <strong className="text-[var(--color-text)]">$120/year</strong>, with a 14-day trial
-          that requires a card. Prices may change with notice. Checkout may not be open yet; these
-          terms still describe the intended hosted offering. Failed payment or cancellation ends
-          hosted access after any remaining paid period. Self-host remains free under MIT.
+          that requires a card and renews automatically unless canceled. Prices may change with
+          notice. Cloud availability is shown on the pricing page. The household owner can manage
+          web billing and cancel renewal in Settings; store purchases are managed through the store.
+          Scheduled cancellation keeps paid access through the current period. Failed payments
+          receive a 72-hour grace period from the recorded payment failure before product writes
+          and background jobs pause. After access ends, household members can still read and export
+          data they are permitted to access. Self-host remains free under MIT.
         </p>
       </section>
 

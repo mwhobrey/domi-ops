@@ -1,4 +1,5 @@
 import {
+  boolean,
   pgEnum,
   pgTable,
   text,
@@ -30,10 +31,19 @@ export const householdSubscriptions = pgTable(
     stripeSubscriptionId: varchar("stripe_subscription_id", { length: 256 }),
     status: subscriptionStatusEnum("status").notNull().default("trialing"),
     trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
+    currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+    pastDueSince: timestamp("past_due_since", { withTimezone: true }),
+    cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+    provider: text("provider").notNull().default("stripe"),
+    sourceUpdatedAt: timestamp("source_updated_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("household_subscriptions_household_id").on(t.householdId)],
+  (t) => [
+    uniqueIndex("household_subscriptions_household_id").on(t.householdId),
+    uniqueIndex("household_subscriptions_customer_unique").on(t.stripeCustomerId),
+    uniqueIndex("household_subscriptions_subscription_unique").on(t.stripeSubscriptionId),
+  ],
 );
 
 /** Stripe event idempotency — prevents double-processing on webhook retries */
@@ -41,4 +51,15 @@ export const stripeEvents = pgTable("stripe_events", {
   id: varchar("id", { length: 256 }).primaryKey(),
   type: varchar("type", { length: 128 }).notNull(),
   processedAt: timestamp("processed_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Durable request identity, committed before calling Stripe. No card data is stored. */
+export const billingCheckoutIntents = pgTable("billing_checkout_intents", {
+  principalKey: text("principal_key").primaryKey(),
+  id: uuid("id").notNull().defaultRandom(),
+  plan: text("plan").notNull(),
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSessionId: text("stripe_session_id"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

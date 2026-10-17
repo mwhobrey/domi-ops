@@ -9,7 +9,7 @@ export const DRIVE_TITLE_MAX_LEN = 256;
 export type DriveObjectKind = "file" | "link";
 export type DriveVisibility = "household" | "private";
 
-export function driveVisibleWhere(db: Database, auth: AuthContext) {
+export function driveVisibleWhere(db: Database, auth: Pick<AuthContext, "householdId" | "userId" | "memberId">) {
   return and(
     eq(driveObjects.householdId, auth.householdId),
     or(

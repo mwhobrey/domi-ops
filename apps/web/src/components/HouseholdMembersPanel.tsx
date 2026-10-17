@@ -62,9 +62,11 @@ function assignableRoles(actorRole: HouseholdRole, memberRole: HouseholdRole): H
 export function HouseholdMembersPanel({
   canManage,
   actorRole,
+  actorMemberId,
 }: {
   canManage: boolean;
   actorRole: HouseholdRole;
+  actorMemberId?: string;
 }) {
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [loading, setLoading] = useState(canManage);
@@ -151,15 +153,22 @@ export function HouseholdMembersPanel({
 
   if (!canManage) return null;
 
+  async function removeMember(member: MemberRow) {
+    if (!window.confirm(`Remove ${member.name ?? "this person's"} access? Household records remain, and their connected sync stops. Their own login is kept.`)) return;
+    setRolePendingId(member.memberId); setError(null);
+    try { await apiClient.delete(`/api/core/household/members/${member.memberId}`, { confirm: "REMOVE" }); await loadMembers(); }
+    catch (err) { setError(provisionErrorMessage(err)); }
+    finally { setRolePendingId(null); }
+  }
+
   return (
-    <Card data-tour="invite-section">
+    <Card id="members" data-tour="invite-section">
       <CardBody className="space-y-6">
         <div className="space-y-1">
           <SectionHeader title="Members" />
           <p className="text-sm text-[var(--color-text-muted)]">
             Create username accounts for kids or other members who should not need email or Google.
-            Adults with email can sign up or sign in with Google — single-tenant mode adds them to
-            this household automatically.
+            Use the adult invitation form above for people joining with their own email or Google account.
           </p>
         </div>
 
@@ -206,6 +215,7 @@ export function HouseholdMembersPanel({
                   ) : (
                     <span className="text-[var(--color-text-muted)]">{ROLE_LABELS[m.role]}</span>
                   )}
+                  {options.length > 0 && m.memberId !== actorMemberId && <Button variant="secondary" disabled={rolePendingId === m.memberId} onClick={() => void removeMember(m)}>Remove access</Button>}
                 </li>
               );
             })}

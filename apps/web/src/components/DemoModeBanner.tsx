@@ -11,8 +11,14 @@ export function DemoModeBanner() {
       <strong className="font-medium">Demo household</strong>
       <span className="text-[var(--color-text-muted)]">
         {" "}
-        — shared playground; resets daily at 4:00 AM Central Time.
+        — fictional records in a shared playground. Changes are visible to other visitors and may be reset. Do not enter private information or connect real accounts.
       </span>
+      <nav aria-label="Explore the demo" className="mt-2 flex flex-wrap gap-3">
+        <a href="/login?demo=switch" className="underline">Choose parent, student or caregiver view</a>
+        <a href="/school" className="underline">School</a>
+        <a href="/health" className="underline">Health</a>
+        <a href="/calendar" className="underline">Calendar</a>
+      </nav>
     </div>
   );
 }

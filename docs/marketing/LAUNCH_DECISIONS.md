@@ -5,7 +5,7 @@ One-page checklist before hosted launch and public pricing go live. Link: [ADR 0
 | # | Decision | Your answer |
 |---|----------|-------------|
 | 1 | Hero H1 “The homeschool household hub” — keep or broaden? | |
-| 2 | Family tier at launch or Starter-only? | **Starter-only.** Family tier “Coming soon” until dedicated DB (WHO-177/178). |
+| 2 | Family tier at launch or Starter-only? | **One Cloud plan.** Dedicated Family is deferred and removed from public pricing; revisit with customer and service-cost evidence. |
 | 3 | Module bundle (all in base) vs à-la-carte add-ons? | **All modules in Starter ($12/mo).** No per-module SKUs at launch. Single “module extensions” add-on deferred — bundle wins on simplicity and perceived value. |
 | 4 | Demo subdomain `demo.domi-ops.com` confirmed? | |
 | 5 | Hosting: same VPS as dogfood or new infrastructure? | |

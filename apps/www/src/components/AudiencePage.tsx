@@ -22,8 +22,6 @@ export type AudiencePageProps = {
   closing: { title: string; body: string };
 };
 
-const CTA_GLOW = "shadow-[0_0_0_1px_var(--color-accent),0_8px_24px_-4px_var(--color-accent)]";
-
 export function AudiencePage(props: AudiencePageProps) {
   const urls = resolveMarketingUrls();
 
@@ -47,17 +45,15 @@ export function AudiencePage(props: AudiencePageProps) {
                 {props.lead}
               </p>
               <div className="flex flex-wrap items-center gap-4">
+                <LinkButton href="/pricing" size="lg">See the household plan</LinkButton>
                 {urls.demo ? (
-                  <AnchorButton href={urls.demo} size="lg" className={CTA_GLOW}>
+                  <AnchorButton href={urls.demo} size="lg" variant="secondary">
                     Try the demo
                   </AnchorButton>
                 ) : null}
-                <LinkButton href="/pricing" variant="secondary" size="lg">
-                  See pricing
-                </LinkButton>
               </div>
               <p className="text-xs text-[var(--color-text-muted)]">
-                14-day trial, then $12/mo · Open source, self-host free
+                Cloud: $12/month or $120/year · 14-day trial, card required · Demo: no card
               </p>
             </div>
             <ThemeAwareScreenshot
@@ -147,12 +143,12 @@ export function AudiencePage(props: AudiencePageProps) {
           <p className="mx-auto mt-3 max-w-xl text-[var(--color-text-muted)]">{props.closing.body}</p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
             {urls.demo ? (
-              <AnchorButton href={urls.demo} size="lg" className={CTA_GLOW}>
+              <AnchorButton href={urls.demo} size="lg" variant="secondary">
                 Try the demo
               </AnchorButton>
             ) : null}
-            <LinkButton href="/pricing" variant="secondary" size="lg">
-              Get hosted
+            <LinkButton href="/pricing" size="lg">
+              See the household plan
             </LinkButton>
           </div>
         </div>

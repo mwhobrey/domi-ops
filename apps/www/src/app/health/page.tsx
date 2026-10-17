@@ -65,8 +65,8 @@ export default function HealthPage() {
           body: "Link a member to their MyAllyFile profile and their current medications are copied there whenever they change, so the QR code on the fridge or the keychain never lists last month's pills. It only goes one way, you link it on purpose from Settings, and it needs a MyAllyFile Plus or Pro plan.",
         },
         {
-          title: "Blood pressure without the typing",
-          body: "Connect a Withings cuff and the readings arrive on their own, past ones included, and fill the scheduled blood pressure checks they fall near. Nobody types numbers, and nobody gets a reminder for a reading already taken. It reads blood pressure and pulse only, nothing goes back to Withings, and a cuff the household shares won't put one person's reading in another's record. You connect it on purpose from Health, and it works on Cloud or on your own server with your own Withings app. For Withings accounts created after October 12, 2026, Withings requires a Withings+ membership to share data with apps on its Start for Free API plan (an Enterprise plan can lift that); older accounts aren't affected.",
+          title: "Readings, activity and sleep from Withings",
+          body: "Connect a compatible cuff or watch to import blood pressure, pulse, blood oxygen, body temperature, workouts, daily activity and sleep summaries. Available categories depend on your devices and Withings account. Suitable readings fill scheduled checks. Domi Ops reads records and registers update notifications; it does not edit your Withings health records. Disconnecting stops new imports and keeps existing records. Withings may require its own Withings+ membership for API sharing; that cost is separate. Self-host operators use their own developer app.",
         },
         {
           title: "On the household calendar",

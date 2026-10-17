@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { householdSubscriptionAllowsWork } from "@domi-ops/calendar-sync";
 import { randomUUID } from "node:crypto";
 import type { Env } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
@@ -27,7 +28,8 @@ import {
   getObjectBuffer,
   contentTypeFromKey,
 } from "../lib/s3.js";
-import { browserUploadPutUrl } from "../lib/upload-token.js";
+import { claimBrowserUpload, issueBrowserUpload } from "../lib/browser-uploads.js";
+import { fileResponseHeaders } from "../lib/file-response.js";
 import type { AppVariables } from "../middleware/auth.js";
 import { requireAuth } from "../middleware/auth.js";
 
@@ -37,7 +39,8 @@ export function shoppingRoutes(db: Database, env: Env) {
 
   app.get("/shopping", async (c) => {
     const auth = c.get("auth")!;
-    const { created, itemNames } = await materializeDueRecurring(db, auth.householdId);
+    const { created, itemNames } = await householdSubscriptionAllowsWork(db, env, auth.householdId)
+      ? await materializeDueRecurring(db, auth.householdId) : { created: 0, itemNames: [] };
     if (created > 0) {
       void notifyShoppingRecurringMaterialized(db, env, {
         householdId: auth.householdId,
@@ -236,14 +239,14 @@ export function shoppingRoutes(db: Database, env: Env) {
     const key = shoppingReceiptObjectKey(auth.householdId, body.filename.trim());
     const contentType = body.contentType?.trim() || "application/octet-stream";
     const uploadId = randomUUID();
-    const uploadUrl = browserUploadPutUrl(env, {
+    const uploadUrl = await issueBrowserUpload(db, env, {
       uploadId,
       key,
       householdId: auth.householdId,
       memberId: auth.memberId,
       contentType,
-      maxBytes: null,
-    });
+      maxBytes: env.DRIVE_UPLOAD_MAX_BYTES,
+    }, "receipt");
     return c.json({ uploadUrl, key });
   });
 
@@ -259,10 +262,7 @@ export function shoppingRoutes(db: Database, env: Env) {
     const buf = await getObjectBuffer(env, trip.receiptS3Key);
     if (!buf) return c.json({ error: "not_found" }, 404);
     return new Response(buf, {
-      headers: {
-        "Content-Type": contentTypeFromKey(trip.receiptS3Key),
-        "Cache-Control": "private, max-age=3600",
-      },
+      headers: fileResponseHeaders(contentTypeFromKey(trip.receiptS3Key), "receipt"),
     });
   });
 
@@ -288,6 +288,10 @@ export function shoppingRoutes(db: Database, env: Env) {
 
     if (checkedRows.length === 0) {
       return c.json({ ok: true, deleted: 0, trip: null });
+    }
+
+    if (body.receiptKey && !await claimBrowserUpload(db, auth, body.receiptKey, "receipt", "shopping-trip")) {
+      return c.json({ error: "invalid_upload" }, 400);
     }
 
     const itemCosts = body.itemCosts ?? {};

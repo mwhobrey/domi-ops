@@ -54,7 +54,7 @@ async function ensureFolderPath(
   return parentId;
 }
 
-export async function saveReportToWhomeDrive(params: {
+type SaveReportParams = {
   db: Database;
   env: Env;
   householdId: string;
@@ -64,11 +64,18 @@ export async function saveReportToWhomeDrive(params: {
   body: Buffer;
   mimeType: string;
   createdByLabel: string;
-}) {
+};
+
+export async function saveReportToWhomeDrive(params: SaveReportParams) {
+  return params.db.transaction((tx) => saveReportInTransaction({ ...params, db: tx as unknown as Database }));
+}
+
+async function saveReportInTransaction(params: SaveReportParams) {
   const byteSize = params.body.byteLength;
   if (byteSize > params.env.DRIVE_UPLOAD_MAX_BYTES) {
     throw new Error("file_too_large");
   }
+  await params.db.select({ id: households.id }).from(households).where(eq(households.id, params.householdId)).for("update");
   const quota = await checkDriveUploadQuota(params.db, params.env, params.householdId, byteSize);
   if (quota === "quota_exceeded") throw new Error("quota_exceeded");
 

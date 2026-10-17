@@ -8,10 +8,11 @@ RUN apk add --no-cache python3 make g++
 ARG API_URL=http://api:4000
 ENV API_URL=$API_URL
 
-COPY package.json package-lock.json turbo.json ./
+COPY package.json package-lock.json turbo.json tsconfig.json ./
 COPY apps ./apps
 COPY packages ./packages
 RUN npm ci
+RUN npm run build -w @domi-ops/config
 RUN npm run build -w @domi-ops/web
 
 FROM node:24-alpine

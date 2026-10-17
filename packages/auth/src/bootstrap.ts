@@ -5,7 +5,7 @@ import {
   households,
   users,
 } from "@domi-ops/db";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { hasImportRecords } from "./import-records.js";
 import {
   getCanonicalHouseholdId,
@@ -31,7 +31,7 @@ export async function bootstrapHouseholdOnLogin(
   const [existing] = await db
     .select({ householdId: householdMembers.householdId })
     .from(householdMembers)
-    .where(eq(householdMembers.userId, userId))
+    .where(and(eq(householdMembers.userId, userId), isNull(householdMembers.accessRevokedAt)))
     .limit(1);
   if (existing) return existing.householdId;
 
@@ -88,7 +88,7 @@ export async function resolveAuthContext(
   const [member] = await db
     .select()
     .from(householdMembers)
-    .where(eq(householdMembers.userId, userId))
+    .where(and(eq(householdMembers.userId, userId), isNull(householdMembers.accessRevokedAt)))
     .limit(1);
   if (!member) return null;
 

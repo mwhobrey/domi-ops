@@ -1,6 +1,15 @@
 # Google OAuth for Domi Ops
 
-The `invalid_request` / OAuth 2.0 policy error is almost always **Google Cloud Console config**, not Domi Ops code. A client named **Whobrey HomeHub** was likely set up for Flask on port **5000**; Domi Ops uses different URLs.
+Treat Google sign-in, Calendar connection, and Docs connection as separate flows.
+An OAuth policy/verification block, a callback mismatch, and an application account
+error need different fixes. Capture the exact error code before changing settings;
+do not assume a new video fixes every possible sign-in failure.
+
+For the hosted household launch, use the production client and origin under review
+(normally `https://app.domi-ops.com`). The updated recording guide is
+[google-oauth-verification-demo-script.md](./google-oauth-verification-demo-script.md).
+Record after the intended build is deployed and its actual outgoing scopes match
+the review submission. Local tests do not establish Google's approval.
 
 ## 1. OAuth client type
 
@@ -13,7 +22,7 @@ Google Cloud → **APIs & Services** → **Credentials** → your OAuth 2.0 Clie
 | **Default (native)** | `http://localhost:3000` | `cp .env.example .env` (`DOMI_OPS_DEV_PROFILE=native`) |
 | Docker compose `web` | `http://localhost:3001` | `cp .env.docker.example .env` (`DOMI_OPS_DEV_PROFILE=docker`) |
 
-Do not flip `PUBLIC_APP_URL` between 3000 and 3001 without updating Google Cloud redirect URIs. API startup logs OAuth callback URLs in development; `GET /health` returns `dev.oauthRedirects` when `NODE_ENV=development`.
+Do not flip `PUBLIC_APP_URL` between 3000 and 3001 without updating Google Cloud redirect URIs. API startup logs OAuth callback URLs in development; `GET /api/healthz` returns `dev.oauthRedirects` when `NODE_ENV=development`.
 
 ## 3. Authorized JavaScript origins
 
@@ -55,7 +64,7 @@ Optional override: set `GOOGLE_OAUTH_REDIRECT_URI` only for calendar if you need
 2. **Publishing status:** **Testing** for personal/homelab use.
 3. **Test users:** Add every Google account that will sign in (required in Testing mode).
 4. **App domain:** Set **Application home page** and **Privacy policy** URLs. Google often blocks sign-in without a privacy policy link, even for localhost dev. Use your real domain or a static page you control.
-5. **Scopes:** Login uses `openid`, email, profile. Calendar connect adds the Calendar scope. Docs/Drive connect uses **`drive.file` only** (non-sensitive, Family Link–friendly): create and open files via Picker or app uploads. Enable **Google Drive API** in the same GCP project (Docs API optional; we no longer call Docs REST). For **Google OAuth verification** demo recording, see [google-oauth-verification-demo-script.md](./google-oauth-verification-demo-script.md).
+5. **Scopes:** Login uses `openid`, email and profile. Calendar connect requests `calendar.calendarlist.readonly` and `calendar.events`; Docs/Drive connect requests `drive.file` only. Optional connections do not add login identity scopes. Enable the Calendar, Drive and Picker APIs used by your deployment. Docs API is optional because exports use Drive upload/conversion. See the [verification recording guide](./google-oauth-verification-demo-script.md) before submitting the changed scope list.
 
 ## 6. `.env` alignment
 
@@ -153,7 +162,7 @@ With the code `state_mismatch`, the callback could not match the sign-in it belo
 
 ## 10. Student Google Docs (school tests — WHO-209–212)
 
-Students connect the same **Google Docs** OAuth flow as teachers (`/auth/google/docs/start?next=…`). Scopes are **`drive.file` only** (plus login openid/email/profile), with no Docs `documents` scope and no full Drive scope. Family Link supervised accounts can usually grant `drive.file`; if a child previously connected with the old scopes, **disconnect and reconnect** after this change.
+Students connect the same **Google Docs** OAuth flow as teachers (`/auth/google/docs/start?next=…`). This connection requests `drive.file` only, with no Docs-wide or full Drive scope. Supervised accounts remain subject to Google's and their guardian's policies. Verify a synthetic-account reconnect after rollout; do not revoke existing household grants as part of an automated migration.
 
 **Start test flow:** On assignments with an unfrozen `google_doc` test material, the API uses the **teacher's** token to grant the student's Google account **reader** access to the template, then the **student's** token runs `files.copy` into their Drive. The copy is tagged with Drive `appProperties` (`domi_ops_material_id`, `domi_ops_submission_id`, `domi_ops_template_file_id`) for lineage checks.
 

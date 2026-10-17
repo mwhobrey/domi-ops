@@ -23,7 +23,7 @@ export function MarketingShell({
             </picture>
             Domi Ops
           </Link>
-          <nav className="flex items-center gap-2 sm:gap-3" aria-label="Site">
+          <nav className="hidden items-center gap-2 md:flex lg:gap-3" aria-label="Site">
             {urls.ossRepoPublic ? (
               <AnchorButton
                 href={urls.setupDocs}
@@ -35,7 +35,7 @@ export function MarketingShell({
               </AnchorButton>
             ) : (
               <span className="hidden text-sm text-[var(--color-text-muted)] sm:inline-flex">
-                Docs (coming soon)
+                Open source
               </span>
             )}
             <LinkButton href="/homeschool" variant="ghost" size="sm" className="hidden md:inline-flex">
@@ -53,10 +53,25 @@ export function MarketingShell({
             <LinkButton href="/pricing" variant="ghost" size="sm" className="hidden sm:inline-flex">
               Pricing
             </LinkButton>
+            <LinkButton href="/pricing" size="sm">Cloud plan</LinkButton>
             <AnchorButton href={urls.appLogin} variant="secondary" size="sm">
               Log in
             </AnchorButton>
           </nav>
+          <details className="relative md:hidden">
+            <summary className="flex min-h-11 cursor-pointer items-center rounded-lg border border-[var(--color-border)] px-4 text-sm font-medium focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]">Menu</summary>
+            <nav aria-label="Mobile site" className="absolute right-0 top-full z-20 mt-2 flex w-64 max-w-[calc(100vw-2rem)] flex-col gap-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3 shadow-[var(--shadow-elevated)]">
+              <LinkButton href="/pricing" size="sm">Cloud plan and pricing</LinkButton>
+              <LinkButton href="/homeschool" variant="ghost" size="sm">Homeschool</LinkButton>
+              <LinkButton href="/health" variant="ghost" size="sm">Health</LinkButton>
+              <LinkButton href="/faq" variant="ghost" size="sm">FAQ</LinkButton>
+              <LinkButton href="/about" variant="ghost" size="sm">Our story</LinkButton>
+              <AnchorButton href={urls.appLogin} variant="secondary" size="sm">Log in</AnchorButton>
+              {urls.demo && <AnchorButton href={urls.demo} variant="ghost" size="sm">Try the demo</AnchorButton>}
+              {urls.ossRepoPublic && <AnchorButton href={urls.setupDocs} variant="ghost" size="sm">Self-host guide</AnchorButton>}
+              <a href="mailto:support@domi-ops.com" className="inline-flex min-h-11 items-center justify-center text-sm underline">Contact support</a>
+            </nav>
+          </details>
         </div>
       </header>
       <main className="relative z-10">{children}</main>
@@ -78,6 +93,7 @@ export function MarketingShell({
             <Link href="/terms" className="min-h-11 inline-flex items-center hover:text-[var(--color-text)]">
               Terms
             </Link>
+            <a href="mailto:support@domi-ops.com" className="min-h-11 inline-flex items-center hover:text-[var(--color-text)]">Support</a>
             {urls.ossRepoPublic ? (
               <>
                 <a
@@ -98,7 +114,7 @@ export function MarketingShell({
                 </a>
               </>
             ) : (
-              <span className="min-h-11 inline-flex items-center">Self-host guide (coming soon)</span>
+              <a href="mailto:support@domi-ops.com" className="min-h-11 inline-flex items-center">Ask about self-hosting</a>
             )}
           </div>
         </div>

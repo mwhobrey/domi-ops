@@ -117,7 +117,6 @@ export async function putObject(
   key: string,
   body: Buffer,
   contentType: string,
-  opts?: { public?: boolean },
 ): Promise<void> {
   const client = createS3Client(env);
   if (!client || !env.S3_BUCKET) throw new Error("s3_not_configured");
@@ -127,20 +126,18 @@ export async function putObject(
       Key: key,
       Body: body,
       ContentType: contentType,
-      ...(opts?.public ? { ACL: "public-read" } : {}),
     }),
   );
 }
 
 export async function deleteObject(env: Env, key: string): Promise<void> {
   const client = createS3Client(env);
-  if (!client || !env.S3_BUCKET) return;
-  await client.send(
-    new DeleteObjectCommand({
-      Bucket: env.S3_BUCKET,
-      Key: key,
-    }),
-  );
+  if (!client || !env.S3_BUCKET) throw new Error("s3_not_configured");
+  try {
+    await client.send(new DeleteObjectCommand({ Bucket: env.S3_BUCKET, Key: key }));
+  } finally {
+    client.destroy();
+  }
 }
 
 export async function getObjectBuffer(env: Env, key: string): Promise<Buffer | null> {
@@ -153,8 +150,23 @@ export async function getObjectBuffer(env: Env, key: string): Promise<Buffer | n
     }),
   );
   if (!res.Body) return null;
-  const bytes = await res.Body.transformToByteArray();
-  return Buffer.from(bytes);
+  const reader = res.Body.transformToWebStream().getReader();
+  const limit = env.DRIVE_UPLOAD_MAX_BYTES;
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    if (res.ContentLength != null && res.ContentLength > limit) {
+      await reader.cancel(); throw new Error("file_too_large");
+    }
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.length;
+      if (size > limit) { await reader.cancel(); throw new Error("file_too_large"); }
+      chunks.push(value);
+    }
+  } finally { reader.releaseLock(); }
+  return Buffer.concat(chunks, size);
 }
 
 export async function presignedPutUrl(

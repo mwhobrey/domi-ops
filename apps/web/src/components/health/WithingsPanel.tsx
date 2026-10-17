@@ -77,8 +77,8 @@ function PersonRow({
       {!link ? (
         <div className="space-y-2">
           <p className="text-sm text-[var(--color-text-muted)]">
-            You&apos;ll sign in to Withings and approve access to health readings and workouts. Pick how far back to
-            import.
+            You&apos;ll approve import of blood pressure, pulse, blood oxygen, body temperature, workouts,
+            daily activity and sleep summaries. Pick how far back to import. Available data depends on your devices.
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <HistorySelect
@@ -134,8 +134,8 @@ function PersonRow({
           ) : null}
           {link.status === "active" && !link.workouts ? (
             <Alert variant="info">
-              Workouts are not coming across yet: this link was made before Domi Ops asked for activity access. Choose
-              Reconnect and approve it to include workouts. Readings keep importing either way.
+              Workouts, daily activity and sleep are not coming across yet: this link predates activity access.
+              Choose Reconnect and approve it to include those categories. Readings keep importing either way.
             </Alert>
           ) : null}
           {link.status === "active" && link.lastError ? (
@@ -304,8 +304,10 @@ export function WithingsPanel({
         <SectionHeader title="Blood pressure cuff and watch (Withings)" />
         <p className="text-sm text-[var(--color-text-muted)]">
           Connect a Withings cuff or watch and readings arrive on their own, no typing, and fill scheduled checks that
-          fall near them. Blood pressure, pulse, blood oxygen, body temperature and workouts are imported, and only
-          into Domi Ops: nothing is sent back to Withings.
+          fall near them. Import includes blood pressure, pulse, blood oxygen, body temperature, workouts,
+          daily steps, distance, active minutes, calories, and sleep timing, stages, awakenings and score
+          when your devices provide them. Domi Ops reads these records and registers update notifications;
+          it does not edit your Withings health records.
         </p>
         <p className="text-sm text-[var(--color-text-muted)]">
           <strong className="text-[var(--color-text)]">Withings+ for new accounts.</strong> For a Withings account

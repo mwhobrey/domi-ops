@@ -20,7 +20,7 @@ export interface WhomeBetterAuth {
   handler: (request: Request) => Response | Promise<Response>;
 }
 
-export function createBetterAuth(db: Database, env: Env): WhomeBetterAuth {
+export function createBetterAuth(db: Database, env: Env, options: { deferHouseholdMembership?: (headers: Headers) => Promise<boolean> } = {}): WhomeBetterAuth {
   const secret =
     env.SESSION_SECRET ?? "dev-only-insecure-secret-replace-before-production!!";
 
@@ -124,6 +124,9 @@ export function createBetterAuth(db: Database, env: Env): WhomeBetterAuth {
     },
     account: {
       modelName: "ba_accounts",
+      // Better Auth decrypts legacy plaintext values on read; new token writes
+      // are encrypted with SESSION_SECRET. Existing rows need operator rotation.
+      encryptOAuthTokens: true,
     },
     verification: {
       modelName: "ba_verifications",
@@ -176,10 +179,20 @@ export function createBetterAuth(db: Database, env: Env): WhomeBetterAuth {
       },
     },
     databaseHooks: {
+      account: {
+        // Provider ID tokens are needed for callback verification, not app sessions.
+        // Better Auth encryptOAuthTokens covers access/refresh tokens only.
+        create: { before: async (account) => ({ data: { ...account, idToken: null } }) },
+        update: { before: async (account) => ({ data: { ...account, idToken: null } }) },
+      },
       session: {
         create: {
-          after: async (session) => {
+          after: async (session, context) => {
             try {
+              // Invitation acceptance owns membership and role assignment, even on
+              // self-host instances that normally auto-join a newly signed-in user.
+              const headers = context?.headers ?? context?.request?.headers;
+              if (headers && await options.deferHouseholdMembership?.(headers)) return;
               // Runs before any household context exists (we're figuring out household
               // membership right here), so it needs the member_auth_lookup RLS policy — the
               // same "resolve by user_id first" scope auth middleware uses elsewhere. Without

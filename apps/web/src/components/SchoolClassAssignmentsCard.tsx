@@ -13,6 +13,7 @@ import {
   type Category,
 } from "../lib/school-class-types";
 import { SchoolAssignmentSheet } from "./SchoolAssignmentSheet";
+import { SchoolCourseTools } from "./SchoolCourseTools";
 import {
   Alert,
   Badge,
@@ -174,6 +175,10 @@ export function SchoolClassAssignmentsCard({
           />
         </CardHeader>
         <CardBody>
+          {canEditAssignments && <SchoolCourseTools classId={classId} assignments={assignments} onRescheduled={(changes) => setAssignments((old) => old.map((assignment) => {
+            const change = changes.find((row) => row.id === assignment.id);
+            return change ? { ...assignment, dueAt: change.after } : assignment;
+          }))} />}
           {error && <Alert variant="error">{error}</Alert>}
           {assignments.length > 0 && (
             <div className="mb-4 flex flex-wrap items-center gap-2">

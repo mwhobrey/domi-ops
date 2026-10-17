@@ -8,7 +8,7 @@ Source of truth for [WHO-181](https://linear.app/mikewhob-whome/issue/WHO-181) p
 - [x] **Starter only at launch**
 - [ ] Starter + Family at launch (Family deferred — see below)
 
-**Rationale:** One shared Postgres + RLS stack, one Stripe Product, minimal provisioning ops. Family (dedicated DB per household) ships after WHO-177/178 without repricing Starter.
+**Rationale:** One shared Postgres + RLS stack, one Stripe Product, minimal provisioning ops. The 2026-10-16 hosted-household review keeps one Cloud plan and removes the unbuilt dedicated Family offer from public pricing. Reconsider additional tiers only with customer and cost evidence.
 
 ## Hosted Starter — **Domi Ops Cloud**
 
@@ -19,7 +19,7 @@ Source of truth for [WHO-181](https://linear.app/mikewhob-whome/issue/WHO-181) p
 | Annual price | **$120/yr** (2 months free vs monthly) |
 | Trial | **14 days** |
 | Card required for trial | **Yes** |
-| `modules_entitled` | **All modules** (`core`, `school`, `calendar_sync`, `drive`, `health`) |
+| `modules_entitled` | **All modules** (`core`, `school`, `calendar_sync`, `drive`, `health`, `goals`) |
 | `storage_quota_bytes` | **25 GB** (26,843,545,600 bytes) |
 
 ### Module packaging decision
@@ -36,7 +36,7 @@ Source of truth for [WHO-181](https://linear.app/mikewhob-whome/issue/WHO-181) p
 
 ## Hosted Family
 
-**Deferred** — not sold at launch. Pricing page shows “Coming soon.”
+**Deferred** — not sold or advertised on public pricing. The following is an internal planning record, not a product commitment.
 
 | Field | Value |
 |-------|-------|

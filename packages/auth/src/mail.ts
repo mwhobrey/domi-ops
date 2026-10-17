@@ -2,6 +2,18 @@ import nodemailer from "nodemailer";
 import type { Env } from "@domi-ops/config";
 import { isSmtpConfigured } from "@domi-ops/config";
 
+export async function sendHouseholdInvitationEmail(env: Env, input: { to: string; url: string; householdName: string }) {
+  if (!isSmtpConfigured(env)) throw new Error("smtp_not_configured");
+  const transport = nodemailer.createTransport({
+    host: env.SMTP_HOST, port: env.SMTP_PORT ?? 587, secure: env.SMTP_PORT === 465,
+    auth: env.SMTP_USER && env.SMTP_PASSWORD ? { user: env.SMTP_USER, pass: env.SMTP_PASSWORD } : undefined,
+  });
+  await transport.sendMail({ from: env.SMTP_FROM, to: input.to,
+    subject: "You are invited to a Domi Ops household",
+    text: `You have been invited to ${input.householdName} on Domi Ops.\n\nUse your own account with this email address to join. There is no second household subscription charge.\n\n${input.url}\n\nThis invitation expires in 7 days. If you were not expecting it, you can ignore it.`,
+  });
+}
+
 export async function sendVerificationEmail(
   env: Env,
   input: { to: string; url: string; name?: string | null },

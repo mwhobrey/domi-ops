@@ -1,4 +1,6 @@
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
+import { privateTelemetryFields, telemetryRoute } from "@domi-ops/config/diagnostics";
 import { telemetryBugReports, telemetryEvents } from "@domi-ops/db";
 import type { Database } from "@domi-ops/db";
 
@@ -8,13 +10,11 @@ import type { Database } from "@domi-ops/db";
  * their instance to anything. Never touches households/users; nothing here can be
  * traced back to a specific family. See packages/db/src/schema/telemetry.ts.
  *
- * No rate limiting yet — there's no rate-limit infra anywhere in this codebase today
- * (checked; the same gap already flagged for POST /api/billing/checkout). Acceptable
- * for now given volume; revisit before this sees real public traffic at scale.
+ * The collector bounds bodies and batch sizes. Deploy behind edge abuse controls;
+ * this unauthenticated endpoint does not establish consent or caller identity.
  */
 
 const MAX_EVENTS_PER_BATCH = 50;
-const MAX_STRING_LEN = 256;
 const MAX_MESSAGE_LEN = 4000;
 const VALID_KINDS = new Set(["web_vital", "error", "usage"]);
 const VALID_DEPLOYMENT_MODES = new Set(["single", "shared", "dedicated"]);
@@ -37,28 +37,9 @@ function clampUuid(value: unknown): string | undefined {
   return s && UUID_RE.test(s) ? s : undefined;
 }
 
-function clampMetadata(value: unknown): Record<string, string | number | boolean> | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
-  const out: Record<string, string | number | boolean> = {};
-  let count = 0;
-  for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
-    if (count >= 10) break;
-    if (typeof v === "string") {
-      out[key.slice(0, 64)] = v.slice(0, 128);
-      count += 1;
-    } else if (typeof v === "number" && Number.isFinite(v)) {
-      out[key.slice(0, 64)] = v;
-      count += 1;
-    } else if (typeof v === "boolean") {
-      out[key.slice(0, 64)] = v;
-      count += 1;
-    }
-  }
-  return count > 0 ? out : undefined;
-}
-
 export function telemetryRoutes(db: Database) {
   const app = new Hono();
+  app.use("*", bodyLimit({ maxSize: 64 * 1024 }));
 
   app.post("/events", async (c) => {
     let body: { events?: unknown };
@@ -77,8 +58,8 @@ export function telemetryRoutes(db: Database) {
       const e = raw as Record<string, unknown>;
       const anonId = clampUuid(e.anonId);
       const kind = typeof e.kind === "string" && VALID_KINDS.has(e.kind) ? e.kind : undefined;
-      const name = clampString(e.name, MAX_STRING_LEN);
-      if (!anonId || !kind || !name) return [];
+      const fields = privateTelemetryFields(e);
+      if (!anonId || !kind || !fields) return [];
       const deploymentMode =
         typeof e.deploymentMode === "string" && VALID_DEPLOYMENT_MODES.has(e.deploymentMode)
           ? e.deploymentMode
@@ -87,12 +68,12 @@ export function telemetryRoutes(db: Database) {
         {
           anonId,
           kind: kind as "web_vital" | "error" | "usage",
-          name,
-          value: typeof e.value === "number" && Number.isFinite(e.value) ? Math.round(e.value) : null,
-          path: clampString(e.path, MAX_STRING_LEN) ?? null,
+          name: fields.name,
+          value: fields.value,
+          path: fields.path,
           deploymentMode: deploymentMode ?? null,
           appVersion: clampString(e.appVersion, 32) ?? null,
-          metadata: clampMetadata(e.metadata) ?? null,
+          metadata: fields.metadata,
         },
       ];
     });
@@ -129,7 +110,7 @@ export function telemetryRoutes(db: Database) {
       email: clampString(body.email, 320) ?? null,
       deploymentMode: deploymentMode ?? null,
       appVersion: clampString(body.appVersion, 32) ?? null,
-      path: clampString(body.path, MAX_STRING_LEN) ?? null,
+      path: telemetryRoute(body.path),
     });
 
     return c.json({ ok: true });

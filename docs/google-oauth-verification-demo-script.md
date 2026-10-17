@@ -1,218 +1,124 @@
-# Google OAuth verification — demo video capture script
+# Google OAuth verification recording
 
-Capture-ready script for Google Trust & Safety **OAuth verification** (Domi / Whome household app).  
-**Source of truth for scope strings:** `packages/auth/src/google.ts` (calendar + Docs connect) and Better Auth Google sign-in (`packages/auth/src/better-auth.ts` → `/auth/callback/google`).
+Use the hosted household app and the exact OAuth client Google is reviewing.
+The normal hosted origin is `https://app.domi-ops.com`; substitute the actual
+reviewed deployment if different. Do not film the dogfood site or localhost for
+a different production client. The public home page is `https://domi-ops.com`,
+with its privacy policy at `https://domi-ops.com/privacy`.
 
-**Related docs:** [GOOGLE_OAUTH_SETUP.md](./GOOGLE_OAUTH_SETUP.md) · Privacy policy copy (`packages/marketing-ui/src/legal.tsx` → `/privacy`) · WHO-228 (narrowed Docs to `drive.file`).
+## Before recording
 
-**Recording environment (dogfood):** `https://whome.whobrey.me` — use the **same** GCP OAuth client ID and redirect URIs submitted in the verification form. Do not record against localhost unless that client is what Google is reviewing.
+The remediation branch narrows Calendar permissions and separates identity
+permissions from optional connections. Deploy and verify that build before filming
+these scopes. A video of the old full-Calendar grant does not demonstrate the new
+request. Do not remove old scopes from a live client's configuration until the
+intended rollout and test-account reconnect have been verified.
 
----
+Use a synthetic Google account, fictional household and student records, an empty
+test calendar, and a short test document. If necessary, revoke only that synthetic
+account's previous grant so the full consent flow appears. Keep the address bar
+visible for the OAuth client ID. Never show client secrets, refresh tokens, payment
+details, actual medical information, or other household members' information.
 
-## A. Scope inventory (authoritative)
+Check the app name, verified domain, support email, home page and privacy URL in
+Google Cloud Branding. In Data access, declare the exact scopes emitted by the
+deployed app. Add the test account to the testing audience if the project is still
+in testing. Confirm the recording/review account can use the app end to end.
 
-Domi uses **one** GCP Web OAuth client for three **separate** user consent flows. Each flow sends its own `scope` query parameter on the authorize URL.
-
-### A.1 Sign-in (Better Auth — Google social provider)
-
-| Scope string (as requested) | User-facing feature | Why it is needed |
-|----------------------------|---------------------|------------------|
-| `openid` | **Continue with Google** on `/login` | OpenID Connect identity for session creation |
-| `https://www.googleapis.com/auth/userinfo.email` | Account email on profile; household member identity | Match Google account to Domi user / provision username |
-| `https://www.googleapis.com/auth/userinfo.profile` | Display name and avatar on profile | Profile UI without a separate “edit name” step at first sign-in |
-
-**Authorize path:** `/login` → **Continue with Google** → Google → `{PUBLIC_APP_URL}/auth/callback/google`  
-**Redirect URI:** `https://whome.whobrey.me/auth/callback/google`
-
-Better Auth does not pass custom scopes in code; Google receives the provider’s default OIDC set (equivalent to the three rows above). In **Google Cloud Console → OAuth consent screen → Data access**, ensure these match what you submitted (Google may show short labels like “See your primary Google Account email address”).
-
-### A.2 Calendar connect (Domi API — `GOOGLE_CALENDAR_SCOPES`)
-
-| Scope string | User-facing feature | Why it is needed |
-|-------------|---------------------|------------------|
-| `openid` | Same Google account as the member connecting | Ties the calendar token to the signed-in user |
-| `https://www.googleapis.com/auth/userinfo.email` | Connection ownership / troubleshooting | Same as sign-in |
-| `https://www.googleapis.com/auth/userinfo.profile` | (Bundled with connect flow) | Same as sign-in |
-| `https://www.googleapis.com/auth/calendar` | **Calendar** module: import wizard, synced events, bidirectional push | List calendars (`calendarList`), read events for import/sync, create/update/delete events when sync mode is bidirectional (`packages/calendar-sync` — Calendar API v3 GET/POST/PUT/DELETE) |
-
-**Start URL:** `/auth/google/calendar/start` (also linked from **Profile → Integrations** and **Calendar** setup UI)  
-**Redirect URI:** `https://whome.whobrey.me/auth/google/calendar/callback`  
-**OAuth params:** `access_type=offline`, `prompt=consent` (refresh token for background worker sync).
-
-**Mike — scope breadth note:** `calendar` is the full Calendar scope (not `calendar.events.readonly`). Domi **writes** back to Google when the household uses bidirectional sync (edit/drag event in Domi → worker pushes to Google). Read-only scope would break that product behavior. Narrowing to a single calendar ID is a UX choice (import wizard picks calendars), not a different OAuth scope.
-
-### A.3 Google Docs / Drive connect (Domi API — `GOOGLE_DOCS_SCOPES`)
-
-| Scope string | User-facing feature | Why it is needed |
-|-------------|---------------------|------------------|
-| `openid` | Same as above | Account binding for `google_docs_connections` |
-| `https://www.googleapis.com/auth/userinfo.email` | Same as above | Same as above |
-| `https://www.googleapis.com/auth/userinfo.profile` | Same as above | Same as above |
-| `https://www.googleapis.com/auth/drive.file` | **School** (Picker attach, test copy/submit, freeze export), **Reports** export to Google Docs/Drive, teacher **Export to Google Doc** | Per-file access: files user opens via **Google Picker** or creates via Domi upload+convert (`apps/api/src/lib/google-docs-export.ts`). No `drive` or `documents` scope (WHO-228 — Family Link–friendly). |
-
-**Start URL:** `/auth/google/docs/start` (optional `?next=/school/assignment/{id}`)  
-**Redirect URI:** `https://whome.whobrey.me/auth/google/docs/callback`  
-**OAuth params:** `access_type=offline`, `prompt=consent`.
-
-**Picker (not extra OAuth scopes):** Browser uses `GOOGLE_PICKER_API_KEY` + the user’s `drive.file` access token (`GET /api/core/google/docs/picker-session`). No additional user consent beyond `drive.file`.
-
-### A.4 Not part of user OAuth consent (do not list in verification)
-
-| Scope / credential | Used for |
-|--------------------|----------|
-| `https://www.googleapis.com/auth/firebase.messaging` | FCM HTTP v1 **service account** for native push (`packages/calendar-sync/src/native-push-delivery.ts`) — not shown on the user consent screen |
-| Domi Ops Drive (S3/MinIO) | Household file storage — unrelated to Google Drive OAuth |
-
-### A.5 Union list for Google Console + verification reply
-
-Paste **every** scope your GCP project has on the consent screen **Data access** tab. It must match what the app requests. Minimum set implied by current code:
-
-```
-openid
-https://www.googleapis.com/auth/userinfo.email
-https://www.googleapis.com/auth/userinfo.profile
-https://www.googleapis.com/auth/calendar
-https://www.googleapis.com/auth/drive.file
-```
-
-**Per-flow scope strings (exact `scope` query value, space-separated):**
-
-- **Sign-in:** `openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile`
-- **Calendar connect:** `openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/calendar`
-- **Docs connect:** `openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/drive.file`
-
-If the verification ticket only mentions **sensitive** scopes, still film **Calendar** and **`drive.file`** demos; include sign-in only if Google asked for all app scopes or login is in the same client submission.
-
----
-
-## B. Pre-flight checklist (before OBS / camera)
-
-### B.1 Environment and client
-
-- [ ] Record on **`https://whome.whobrey.me`** (or the exact production URL on the OAuth client under review).
-- [ ] GCP project = same **OAuth client ID** as `GOOGLE_OAUTH_CLIENT_ID` on that server.
-- [ ] **Authorized JavaScript origins:** `https://whome.whobrey.me`
-- [ ] **Authorized redirect URIs** (exact):
-  - `https://whome.whobrey.me/auth/callback/google`
-  - `https://whome.whobrey.me/auth/google/calendar/callback`
-  - `https://whome.whobrey.me/auth/google/docs/callback`
-- [ ] **OAuth consent screen → Data access:** every scope in [A.5](#a5-union-list-for-google-console--verification-reply) is added with justification text aligned to this doc.
-- [ ] **Privacy policy URL** on consent screen loads (e.g. `https://whome.whobrey.me/privacy`).
-
-### B.2 Fresh consent screen
-
-- [ ] Use **Mike’s private throwaway Google account** (not Ally’s; no real household health/meds on screen).
-- [ ] Revoke prior access: [Google Account → Third-party access](https://myaccount.google.com/permissions) → remove Domi / Whome app → confirm.
-- [ ] Sign out of Domi or use a clean browser profile so connect flows hit `prompt=consent` where configured.
-- [ ] Calendar and Docs connects use `prompt=consent` in code — expect full permission UI after revoke.
-
-### B.3 Capture quality (Google rejection: obscured scopes)
-
-- [ ] Resolution **1920×1080** or higher; OBS canvas matches monitor.
-- [ ] Browser zoom **100%** (or 110% max if text still readable).
-- [ ] Use **Chrome** (what most reviewers expect).
-- [ ] On Google’s consent step, click **“See all …” / “Show all services”** (wording varies) so **every** permission line is visible.
-- [ ] **Pause 5–8 seconds** on the consent screen; slow scroll if the list is long.
-- [ ] Optional caption overlay: “OAuth client: Whome / Domi Ops — scopes must match Cloud Console submission.”
-
-### B.4 App data safety
-
-- [ ] Do **not** open **Health** with Ally’s medications or real PHI.
-- [ ] School demo: Mike-owned test class/assignment or empty homeschool fixture.
-- [ ] Calendar demo: throwaway calendar or “Domi OAuth Demo” Google calendar.
-
-### B.5 Module gates
-
-- [ ] Household has modules enabled: `calendar_sync`, `school`, `drive` as needed (`/settings` → household modules for owner).
-- [ ] Signed in as **owner/admin** for connect buttons on Profile.
-
-### B.6 Quick code/console parity check
+All three callbacks must match the production client exactly:
 
 ```text
-# Optional: while logged in, start Calendar connect and inspect the address bar on accounts.google.com
-# scope= parameter must include calendar (calendar flow) or drive.file (docs flow)
+https://app.domi-ops.com/auth/callback/google
+https://app.domi-ops.com/auth/google/calendar/callback
+https://app.domi-ops.com/auth/google/docs/callback
 ```
 
----
+## Permissions and visible proof
 
-## C. Shot-by-shot video script
+Source: `packages/auth/src/google.ts`, `packages/auth/src/better-auth.ts`,
+`packages/calendar-sync/src/client.ts`, `sync.ts`, `push.ts`, and
+`apps/api/src/lib/google-drive-export.ts`.
 
-**Target length:** **6–12 minutes** — clarity beats brevity; Google commonly accepts ~3–10 minutes if every sensitive scope is shown and exercised.
+| Flow | Requested permission | Reason and demonstration |
+| --- | --- | --- |
+| Sign in | `openid`, `https://www.googleapis.com/auth/userinfo.email`, `https://www.googleapis.com/auth/userinfo.profile` | Establish the member's identity, email, name and avatar. Show Google sign-in returning to the app. |
+| Connect Calendar | `https://www.googleapis.com/auth/calendar.calendarlist.readonly` | Display the user's calendar list so they can choose calendars. Show the selection screen. It does not administer or delete calendars. |
+| Connect Calendar | `https://www.googleapis.com/auth/calendar.events` | Import events and create, change or delete events when the user enables bidirectional sync. Show a Google event appearing in Domi Ops, then an app change reaching the selected Google calendar. |
+| Connect Docs | `https://www.googleapis.com/auth/drive.file` | Read/modify files explicitly selected with Picker or created by the app. Show picking one school material and creating a new exported report document. No full Drive or Docs-wide scope is requested. |
 
-**Suggested filename:** `domi-ops-google-oauth-verification-whome-YYYY-MM-DD.mp4`
+Calendar and Docs connections request offline access for refresh tokens. They are
+optional and separate from sign-in. FCM's service-account messaging permission and
+Domi Ops' own file storage are not user Google consent scopes.
 
-| Scene | Time (cum.) | Action | Voice / caption | Must be visible |
-|-------|-------------|--------|-----------------|-----------------|
-| **1 — Branding** | 0:00–0:30 | Open `https://whome.whobrey.me` (logged out). Show login page logo and name **Domi** / household app. | “Domi Ops is a household operations app: calendar, school, and shared planning.” | App name, home/login branding |
-| **2 — Privacy beat** | 0:30–0:50 | Open `/privacy` in new tab; scroll to **Google account data** section briefly; return to app. | “We only use Google data for features the user enables; details in our privacy policy.” | Privacy policy Google section (no health data on screen) |
-| **3 — Sign-in (if in scope submission)** | 0:50–1:40 | `/login` → **Continue with Google**. On consent: expand all services; read permissions; **Allow**. | “Sign-in uses OpenID, email, and profile to create a Domi account.” | Full consent list; redirect back to Domi dashboard |
-| **4 — Profile integrations** | 1:40–2:00 | Go to **`/profile`** → scroll to **Google Calendar** and **Google Docs** sections. | “Calendar and Docs are optional connections, separate from sign-in.” | Both connect buttons, “not connected” or reconnect state |
-| **5 — Calendar consent** | 2:00–3:30 | Click **Connect Google** (Profile or `/calendar` banner) → hits `/auth/google/calendar/start`. On Google: **expand all scopes**; linger; **Allow**. | “Calendar scope lets the user pick which Google calendars to import and sync events two-way when enabled.” | Every line mentioning Calendar; URL shows `redirect_uri=.../auth/google/calendar/callback` |
-| **6 — Calendar import** | 3:30–5:00 | Land on `/calendar?connected=1&import=1` (or open **Import wizard**). Select a **test** Google calendar; preview → commit import. | “We only sync calendars the user explicitly selects.” | Wizard UI, calendar names, preview/commit |
-| **7 — Calendar feature proof** | 5:00–6:30 | Show imported events in **Month** or **Week** view. Open an event; edit title or time; save. (If bidirectional sync enabled, mention worker pushes to Google.) | “This requires read/write Calendar API access, not read-only.” | Domi calendar grid with Google-sourced events; edit sheet |
-| **8 — Docs consent** | 6:30–8:00 | **Profile → Connect Google Docs** (or `/auth/google/docs/start`). Expand all permissions on consent; linger; **Allow**. | “`drive.file` limits access to files the user creates or picks in Domi—not entire Drive.” | `drive.file` / “See and download files you created or opened with this app” (Google wording); `redirect_uri=.../auth/google/docs/callback` |
-| **9 — Docs: reports export** | 8:00–9:00 | `/reports` → run export → **Google Docs** (or weekly report export). Complete flow; show Doc opens in Google. | “Reports export creates a new Doc via Drive—the scope we requested.” | Export sheet, success toast, Google Doc tab |
-| **10 — Docs: school Picker** | 9:00–10:30 | `/school` → open a **test** assignment → **Add from Google** / Picker → select a file → attach. (Optional: student **Submit via Google** with a copy.) | “School materials use Picker + `drive.file` for attach, test copies, and submit.” | Picker UI, material on assignment; no real student PII |
-| **11 — Optional denial demo** | 10:30–11:00 | Show export or Picker **disabled** message when Docs not connected (incognito or before connect). | “Without `drive.file`, these actions prompt reconnect.” | UI error/connect CTA |
-| **12 — Close** | 11:00–11:30 | Return to `/profile` showing **connected** Calendar + Docs. | “OAuth tokens are encrypted at rest; user can revoke in Google Account settings.” | Connected status on profile |
+The Calendar endpoints used here are calendarList.list, colors.get and event
+list/get/insert/update/delete. Google's method documentation permits the narrowed
+scopes: [calendar selection](https://developers.google.com/workspace/calendar/api/v3/reference/calendarList/list),
+[colors](https://developers.google.com/workspace/calendar/api/v3/reference/colors/get),
+[event creation](https://developers.google.com/workspace/calendar/api/v3/reference/events/insert),
+[event deletion](https://developers.google.com/workspace/calendar/api/v3/reference/events/delete).
+This is a code and documentation mapping; complete a live synthetic-account sync
+check before claiming acceptance. A read-only event scope cannot support the
+app's bidirectional event changes. The app does not need calendar administration.
 
-**Adjust scenes 3, 5, 8** to match **only** the scopes Google flagged in the rejection email (e.g. skip sign-in if only Calendar + Drive were submitted).
+Google classifies `drive.file` as a non-sensitive, per-file scope in its
+[Drive authorization guide](https://developers.google.com/workspace/drive/api/guides/api-specific-auth).
+Still show the Docs flow when it is part of the submitted app demonstration.
 
----
+## Recording sequence
 
-## D. Submission notes
+Aim for a clear 6-10 minute recording; that is a production suggestion, not a
+Google duration requirement. Record at readable resolution. Expand every consent
+section, scroll the whole list, and hold each permission list long enough to read.
 
-### D.1 Video
+1. Open the public home page and privacy policy. Show the Google data explanation
+   and the app's name. Open the reviewed hosted app.
+2. Sign in with the synthetic Google account. Show the consent/account flow,
+   matching app name and OAuth client ID in the address bar, then the successful
+   return to the household. Do not claim a successful sign-in if Google blocks it.
+3. Open Profile integrations and connect Calendar. Show the complete expanded
+   permission list and grant it. Explain calendar selection and event changes.
+4. Select only the test calendar. Import a uniquely named synthetic event. Show
+   that event in Domi Ops and in Google Calendar.
+5. Enable bidirectional sync for the test calendar. Create a synthetic event in
+   Domi Ops, show it in Google, change its title/time in Domi Ops and verify the
+   Google change, then delete that test event and verify the Google deletion.
+   Wait for actual worker completion. Narration about intended behavior is not
+   evidence that event-writing permission is used.
+6. Connect Docs separately. Expand and show the per-file permission. Use Google
+   Picker to select the synthetic school document and show the attachment.
+7. Export a fictional report to Google Docs/Drive. Open the newly created file and
+   show its content. Explain that unrelated Drive files are outside `drive.file`.
+8. Show how the user disconnects the optional integrations and where they can
+   revoke access in their Google Account. Sign-in and household data remain
+   separate from the optional connection controls.
 
-- **Length:** aim **6–12 minutes**; minimum ~4 minutes if only two sensitive scopes and demos are tight.
-- **Format:** MP4, H.264; 1080p; clear UI text.
-- **Audio:** voice-over or text captions explaining **which scope** each demo satisfies.
-- **Upload:** attach in Google Cloud Console verification form or reply to Trust & Safety email with Drive/YouTube link per their instructions.
+If a step fails, fix or disclose it before submitting; do not splice a successful
+flow from another client or deployment into the review. Follow any specific
+requirements in Google's review email in addition to this guide.
 
-### D.2 Text to paste beside the video
+Upload the demonstration as an unlisted YouTube video and confirm the reviewer can
+open it. Google's [sensitive scope verification guidance](https://developers.google.com/identity/protocols/oauth2/production-readiness/sensitive-scope-verification)
+requires showing the grant process and the functionality enabled by the requested
+scopes, including the sign-in flow when used. The branding, client ID, submitted
+scope list, video, and deployed behavior need to agree.
 
-Use this block (edit app name if Console differs):
+## Sign-in diagnosis and acceptance receipt
 
-```text
-App: Domi Ops (Whome household deployment)
-Homepage: https://whome.whobrey.me
-Privacy policy: https://whome.whobrey.me/privacy
+Record these facts privately without tokens or authorization codes:
 
-OAuth scopes requested by the application (must match Cloud Console Data access):
+- Deployed Git SHA, public origin and OAuth client ID (the client ID is not secret).
+- Exact outgoing `scope` and `redirect_uri` values for each flow.
+- Google's exact policy/error code, current publishing/review status and whether
+  the synthetic account is in the allowed audience.
+- Actual callback result and application error code, if Google grants consent but
+  the application fails afterward. Account-link conflicts, lost state cookies,
+  or callback errors are application/configuration investigations, distinct from
+  provider verification. Never repair them by deleting other users' account rows.
+- Successful synthetic-account calendar selection, import, event create/update/
+  delete, Picker attachment and report export after any scope change.
+- Video URL, submission date and Google's eventual review result.
 
-openid
-https://www.googleapis.com/auth/userinfo.email
-https://www.googleapis.com/auth/userinfo.profile
-https://www.googleapis.com/auth/calendar
-https://www.googleapis.com/auth/drive.file
-
-Flow 1 — Sign-in: /login → Google → /auth/callback/google
-  Scopes: openid, userinfo.email, userinfo.profile
-  Purpose: authentication and profile (name, email, avatar).
-
-Flow 2 — Calendar connect: /auth/google/calendar/start → /auth/google/calendar/callback
-  Scopes: openid, userinfo.email, userinfo.profile, calendar
-  Purpose: user-selected calendar import/sync and bidirectional event updates.
-
-Flow 3 — Docs/Drive connect: /auth/google/docs/start → /auth/google/docs/callback
-  Scopes: openid, userinfo.email, userinfo.profile, drive.file
-  Purpose: Google Picker attachments, school test workflow, report export to Docs/Drive (files user creates or opens via Domi only).
-
-The demo video shows each sensitive scope on the expanded Google consent screen and demonstrates the corresponding in-app features immediately after grant.
-```
-
-### D.3 Checklist before submit
-
-- [ ] Video shows **expanded** consent for **each** flow you request users to complete.
-- [ ] Console **Data access** scopes = code (`packages/auth/src/google.ts`) = pasted list above.
-- [ ] No real health/medication data visible.
-- [ ] Redirect URIs in video match GCP credentials exactly.
-
-### D.4 Follow-ups for Mike (not in scope of this doc PR)
-
-- If Google asks to remove duplicate OIDC scopes from calendar/docs flows, that is a **code change** (separate issue)—calendar connect currently bundles `GOOGLE_LOGIN_SCOPES` intentionally.
-- If verification is for **`app.domi-ops.com`** hosted beta instead of whome, re-record with that origin and the hosted OAuth client; redirect paths stay the same pattern under `PUBLIC_APP_URL`.
-
----
-
-*Last updated from repo branch implementing this doc. Regenerate scope tables from `packages/auth/src/google.ts` if scopes change.*
+Status at implementation: local scope URL tests pass. No production Google client
+has been changed, no live grant has been revoked, and provider approval or restored
+Google sign-in has not been established by this work. Mike records/submits the
+video and Google's review remains an external acceptance gate.

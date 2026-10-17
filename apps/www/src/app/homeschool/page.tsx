@@ -49,8 +49,8 @@ export default function HomeschoolPage() {
           body: "Weighted categories for tests, homework, and projects, tracked across the whole year.",
         },
         {
-          title: "Tests that grade themselves",
-          body: "Build a test in the app, students take it there, and scores land in the gradebook. Override any answer you disagree with.",
+          title: "Tests with automatic scoring and teacher review",
+          body: "Choice and short-answer questions can score automatically. Review written answers yourself and adjust any score before finalizing the gradebook.",
         },
         {
           title: "School days, not roll call",

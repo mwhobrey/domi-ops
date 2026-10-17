@@ -63,7 +63,7 @@ export function materialOpenUrl(
     return googleFileOpenUrl(material.googleFileId, material.googleMimeType);
   }
   if (material.source === "domi_drive_file" && material.driveObjectId) {
-    return `/api/core/drive/objects/${material.driveObjectId}/file`;
+    return `/api/school/assignments/${material.assignmentId}/materials/${material.id}/file`;
   }
   if (material.externalUrl) return material.externalUrl;
   if (material.driveObject?.url) return material.driveObject.url;

@@ -7,6 +7,10 @@ import { createDb, createScopedDb } from "@domi-ops/db";
 import { initSentry } from "./lib/sentry.js";
 import { createAuthMiddleware, type AppVariables } from "./middleware/auth.js";
 import { createTenantMiddleware } from "./middleware/tenant.js";
+import { createSubscriptionMiddleware } from "./middleware/subscription.js";
+import { createDemoProtectionMiddleware } from "./middleware/demo.js";
+import { householdInvitationRoutes } from "./routes/household-invitations.js";
+import { INVITATION_COOKIE, lookupHouseholdInvitation } from "./lib/household-invitations.js";
 import { whomeSessionRoutes } from "./routes/auth.js";
 import { calendarRoutes } from "./routes/calendar.js";
 import { scheduleConflictRoutes } from "./routes/schedule-conflicts.js";
@@ -37,6 +41,7 @@ import { healthMyallyfileRoutes } from "./routes/health-myallyfile.js";
 import { healthWithingsRoutes } from "./routes/health-withings.js";
 import { integrationsWithingsRoutes } from "./routes/integrations-withings.js";
 import { schoolClassesRoutes } from "./routes/school-classes.js";
+import { schoolCourseToolsRoutes } from "./routes/school-course-tools.js";
 import { schoolRecordsRoutes } from "./routes/school-records.js";
 import { schoolAssignmentsRoutes } from "./routes/school-assignments.js";
 import { schoolMaterialsRoutes } from "./routes/school-materials.js";
@@ -75,7 +80,13 @@ const db = createScopedDb(baseDb);
 // and nothing ever frees (whome, 2026-10-14). A request that holds a `baseDb` connection never waits for
 // `baseDb` again this way, because `authDb` is only ever held for a single short query.
 const authDb = createDb(env.DATABASE_URL);
-const betterAuth = createBetterAuth(authDb, env);
+const betterAuth = createBetterAuth(authDb, env, {
+  deferHouseholdMembership: async (headers) => {
+    const cookie = headers.get("cookie")?.split(";").map((part) => part.trim()).find((part) => part.startsWith(`${INVITATION_COOKIE}=`));
+    const token = cookie?.slice(INVITATION_COOKIE.length + 1);
+    return Boolean(token && await lookupHouseholdInvitation(authDb, token));
+  },
+});
 
 const app = new Hono<{ Variables: AppVariables }>();
 
@@ -111,8 +122,10 @@ app.use(
 );
 
 // Session → auth context must run before calendar OAuth (reads c.get("auth") on /start).
+app.use("*", createDemoProtectionMiddleware(env));
 app.use("*", createAuthMiddleware(baseDb, env, betterAuth));
 app.use("*", createTenantMiddleware(db, env));
+app.use("/api/*", createSubscriptionMiddleware(db, env));
 
 app.route("/auth/google/calendar", googleCalendarAuthRoutes(db, env));
 app.route("/auth/google/docs", googleDocsAuthRoutes(db, env));
@@ -128,6 +141,12 @@ app.on(["POST", "GET"], "/auth/*", async (c) => {
   if (path.includes("/sign-up")) {
     if (env.DEMO_MODE) {
       return c.json({ message: "Sign-up is disabled on the demo instance" }, 403);
+    }
+    if (path.endsWith("/sign-up/email")) {
+        const token = getCookie(c, INVITATION_COOKIE);
+        const invitation = token ? await lookupHouseholdInvitation(authDb, token) : null;
+        const body = await c.req.raw.clone().json().catch(() => null) as { email?: string } | null;
+        if (invitation && body?.email?.trim().toLowerCase() === invitation.invitation.email) return betterAuth.handler(c.req.raw);
     }
     if (isHostedDeployment(env)) {
       return c.json({ message: "Public sign-up is disabled on hosted deployments" }, 403);
@@ -190,13 +209,14 @@ app.route("/api/core", profileRoutes(db, env));
 app.route("/api/core", householdRoutes(db, env));
 app.route("/api/core", weeklyReportRoutes(db, env));
 app.route("/api/core", reportRoutes(db, env));
-app.route("/api/core/upload", browserUploadRoutes(env));
+app.route("/api/core/upload", browserUploadRoutes(db, env));
 app.route("/api/core/drive", driveRoutes(db, env));
 app.route("/api/core/onboarding", onboardingRoutes(db, env));
 app.route("/api/core/glance-config", glanceConfigRoutes(db, env));
 app.route("/api/core/dashboard-layout", dashboardLayoutRoutes(db, env));
 app.route("/s", drivePublicRoutes(db, env));
 app.route("/api/school", schoolClassesRoutes(db, env));
+app.route("/api/school", schoolCourseToolsRoutes(db, env));
 app.route("/api/school", schoolRecordsRoutes(db, env));
 app.route("/api/school", schoolAssignmentsRoutes(db, env));
 app.route("/api/school", schoolMaterialsRoutes(db, env));
@@ -215,6 +235,7 @@ app.route("/api/health/myallyfile", healthMyallyfileRoutes(db, env));
 app.route("/api/health/withings", healthWithingsRoutes(db, env));
 app.route("/api/integrations/withings", integrationsWithingsRoutes(db, env));
 app.route("/api/billing", billingRoutes(db, env));
+app.route("/api", householdInvitationRoutes(db, env));
 app.route("/api/billing", revenueCatRoutes(db, env));
 app.route("/api/core", nativeAuthRoutes(db, env, betterAuth));
 app.route("/api/telemetry", telemetryRoutes(db));

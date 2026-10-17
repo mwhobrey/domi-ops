@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { validateDevPublicAppUrl, oauthRedirectUris, inferDevWebProfile } from "./dev-url.js";
 import { loadRootDotenv, resetRootDotenvFlag } from "./load-dotenv.js";
+export { subscriptionAllowsWork, type SubscriptionAccessState } from "./subscription-access.js";
 
 export { loadRootDotenv, resetRootDotenvFlag } from "./load-dotenv.js";
 
@@ -147,6 +148,10 @@ export const envSchema = z
     APNS_P8_KEY: z.string().optional(),
     /** RevenueCat webhook shared secret (WHO-290). */
     REVENUECAT_WEBHOOK_SECRET: z.string().optional(),
+    REVENUECAT_ALLOWED_PRODUCT_IDS: z.string().optional(),
+    REVENUECAT_ALLOWED_APP_IDS: z.string().optional(),
+    REVENUECAT_ENTITLEMENT_ID: z.string().default("starter"),
+    REVENUECAT_ENVIRONMENT: z.enum(["PRODUCTION", "SANDBOX"]).default("PRODUCTION"),
     /** Apple Sign in with Apple client id / Services ID (WHO-288). */
     APPLE_CLIENT_ID: z.string().optional(),
     APPLE_CLIENT_SECRET: z.string().optional(),
@@ -234,6 +239,9 @@ export const KNOWN_HOUSEHOLD_MODULES = [
   "health",
   "goals",
 ] as const;
+
+/** One hosted household plan includes the complete public module catalog. */
+export const HOSTED_HOUSEHOLD_MODULES = KNOWN_HOUSEHOLD_MODULES;
 
 /** Deploy catalog ∩ known modules — used for household settings `availableModules`. */
 export function deployAvailableModules(envModules: readonly string[]): string[] {

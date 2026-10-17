@@ -54,6 +54,12 @@ export function DeleteAccountCard() {
           Permanently removes your Domi Ops login and membership. Household data owned only by you
           may become inaccessible. This cannot be undone.
         </p>
+        <p className="mt-2 text-sm text-[var(--color-text-muted)]">
+          Export your data first. A final household owner must cancel an active subscription or
+          transfer ownership before deleting their login. Manage web billing in Settings; store
+          subscriptions are managed in the App Store or Google Play. For immediate deletion help,
+          contact <a href="mailto:support@domi-ops.com" className="underline">support@domi-ops.com</a>.
+        </p>
       </div>
       <label className="block space-y-1.5">
         <span className="text-label text-[var(--color-text-muted)]">

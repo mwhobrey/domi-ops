@@ -12,7 +12,7 @@ Policy source: [ADR 001](../../docs/adr/001-public-launch-scope.md) (OSS + hoste
 |-------|-------|
 | **OSS** | MIT, Docker Compose, full module bundle, `DEPLOYMENT_MODE=single`. Public. |
 | **Hosted Starter** | `DEPLOYMENT_MODE=shared` + RLS. Private beta live. Public opening is what's left. |
-| **Hosted Family** | Dedicated DB per household. Unbuilt (ADR 003 Phase 2). "Coming soon." |
+| **Hosted Family** | Dedicated DB per household. Unbuilt and deferred; not advertised on pricing. |
 | **Same codebase** | No paywalled modules in git; hosted monetizes via entitlements + Drive quota. |
 
 Pricing: [PRICING_TIERS.md](../../docs/marketing/PRICING_TIERS.md) — $12/mo / $120/yr, 14-day trial (card required), 25 GB Drive, all modules.
@@ -20,14 +20,14 @@ Pricing: [PRICING_TIERS.md](../../docs/marketing/PRICING_TIERS.md) — $12/mo / 
 ## Deployments
 
 - **Dogfood:** `https://whome.whobrey.me`, single-tenant, operator-run (`deploy/update-prod.sh`). Local QA phases 0–5 pass — [06_DOGFOOD_TEST_PHASES.md](./06_DOGFOOD_TEST_PHASES.md).
-- **Hosted beta:** `app.domi-ops.com` + `domi-ops.com`, split infra (compute droplet + DO Managed Postgres + DO Spaces, ~$32/mo). Deploy via `deploy/deploy-hosted.sh` on the droplet after each merge. **Migrations run first, via the admin connection** — the app's `domi_ops_app` role has no DDL rights, so the deploy script's pending-migrations check aborts until an admin `db:migrate` has run. Full provisioning + ops: [deploy/HOSTED_BETA_SETUP.md](../../deploy/HOSTED_BETA_SETUP.md), [deploy/HOSTED_OPS.md](../../deploy/HOSTED_OPS.md).
+- **Hosted beta:** `app.domi-ops.com` + `domi-ops.com`, split compute/Postgres/Spaces infrastructure. Release through an approved version tag and `.github/workflows/publish-images.yml`, following [RELEASE_PROCESS.md](../../docs/RELEASE_PROCESS.md). The workflow owns the hosted deployment; do not substitute a manual SSH deployment. Migrations use the admin connection, because `domi_ops_app` has no DDL rights. Provisioning and operations: [HOSTED_BETA_SETUP.md](../../deploy/HOSTED_BETA_SETUP.md), [HOSTED_OPS.md](../../deploy/HOSTED_OPS.md).
 
 ## What's left
 
 1. **Watch beta feedback.** The tester is live; act on what comes back.
-2. **WHO-186** — enforce `household_subscriptions.status` (`past_due` / `canceled`) on module entitlements. Today `getHouseholdModuleContext` only reads the `modules_entitled` ceiling; status is surfaced in Settings UI but doesn't gate anything.
-3. **Public hosted opening** (WHO-187 go/no-go → announcement): open signup (currently `/auth/sign-up/*` is hard-blocked on hosted — WHO-248), community channels, `CODE_OF_CONDUCT.md` / `SECURITY.md` / issue templates audit, post-launch support runbook.
-4. **Real brand assets** — `apps/www` still renders "Domi Ops" as plain text, no `favicon.ico`, no OG image.
+2. **Hosted audit remediation is implemented locally, unreleased.** Subscription writes/jobs now gate by lifecycle; invites, billing management and private storage fixes have restricted-role regression coverage. Deploy/reconcile and capture provider acceptance before treating this as live. See [coverage](../../docs/HOSTED_AUDIT_REMEDIATION.md).
+3. **Public hosted opening** (WHO-187 go/no-go → announcement): complete [hosted acceptance](../../docs/HOSTED_LAUNCH_ACCEPTANCE.md), including Google review, payments, storage/retention and device checks. Hosted public signup remains closed; verified exact-email invitation signup is supported. Checkout/setup provisions paying households.
+4. **Positioning and acquisition evidence:** Cloud-first pages and mobile navigation are implemented; homepage/pricing screenshots and metadata exist. Validate homeschool-led activation, paid retention and support cost through the [measurement plan](../../docs/HOSTED_MEASUREMENT.md), rather than assuming feature completion establishes demand.
 
 ## Shipped (do not redo)
 

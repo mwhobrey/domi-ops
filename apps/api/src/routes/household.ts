@@ -2,8 +2,8 @@ import { Hono } from "hono";
 import type { Env } from "@domi-ops/config";
 import { householdModuleCeiling, isModuleEnabled, normalizeHouseholdModulesSelection } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
-import { calendarConnections, households, householdSubscriptions } from "@domi-ops/db";
-import { eq } from "drizzle-orm";
+import { calendarConnections, googleDocsConnections, healthMyallyfileLinks, healthWithingsLinks, householdMembers, households, householdSubscriptions } from "@domi-ops/db";
+import { and, eq, isNull, or } from "drizzle-orm";
 import {
   canProvisionMembers,
   isHouseholdMemberRole,
@@ -74,6 +74,9 @@ export function householdRoutes(db: Database, env: Env) {
       storageUsedBytes?: number;
       subscriptionStatus?: "trialing" | "active" | "past_due" | "canceled" | null;
       trialEndsAt?: Date | null;
+      currentPeriodEnd?: Date | null;
+      cancelAtPeriodEnd?: boolean | null;
+      billingProvider?: string | null;
       telemetryOptIn?: boolean;
     },
     modulesEntitled: string[] | null,
@@ -100,6 +103,9 @@ export function householdRoutes(db: Database, env: Env) {
       drivePublicSharesEnabled: env.DRIVE_PUBLIC_SHARES_ENABLED,
       subscriptionStatus: row.subscriptionStatus ?? null,
       trialEndsAt: row.trialEndsAt?.toISOString() ?? null,
+      currentPeriodEnd: row.currentPeriodEnd?.toISOString() ?? null,
+      cancelAtPeriodEnd: row.cancelAtPeriodEnd ?? false,
+      billingProvider: row.billingProvider ?? null,
     };
   }
 
@@ -121,6 +127,9 @@ export function householdRoutes(db: Database, env: Env) {
         modulesEntitled: householdSubscriptions.modulesEntitled,
         subscriptionStatus: householdSubscriptions.status,
         trialEndsAt: householdSubscriptions.trialEndsAt,
+        currentPeriodEnd: householdSubscriptions.currentPeriodEnd,
+        cancelAtPeriodEnd: householdSubscriptions.cancelAtPeriodEnd,
+        billingProvider: householdSubscriptions.provider,
       })
       .from(households)
       .leftJoin(householdSubscriptions, eq(householdSubscriptions.householdId, households.id))
@@ -360,6 +369,7 @@ export function householdRoutes(db: Database, env: Env) {
       const updated = await updateHouseholdMemberRole(db, {
         householdId: auth.householdId,
         actorRole: auth.role,
+        actorUserId: auth.userId,
         targetMemberId: memberId,
         role: body.role,
       });
@@ -372,6 +382,30 @@ export function householdRoutes(db: Database, env: Env) {
       }
       throw e;
     }
+  });
+
+  app.delete("/household/members/:memberId", async (c) => {
+    const auth = c.get("auth")!;
+    if (!canProvisionMembers(auth.role)) return c.json({ error: "forbidden" }, 403);
+    const body = await c.req.json<{ confirm?: string }>().catch(() => null);
+    if (body?.confirm !== "REMOVE") return c.json({ error: "confirm_required" }, 400);
+    await db.select({ id: households.id }).from(households).where(eq(households.id, auth.householdId)).for("update");
+    const members = await db.select().from(householdMembers).where(and(eq(householdMembers.householdId, auth.householdId), isNull(householdMembers.accessRevokedAt)));
+    const actor = members.find((m) => m.userId === auth.userId);
+    const target = members.find((m) => m.id === c.req.param("memberId"));
+    if (!actor || !canProvisionMembers(actor.role)) return c.json({ error: "forbidden" }, 403);
+    if (!target) return c.json({ error: "not_found" }, 404);
+    if (target.id === actor.id) return c.json({ error: "use_account_controls", message: "Use account controls to leave or delete your own account." }, 409);
+    if (actor.role === "admin" && ["owner", "admin"].includes(target.role)) return c.json({ error: "cannot_change_elevated" }, 403);
+    if (target.role === "owner" && members.filter((m) => m.role === "owner").length <= 1) return c.json({ error: "last_owner" }, 409);
+    await db.update(householdMembers).set({ accessRevokedAt: new Date() }).where(and(eq(householdMembers.id, target.id), eq(householdMembers.householdId, auth.householdId)));
+    await db.delete(calendarConnections).where(and(eq(calendarConnections.householdId, auth.householdId), eq(calendarConnections.userId, target.userId)));
+    await db.delete(googleDocsConnections).where(and(eq(googleDocsConnections.householdId, auth.householdId), eq(googleDocsConnections.userId, target.userId)));
+    await db.update(healthWithingsLinks).set({ status: "revoked" }).where(and(eq(healthWithingsLinks.householdId, auth.householdId), or(eq(healthWithingsLinks.memberId, target.id), eq(healthWithingsLinks.linkedByUserId, target.userId))));
+    await db.update(healthMyallyfileLinks).set({ status: "revoked" }).where(and(eq(healthMyallyfileLinks.householdId, auth.householdId), or(eq(healthMyallyfileLinks.memberId, target.id), eq(healthMyallyfileLinks.linkedByUserId, target.userId))));
+    // Auth context is resolved from current membership on every request; the login
+    // remains the person's own, and immediately loses this household's access.
+    return c.json({ ok: true });
   });
 
   return app;

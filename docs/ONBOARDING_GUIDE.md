@@ -1,14 +1,30 @@
 # First-login onboarding guide
 
-**Status (updated 2026-08-29):** built in-app as `apps/web/src/components/OnboardingChecklist.tsx`, a dismissible checklist card on the dashboard, role-aware (owner/admin steps vs. member steps), rendered for every first-time visitor until dismissed. This doc stays the content source of truth; update the component's `OWNER_STEPS`/`MEMBER_STEPS` arrays if this doc changes.
+**Status (updated 2026-10-17):** built in-app as `apps/web/src/components/OnboardingChecklist.tsx`, a dismissible dashboard checklist with separate owner/admin and member steps. Progress follows the member across devices. The shared demo suppresses the personal checklist and provides explicit parent, student and caregiver entry instead.
 
 **Implementation notes:**
 - Persistence is server-side (`household_members.onboarding_steps_done` / `onboarding_dismissed_at`, migration `0055_onboarding_checklist.sql`), via `GET`/`PATCH /api/core/onboarding`. Domi Ops is meant to work everywhere someone picks it up (phone, tablet, desktop, installed PWA), so checklist progress has to travel with the person, not sit in one browser's local storage. A first pass used per-member `localStorage`, matching the existing `ProfileOnboardingBanner` nudge, and got replaced once that fell short of the cross-platform bar.
 - It's a dashboard card, not a blocking modal. Matches the rest of this app's style, doesn't gate access to anything.
 - An admin cannot yet reopen a dismissed checklist for someone else from Settings; nothing surfaces the raw DB columns in any UI. Fine for now; revisit if it turns out people actually want that.
-- Five of the six steps are clickable and launch a `driver.js` guided tour: a spotlight card pointing at the actual setting, not just a link that dumps you on the page (`apps/web/src/lib/tours.ts`). The exception is "Install on your phone," which is a browser action, not something in our own UI. A step whose target lives on another page (Calendar, Profile) sets a `sessionStorage` flag before navigating; `PendingTourRunner`, mounted on Settings/Calendar/Profile, picks it up and runs the tour once that page has rendered. Clicking the checklist item again re-runs the tour. It doesn't mark the step done by itself; the checkbox is still a separate click.
+- Settings, Calendar and Profile steps can launch a `driver.js` guided tour of the real setting (`apps/web/src/lib/tours.ts`). The useful-task step links directly to enabled School/Health workflows, and installation gives browser instructions. Visiting a page does not itself mark the checkbox complete.
 
 ---
+
+## First useful task
+
+After confirming name and timezone, choose one real workflow before connecting integrations.
+
+- **School:** provision a child login if needed, create a class, enroll the student,
+  and create one assignment. Open it as the student, submit work, then review it as
+  the teacher. Keep student and teacher logins separate. Existing courses can be
+  reused as undated drafts; selected dated, unsubmitted assignments can be shifted
+  after reviewing a household-timezone preview.
+- **Health:** choose the intended household member, add one medication or check,
+  record an appropriate observation, and verify the intended caregiver can see it.
+  Review sharing explicitly; owner/admin status does not override private Health access.
+
+Google, Withings, push notifications and phone installation can follow once that
+workflow is useful. Local School and Health work does not require a Google grant.
 
 ## For the household admin (owner)
 
@@ -18,14 +34,21 @@ You just finished setup and you're looking at an empty dashboard. Here's the ord
 
 Go to **Settings**:
 - Confirm household name and timezone are right. Wrong timezone silently shifts every calendar reminder, so check this first.
-- Decide which modules you actually want on. Starter and self-host both include all five (`core`, `school`, `calendar_sync`, `drive`, `health`). Turning off the ones you won't use keeps navigation simpler for everyone; it isn't a storage or billing decision.
+- Decide which modules you actually want on. Cloud includes all six (`core`, `school`, `calendar_sync`, `drive`, `health`, `goals`); self-host availability follows the operator's configured catalog. Turn off unused modules to simplify navigation.
 
 ### 2. Bring in your household (3 min)
 
 **Settings → Members:**
-- Invite adults by email, or Google if connected, and they'll get their own login.
+- Create an adult invitation in **Settings → Invite an adult**. Send it by email
+  when SMTP is configured or privately share the join link. It expires after seven
+  days and is bound to the invited email. The recipient signs in or creates and
+  verifies that exact account, then accepts. Google login is optional and does not
+  change which email may accept. Existing membership in another household is rejected.
 - Provision username-only accounts for kids: no email required, good for anyone too young for their own inbox.
 - Set roles: owner (you) vs. admin vs. member. Only owners and admins can change modules or provision new members.
+- Revoke unused invitations. Remove access for a departing member without deleting
+  household history; reinviting the same person reuses the retained member identity.
+  Admins cannot remove owners or peers, and the last owner cannot be removed.
 
 ### 3. Calendar (2 min)
 

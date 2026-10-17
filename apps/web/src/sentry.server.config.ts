@@ -1,5 +1,6 @@
 import * as Sentry from "@sentry/nextjs";
 import { dropNodeProcessWarnings } from "./lib/sentry-filters";
+import { DIAGNOSTIC_DATA_COLLECTION, scrubDiagnosticEvent } from "@domi-ops/config/diagnostics";
 
 /**
  * WHO-292 — Next.js Node runtime. Uses the same optional SENTRY_DSN as api/worker
@@ -12,6 +13,12 @@ if (dsn) {
     environment: process.env.NODE_ENV,
     integrations: [Sentry.captureConsoleIntegration({ levels: ["error"] })],
     // Node process warnings are not errors (WHO-438); they stay in the container logs.
-    beforeSend: dropNodeProcessWarnings,
+    sendDefaultPii: false, maxBreadcrumbs: 0, tracesSampleRate: 0, attachStacktrace: true,
+    dataCollection: DIAGNOSTIC_DATA_COLLECTION, enableLogs: false,
+    ignoreSpans: [/.*/],
+    tracePropagationTargets: [],
+    beforeSendLog: () => null, beforeSendMetric: () => null,
+    beforeSendTransaction: () => null,
+    beforeSend: (event, hint) => { hint.attachments = []; return dropNodeProcessWarnings(event) ? scrubDiagnosticEvent(event) : null; },
   });
 }

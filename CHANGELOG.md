@@ -8,6 +8,60 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+### Fixed
+
+- Hosted billing provisions one household under concurrent delivery, records durable
+  checkout identities before provider calls, handles subscription expiry/payment
+  recovery and cancels losing duplicate purchases. Owners can manage billing and
+  restart a canceled subscription without a second trial; account deletion protects
+  active household billing and last ownership.
+- Native purchase/restore checks current owner and billing provider before opening
+  the store, and refuses purchases when webhook product/app allowlists are missing.
+  A missing selected interval cannot charge a different package.
+- The hosted production template includes the standalone calendar without requiring
+  optional Google credentials.
+- Nested database scopes restore the caller's tenant/privilege settings. Goals and
+  recurring bills now have tenant policies and parent-reference checks. School
+  enrollment includes its first/last household calendar date.
+- Generated files use atomic storage accounting; external snapshot/conversion
+  downloads reject private networks and enforce redirect, time and byte limits.
+- Missing object-storage credentials cannot silently release file quota or erase
+  upload provenance during deletion and cleanup.
+- Optional product metrics omit raw errors and record paths, clear queued data and
+  rotate browser identity on opt-out, and keep feedback identity separate. Sentry
+  transport omits private payloads and attachments. New identity access/refresh
+  tokens are encrypted; provider ID tokens are discarded after verification.
+- Browser uploads are private, single-use, bound to the household and uploader, and
+  counted against storage using the bytes the server receives. School attachments
+  reject arbitrary Drive and cross-household object keys. Active uploaded documents
+  download with sandbox and nosniff headers instead of running on the app origin.
+- Health organizer integration tests own their fixtures and clean up exact IDs,
+  preventing parallel runs from deleting another suite's organizer plans.
+
+### Added
+
+- Verified-email adult invitations, private join links, revocation, removal of
+  access without deleting history, and same-identity reinvitation.
+- Encrypted household/file archives with per-transfer keys and tested restore into
+  an empty self-host instance; existing reports remain permission-limited.
+- Draft course reuse and selected-assignment date previews with household-timezone
+  shifts, stale-preview checks and protection for submitted work.
+- School/Health first-task onboarding, parent/student/caregiver demo entry,
+  Cloud-first marketing and mobile navigation, accurate privacy/integration copy,
+  and an opted-in aggregate activation report with small-cohort suppression.
+
+### Operations
+
+- Migration 0098 records browser upload provenance. Deploy migration and API together;
+  request new URLs for unfinished uploads. See `docs/UPLOAD_STORAGE_MAINTENANCE.md`
+  for abandoned upload cleanup and review of legacy public School object ACLs.
+- Deploy migrations 0099-0101 with the API/auth/web/worker changes. Reconcile legacy
+  file bytes/provenance and provider periods before launch. See
+  `docs/HOSTED_LAUNCH_ACCEPTANCE.md` for payment, retention, device, demo and Google
+  gates. Optional Calendar scopes are narrowed; record the verification video only
+  after the deployed request matches the updated script. No provider approval or
+  production maintenance is implied by these local changes.
+
 ## [0.10.1] - 2026-10-16
 
 Health report navigation, medication/vitals comparisons and loading-state fixes. No migrations, new environment variables or manual steps.

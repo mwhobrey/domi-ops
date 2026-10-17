@@ -1,5 +1,6 @@
 import * as Sentry from "@sentry/node";
 import { dropNodeProcessWarnings, type Env } from "@domi-ops/config";
+import { DIAGNOSTIC_DATA_COLLECTION, scrubDiagnosticEvent } from "@domi-ops/config/diagnostics";
 
 /**
  * WHO-253 — see apps/api/src/lib/sentry.ts for the full rationale; same pattern here. No-op if
@@ -12,6 +13,14 @@ export function initSentry(env: Env): void {
     environment: env.NODE_ENV,
     integrations: [Sentry.captureConsoleIntegration({ levels: ["error"] })],
     // Node process warnings are not errors (WHO-438); they stay in the logs.
-    beforeSend: dropNodeProcessWarnings,
+    dataCollection: DIAGNOSTIC_DATA_COLLECTION,
+    beforeSendLog: () => null,
+    beforeSendMetric: () => null,
+    maxBreadcrumbs: 0,
+    tracesSampleRate: 0,
+    ignoreSpans: [/.*/],
+    tracePropagationTargets: [],
+    attachStacktrace: true,
+    beforeSend: (event, hint) => { hint.attachments = []; return dropNodeProcessWarnings(event) ? scrubDiagnosticEvent(event) : null; },
   });
 }

@@ -40,51 +40,36 @@ export function getPricingDisplay(): {
     hostedCheckoutEnabled: checkoutEnabled,
     tiers: [
       {
-        id: "self-host",
-        name: "Self-host OSS",
-        priceLabel: "Free",
-        description: "MIT license. Run on your server with Docker Compose.",
-        modules: "All modules",
-        drive: "Unlimited",
-        isolation: "Your Postgres + MinIO",
-        cta: ossRepoPublic()
-          ? {
-              kind: "link",
-              label: "Self-host guide",
-              href: "https://github.com/mwhobrey/domi-ops/blob/main/docs/SETUP.md",
-              external: true,
-            }
-          : { kind: "disabled", label: "Coming soon" },
-      },
-      {
         id: "starter",
         name: "Domi Ops Cloud",
         priceLabel: "$12",
         priceSuffix: "/mo, or $120/yr",
-        description: "Managed cloud on shared infrastructure. 14-day trial, card required.",
+        description: "One subscription for your household. A 14-day trial, with a card required. Renews automatically unless canceled.",
         highlight: true,
-        modules: "All modules included",
-        drive: "25 GB",
-        isolation: "Shared Postgres + RLS",
+        modules: "School, calendar, health, files, goals and household planning",
+        drive: "25 GB of household file storage",
+        isolation: "Separate logins for adults and children, with roles and sharing controls",
         cta: checkoutEnabled
           ? {
               kind: "checkout",
               options: [
-                { plan: "monthly", label: "Start trial: monthly" },
-                { plan: "annual", label: "Start trial: annual (2 months free)" },
+                { plan: "monthly", label: "Start trial — then $12/month" },
+                { plan: "annual", label: "Start trial — then $120/year" },
               ],
             }
-          : { kind: "disabled", label: "Coming soon" },
+          : { kind: "link", label: "Ask about Cloud access", href: "mailto:support@domi-ops.com", external: true },
       },
       {
-        id: "family",
-        name: "Hosted Family",
-        priceLabel: "Coming soon",
-        description: "Dedicated database per household, available after initial launch.",
+        id: "self-host",
+        name: "Self-host",
+        priceLabel: "Free",
+        description: "The same open-source app on a server you manage. MIT license.",
         modules: "All modules included",
-        drive: "Higher quota TBD",
-        isolation: "Dedicated Postgres",
-        cta: { kind: "disabled", label: "Coming soon" },
+        drive: "Storage depends on your server",
+        isolation: "You manage setup, updates and backups",
+        cta: ossRepoPublic()
+          ? { kind: "link", label: "Self-host guide", href: "https://github.com/mwhobrey/domi-ops/blob/main/docs/SETUP.md", external: true }
+          : { kind: "link", label: "Ask about self-hosting", href: "mailto:support@domi-ops.com", external: true },
       },
     ],
   };

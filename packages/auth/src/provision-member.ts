@@ -1,7 +1,7 @@
 import { hashPassword } from "better-auth/crypto";
 import type { Database } from "@domi-ops/db";
-import { baAccounts, homeStatus, householdMembers, users } from "@domi-ops/db";
-import { and, eq, sql } from "drizzle-orm";
+import { baAccounts, homeStatus, householdMembers, households, users } from "@domi-ops/db";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { memberShownLabel } from "./member-label.js";
 import { normalizeUsername, validateUsernameFormat } from "./username.js";
 
@@ -139,7 +139,7 @@ export async function listHouseholdMembersWithAuth(
     })
     .from(householdMembers)
     .innerJoin(users, eq(users.id, householdMembers.userId))
-    .where(eq(householdMembers.householdId, householdId));
+    .where(and(eq(householdMembers.householdId, householdId), isNull(householdMembers.accessRevokedAt)));
 
   return rows;
 }
@@ -183,6 +183,7 @@ export async function updateHouseholdMemberRole(
   input: {
     householdId: string;
     actorRole: string;
+    actorUserId?: string;
     targetMemberId: string;
     role: HouseholdMemberRole;
   },
@@ -190,6 +191,13 @@ export async function updateHouseholdMemberRole(
   if (!isHouseholdMemberRole(input.role)) {
     throw new UpdateMemberRoleError("Invalid role", "invalid_role");
   }
+  await db.select({ id: households.id }).from(households).where(eq(households.id, input.householdId)).for("update");
+  let actorRole = input.actorRole;
+  if (input.actorUserId) {
+    const [actor] = await db.select({ role: householdMembers.role }).from(householdMembers).where(and(eq(householdMembers.householdId, input.householdId), eq(householdMembers.userId, input.actorUserId), isNull(householdMembers.accessRevokedAt)));
+    actorRole = actor?.role ?? "";
+  }
+  if (!canProvisionMembers(actorRole)) throw new UpdateMemberRoleError("Household management permission required", "forbidden");
 
   const [target] = await db
     .select({ id: householdMembers.id, role: householdMembers.role })
@@ -198,6 +206,7 @@ export async function updateHouseholdMemberRole(
       and(
         eq(householdMembers.id, input.targetMemberId),
         eq(householdMembers.householdId, input.householdId),
+        isNull(householdMembers.accessRevokedAt),
       ),
     )
     .limit(1);
@@ -211,7 +220,7 @@ export async function updateHouseholdMemberRole(
 
   const elevated = (role: string) => role === "owner" || role === "admin";
 
-  if (input.actorRole === "admin") {
+  if (actorRole === "admin") {
     if (elevated(input.role) || elevated(target.role)) {
       throw new UpdateMemberRoleError(
         "Admins can only change member, child, or guest roles",
@@ -225,7 +234,7 @@ export async function updateHouseholdMemberRole(
       .select({ count: sql<number>`cast(count(*) as int)` })
       .from(householdMembers)
       .where(
-        and(eq(householdMembers.householdId, input.householdId), eq(householdMembers.role, "owner")),
+        and(eq(householdMembers.householdId, input.householdId), eq(householdMembers.role, "owner"), isNull(householdMembers.accessRevokedAt)),
       );
     if (Number(count) <= 1) {
       throw new UpdateMemberRoleError(

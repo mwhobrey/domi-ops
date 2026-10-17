@@ -1,6 +1,11 @@
 # Competitive landscape — Domi Ops marketing (WHO-134)
 
-*Survey date: 2026-06-23. Informs hero copy and module grid on `domi-ops.com`.*
+*Historical survey: 2026-06-23. Retained as background, not current positioning guidance.*
+
+Use [HOSTED_POSITIONING.md](HOSTED_POSITIONING.md) for the 2026-10-17 hosted
+household decision and current official competitor comparison. This older survey
+omits direct school-and-household alternatives and its category claims must not
+be reused in marketing without fresh verification.
 
 ## Market segments
 

@@ -53,11 +53,11 @@ const TOURS: Record<TourKey, TourDef> = {
     path: "/settings",
     steps: [
       {
-        element: '[data-tour="invite-section"]',
+        element: '[data-tour="adult-invites"]',
         popover: {
           title: "Bring in your household",
           description:
-            "Adults sign in with email or Google on their own. Kids or anyone without email get a username-only login you set up right here.",
+            "Send an adult an email invitation or create a private link. They join with their own verified email or Google account, without another checkout. For children, create a username login in the Members panel below.",
         },
       },
     ],
