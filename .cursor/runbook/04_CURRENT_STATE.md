@@ -20,7 +20,9 @@
   source calendar, recurring rule and events on completion or failure.
 - Teardown attempts all cleanup/resource finalizers and aggregates failures only
   after every step is attempted; an original check failure is retained as the
-  cause. CI covers cleanup failure and ownership guards.
+  cause. Restore storage prefixes are independent, and object deletion failures
+  do not skip later objects or pages. CI covers listing/deletion/pagination
+  failures, resource finalizers and ownership guards.
 - Optional Google/Stripe sandbox credentials are supplied separately in ignored
   configuration. This does not establish production OAuth approval, payment
   configuration, public HTTPS behavior or release deployment.

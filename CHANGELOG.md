@@ -12,6 +12,8 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 - Local hosted QA attempts every cleanup and resource finalizer after teardown
   failures, retains their errors, and reports success only after cleanup finishes.
+  Restore storage prefixes are independent; failed object deletions do not skip
+  later objects or pages.
 
 - Local hosted QA waits for storage readiness, rolls back failed provider seeding,
   retries failed simulated checkout webhooks, and removes worker-check fixtures

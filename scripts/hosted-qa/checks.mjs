@@ -8,9 +8,9 @@ import { eq, inArray, sql } from "drizzle-orm";
 import { createDb, closeDb, withHouseholdContext, withSystemContext, householdMembers, households, users, calendars, calendarEvents, recurringRules, healthEvents, driveObjects } from "@domi-ops/db";
 import { SYNC_QUEUE } from "@domi-ops/calendar-sync";
 import { decryptSensitive } from "@domi-ops/crypto";
-import { DeleteObjectCommand, GetObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { createS3Client } from "../../apps/api/dist/lib/s3.js";
-import { cleanupAll } from "./cleanup.mjs";
+import { cleanupAll, restorePrefixCleanupSteps } from "./cleanup.mjs";
 
 if (process.env.QA_TOKEN?.length !== 64 || !process.env.DATABASE_URL?.includes("@postgres:5432/domi_ops")) throw new Error("Harness database required");
 const fixture = JSON.parse(await readFile("/qa/fixtures.json", "utf8")), alpha = fixture.households.find((h) => h.label === "alpha");
@@ -68,12 +68,10 @@ try {
     },
     // The destination is exclusively this lab's restore DB; remove only the exported IDs.
     () => withSystemContext(target, async (tx) => { await tx.delete(households).where(eq(households.id, alpha.householdId)); if (memberUserIds.length) await tx.delete(users).where(inArray(users.id, memberUserIds)); }),
-    async () => {
-      for (const prefix of [`drive/${alpha.householdId}/`, `school/${alpha.householdId}/`, `avatars/${alpha.householdId}/`, `households/${alpha.householdId}/`]) {
-        let cursor;
-        do { const page = await client.send(new ListObjectsV2Command({ Bucket: "hosted-qa-restore", Prefix: prefix, ContinuationToken: cursor })); for (const object of page.Contents ?? []) await client.send(new DeleteObjectCommand({ Bucket: "hosted-qa-restore", Key: object.Key })); cursor = page.IsTruncated ? page.NextContinuationToken : undefined; } while (cursor);
-      }
-    },
+    ...restorePrefixCleanupSteps(client, "hosted-qa-restore", [
+      `drive/${alpha.householdId}/`, `school/${alpha.householdId}/`,
+      `avatars/${alpha.householdId}/`, `households/${alpha.householdId}/`,
+    ]),
     () => queue.close(),
     () => client.destroy(),
     () => closeDb(db),

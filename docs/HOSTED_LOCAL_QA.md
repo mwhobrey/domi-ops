@@ -75,7 +75,10 @@ delivery without creating another subscription. Worker checks remove their own
 generated calendar, rule and events after each run, including failed runs.
 Cleanup attempts every remaining step even if deletion or a resource finalizer
 fails, then reports aggregated cleanup errors with the original check error as
-their cause. A success receipt is emitted only after teardown completes.
+their cause. Restore storage prefixes are independent cleanup steps; a failed
+object deletion does not skip other objects or pages. A failed listing retains
+earlier deletion errors and still allows later prefixes and finalizers to run.
+A success receipt is emitted only after teardown completes.
 MyAllyFile points to a disabled local endpoint; Withings, Sentry, push and optional
 metrics are not configured. The admin database password is supplied only to the
 one-shot setup tools; application and worker use a NOBYPASSRLS non-owner role.
