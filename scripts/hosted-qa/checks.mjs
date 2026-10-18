@@ -10,6 +10,7 @@ import { SYNC_QUEUE } from "@domi-ops/calendar-sync";
 import { decryptSensitive } from "@domi-ops/crypto";
 import { DeleteObjectCommand, GetObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import { createS3Client } from "../../apps/api/dist/lib/s3.js";
+import { cleanupAll } from "./cleanup.mjs";
 
 if (process.env.QA_TOKEN?.length !== 64 || !process.env.DATABASE_URL?.includes("@postgres:5432/domi_ops")) throw new Error("Harness database required");
 const fixture = JSON.parse(await readFile("/qa/fixtures.json", "utf8")), alpha = fixture.households.find((h) => h.label === "alpha");
@@ -20,6 +21,7 @@ const storageEnv = { ...process.env, S3_FORCE_PATH_STYLE: true }, client = creat
 const directory = await mkdtemp("/tmp/domi-qa-archive-");
 let memberUserIds = [];
 let workerCalendarId;
+let checkError;
 try {
   const [role] = await db.execute(sql`select current_user as name, rolsuper, rolbypassrls from pg_roles where rolname=current_user`);
   assert.equal(role.name, "domi_ops_app"); assert.equal(role.rolsuper, false); assert.equal(role.rolbypassrls, false);
@@ -52,18 +54,31 @@ try {
     const body = await client.send(new GetObjectCommand({ Bucket: "hosted-qa-restore", Key: file.s3Key })); assert.match(await body.Body.transformToString(), /alpha private synthetic file/);
   });
   evidence.archive = { exportedFiles: exported.files, dryRun: true, restored: true, targetKeyDecryption: true, privateFileRestored: true };
-  console.log(JSON.stringify(evidence));
+} catch (error) {
+  checkError = error;
+  throw error;
 } finally {
-  if (workerCalendarId) await withHouseholdContext(db, alpha.householdId, async (tx) => {
-    await tx.delete(calendarEvents).where(eq(calendarEvents.calendarId, workerCalendarId));
-    await tx.delete(recurringRules).where(eq(recurringRules.calendarId, workerCalendarId));
-    await tx.delete(calendars).where(eq(calendars.id, workerCalendarId));
-  });
-  // The destination is exclusively this lab's restore DB; remove only the exported IDs.
-  await withSystemContext(target, async (tx) => { await tx.delete(households).where(eq(households.id, alpha.householdId)); if (memberUserIds.length) await tx.delete(users).where(inArray(users.id, memberUserIds)); });
-  for (const prefix of [`drive/${alpha.householdId}/`, `school/${alpha.householdId}/`, `avatars/${alpha.householdId}/`, `households/${alpha.householdId}/`]) {
-    let cursor;
-    do { const page = await client.send(new ListObjectsV2Command({ Bucket: "hosted-qa-restore", Prefix: prefix, ContinuationToken: cursor })); for (const object of page.Contents ?? []) await client.send(new DeleteObjectCommand({ Bucket: "hosted-qa-restore", Key: object.Key })); cursor = page.IsTruncated ? page.NextContinuationToken : undefined; } while (cursor);
-  }
-  await queue.close(); client.destroy(); await closeDb(db); await closeDb(target); await rm(directory, { recursive: true });
+  await cleanupAll([
+    async () => {
+      if (workerCalendarId) await withHouseholdContext(db, alpha.householdId, async (tx) => {
+        await tx.delete(calendarEvents).where(eq(calendarEvents.calendarId, workerCalendarId));
+        await tx.delete(recurringRules).where(eq(recurringRules.calendarId, workerCalendarId));
+        await tx.delete(calendars).where(eq(calendars.id, workerCalendarId));
+      });
+    },
+    // The destination is exclusively this lab's restore DB; remove only the exported IDs.
+    () => withSystemContext(target, async (tx) => { await tx.delete(households).where(eq(households.id, alpha.householdId)); if (memberUserIds.length) await tx.delete(users).where(inArray(users.id, memberUserIds)); }),
+    async () => {
+      for (const prefix of [`drive/${alpha.householdId}/`, `school/${alpha.householdId}/`, `avatars/${alpha.householdId}/`, `households/${alpha.householdId}/`]) {
+        let cursor;
+        do { const page = await client.send(new ListObjectsV2Command({ Bucket: "hosted-qa-restore", Prefix: prefix, ContinuationToken: cursor })); for (const object of page.Contents ?? []) await client.send(new DeleteObjectCommand({ Bucket: "hosted-qa-restore", Key: object.Key })); cursor = page.IsTruncated ? page.NextContinuationToken : undefined; } while (cursor);
+      }
+    },
+    () => queue.close(),
+    () => client.destroy(),
+    () => closeDb(db),
+    () => closeDb(target),
+    () => rm(directory, { recursive: true }),
+  ], checkError);
 }
+console.log(JSON.stringify(evidence));

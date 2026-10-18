@@ -73,6 +73,9 @@ the database seed and can be retried. Simulated checkout completion and webhook
 delivery are persisted separately; posting the checkout again retries failed
 delivery without creating another subscription. Worker checks remove their own
 generated calendar, rule and events after each run, including failed runs.
+Cleanup attempts every remaining step even if deletion or a resource finalizer
+fails, then reports aggregated cleanup errors with the original check error as
+their cause. A success receipt is emitted only after teardown completes.
 MyAllyFile points to a disabled local endpoint; Withings, Sentry, push and optional
 metrics are not configured. The admin database password is supplied only to the
 one-shot setup tools; application and worker use a NOBYPASSRLS non-owner role.

@@ -71,8 +71,8 @@ jobs:
       - name: Test
         run: npm run test
 
-      - name: Hosted QA ownership guards
-        run: node --test scripts/hosted-qa/ownership.test.mjs
+      - name: Hosted QA safety guards
+        run: node --test scripts/hosted-qa/ownership.test.mjs scripts/hosted-qa/cleanup.test.mjs
 
   test-hosted:
     runs-on: ubuntu-latest
