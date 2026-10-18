@@ -85,6 +85,11 @@ services:
       MINIO_ROOT_PASSWORD: ${DOMI_QA_S3_PASSWORD}
     volumes: ["objects:/data"]
     networks: [qa]
+    healthcheck:
+      test: [CMD, curl, --fail, --silent, --max-time, "2", http://localhost:9000/minio/health/ready]
+      interval: 2s
+      timeout: 3s
+      retries: 30
   mail:
     image: axllent/mailpit:v1.31.6
     networks: [qa]

@@ -12,6 +12,7 @@ let state = await readFile("/qa/providers.json", "utf8").then(JSON.parse).catch(
   if (error.code !== "ENOENT") throw error;
   return { customers: {}, subscriptions: {}, sessions: {}, portals: {}, requests: {}, fixtures: null };
 });
+state.checkoutDeliveries ??= {};
 let pendingSave = Promise.resolve();
 const save = () => {
   const snapshot = JSON.stringify(state);
@@ -87,7 +88,13 @@ createServer(async (req, res) => {
         const sub = { id: id("sub"), object: "subscription", customer: customer.id, status: session.trial ? "trialing" : "active", trial_end: session.trial ? end : null, cancel_at_period_end: false, items: { data: [{ current_period_end: end }] } };
         state.subscriptions[sub.id] = sub;
         Object.assign(session, { status: "complete", payment_status: session.trial ? "no_payment_required" : "paid", subscription: sub.id, customer_details: { email: customer.email } });
-        await save(); await event("checkout.session.completed", session);
+        state.checkoutDeliveries[session.id] = false;
+        await save();
+      }
+      if (!state.checkoutDeliveries[session.id]) {
+        await event("checkout.session.completed", session);
+        state.checkoutDeliveries[session.id] = true;
+        await save();
       }
       return redirect(session.success_url.replace("{CHECKOUT_SESSION_ID}", session.id));
     }

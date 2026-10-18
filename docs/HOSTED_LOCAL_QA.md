@@ -67,6 +67,12 @@ exposes fixed service destinations on loopback; it has no application credential
 Services use no checkout `.env`, live keys, production database or shared Redis.
 The app has a separate authentication-cookie prefix so manual QA logins do not
 replace normal localhost development sessions.
+Startup waits for MinIO readiness. Provider fixture registration has a 15-second
+timeout and runs inside the seed transaction, so a failed registration rolls back
+the database seed and can be retried. Simulated checkout completion and webhook
+delivery are persisted separately; posting the checkout again retries failed
+delivery without creating another subscription. Worker checks remove their own
+generated calendar, rule and events after each run, including failed runs.
 MyAllyFile points to a disabled local endpoint; Withings, Sentry, push and optional
 metrics are not configured. The admin database password is supplied only to the
 one-shot setup tools; application and worker use a NOBYPASSRLS non-owner role.

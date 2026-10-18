@@ -10,6 +10,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Fixed
 
+- Local hosted QA waits for storage readiness, rolls back failed provider seeding,
+  retries failed simulated checkout webhooks, and removes worker-check fixtures
+  between runs.
+
 - Subscription trial and cancellation dates use the household timezone on both
   server and browser, preventing hydration errors and inconsistent billing dates.
 

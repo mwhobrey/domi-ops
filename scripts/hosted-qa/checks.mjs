@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { randomBytes, randomUUID } from "node:crypto";
 import { Queue } from "bullmq";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { createDb, closeDb, withHouseholdContext, withSystemContext, householdMembers, households, users, calendars, calendarEvents, recurringRules, healthEvents, driveObjects } from "@domi-ops/db";
 import { SYNC_QUEUE } from "@domi-ops/calendar-sync";
 import { decryptSensitive } from "@domi-ops/crypto";
@@ -19,16 +19,19 @@ const evidence = {};
 const storageEnv = { ...process.env, S3_FORCE_PATH_STYLE: true }, client = createS3Client(storageEnv);
 const directory = await mkdtemp("/tmp/domi-qa-archive-");
 let memberUserIds = [];
+let workerCalendarId;
 try {
   const [role] = await db.execute(sql`select current_user as name, rolsuper, rolbypassrls from pg_roles where rolname=current_user`);
   assert.equal(role.name, "domi_ops_app"); assert.equal(role.rolsuper, false); assert.equal(role.rolbypassrls, false);
   assert.equal((await db.select().from(households)).length, 0);
   const isolated = await withHouseholdContext(db, alpha.householdId, (tx) => tx.select().from(households)); assert.deepEqual(isolated.map((h) => h.id), [alpha.householdId]);
   evidence.role = { name: role.name, bypassRls: false, unscopedHouseholds: 0 };
-  const rule = await withHouseholdContext(db, alpha.householdId, async (tx) => {
+  const created = await withHouseholdContext(db, alpha.householdId, async (tx) => {
     const [calendar] = await tx.insert(calendars).values({ householdId: alpha.householdId, ownerUserId: alpha.userId, name: "Worker QA", visibility: "household" }).returning();
-    const [r] = await tx.insert(recurringRules).values({ householdId: alpha.householdId, calendarId: calendar.id, title: `QA worker ${randomUUID()}`, rrule: "FREQ=DAILY;COUNT=1", startDate: new Date().toISOString().slice(0, 10), allDay: true }).returning(); return r;
+    const [rule] = await tx.insert(recurringRules).values({ householdId: alpha.householdId, calendarId: calendar.id, title: `QA worker ${randomUUID()}`, rrule: "FREQ=DAILY;COUNT=1", startDate: new Date().toISOString().slice(0, 10), allDay: true }).returning(); return { calendarId: calendar.id, rule };
   });
+  workerCalendarId = created.calendarId;
+  const rule = created.rule;
   const job = await queue.add("local-qa-materialize", { name: "recurring.materialize", payload: { householdId: alpha.householdId } });
   const deadline = Date.now() + 15000;
   while (Date.now() < deadline && !["completed", "failed"].includes(await job.getState())) await new Promise((r) => setTimeout(r, 200));
@@ -51,6 +54,11 @@ try {
   evidence.archive = { exportedFiles: exported.files, dryRun: true, restored: true, targetKeyDecryption: true, privateFileRestored: true };
   console.log(JSON.stringify(evidence));
 } finally {
+  if (workerCalendarId) await withHouseholdContext(db, alpha.householdId, async (tx) => {
+    await tx.delete(calendarEvents).where(eq(calendarEvents.calendarId, workerCalendarId));
+    await tx.delete(recurringRules).where(eq(recurringRules.calendarId, workerCalendarId));
+    await tx.delete(calendars).where(eq(calendars.id, workerCalendarId));
+  });
   // The destination is exclusively this lab's restore DB; remove only the exported IDs.
   await withSystemContext(target, async (tx) => { await tx.delete(households).where(eq(households.id, alpha.householdId)); if (memberUserIds.length) await tx.delete(users).where(inArray(users.id, memberUserIds)); });
   for (const prefix of [`drive/${alpha.householdId}/`, `school/${alpha.householdId}/`, `avatars/${alpha.householdId}/`, `households/${alpha.householdId}/`]) {

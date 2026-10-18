@@ -50,9 +50,10 @@ try {
         fixture.course = { id: course.id, assignmentId: assignment.id };
       }
     }
+    // A failed provider registration must roll back the household seed.
+    const response = await fetch(`${process.env.QA_PROVIDER_URL}/__qa/fixtures`, { method: "POST", headers: { "x-qa-token": process.env.QA_TOKEN, "content-type": "application/json" }, body: JSON.stringify(fixture), signal: AbortSignal.timeout(15000) });
+    if (!response.ok) throw new Error("Could not initialize provider fixture identities");
   });
-  const response = await fetch(`${process.env.QA_PROVIDER_URL}/__qa/fixtures`, { method: "POST", headers: { "x-qa-token": process.env.QA_TOKEN }, body: JSON.stringify(fixture) });
-  if (!response.ok) throw new Error("Could not initialize provider fixture identities");
   await writeFile("/qa/fixtures.json", JSON.stringify(fixture));
   console.log("Seeded Alpha, Beta, Expired households and student; synthetic School, Health, private files and billing.");
 } finally { await closeDb(db); }

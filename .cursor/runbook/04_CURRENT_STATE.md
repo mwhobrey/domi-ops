@@ -14,6 +14,10 @@
 - App/marketing/inbox/fixture guide default to localhost ports 13180-13183.
   `qa:hosted:down` retains data; `qa:hosted:reset` checks ownership before removing
   only lab containers and volumes. `.qa/hosted/runs/` retains local receipts.
+- Startup waits for MinIO health; provider seed registration is bounded and runs
+  before the database transaction commits. Checkout retries pending webhook
+  delivery without creating a new subscription. Worker checks clean up their own
+  source calendar, recurring rule and events on completion or failure.
 - Optional Google/Stripe sandbox credentials are supplied separately in ignored
   configuration. This does not establish production OAuth approval, payment
   configuration, public HTTPS behavior or release deployment.
