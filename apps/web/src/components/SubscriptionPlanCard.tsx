@@ -35,9 +35,10 @@ const STATUS_BADGE: Record<SubscriptionStatus, { label: string; className: strin
   },
 };
 
-function formatDate(iso: string): string {
+function formatDate(iso: string, timeZone: string): string {
   try {
-    return new Date(iso).toLocaleDateString(undefined, {
+    return new Date(iso).toLocaleDateString("en-US", {
+      timeZone,
       year: "numeric",
       month: "long",
       day: "numeric",
@@ -54,6 +55,7 @@ export function SubscriptionPlanCard({
   cancelAtPeriodEnd = false,
   billingProvider,
   isOwner = false,
+  timeZone = "UTC",
 }: {
   subscriptionStatus: SubscriptionStatus | null;
   trialEndsAt: string | null;
@@ -61,6 +63,7 @@ export function SubscriptionPlanCard({
   cancelAtPeriodEnd?: boolean;
   billingProvider?: string | null;
   isOwner?: boolean;
+  timeZone?: string;
 }) {
   const native = isNativeShell();
   const iap = native && isRevenueCatAvailable();
@@ -117,7 +120,7 @@ export function SubscriptionPlanCard({
         {subscriptionStatus === "trialing" && trialEndsAt && (
           <p className="text-sm text-[var(--color-text-muted)]">
             Your free trial ends on{" "}
-            <span className="font-medium text-[var(--color-text)]">{formatDate(trialEndsAt)}</span>.
+            <span className="font-medium text-[var(--color-text)]">{formatDate(trialEndsAt, timeZone)}</span>.
             {cancelAtPeriodEnd ? " Your trial will not renew." : " Your subscription renews automatically unless canceled."}
           </p>
         )}
@@ -136,7 +139,7 @@ export function SubscriptionPlanCard({
 
         {cancelAtPeriodEnd && currentPeriodEnd && (
           <p className="text-sm text-[var(--color-text-muted)]">
-            Renewal is canceled. Your paid access continues through {formatDate(currentPeriodEnd)}.
+            Renewal is canceled. Your paid access continues through {formatDate(currentPeriodEnd, timeZone)}.
           </p>
         )}
 

@@ -4,10 +4,33 @@
 
 ## What is working (implemented paths)
 
-### Hosted audit remediation (unreleased)
+### Local hosted QA harness (unreleased)
+
+- `docs/HOSTED_LOCAL_QA.md`: `mise exec -- npm run qa:hosted` builds and starts a
+  standalone checkout-owned lab with real authentication/RLS, source and restore
+  databases, Redis/worker, private MinIO files, captured SMTP and signed simulated
+  Stripe events. It runs hosted integration tests and browser subscription,
+  invitation, permission and mobile-marketing journeys plus worker/archive checks.
+- App/marketing/inbox/fixture guide default to localhost ports 13180-13183.
+  `qa:hosted:down` retains data; `qa:hosted:reset` checks ownership before removing
+  only lab containers and volumes. `.qa/hosted/runs/` retains local receipts.
+- Startup waits for MinIO health; provider seed registration is bounded and runs
+  before the database transaction commits. Checkout retries pending webhook
+  delivery without creating a new subscription. Worker checks clean up their own
+  source calendar, recurring rule and events on completion or failure.
+- Teardown attempts all cleanup/resource finalizers and aggregates failures only
+  after every step is attempted; an original check failure is retained as the
+  cause. Restore storage prefixes are independent, and object deletion failures
+  do not skip later objects or pages. CI covers listing/deletion/pagination
+  failures, resource finalizers and ownership guards.
+- Optional Google/Stripe sandbox credentials are supplied separately in ignored
+  configuration. This does not establish production OAuth approval, payment
+  configuration, public HTTPS behavior or release deployment.
+
+### Hosted audit remediation (merged, unreleased)
 
 - Coverage and remaining acceptance gates: `docs/HOSTED_AUDIT_REMEDIATION.md`.
-- This is unreleased work on `fix/hosted-audit-remediation` (draft PR #283); deployment and
+- PR #283 is merged; deployment and
   provider acceptance remain separate. Follow `docs/HOSTED_LAUNCH_ACCEPTANCE.md`.
 - Migrations 0099-0101 add billing lifecycle/intents, adult invitations with retained
   revoked-member history, and missing Goals/recurring-bill tenant policies.
@@ -48,7 +71,7 @@
 - Drizzle schema + SQL migrations (`packages/db/drizzle/`), including `school_submission_artifacts` (`0002`); `0017` drops `household_members.nickname` / `public_label`.
 - **Hosted RLS (WHO-195/196):** `0038_rls_household_policies` + `0039_rls_context_policies`; `@domi-ops/db` `withHouseholdContext` / scoped db proxy; API `createTenantMiddleware`; worker sets context per job (`withWorkerScanContext` for cross-tenant scans). Docs: `docs/HOSTED_RLS.md`, ADR `003`.
 - **Hosted entitlements (WHO-178):** `householdModuleCeiling` / `filterActiveHouseholdModules` in `@domi-ops/config`; settings PATCH capped by `household_subscriptions.modules_entitled`; session DTO filters nav modules; drive quota enforced when `DEPLOYMENT_MODE=shared|dedicated`; tenant middleware fails closed without `householdId` on hosted.
-- **Hosted QA (WHO-198/197):** `docker-compose.hosted.yml`, `npm run dev:hosted`, `npm run db:seed-hosted-qa`, `npm run test:hosted`; matrix `docs/HOSTED_TENANT_TESTS.md`.
+- **Hosted QA (WHO-198/197):** standalone lab `npm run qa:hosted`, `docs/HOSTED_LOCAL_QA.md`; existing `docker-compose.hosted.yml`, `npm run dev:hosted`, `npm run db:seed-hosted-qa`, `npm run test:hosted`; matrix `docs/HOSTED_TENANT_TESTS.md`.
 - **Hosted ops (WHO-180):** `deploy/HOSTED_OPS.md` — monitoring, backups, incidents, capacity.
 - **Charts (2026-08-25):** `apps/web/src/components/charts/` — recharts, lazy-loaded (`charts/lazy.ts`) so it's never in a page's initial bundle unless that page actually renders one (found and fixed a real regression: without lazy-loading, recharts leaked into every report route's bundle via a shared Next.js chunk, including Shopping which uses no charts). Palette is the dataviz skill's validated categorical reference instance, as `--chart-series-*` CSS vars in `globals.css`. Wired into Health (vitals trend, events-by-type), Expenses (spend trend, by-category — `monthlyTrend` existed in the API response but nothing rendered it before this), Chores (completions by person). School and Shopping reports don't have charts yet.
 - **Telemetry (2026-08-25, docs/TELEMETRY.md):** opt-in, anonymized metrics — off by default on every deployment mode, toggled per household in Settings → Privacy (`households.telemetry_opt_in`, migration `0059`). `telemetry_events`/`telemetry_bug_reports` (`0060`) have no household_id/userId at all — not RLS-protected, same reasoning as `stripe_events`. Ingest is unauthenticated (`apps/api/src/routes/telemetry.ts`, `/api/telemetry/*`) since self-host instances phone home cross-origin to the central collector (defaults to `https://app.domi-ops.com`, override via `TELEMETRY_ENDPOINT`) — needed its own CORS rule registered **before** the global one, since Hono's cors() answers OPTIONS preflight itself without calling next(), so a later more-specific cors() can't override an earlier general one (caught by hand-testing a cross-origin preflight, not by typecheck). Client: `apps/web/src/lib/telemetry.ts`, booted from `AppChrome.tsx` only when opted in. Bug reports (`FeedbackCard.tsx` on `/profile`) are NOT gated by the toggle — sending one is its own one-time consent.

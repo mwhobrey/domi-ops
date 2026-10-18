@@ -1,0 +1,164 @@
+# Standalone project. Never combine this file with the normal development overlays.
+x-qa: &qa
+  image: ${DOMI_QA_IMAGE:?Run npm run qa:hosted:up}
+  networks: [qa]
+  labels:
+    dev.domi-ops.qa: hosted-v1
+
+x-env: &env
+  NODE_ENV: production
+  DOMI_OPS_DOTENV_LOADED: "1"
+  DEPLOYMENT_MODE: shared
+  HOSTED_TIER: starter
+  AUTH_REQUIRED: "true"
+  ALLOW_PUBLIC_SIGNUP: "false"
+  MODULES_ENABLED: core,school,calendar_sync,drive,health,goals
+  PUBLIC_APP_URL: http://localhost:${DOMI_QA_WEB_PORT}
+  PUBLIC_MARKETING_URL: http://localhost:${DOMI_QA_WWW_PORT}
+  API_URL: http://api:4000
+  DATABASE_URL: postgresql://domi_ops_app:${DOMI_QA_APP_PASSWORD}@postgres:5432/domi_ops
+  SESSION_SECRET: ${DOMI_QA_SESSION_SECRET}
+  ENCRYPTION_KEY: ${DOMI_QA_ENCRYPTION_KEY}
+  REDIS_URL: redis://redis:6379
+  S3_ENDPOINT: http://minio:9000
+  S3_REGION: us-east-1
+  S3_BUCKET: hosted-qa
+  S3_ACCESS_KEY: qa-storage
+  S3_SECRET_KEY: ${DOMI_QA_S3_PASSWORD}
+  S3_FORCE_PATH_STYLE: "true"
+  DRIVE_UPLOAD_MAX_BYTES: "10485760"
+  DRIVE_QUOTA_ENFORCE: "true"
+  MYALLYFILE_API_BASE: http://providers:4080/disabled-integrations
+  SMTP_HOST: mail
+  SMTP_PORT: "1025"
+  SMTP_FROM: qa@domi-ops.test
+  SENTRY_DSN: ""
+  NEXT_PUBLIC_SENTRY_DSN: ""
+  TELEMETRY_ENDPOINT: http://providers:4080/disabled-telemetry
+  STRIPE_SECRET_KEY: ${DOMI_QA_STRIPE_KEY:-sk_test_local_fixture}
+  STRIPE_WEBHOOK_SECRET: ${DOMI_QA_STRIPE_WEBHOOK:-whsec_local_fixture_only}
+  STRIPE_PRICE_STARTER_MONTHLY: ${DOMI_QA_STRIPE_MONTHLY:-price_qa_monthly}
+  STRIPE_PRICE_STARTER_ANNUAL: ${DOMI_QA_STRIPE_ANNUAL:-price_qa_annual}
+  GOOGLE_OAUTH_CLIENT_ID: ${DOMI_QA_GOOGLE_CLIENT_ID:-}
+  GOOGLE_OAUTH_CLIENT_SECRET: ${DOMI_QA_GOOGLE_CLIENT_SECRET:-}
+  GOOGLE_PICKER_API_KEY: ${DOMI_QA_GOOGLE_PICKER_KEY:-}
+  QA_STRIPE_MODE: ${DOMI_QA_STRIPE_MODE:-fixture}
+  QA_TOKEN: ${DOMI_QA_TOKEN}
+  QA_COOKIE_PREFIX: domi-ops-qa-${DOMI_QA_WEB_PORT}
+  QA_PROVIDER_URL: http://providers:4080
+  QA_PROVIDER_PUBLIC_URL: http://localhost:${DOMI_QA_PROVIDER_PORT}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment: &postgres-env
+      POSTGRES_USER: domi_ops
+      POSTGRES_PASSWORD: ${DOMI_QA_ADMIN_PASSWORD}
+      POSTGRES_DB: domi_ops
+    volumes: ["database:/var/lib/postgresql/data"]
+    networks: [qa]
+    healthcheck: &postgres-health
+      test: [CMD-SHELL, "pg_isready -U domi_ops -d domi_ops"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  archive:
+    image: postgres:16-alpine
+    environment: *postgres-env
+    volumes: ["archive:/var/lib/postgresql/data"]
+    networks: [qa]
+    healthcheck: *postgres-health
+  redis:
+    image: redis:7-alpine
+    networks: [qa]
+    volumes: ["redis:/data"]
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  minio:
+    image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: qa-storage
+      MINIO_ROOT_PASSWORD: ${DOMI_QA_S3_PASSWORD}
+    volumes: ["objects:/data"]
+    networks: [qa]
+    healthcheck:
+      test: [CMD, curl, --fail, --silent, --max-time, "2", http://localhost:9000/minio/health/ready]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  mail:
+    image: axllent/mailpit:v1.31.6
+    networks: [qa]
+  providers:
+    <<: *qa
+    command: [node, scripts/hosted-qa/providers.mjs]
+    environment:
+      QA_TOKEN: ${DOMI_QA_TOKEN}
+      QA_PROVIDER_PUBLIC_URL: http://localhost:${DOMI_QA_PROVIDER_PORT}
+      QA_WEBHOOK_SECRET: whsec_local_fixture_only
+    volumes: ["state:/qa"]
+  tools:
+    <<: *qa
+    profiles: [tools]
+    build:
+      context: .
+      dockerfile: scripts/hosted-qa/Dockerfile
+      args:
+        QA_APP_URL: http://localhost:${DOMI_QA_WEB_PORT}
+        QA_MARKETING_URL: http://localhost:${DOMI_QA_WWW_PORT}
+    environment:
+      <<: *env
+      QA_ADMIN_PASSWORD: ${DOMI_QA_ADMIN_PASSWORD}
+      DOMI_OPS_APP_PASSWORD: ${DOMI_QA_APP_PASSWORD}
+      QA_ENCRYPTION_KEY: ${DOMI_QA_ENCRYPTION_KEY}
+    volumes: ["state:/qa"]
+  api:
+    <<: *qa
+    command: [node, scripts/hosted-qa/api.mjs]
+    environment: *env
+  worker:
+    <<: *qa
+    command: [node, apps/worker/dist/index.js]
+    environment: *env
+  web:
+    <<: *qa
+    command: [npm, run, start, -w, "@domi-ops/web", --, --hostname, 0.0.0.0]
+    environment:
+      <<: *env
+      PORT: "3000"
+  www:
+    <<: *qa
+    command: [npm, run, start, -w, "@domi-ops/www", --, --hostname, 0.0.0.0]
+    environment:
+      PORT: "3000"
+      NEXT_PUBLIC_HOSTED_CHECKOUT_ENABLED: "true"
+      NEXT_PUBLIC_OSS_REPO_PUBLIC: "true"
+      PUBLIC_APP_URL: http://localhost:${DOMI_QA_WEB_PORT}
+      PUBLIC_MARKETING_URL: http://localhost:${DOMI_QA_WWW_PORT}
+  gateway:
+    <<: *qa
+    command: [node, scripts/hosted-qa/gateway.mjs]
+    networks: [qa, edge]
+    ports:
+      - "127.0.0.1:${DOMI_QA_WEB_PORT}:3000"
+      - "127.0.0.1:${DOMI_QA_WWW_PORT}:3001"
+      - "127.0.0.1:${DOMI_QA_MAIL_PORT}:8025"
+      - "127.0.0.1:${DOMI_QA_PROVIDER_PORT}:4080"
+      - "127.0.0.1:${DOMI_QA_DB_PORT}:5432"
+      - "127.0.0.1:${DOMI_QA_ARCHIVE_PORT}:5433"
+      - "127.0.0.1:${DOMI_QA_S3_PORT}:9000"
+
+networks:
+  edge:
+  qa:
+    internal: ${DOMI_QA_INTERNAL:-true}
+volumes:
+  database:
+  archive:
+  redis:
+  objects:
+  state:

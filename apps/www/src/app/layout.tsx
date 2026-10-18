@@ -43,7 +43,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${inter.variable} ${spaceGrotesk.variable}`}>
-      <body className="antialiased">{children}</body>
+      <body className="antialiased">
+        {process.env.DOMI_OPS_QA_HARNESS === "1" && <aside style={{ background: "#fef08a", color: "#422006", padding: "8px", textAlign: "center" }}>Local hosted QA — testing environment</aside>}
+        {children}
+      </body>
     </html>
   );
 }

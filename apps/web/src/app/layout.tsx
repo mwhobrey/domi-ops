@@ -77,6 +77,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={inter.variable}>
       <body className="antialiased">
+        {process.env.DOMI_OPS_QA_HARNESS === "1" && <aside style={{ background: "#fef08a", color: "#422006", padding: "8px", textAlign: "center" }}>Local hosted QA — testing environment</aside>}
         <SentryClientInit />
         {children}
         <PwaRegister />

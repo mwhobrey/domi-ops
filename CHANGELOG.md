@@ -10,6 +10,18 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Fixed
 
+- Local hosted QA attempts every cleanup and resource finalizer after teardown
+  failures, retains their errors, and reports success only after cleanup finishes.
+  Restore storage prefixes are independent; failed object deletions do not skip
+  later objects or pages.
+
+- Local hosted QA waits for storage readiness, rolls back failed provider seeding,
+  retries failed simulated checkout webhooks, and removes worker-check fixtures
+  between runs.
+
+- Subscription trial and cancellation dates use the household timezone on both
+  server and browser, preventing hydration errors and inconsistent billing dates.
+
 - Hosted billing provisions one household under concurrent delivery, records durable
   checkout identities before provider calls, handles subscription expiry/payment
   recovery and cancels losing duplicate purchases. Owners can manage billing and
@@ -39,6 +51,11 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
   preventing parallel runs from deleting another suite's organizer plans.
 
 ### Added
+
+- Isolated local hosted QA lab with synthetic households, real authentication/RLS,
+  private files, captured email, simulated signed billing events, browser journeys,
+  worker execution and encrypted archive restore checks. Ownership guards confine
+  reset to the lab; optional testing credentials enable manual provider acceptance.
 
 - Verified-email adult invitations, private join links, revocation, removal of
   access without deleting history, and same-identity reinvitation.

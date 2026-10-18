@@ -2,6 +2,11 @@
 
 Prove cross-household leakage is impossible when `DEPLOYMENT_MODE=shared` and RLS policies (`0038`/`0039`) are applied.
 
+For an isolated full-stack rehearsal, use [Local hosted QA](HOSTED_LOCAL_QA.md):
+`mise exec -- npm run qa:hosted` creates its own databases, files, email capture
+and simulated billing, runs this suite, then exercises browser, worker and archive
+flows. It does not use the normal dev database or `.env`.
+
 ## Prerequisites
 
 1. Postgres with migrations applied (`npm run db:migrate`).

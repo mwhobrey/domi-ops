@@ -75,6 +75,7 @@ export default async function SettingsPage() {
                 cancelAtPeriodEnd={household.cancelAtPeriodEnd}
                 billingProvider={household.billingProvider}
                 isOwner={profile.role === "owner"}
+                timeZone={household.timezone}
               />
             ) : null}
             <HouseholdSettingsEditor initial={household} />

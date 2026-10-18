@@ -30,7 +30,15 @@
     "import:validate": "npm run build -w @domi-ops/import-homehub && node packages/import-homehub/scripts/validate-import.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
-    "fixture:homehub": "node packages/import-homehub/scripts/create-fixture.mjs"
+    "fixture:homehub": "node packages/import-homehub/scripts/create-fixture.mjs",
+    "qa:hosted": "node scripts/hosted-qa/run.mjs run",
+    "qa:hosted:up": "node scripts/hosted-qa/run.mjs up",
+    "qa:hosted:test": "node scripts/hosted-qa/run.mjs test",
+    "qa:hosted:status": "node scripts/hosted-qa/run.mjs status",
+    "qa:hosted:logs": "node scripts/hosted-qa/run.mjs logs",
+    "qa:hosted:down": "node scripts/hosted-qa/run.mjs down",
+    "qa:hosted:reset": "node scripts/hosted-qa/run.mjs reset",
+    "qa:hosted:providers": "node scripts/hosted-qa/run.mjs providers"
   },
   "devDependencies": {
     "playwright": "^1.64.0",
