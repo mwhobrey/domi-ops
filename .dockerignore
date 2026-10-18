@@ -13,6 +13,10 @@ coverage
 .env
 .env.*
 !.env.example
+!.env.hosted-prod.example
 apps/web/.next
 packages/**/dist
 apps/**/dist
+
+# Isolated hosted QA credentials, data and receipts
+.qa/

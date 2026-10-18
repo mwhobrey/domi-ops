@@ -20,7 +20,7 @@ export interface WhomeBetterAuth {
   handler: (request: Request) => Response | Promise<Response>;
 }
 
-export function createBetterAuth(db: Database, env: Env, options: { deferHouseholdMembership?: (headers: Headers) => Promise<boolean> } = {}): WhomeBetterAuth {
+export function createBetterAuth(db: Database, env: Env, options: { deferHouseholdMembership?: (headers: Headers) => Promise<boolean>; cookiePrefix?: string } = {}): WhomeBetterAuth {
   const secret =
     env.SESSION_SECRET ?? "dev-only-insecure-secret-replace-before-production!!";
 
@@ -166,6 +166,7 @@ export function createBetterAuth(db: Database, env: Env, options: { deferHouseho
       }),
     ],
     advanced: {
+      ...(options.cookiePrefix ? { cookiePrefix: options.cookiePrefix } : {}),
       database: {
         generateId: () => randomUUID(),
       },

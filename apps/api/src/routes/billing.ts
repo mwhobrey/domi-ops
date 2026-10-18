@@ -498,7 +498,7 @@ export function billingRoutes(db: Database, env: Env, stripeFactory = makeStripe
     if (!sessionId) return c.json({ valid: false, reason: "missing_session_id" });
 
     try {
-      const stripe = makeStripe(env.STRIPE_SECRET_KEY!);
+      const stripe = stripeFactory(env.STRIPE_SECRET_KEY!);
       const session = await stripe.checkout.sessions.retrieve(sessionId);
 
       if (session.payment_status !== "paid" && session.payment_status !== "no_payment_required") {
@@ -580,7 +580,7 @@ export function billingRoutes(db: Database, env: Env, stripeFactory = makeStripe
     const callerUserId = c.get("userId");
 
     try {
-      const stripe = makeStripe(env.STRIPE_SECRET_KEY!);
+      const stripe = stripeFactory(env.STRIPE_SECRET_KEY!);
       const session = await stripe.checkout.sessions.retrieve(session_id);
 
       if (session.payment_status !== "paid" && session.payment_status !== "no_payment_required") {
