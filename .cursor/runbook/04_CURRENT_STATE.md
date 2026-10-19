@@ -4,6 +4,11 @@
 
 ## What is working (implemented paths)
 
+- Remaining dependency maintenance includes node-gyp 13 (Node 22.22.2+ for source
+  development), Vitest 5.0.5 and the Sentry v11 web migration. Keep Drizzle's root
+  override aligned with workspace requirements (`^0.45.4`); auth's hoisted adapter
+  must resolve the ORM after both Node 22 and Node 24 clean installs.
+
 - Web Sentry v11 uses the shared `dataCollection` privacy policy instead of the
   removed `sendDefaultPii` option. Explicitly disable queue-argument collection
   alongside request, user, database, AI and stack-context data; keep the event

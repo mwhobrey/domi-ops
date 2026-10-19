@@ -29,6 +29,7 @@ afterEach(async () => {
 
 it("sends useful errors through Sentry v11 without private scope data or attachments", async () => {
   vi.stubEnv("SENTRY_DSN", "https://public@sentry.invalid/1");
+  vi.stubEnv("SENTRY_RELEASE", "privacy-regression-test");
   await import("../sentry.server.config");
   const secret = "PRIVATE_HEALTH_OAUTH_AND_QUEUE_SENTINEL";
 
@@ -51,5 +52,7 @@ it("sends useful errors through Sentry v11 without private scope data or attachm
   expect(serialized).toContain("Error details omitted for privacy");
   expect(serialized).toContain("sentry-privacy.test.ts");
   const itemTypes = envelopes.flatMap((envelope) => envelope[1].map(([header]) => header.type));
-  expect(itemTypes.filter((type) => type !== "client_report")).toEqual(["event"]);
+  expect(itemTypes.filter((type) => type === "event")).toHaveLength(1);
+  // Release health and dropped-item counters can accompany the scrubbed error.
+  expect(itemTypes.every((type) => ["event", "session", "client_report"].includes(type))).toBe(true);
 });
