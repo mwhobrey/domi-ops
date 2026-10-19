@@ -8,7 +8,18 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-19
+
+Requires `npm run db:migrate` (migrations 0098-0101); the hosted release workflow
+applies them automatically. Back up and complete the billing/storage preflight in
+`docs/HOSTED_LAUNCH_ACCEPTANCE.md` before deployment. Review legacy Stripe identities,
+subscription periods, file ACLs and storage accounting; reissue unfinished upload
+URLs. Deploy the updated OAuth flow before recording the Google verification video.
+Google approval and the remaining hosted launch acceptance checks are separate.
+
 ### Changed
+
+- Updated the Hono Node server adapter to 2.1.5 and ESLint to 10.12.0.
 
 - Updated the remaining maintenance dependencies and node-gyp 13 together.
   Source development uses Node 22.22.2+; Drizzle's shared override matches the

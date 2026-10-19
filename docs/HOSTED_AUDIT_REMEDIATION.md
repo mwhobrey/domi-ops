@@ -100,7 +100,7 @@ The second pass found and corrected three gaps:
   modules; a production configuration regression verifies that behavior. The older
   competitor survey now points to the current positioning decision.
 
-These corrections are included in draft PR #283. CI and the local test receipts
+These corrections were merged in PR #283. CI and the local test receipts
 remain distinct from deployed acceptance. Google approval, live provider setup,
 legacy maintenance, retention, devices and customer evidence are still required
 as listed in the launch checklist.
