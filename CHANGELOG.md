@@ -8,6 +8,18 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+### Fixed
+
+- Withings history imports group the period selector with Import history on
+  mobile and desktop, separately from Sync now, and explain each action.
+- Report export controls distinguish cloud documents, file download formats and
+  printing; school transcript controls separate the selected student from all-student
+  downloads. Calendar creation destination stays labeled on mobile.
+- School transcript exports use the student selected on screen, and expense exports
+  retain the Household/Me filter instead of always exporting household totals.
+- Report previews ignore superseded responses, keeping downloads and printing tied
+  to the current format and filters when requests finish out of order.
+
 ## [0.11.1] - 2026-10-19
 
 ### Fixed

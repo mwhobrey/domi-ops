@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { HEALTH_REPORT_KINDS } from "../../../api/src/lib/reports/types";
 import { HEALTH_REPORT_FOCUS_OPTIONS } from "./health-report-export";
-import { parseReportKind } from "./reports";
+import { parseReportKind, reportExportBody } from "./reports";
+
+describe("report export filters", () => {
+  it("preserves the personal expense scope through export serialization", () => {
+    expect(reportExportBody({ module: "expenses", kind: "overview", month: "2026-10", scope: "personal" }))
+      .toEqual({ module: "expenses", kind: "overview", month: "2026-10", scope: "personal" });
+  });
+});
 
 describe("report navigation", () => {
   it("recognizes every health report the API advertises and maps it to a pane", () => {

@@ -34,6 +34,7 @@ export interface ReportExportParams {
   from?: string | null;
   to?: string | null;
   month?: string | null;
+  scope?: "household" | "personal";
   term?: string | null;
   studentMemberId?: string | null;
   memberId?: string | null;
@@ -89,6 +90,7 @@ export function reportExportBody(params: ReportExportParams): Record<string, unk
   if (params.from) body.from = params.from;
   if (params.to) body.to = params.to;
   if (params.month) body.month = params.month;
+  if (params.scope) body.scope = params.scope;
   if (params.term) body.term = params.term;
   if (params.studentMemberId) body.studentMemberId = params.studentMemberId;
   if (params.memberId) body.memberId = params.memberId;

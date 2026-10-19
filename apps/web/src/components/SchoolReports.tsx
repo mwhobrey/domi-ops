@@ -352,8 +352,11 @@ function ProgressView({ reports }: { reports: SchoolReportsData }) {
   );
 }
 
-function TranscriptView({ reports }: { reports: SchoolReportsData }) {
-  const [memberId, setMemberId] = useState(reports.transcripts[0]?.memberId ?? "");
+function TranscriptView({ reports, memberId, onMemberChange }: {
+  reports: SchoolReportsData;
+  memberId: string;
+  onMemberChange: (memberId: string) => void;
+}) {
   const transcript = reports.transcripts.find((t) => t.memberId === memberId) ?? reports.transcripts[0];
 
   if (!transcript) {
@@ -362,24 +365,30 @@ function TranscriptView({ reports }: { reports: SchoolReportsData }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        {reports.transcripts.length > 1 && (
-          <Select className="max-w-xs" value={memberId} aria-label="Student transcript" onChange={(e) => setMemberId(e.target.value)}>
-            {reports.transcripts.map((row) => (
-              <option key={row.memberId} value={row.memberId}>{row.label}</option>
-            ))}
-          </Select>
-        )}
-        <Button type="button" variant="secondary" size="sm" onClick={() => downloadTranscriptCsv(transcript)}>
-          <Download className="h-4 w-4" aria-hidden />
-          Download CSV
-        </Button>
-        {reports.transcripts.length > 1 && reports.viewMode !== "student" && (
-          <Button type="button" variant="ghost" size="sm" onClick={() => downloadAllTranscriptsCsv(reports)}>
-            Download all
+      <fieldset className="min-w-0 space-y-2 rounded-lg border border-[var(--color-border)] px-3 pb-3">
+        <legend className="px-1 text-sm font-medium">Selected student</legend>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          {reports.transcripts.length > 1 && (
+            <Select className="sm:max-w-xs" value={transcript.memberId} aria-label="Student transcript" onChange={(e) => onMemberChange(e.target.value)}>
+              {reports.transcripts.map((row) => (
+                <option key={row.memberId} value={row.memberId}>{row.label}</option>
+              ))}
+            </Select>
+          )}
+          <Button type="button" variant="secondary" size="sm" onClick={() => downloadTranscriptCsv(transcript)}>
+            <Download className="h-4 w-4" aria-hidden />
+            Download student CSV
           </Button>
-        )}
-      </div>
+        </div>
+      </fieldset>
+      {reports.transcripts.length > 1 && reports.viewMode !== "student" && (
+        <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3">
+          <Button type="button" variant="ghost" size="sm" onClick={() => downloadAllTranscriptsCsv(reports)}>
+            Download all students (CSV)
+          </Button>
+          <p className="text-xs text-[var(--color-text-muted)]">One file for each student in this report.</p>
+        </div>
+      )}
       <div className="rounded-[var(--radius-lg)] border border-[var(--color-border)] p-4">
         <p className="text-lg font-semibold">{transcript.label}</p>
         <p className="mt-1 text-sm text-[var(--color-text-muted)]">
@@ -427,6 +436,8 @@ export function SchoolReports({
   const isStudent = reports.viewMode === "student";
   const [view, setView] = useState<SchoolReportView>(initialView);
   const [exportOpen, setExportOpen] = useState(false);
+  const [transcriptMemberId, setTranscriptMemberId] = useState("");
+  const transcript = reports.transcripts.find((t) => t.memberId === transcriptMemberId) ?? reports.transcripts[0];
 
   const exportKind: ReportKind | null = useMemo(() => {
     if (view === "weekly") return null;
@@ -442,9 +453,9 @@ export function SchoolReports({
       kind: exportKind,
       term: reports.selectedTerm,
       studentMemberId:
-        exportKind === "school-transcript" ? reports.transcripts[0]?.memberId : undefined,
+        exportKind === "school-transcript" ? transcript?.memberId : undefined,
     };
-  }, [exportKind, reports.selectedTerm, reports.transcripts]);
+  }, [exportKind, reports.selectedTerm, transcript?.memberId]);
 
   return (
     <div className="space-y-6">
@@ -460,7 +471,7 @@ export function SchoolReports({
         {exportKind && exportParams ? (
           <Button type="button" variant="ghost" size="sm" onClick={() => setExportOpen(true)}>
             <Download className="h-4 w-4" aria-hidden />
-            Export…
+            {view === "transcript" ? "Export selected student…" : "Export…"}
           </Button>
         ) : null}
       </div>
@@ -478,7 +489,7 @@ export function SchoolReports({
       {view === "weighted" && <WeightedReportsView reports={reports} />}
       {view === "missing" && <MissingDigestView reports={reports} />}
       {view === "progress" && <ProgressView reports={reports} />}
-      {view === "transcript" && <TranscriptView reports={reports} />}
+      {view === "transcript" && <TranscriptView reports={reports} memberId={transcript?.memberId ?? ""} onMemberChange={setTranscriptMemberId} />}
       {view === "weekly" && <WeeklyReportPanel module="school" />}
 
       {reports.summary.missingTotal > 0 && view !== "missing" && (
@@ -493,7 +504,7 @@ export function SchoolReports({
           open={exportOpen}
           onClose={() => setExportOpen(false)}
           exportParams={exportParams}
-          reportTitle={`School ${exportKind?.replace("school-", "") ?? "report"}`}
+          reportTitle={view === "transcript" && transcript ? `${transcript.label} — transcript` : `School ${exportKind?.replace("school-", "") ?? "report"}`}
           driveEnabled={driveEnabled}
         />
       ) : null}
