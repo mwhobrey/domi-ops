@@ -4,6 +4,13 @@
 
 ## What is working (implemented paths)
 
+- Dependency maintenance: React/React DOM 19.3.1 (including shared marketing
+  peers), Tiptap 3.32.0, Better Auth 1.7.10, Nodemailer 10.1.1, BullMQ 6.3.15,
+  Driver.js 1.10.1, S3 presigner 3.1152.0 and Capacitor Android 8.5.3. Dependabot
+  groups routine patch/minor updates, preserving framework/editor groups and
+  separate major upgrades. Validate lockfile changes under both CI Node 22 and
+  application-image Node 24; a Node 22 install alone can miss Docker failures.
+
 - Production Compose (hosted and self-host) checks API `/api/healthz` with a
   bounded Node fetch; new web containers wait for `service_healthy`. This gates
   startup only, not later API restarts or zero-downtime replacement.
