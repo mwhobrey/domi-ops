@@ -4,6 +4,16 @@
 
 ## What is working (implemented paths)
 
+- Remaining dependency maintenance includes node-gyp 13 (Node 22.22.2+ for source
+  development), Vitest 5.0.5 and the Sentry v11 web migration. Keep Drizzle's root
+  override aligned with workspace requirements (`^0.45.4`); auth's hoisted adapter
+  must resolve the ORM after both Node 22 and Node 24 clean installs.
+
+- Web Sentry v11 uses the shared `dataCollection` privacy policy instead of the
+  removed `sendDefaultPii` option. Explicitly disable queue-argument collection
+  alongside request, user, database, AI and stack-context data; keep the event
+  allowlist, attachment removal and disabled tracing/log/metric hooks.
+
 - Dependency maintenance: React/React DOM 19.3.1 (including shared marketing
   peers), Tiptap 3.32.0, Better Auth 1.7.10, Nodemailer 10.1.1, BullMQ 6.3.15,
   Driver.js 1.10.1, S3 presigner 3.1152.0 and Capacitor Android 8.5.3. Dependabot

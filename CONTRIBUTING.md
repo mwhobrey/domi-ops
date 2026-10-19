@@ -27,7 +27,9 @@ or [self-host setup help](../../issues/new?template=self_host_help.yml). Open-en
 
 ## Development setup
 
-**Prerequisites:** Node 20+, Docker (for Postgres, Redis, MinIO).
+**Prerequisites:** Node 22.22.2+ on the Node 22 LTS line (`mise install` uses the
+repository's Node 22 pin), Docker (for Postgres, Redis, MinIO). The native build
+tooling requires this minimum; application images use Node 24.
 
 ```bash
 cp .env.example .env

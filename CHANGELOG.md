@@ -10,6 +10,13 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Changed
 
+- Updated the remaining maintenance dependencies and node-gyp 13 together.
+  Source development uses Node 22.22.2+; Drizzle's shared override matches the
+  workspace update so the auth adapter resolves the same ORM version.
+
+- Updated the web Sentry SDK to v11 with explicit collection opt-outs, including
+  queue arguments; diagnostic error details and attachments remain scrubbed.
+
 - Updated React, Tiptap, Better Auth, Nodemailer, BullMQ, Driver.js, the S3
   presigner and Capacitor Android together, keeping shared React/editor packages
   aligned. Routine Dependabot patch/minor updates are grouped; major upgrades

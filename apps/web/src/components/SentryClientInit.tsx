@@ -37,12 +37,11 @@ function loadBrowserSentry(hint?: string | null): Promise<SentryModule | null> {
         dsn: resolved,
         environment: process.env.NODE_ENV,
         integrations: [Sentry.captureConsoleIntegration({ levels: ["error"] })],
-        sendDefaultPii: false, maxBreadcrumbs: 0, tracesSampleRate: 0, attachStacktrace: true,
-        dataCollection: DIAGNOSTIC_DATA_COLLECTION, enableLogs: false,
+        maxBreadcrumbs: 0, tracesSampleRate: 0, attachStacktrace: true,
+        dataCollection: DIAGNOSTIC_DATA_COLLECTION,
         ignoreSpans: [/.*/],
         tracePropagationTargets: [],
         beforeSendLog: () => null, beforeSendMetric: () => null,
-        beforeSendTransaction: () => null,
         beforeSend: (event, hint) => { hint.attachments = []; return scrubDiagnosticEvent(event); },
       });
     }
