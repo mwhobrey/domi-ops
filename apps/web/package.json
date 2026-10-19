@@ -15,7 +15,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@domi-ops/marketing-ui": "*",
     "@domi-ops/config": "*",
-    "@sentry/nextjs": "^10.75.0",
+    "@sentry/nextjs": "^11.8.0",
     "@tiptap/extension-link": "^3.32.0",
     "@tiptap/markdown": "^3.32.0",
     "@tiptap/pm": "^3.32.0",
