@@ -1,7 +1,7 @@
 "use client";
 
 import { Download, FileText, FolderOpen, HardDrive, Printer } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, apiClient } from "../../lib/client-api";
 import {
   downloadReportFile,
@@ -15,6 +15,7 @@ import type {
   ReportRenderFormat,
 } from "../../lib/reports";
 import { reportExportBody } from "../../lib/reports";
+import { createLatestGate } from "../../lib/latest-request";
 import { Alert, Button, Select, Sheet, Spinner } from "../ui";
 
 function PreviewBody({
@@ -66,11 +67,21 @@ export function ReportExportSheet({
   const [format, setFormat] = useState<ReportRenderFormat>("styled");
   const [downloadFormat, setDownloadFormat] = useState<ReportDownloadFormat>("csv");
   const [googleConnected, setGoogleConnected] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [previewPending, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [preview, setPreview] = useState<PreviewPayload | null>(null);
+  const previewKey = JSON.stringify([reportExportBody(exportParams), format]);
+  const [previewResult, setPreviewResult] = useState<{
+    key: string;
+    preview: PreviewPayload | null;
+    error: string | null;
+  } | null>(null);
+  const currentPreview = previewResult?.key === previewKey ? previewResult : null;
+  const preview = currentPreview?.preview ?? null;
+  const previewError = currentPreview?.error ?? null;
+  const loading = previewPending || (open && currentPreview == null);
+  const previewGate = useRef(createLatestGate());
 
   const exportNote =
     weekCount > 1
@@ -89,6 +100,7 @@ export function ReportExportSheet({
   }, []);
 
   const loadPreview = useCallback(async () => {
+    const requestId = previewGate.current.next();
     setLoading(true);
     setError(null);
     setSuccess(null);
@@ -100,19 +112,15 @@ export function ReportExportSheet({
         format,
         destination: "preview",
       });
-      setPreview({
-        plainText: data.preview.plainText,
-        html: data.preview.html,
-        filenameBase: data.preview.filenameBase,
-        downloads: data.preview.downloads,
-      });
+      if (!previewGate.current.isCurrent(requestId)) return;
+      setPreviewResult({ key: previewKey, preview: data.preview, error: null });
     } catch (err) {
-      setPreview(null);
-      setError(err instanceof ApiError ? err.message : "Preview failed");
+      if (!previewGate.current.isCurrent(requestId)) return;
+      setPreviewResult({ key: previewKey, preview: null, error: err instanceof ApiError ? err.message : "Preview failed" });
     } finally {
-      setLoading(false);
+      if (previewGate.current.isCurrent(requestId)) setLoading(false);
     }
-  }, [exportParams, format]);
+  }, [exportParams, format, previewKey]);
 
   useEffect(() => {
     if (!open) return;
@@ -122,6 +130,8 @@ export function ReportExportSheet({
   useEffect(() => {
     if (!open) return;
     void loadPreview();
+    const gate = previewGate.current;
+    return () => gate.cancel();
   }, [open, loadPreview]);
 
   async function runExport(target: ReportExportDestination) {
@@ -210,7 +220,7 @@ export function ReportExportSheet({
           </Alert>
         ) : null}
 
-        {error ? <Alert variant="error">{error}</Alert> : null}
+        {error || previewError ? <Alert variant="error">{error ?? previewError}</Alert> : null}
         {success ? <Alert variant="success">{success}</Alert> : null}
 
         <div className="space-y-2">

@@ -14,6 +14,8 @@
   all-student CSV separate. Expense exports preserve Household/Me scope through the
   API; personal scope derives its member from auth. Calendar creation destination
   stays labeled on mobile, separately from visibility filters. See `docs/UI.md`.
+- Export previews use the shared latest-request gate and a format/filter key;
+  stale successes/errors cannot replace the current preview or unlock its actions.
 
 ### v0.11.1 worker packaging correction
 
