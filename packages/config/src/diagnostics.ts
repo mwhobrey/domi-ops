@@ -2,7 +2,7 @@ export { telemetryRoute, privateTelemetryFields } from "./telemetry-privacy.js";
 export const DIAGNOSTIC_DATA_COLLECTION = {
   userInfo: false, cookies: false, httpHeaders: { request: false, response: false },
   httpBodies: [], urlQueryParams: false, graphQL: { document: false, variables: false },
-  genAI: { inputs: false, outputs: false }, databaseQueryData: false,
+  genAI: { inputs: false, outputs: false }, databaseQueryData: false, queues: false,
   stackFrameVariables: false, frameContextLines: 0,
 };
 

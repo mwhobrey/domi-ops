@@ -10,6 +10,9 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Changed
 
+- Updated the web Sentry SDK to v11 with explicit collection opt-outs, including
+  queue arguments; diagnostic error details and attachments remain scrubbed.
+
 - Updated React, Tiptap, Better Auth, Nodemailer, BullMQ, Driver.js, the S3
   presigner and Capacitor Android together, keeping shared React/editor packages
   aligned. Routine Dependabot patch/minor updates are grouped; major upgrades
