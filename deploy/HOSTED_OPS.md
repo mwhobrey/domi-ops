@@ -18,11 +18,18 @@ PgBouncer in **transaction mode** for Starter prod (see ADR 003). Migrations run
 
 | Signal | Check |
 |--------|--------|
-| API liveness | `GET https://app.domi-ops.com/api/health` (or `/health` on API host) |
+| API readiness | `GET https://app.domi-ops.com/api/healthz` (also `/api/healthz` directly on the API host; checks the database) |
 | Worker queue | Redis `LLEN` on `bull:domi-ops-sync:*` — alert on sustained growth |
 | Failed jobs | Worker logs + BullMQ failed set; replay after root-cause |
 | Postgres | Connections, disk, replication lag (managed provider dashboards) |
 | S3 | Bucket size, 5xx rate on presigned PUT path |
+
+Both production Compose files probe the API's `/api/healthz` before starting a
+new web container. Failed connections, non-2xx responses and probe timeouts keep
+web waiting. A 30-second startup grace period allows migrations to finish before
+failed probes count toward the unhealthy threshold. This gates startup; it does
+not provide zero-downtime API replacement or restart dependents after later API
+failures. Continue monitoring public health and container logs after deployment.
 
 ## Backups
 

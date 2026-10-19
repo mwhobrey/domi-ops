@@ -66,6 +66,12 @@ services:
       # crashing first.
       API_URL: http://api:4000
       # DATABASE_URL, S3_* come from .env — DO Managed Postgres + DO Spaces (external, not containers here).
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/api/healthz', { signal: AbortSignal.timeout(2500) }).then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      start_period: 30s
+      retries: 12
     depends_on:
       redis:
         condition: service_healthy
@@ -119,7 +125,7 @@ services:
       ALLOW_PUBLIC_SIGNUP: "false"
     depends_on:
       api:
-        condition: service_started
+        condition: service_healthy
     networks:
       - proxy
 

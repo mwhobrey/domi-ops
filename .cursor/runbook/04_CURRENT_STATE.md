@@ -4,6 +4,10 @@
 
 ## What is working (implemented paths)
 
+- Production Compose (hosted and self-host) checks API `/api/healthz` with a
+  bounded Node fetch; new web containers wait for `service_healthy`. This gates
+  startup only, not later API restarts or zero-downtime replacement.
+
 ### Local hosted QA harness (unreleased)
 
 - `docs/HOSTED_LOCAL_QA.md`: `mise exec -- npm run qa:hosted` builds and starts a
