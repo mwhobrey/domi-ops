@@ -7,12 +7,11 @@ if (dsn) {
   Sentry.init({
     dsn,
     environment: process.env.NODE_ENV,
-    sendDefaultPii: false, maxBreadcrumbs: 0, tracesSampleRate: 0,
-    dataCollection: DIAGNOSTIC_DATA_COLLECTION, enableLogs: false,
+    maxBreadcrumbs: 0, tracesSampleRate: 0,
+    dataCollection: DIAGNOSTIC_DATA_COLLECTION,
     ignoreSpans: [/.*/],
     tracePropagationTargets: [],
     beforeSendLog: () => null, beforeSendMetric: () => null,
-    beforeSendTransaction: () => null,
     beforeSend: (event, hint) => { hint.attachments = []; return scrubDiagnosticEvent(event); },
   });
 }
