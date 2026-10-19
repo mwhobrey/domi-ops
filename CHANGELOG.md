@@ -8,6 +8,13 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+### Changed
+
+- Updated React, Tiptap, Better Auth, Nodemailer, BullMQ, Driver.js, the S3
+  presigner and Capacitor Android together, keeping shared React/editor packages
+  aligned. Routine Dependabot patch/minor updates are grouped; major upgrades
+  stay separate.
+
 ### Fixed
 
 - Production web startup waits for the API and its database readiness check,

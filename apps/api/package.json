@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1150.0",
-    "@aws-sdk/s3-request-presigner": "^3.1146.0",
+    "@aws-sdk/s3-request-presigner": "^3.1152.0",
     "@domi-ops/auth": "*",
     "@domi-ops/calendar-sync": "*",
     "@domi-ops/config": "*",
@@ -19,7 +19,7 @@
     "@domi-ops/db": "*",
     "@hono/node-server": "^1.14.4",
     "@sentry/node": "^11.4.0",
-    "better-auth": "^1.7.7",
+    "better-auth": "^1.7.10",
     "drizzle-orm": "^0.45.3",
     "hono": "^4.13.12",
     "ioredis": "^5.6.1",

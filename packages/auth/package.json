@@ -20,9 +20,9 @@
     "@domi-ops/config": "*",
     "@domi-ops/crypto": "*",
     "@domi-ops/db": "*",
-    "better-auth": "^1.7.7",
+    "better-auth": "^1.7.10",
     "drizzle-orm": "^0.45.3",
-    "nodemailer": "^10.0.14"
+    "nodemailer": "^10.1.1"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",

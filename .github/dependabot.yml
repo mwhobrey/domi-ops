@@ -14,10 +14,11 @@ updates:
         update-types: ["version-update:semver-major"]
     groups:
       # Next.js/React ecosystem moves together often enough that separate PRs just churn CI —
-      # bundle them. Everything else stays one-PR-per-bump so audits stay easy to reason about.
+      # bundle them, including Next's matching lint configuration.
       next-react:
         patterns:
           - "next"
+          - "eslint-config-next"
           - "react"
           - "react-dom"
           - "@types/react"
@@ -28,8 +29,16 @@ updates:
       tiptap:
         patterns:
           - "@tiptap/*"
+      # Routine maintenance shares one lockfile and one validation run. Major
+      # upgrades stay separate; framework/editor groups above take precedence.
+      maintenance:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
 
-  # Dockerfiles (api, web, worker, import) all pin node:22-alpine as their base image
+  # Application images use Node 24; the marketing image uses Node 22.
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
