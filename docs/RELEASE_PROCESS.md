@@ -1,5 +1,7 @@
 # Release process
 
+The current release cut and its verification gates are tracked in [RELEASE_PLAN.md](./RELEASE_PLAN.md).
+
 ## Versioning
 
 Domi Ops follows [Semantic Versioning](https://semver.org/): `MAJOR.MINOR.PATCH`.

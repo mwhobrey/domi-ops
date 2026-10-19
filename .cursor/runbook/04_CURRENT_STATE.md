@@ -4,6 +4,13 @@
 
 ## What is working (implemented paths)
 
+### v0.11.2 release candidate
+
+Patch cut for the merged UI control and report-export fixes in PR #302. Root
+version/lockfile metadata and changelog are prepared for 0.11.2; no new migrations,
+dependencies or environment changes since v0.11.1. Follow `docs/RELEASE_PLAN.md`
+and record tag-workflow, hosted deployment and smoke receipts before publication.
+
 ### Control grouping and report exports (unreleased)
 
 - Withings controls separate Sync now from a labeled Import history group whose
