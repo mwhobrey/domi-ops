@@ -4,6 +4,20 @@
 
 ## What is working (implemented paths)
 
+### v0.11.0 release scope and acceptance
+
+This release collects hosted subscription/storage hardening, adult invitations,
+household archives, course copy/rescheduling, onboarding/marketing updates and the
+isolated QA harness. Deploy migrations 0098-0101 with all application services.
+Follow `docs/HOSTED_LAUNCH_ACCEPTANCE.md` for the billing/storage inventory,
+pre-migration backup and rollback rehearsal. Code and local QA do not establish
+that production maintenance has been performed.
+
+The narrowed Google scopes must be deployed before recording the production-client
+verification video. Recording, provider approval and fresh-grant/reconnect acceptance
+remain separate from the software release; use
+`docs/google-oauth-verification-demo-script.md`.
+
 - Remaining dependency maintenance includes node-gyp 13 (Node 22.22.2+ for source
   development), Vitest 5.0.5 and the Sentry v11 web migration. Keep Drizzle's root
   override aligned with workspace requirements (`^0.45.4`); auth's hoisted adapter
@@ -25,7 +39,7 @@
   bounded Node fetch; new web containers wait for `service_healthy`. This gates
   startup only, not later API restarts or zero-downtime replacement.
 
-### Local hosted QA harness (unreleased)
+### Local hosted QA harness
 
 - `docs/HOSTED_LOCAL_QA.md`: `mise exec -- npm run qa:hosted` builds and starts a
   standalone checkout-owned lab with real authentication/RLS, source and restore
@@ -48,7 +62,7 @@
   configuration. This does not establish production OAuth approval, payment
   configuration, public HTTPS behavior or release deployment.
 
-### Hosted audit remediation (merged, unreleased)
+### Hosted audit remediation
 
 - Coverage and remaining acceptance gates: `docs/HOSTED_AUDIT_REMEDIATION.md`.
 - PR #283 is merged; deployment and
