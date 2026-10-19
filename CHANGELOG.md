@@ -8,6 +8,14 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-10-19
+
+### Fixed
+
+- Include workspace-local dependencies in the production worker image so its
+  Sentry dependency resolves and background jobs can start. The image build now
+  verifies that the worker can import Sentry from its runtime location.
+
 ## [0.11.0] - 2026-10-19
 
 Requires `npm run db:migrate` (migrations 0098-0101); the hosted release workflow

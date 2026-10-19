@@ -23,8 +23,10 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=builder --chown=node:node /app/apps/worker/dist ./apps/worker/dist
 COPY --from=builder --chown=node:node /app/apps/worker/package.json ./apps/worker/
+COPY --from=builder --chown=node:node /app/apps/worker/node_modules ./apps/worker/node_modules
 COPY --from=builder --chown=node:node /app/packages ./packages
 COPY --from=builder --chown=node:node /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/package.json ./
+RUN cd /app/apps/worker && node --input-type=module -e "await import('@sentry/node')"
 USER node
 CMD ["node", "apps/worker/dist/index.js"]

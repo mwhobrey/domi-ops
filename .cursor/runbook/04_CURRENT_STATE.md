@@ -4,6 +4,12 @@
 
 ## What is working (implemented paths)
 
+### v0.11.1 worker packaging correction
+
+The production worker image includes workspace-local dependencies and verifies
+its Sentry import during the image build. The v0.11.0 image omitted this directory,
+causing `ERR_MODULE_NOT_FOUND` before worker startup despite passing source-based QA.
+
 ### v0.11.0 release scope and acceptance
 
 This release collects hosted subscription/storage hardening, adult invitations,
