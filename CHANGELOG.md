@@ -8,6 +8,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+## [0.11.2] - 2026-10-19
+
+No new migrations, environment changes or dependencies when upgrading from v0.11.1.
+
 ### Fixed
 
 - Withings history imports group the period selector with Import history on
