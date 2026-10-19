@@ -55,6 +55,22 @@ Typography: **Inter** via `next/font` on `layout.tsx`.
 - **Profile onboarding** — `ProfileOnboardingBanner` when display name unset; dismiss stored per member in `localStorage`.
 - **Reports hub** — `/reports` title only; mobile module/kind pill picker card; desktop sidebar nav at `lg+`.
 
+## Control and action grouping
+
+- Keep an action's inputs together in a labeled group when neighboring actions use
+  different inputs. A wrapping flex row alone does not establish that relationship
+  on phones. Stack related controls inside the group below `sm`.
+- Name the scope in the action: selected student versus all students, file download
+  versus printing, new-event calendar versus visibility filters. Keep purpose labels
+  visible on mobile; accessible names alone do not explain a dropdown to sighted users.
+- Export the same selected person, period and scope as the report on screen. The
+  school transcript preview, CSV and cloud export share the selected student.
+  Personal expense exports use the authenticated member, never a caller-selected
+  member id. Preview and cloud exports use Document format; file downloads use
+  Download as in their own group.
+- Check 320 px, 375 px and desktop widths after wrapping or grouping changes. Verify
+  the outgoing request or downloaded content as well as the layout, with synthetic data.
+
 ## Dashboard widgets
 
 Default layout (top → bottom): **Today at a glance** → **Today’s schedule** + **compact weather** (2-col `md+`) → **Schedule conflict checker** (when calendar is on) → **Household** → **Month** calendar (secondary).

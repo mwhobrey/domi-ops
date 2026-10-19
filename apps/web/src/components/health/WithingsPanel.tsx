@@ -144,29 +144,40 @@ function PersonRow({
             </Alert>
           ) : null}
 
-          <div className="flex flex-wrap items-center gap-2">
-            {link.status !== "revoked" ? (
-              <>
+          {link.status !== "revoked" ? (
+            <div className="space-y-4">
+              <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3">
                 <Button size="sm" variant="secondary" disabled={busy} onClick={() => onAction(() => apiClient.post(`${base}/sync`))}>
                   Sync now
                 </Button>
-                <HistorySelect
-                  id={`withings-rehistory-${member.memberId}`}
-                  label={`Import more of ${member.label}'s history`}
-                  value={days}
-                  onChange={setDays}
-                  disabled={busy}
-                />
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={busy}
-                  onClick={() => onAction(() => apiClient.post(`${base}/backfill`, { days }))}
-                >
-                  Import history
-                </Button>
-              </>
-            ) : null}
+                <p className="text-sm text-[var(--color-text-muted)]">Fetch new and updated readings.</p>
+              </div>
+              <fieldset className="min-w-0 space-y-2 rounded-lg border border-[var(--color-border)] px-3 pb-3">
+                <legend className="px-1 text-sm font-medium">Import history</legend>
+                <p className="text-sm text-[var(--color-text-muted)]">
+                  Recheck the selected period for missing readings. Existing entries won&apos;t be duplicated.
+                </p>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <HistorySelect
+                    id={`withings-rehistory-${member.memberId}`}
+                    label={`History period to import for ${member.label}`}
+                    value={days}
+                    onChange={setDays}
+                    disabled={busy}
+                  />
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={busy}
+                    onClick={() => onAction(() => apiClient.post(`${base}/backfill`, { days }))}
+                  >
+                    Import history
+                  </Button>
+                </div>
+              </fieldset>
+            </div>
+          ) : null}
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               size="sm"
               variant="secondary"

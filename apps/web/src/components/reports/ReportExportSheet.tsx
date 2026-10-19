@@ -182,13 +182,14 @@ export function ReportExportSheet({
       description={reportTitle}
       className="max-w-2xl"
     >
-      <div className="space-y-4">
+      <div className="space-y-4 px-6 py-4">
         <label className="block space-y-1 text-sm">
-          <span className="text-[var(--color-text-muted)]">Preview format</span>
+          <span className="text-[var(--color-text-muted)]">Document format</span>
           <Select value={format} onChange={(e) => setFormat(e.target.value as ReportRenderFormat)}>
             <option value="styled">Styled tables</option>
             <option value="plain">Structured text</option>
           </Select>
+          <span className="block text-xs text-[var(--color-text-muted)]">Applies to the preview and cloud exports.</span>
         </label>
 
         {exportNote ? <p className="text-sm text-[var(--color-text-muted)]">{exportNote}</p> : null}
@@ -213,7 +214,12 @@ export function ReportExportSheet({
         {success ? <Alert variant="success">{success}</Alert> : null}
 
         <div className="space-y-2">
-          <p className="text-sm font-medium">Preview</p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-medium">Preview</p>
+            <Button type="button" size="sm" variant="secondary" onClick={() => void loadPreview()} disabled={loading}>
+              Refresh preview
+            </Button>
+          </div>
           {loading ? (
             <div className="flex justify-center py-8">
               <Spinner />
@@ -226,68 +232,72 @@ export function ReportExportSheet({
         </div>
 
         <div className="space-y-3 border-t border-[var(--color-border)] pt-4">
-          <p className="text-sm font-medium">Export</p>
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="secondary" onClick={() => void loadPreview()} disabled={loading}>
-              Refresh preview
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => void runExport("domi-ops-drive")}
-              disabled={exporting || !driveEnabled}
-              title={driveEnabled ? undefined : "Drive module is not enabled"}
-            >
-              <FolderOpen className="h-4 w-4" aria-hidden />
-              Save to Drive
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => void runExport("google-drive")}
-              disabled={exporting || !googleConnected}
-              title={googleConnected ? undefined : "Connect Google Docs in profile"}
-            >
-              <HardDrive className="h-4 w-4" aria-hidden />
-              Google Drive
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => void runExport("google-docs")}
-              disabled={exporting || !googleConnected}
-              title={googleConnected ? undefined : "Connect Google Docs in profile"}
-            >
-              <FileText className="h-4 w-4" aria-hidden />
-              Google Docs
-            </Button>
-          </div>
-
-          <div className="flex flex-wrap items-end gap-2">
-            <label className="space-y-1 text-sm">
-              <span className="text-[var(--color-text-muted)]">Download as</span>
-              <Select
-                value={downloadFormat}
-                onChange={(e) => setDownloadFormat(e.target.value as ReportDownloadFormat)}
-                aria-label="Download format"
+          <fieldset className="min-w-0 space-y-2 rounded-lg border border-[var(--color-border)] px-3 pb-3">
+            <legend className="px-1 text-sm font-medium">Save a document</legend>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => void runExport("domi-ops-drive")}
+                disabled={exporting || !driveEnabled}
+                title={driveEnabled ? undefined : "Drive module is not enabled"}
               >
-                <option value="csv">CSV</option>
-                <option value="json">JSON</option>
-                <option value="yaml">YAML</option>
-              </Select>
-            </label>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={runDownload}
-              disabled={!preview || loading}
-            >
-              <Download className="h-4 w-4" aria-hidden />
-              Download
-            </Button>
+                <FolderOpen className="h-4 w-4" aria-hidden />
+                Save to Drive
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => void runExport("google-drive")}
+                disabled={exporting || !googleConnected}
+                title={googleConnected ? undefined : "Connect Google Docs in profile"}
+              >
+                <HardDrive className="h-4 w-4" aria-hidden />
+                Google Drive
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => void runExport("google-docs")}
+                disabled={exporting || !googleConnected}
+                title={googleConnected ? undefined : "Connect Google Docs in profile"}
+              >
+                <FileText className="h-4 w-4" aria-hidden />
+                Google Docs
+              </Button>
+            </div>
+          </fieldset>
+
+          <fieldset className="min-w-0 space-y-2 rounded-lg border border-[var(--color-border)] px-3 pb-3">
+            <legend className="px-1 text-sm font-medium">Download a file</legend>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <label className="space-y-1 text-sm">
+                <span className="text-[var(--color-text-muted)]">Download as</span>
+                <Select
+                  value={downloadFormat}
+                  onChange={(e) => setDownloadFormat(e.target.value as ReportDownloadFormat)}
+                  aria-label="Download format"
+                >
+                  <option value="csv">CSV</option>
+                  <option value="json">JSON</option>
+                  <option value="yaml">YAML</option>
+                </Select>
+              </label>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={runDownload}
+                disabled={!preview || loading}
+              >
+                <Download className="h-4 w-4" aria-hidden />
+                Download
+              </Button>
+            </div>
+          </fieldset>
+          <div>
             <Button type="button" variant="ghost" onClick={runPrint} disabled={!preview || loading}>
               <Printer className="h-4 w-4" aria-hidden />
-              Print
+              Print report
             </Button>
           </div>
         </div>

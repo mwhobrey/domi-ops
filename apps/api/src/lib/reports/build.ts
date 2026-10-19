@@ -53,6 +53,7 @@ export interface ReportQueryParams {
   from?: string | null;
   to?: string | null;
   month?: string | null;
+  scope?: "household" | "personal";
   term?: string | null;
   studentMemberId?: string | null;
   memberId?: string | null;
@@ -296,7 +297,12 @@ export async function buildCanonicalReport(
 
   if (module === "expenses" && kind === "overview") {
     const month = params.month?.trim() || undefined;
-    const data = await buildExpenseReports(db, auth.householdId, month);
+    const scope = params.scope === "personal" ? "personal" : "household";
+    if (scope === "personal" && !auth.memberId) return null;
+    const data = await buildExpenseReports(db, auth.householdId, month, {
+      scope,
+      memberId: scope === "personal" ? auth.memberId : undefined,
+    });
     return expensesOverviewToCanonical(data);
   }
 

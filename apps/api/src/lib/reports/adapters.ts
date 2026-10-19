@@ -949,7 +949,7 @@ export function expensesOverviewToCanonical(data: ExpenseReport): CanonicalRepor
   }
 
   return {
-    title: `Spending report — ${formatMonthLabel(data.month)}`,
+    title: `${data.scope === "personal" ? "Personal spending" : "Spending"} report — ${formatMonthLabel(data.month)}`,
     module: "expenses",
     kind: "overview",
     generatedAt: new Date().toISOString(),

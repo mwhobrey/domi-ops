@@ -128,13 +128,13 @@ export function CalendarFilterBar({
   return (
     <>
       <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <label className="flex shrink-0 items-center gap-1.5">
+        <label className="flex w-full min-w-0 flex-wrap items-center gap-1.5 rounded-lg border border-[var(--color-border)] p-2 sm:w-auto">
           <span className="sr-only">Write to calendar</span>
           <span
-            className="hidden text-xs font-medium text-[var(--color-text-muted)] sm:inline"
+            className="text-xs font-medium text-[var(--color-text-muted)]"
             aria-hidden
           >
-            Write to
+            New events in
           </span>
           <Select
             className="!w-auto min-w-[7.5rem] max-w-[11rem] py-1.5 text-xs sm:min-w-[8.5rem]"

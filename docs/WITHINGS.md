@@ -85,6 +85,9 @@ configured on the server (`GET /api/health/withings` says `enabled: false`) or t
   **Connect Withings**, which sends the browser to Withings to approve access.
 - **Connected:** state badge, last synced time, and where the import starts. **Sync now**, **Import history**
   (over a window picked beside it) and **Unlink** (with a confirmation).
+  Sync now fetches changes since the previous sync and does not use the history selector.
+  The selector and Import history button sit inside a labeled group on mobile and desktop;
+  use that action to recheck a date range for missing readings without duplicating existing entries.
 - **Coming back from Withings** lands on `/health?withings=<result>` (`connected`, `denied`, `expired`,
   `forbidden`, `already_linked`, `unavailable`, `error`), opens Checks and shows what happened. The parent
   (`HealthPageClient`) holds that message so a data reload or tab switch does not drop it, and it has a

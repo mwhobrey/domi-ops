@@ -4,6 +4,17 @@
 
 ## What is working (implemented paths)
 
+### Control grouping and report exports (unreleased)
+
+- Withings controls separate Sync now from a labeled Import history group whose
+  period selector stays with its action on mobile and desktop. Sync now fetches
+  changes; Import history rechecks the selected date range with existing dedupe.
+- Report exports distinguish document format, cloud saves, file downloads and
+  printing. School transcript CSV/cloud export share the selected student, with
+  all-student CSV separate. Expense exports preserve Household/Me scope through the
+  API; personal scope derives its member from auth. Calendar creation destination
+  stays labeled on mobile, separately from visibility filters. See `docs/UI.md`.
+
 ### v0.11.1 worker packaging correction
 
 The production worker image includes workspace-local dependencies and verifies

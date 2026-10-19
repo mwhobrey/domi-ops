@@ -111,8 +111,8 @@ export function ExpenseMonthlyReportSection({
   }, [load]);
 
   const exportParams = useMemo(
-    () => ({ module: "expenses" as const, kind: "overview" as const, month }),
-    [month],
+    () => ({ module: "expenses" as const, kind: "overview" as const, month, scope }),
+    [month, scope],
   );
 
   return (
@@ -152,6 +152,7 @@ export function ExpenseMonthlyReportSection({
               size="sm"
               variant={scope === key ? "primary" : "secondary"}
               onClick={() => setScope(key)}
+              aria-pressed={scope === key}
             >
               {key === "household" ? "Household" : "Me"}
             </Button>
@@ -161,7 +162,7 @@ export function ExpenseMonthlyReportSection({
           Update
         </Button>
         {report ? (
-          <Button type="button" size="sm" onClick={() => setExportOpen(true)}>
+          <Button type="button" size="sm" disabled={loading} onClick={() => setExportOpen(true)}>
             Export…
           </Button>
         ) : null}
@@ -251,7 +252,7 @@ export function ExpenseMonthlyReportSection({
         open={exportOpen}
         onClose={() => setExportOpen(false)}
         exportParams={exportParams}
-        reportTitle={report ? `Spending — ${formatMonthLabel(report.month)}` : "Spending report"}
+        reportTitle={report ? `${scope === "personal" ? "Personal" : "Household"} spending — ${formatMonthLabel(report.month)}` : "Spending report"}
         driveEnabled={driveEnabled}
       />
     </div>

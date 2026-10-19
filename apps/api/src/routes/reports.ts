@@ -110,6 +110,7 @@ export function reportRoutes(db: Database, env: Env) {
         from: c.req.query("from")?.trim() || null,
         to: c.req.query("to")?.trim() || null,
         month: c.req.query("month")?.trim() || null,
+        scope: c.req.query("scope")?.trim() === "personal" ? "personal" : "household",
         term: c.req.query("term")?.trim() || null,
         studentMemberId: c.req.query("studentMemberId")?.trim() || null,
         memberId: c.req.query("memberId")?.trim() || null,
@@ -142,6 +143,7 @@ export function reportRoutes(db: Database, env: Env) {
       from?: string | null;
       to?: string | null;
       month?: string | null;
+      scope?: "household" | "personal";
       term?: string | null;
       studentMemberId?: string | null;
       memberId?: string | null;
@@ -183,6 +185,7 @@ export function reportRoutes(db: Database, env: Env) {
         from: body.from,
         to: body.to,
         month: body.month,
+        scope: body.scope,
         term: body.term,
         studentMemberId: body.studentMemberId,
         memberId: body.memberId,
