@@ -267,6 +267,9 @@ remain separate from the software release; use
   household transaction and require its current calendar to match the enabled
   queued Google mapping. Superseded outbox rows are discarded, so moving an event
   cannot send its newer contents through an old calendar's queued export.
+- A pending create intent whose event already has a Google ID becomes an update:
+  another save may have queued it while the first export was in flight. Completed
+  duplicate creates remain no-ops.
 
 - **First Google push on save:** `planEventGooglePush` queues `create` when an
   explicitly saved non-recurring local event has no Google ID and its destination

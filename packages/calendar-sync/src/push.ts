@@ -137,9 +137,14 @@ export async function pushEventCreate(
     .where(eq(calendarEvents.id, eventId))
     .limit(1)
     .for("update");
-  // Already has a Google event id — this isn't a first-push case (e.g. the outbox row is stale
-  // because a prior attempt already succeeded).
-  if (!ev || ev.googleEventId) return false;
+  if (!ev) return false;
+  // A save can queue another create while the first export is in flight. Preserve
+  // that save's newer contents once the first job has recorded the Google ID.
+  if (ev.googleEventId) {
+    return ev.syncStatus === "pending"
+      ? pushEventUpdate(db, env, eventId, linkedCalendarId)
+      : false;
+  }
 
   const [lc] = await db
     .select()

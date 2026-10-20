@@ -21,6 +21,8 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 - Queued Calendar pushes validate the event's current destination and serialize
   with moves, preventing stale work from exporting newer contents to a former
   calendar. Superseded outbox entries are discarded.
+- Saves made during the first Google export retain their later edits instead of
+  being stranded behind a create intent whose Google event already exists.
 
 ## [0.11.2] - 2026-10-19
 

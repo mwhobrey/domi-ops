@@ -92,4 +92,20 @@ describe("queued Google push destination", () => {
     expect(removed).toEqual([calendarSyncOutbox]);
     expect(updates).toEqual([]);
   });
+
+  it("delivers a save queued during the first export as an update once the Google ID exists", async () => {
+    event.googleEventId = "google-event";
+    event.title = "Edited while the first export was in flight";
+    expect(await pushEventCreate(db, env, String(event.id), "linked-a")).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/events/google-event"), expect.objectContaining({
+      method: "PUT", body: expect.stringContaining(String(event.title)),
+    }));
+  });
+
+  it("ignores a completed duplicate create intent", async () => {
+    event.googleEventId = "google-event";
+    event.syncStatus = "synced";
+    expect(await pushEventCreate(db, env, String(event.id), "linked-a")).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
