@@ -70,7 +70,7 @@ export function computeEventPolicy(
   if (row.syncStatus === "conflict") {
     return { editable: false, pushable: false };
   }
-  if (row.source === "local" || !row.googleEventId) {
+  if (!row.googleEventId) {
     return { editable: true, pushable: false };
   }
   const link = ctx.linkedByTargetCalendar.get(row.calendarId);
@@ -216,4 +216,30 @@ export function isGooglePushPatch(
     if (String(body[key] ?? "") !== String(row[key] ?? "")) return true;
   }
   return false;
+}
+
+export function planEventGooglePush(
+  row: CalendarEventRow,
+  ctx: EventPolicyContext,
+  patch: Record<string, unknown>,
+): { operation: "create" | "update"; connectionId: string; linkedCalendarId: string } | null {
+  const policy = computeEventPolicy(row, ctx);
+  if (!policy.editable) return null;
+  if (row.googleEventId) {
+    if (!policy.pushable || !isGooglePushPatch(patch, row)) return null;
+    return {
+      operation: "update",
+      connectionId: policy.connectionId!,
+      linkedCalendarId: policy.linkedCalendarId!,
+    };
+  }
+  if (row.source !== "local" || row.recurringRuleId) return null;
+  const targetId = typeof patch.calendarId === "string" ? patch.calendarId : row.calendarId;
+  const link = ctx.linkedByTargetCalendar.get(targetId);
+  if (link?.syncMode !== "bidirectional" || link.connectionUserId !== ctx.userId) return null;
+  return {
+    operation: "create",
+    connectionId: link.connectionId,
+    linkedCalendarId: link.linkedCalendarId,
+  };
 }

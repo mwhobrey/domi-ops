@@ -8,6 +8,17 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+### Fixed
+
+- Bidirectional Calendar sync keeps sending edits to events originally created in
+  Domi Ops after their first successful Google push, subject to connection ownership
+  and sync mode.
+- Saving a non-recurring local event after linking its calendar or enabling
+  bidirectional sync queues its first Google creation, including moves into a
+  linked calendar. Historical events are not bulk-exported automatically.
+- Calendar sync confirmation says "Sync requested" so it does not imply a finished
+  request is still queued; the live progress indicator reports actual job state.
+
 ## [0.11.2] - 2026-10-19
 
 No new migrations, environment changes or dependencies when upgrading from v0.11.1.
