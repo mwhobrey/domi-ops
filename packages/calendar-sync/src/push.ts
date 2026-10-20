@@ -40,11 +40,13 @@ export async function pushEventUpdate(
   eventId: string,
   linkedCalendarId: string,
 ): Promise<boolean> {
+  // Worker calls run in a household transaction; keep moves behind this export's snapshot.
   const [ev] = await db
     .select()
     .from(calendarEvents)
     .where(eq(calendarEvents.id, eventId))
-    .limit(1);
+    .limit(1)
+    .for("update");
   if (!ev?.googleEventId) return false;
 
   const [lc] = await db
@@ -52,7 +54,7 @@ export async function pushEventUpdate(
     .from(linkedGoogleCalendars)
     .where(eq(linkedGoogleCalendars.id, linkedCalendarId))
     .limit(1);
-  if (!lc) return false;
+  if (!lc?.syncEnabled || lc.targetCalendarId !== ev.calendarId) return false;
 
   const [conn] = await db
     .select()
@@ -128,11 +130,13 @@ export async function pushEventCreate(
   eventId: string,
   linkedCalendarId: string,
 ): Promise<boolean> {
+  // The row lock serializes an in-flight first export with later calendar moves.
   const [ev] = await db
     .select()
     .from(calendarEvents)
     .where(eq(calendarEvents.id, eventId))
-    .limit(1);
+    .limit(1)
+    .for("update");
   // Already has a Google event id — this isn't a first-push case (e.g. the outbox row is stale
   // because a prior attempt already succeeded).
   if (!ev || ev.googleEventId) return false;
@@ -142,7 +146,7 @@ export async function pushEventCreate(
     .from(linkedGoogleCalendars)
     .where(eq(linkedGoogleCalendars.id, linkedCalendarId))
     .limit(1);
-  if (!lc) return false;
+  if (!lc?.syncEnabled || lc.targetCalendarId !== ev.calendarId) return false;
 
   const [conn] = await db
     .select()
@@ -220,7 +224,12 @@ export async function processOutboxForConnection(
 
   // Unscoped by design (see below) — every connection's linked-calendar ids, not just this one's.
   const linked = await db
-    .select({ id: linkedGoogleCalendars.id, connectionId: linkedGoogleCalendars.connectionId })
+    .select({
+      id: linkedGoogleCalendars.id,
+      connectionId: linkedGoogleCalendars.connectionId,
+      targetCalendarId: linkedGoogleCalendars.targetCalendarId,
+      syncEnabled: linkedGoogleCalendars.syncEnabled,
+    })
     .from(linkedGoogleCalendars);
   const linkedIds = new Set(
     linked.filter((l) => l.connectionId === connectionId).map((l) => l.id),
@@ -253,6 +262,17 @@ export async function processOutboxForConnection(
       // *this* connection, on every single connection's processing run. That silently dropped
       // other households' pending sync work continuously. This row belongs to a different,
       // still-valid connection — leave it for that connection's own run to pick up.
+      continue;
+    }
+
+    const destination = linked.find((l) => l.id === lcId);
+    const [currentEvent] = await db
+      .select({ calendarId: calendarEvents.calendarId })
+      .from(calendarEvents)
+      .where(eq(calendarEvents.id, row.eventId))
+      .limit(1);
+    if (!currentEvent || !destination?.syncEnabled || destination.targetCalendarId !== currentEvent.calendarId) {
+      await db.delete(calendarSyncOutbox).where(eq(calendarSyncOutbox.id, row.id));
       continue;
     }
 

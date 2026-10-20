@@ -18,6 +18,9 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
   linked calendar. Historical events are not bulk-exported automatically.
 - Calendar sync confirmation says "Sync requested" so it does not imply a finished
   request is still queued; the live progress indicator reports actual job state.
+- Queued Calendar pushes validate the event's current destination and serialize
+  with moves, preventing stale work from exporting newer contents to a former
+  calendar. Superseded outbox entries are discarded.
 
 ## [0.11.2] - 2026-10-19
 

@@ -263,6 +263,11 @@ remain separate from the software release; use
 
 ### Calendar sync module
 
+- **Queued destination safety:** worker create/update pushes lock the event in the
+  household transaction and require its current calendar to match the enabled
+  queued Google mapping. Superseded outbox rows are discarded, so moving an event
+  cannot send its newer contents through an old calendar's queued export.
+
 - **First Google push on save:** `planEventGooglePush` queues `create` when an
   explicitly saved non-recurring local event has no Google ID and its destination
   is linked to the viewer's bidirectional connection. This covers events created
