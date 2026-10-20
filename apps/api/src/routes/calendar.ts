@@ -49,7 +49,7 @@ import {
 } from "../lib/calendar-sync-status.js";
 import {
   computeEventPolicy,
-  isGooglePushPatch,
+  planEventGooglePush,
   isSchedulePatch,
   loadEventPolicyContext,
   toEventDto,
@@ -1082,11 +1082,7 @@ export function calendarRoutes(db: Database, env: Env) {
     }
 
     const scheduleChange = isSchedulePatch(body, existing);
-    const pushAfter =
-      isGooglePushPatch({ ...body, location }, existing) &&
-      policy.pushable &&
-      policy.linkedCalendarId &&
-      policy.connectionId;
+    const pushAfter = planEventGooglePush(existing, policyCtx, { ...body, location });
 
     const targetCalendarId = body.calendarId ?? existing.calendarId;
     if (body.categoryKey !== undefined) {
@@ -1129,12 +1125,12 @@ export function calendarRoutes(db: Database, env: Env) {
     if (pushAfter && isModuleEnabled(env, "calendar_sync")) {
       await db.insert(calendarSyncOutbox).values({
         eventId: ev.id,
-        operation: "update",
-        payloadJson: JSON.stringify({ linkedCalendarId: policy.linkedCalendarId }),
+        operation: pushAfter.operation,
+        payloadJson: JSON.stringify({ linkedCalendarId: pushAfter.linkedCalendarId }),
       });
       const redisUrl = env.REDIS_URL ?? "redis://localhost:6379";
       await enqueueSyncJob(redisUrl, "google.calendar.push", {
-        connectionId: policy.connectionId!,
+        connectionId: pushAfter.connectionId,
         householdId: auth.householdId,
         userId: auth.userId,
       });

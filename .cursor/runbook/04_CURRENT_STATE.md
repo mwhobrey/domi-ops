@@ -263,6 +263,35 @@ remain separate from the software release; use
 
 ### Calendar sync module
 
+- **Queued destination safety:** worker create/update pushes lock the event in the
+  household transaction and require its current calendar to match the enabled
+  queued Google mapping. Superseded outbox rows are discarded, so moving an event
+  cannot send its newer contents through an old calendar's queued export.
+- A pending create intent whose event already has a Google ID becomes an update:
+  another save may have queued it while the first export was in flight. Completed
+  duplicate creates remain no-ops.
+
+- **First Google push on save:** `planEventGooglePush` queues `create` when an
+  explicitly saved non-recurring local event has no Google ID and its destination
+  is linked to the viewer's bidirectional connection. This covers events created
+  before linking/enabling sync and moved local events. It queues `update` for
+  already-exported content/schedule edits. Saving does not bulk-export history.
+- **Sync feedback:** the button confirmation is "Sync requested"; actual job state
+  comes from `GET /api/calendar/sync/status`. The old persistent "Sync queued"
+  confirmation could remain after a successful run. Inspect `run.status`, mode,
+  mapping and event Google ID before diagnosing a stalled worker. "Sync now" pulls
+  Google data and drains existing outbox work in bidirectional mode; it does not
+  enqueue every unexported local event.
+
+- **Bidirectional edit policy:** a Domi-created event keeps `source: local` after
+  its first Google push. Once it has a `googleEventId`, edits use the same
+  connection-owner and bidirectional-mode checks as imported events; do not reject
+  it solely by source. Local regression coverage includes this lifecycle.
+- **Known deletion gap (v0.11.2 source audit):** `DELETE /api/calendar/events/:id`
+  deletes only the Domi row; no Google deletion is queued or sent. Do not claim
+  deletion sync in the OAuth video until implemented and verified. Reconnecting
+  Calendar also resets its mode to `GOOGLE_CALENDAR_DEFAULT_SYNC_MODE`.
+
 - Google OAuth connect discovers linked sources (`sync_enabled` false until import wizard commit).
 - Google sync upserts by `google_event_id` **per household** (cross-lane match for HomeHub-imported events); fuzzy match when import row lacks `google_event_id`; post-sync dedupe + partial unique index `0012`.
 - `POST /api/calendar/dedupe` and Google sheet **Remove duplicates** for one-off cleanup.

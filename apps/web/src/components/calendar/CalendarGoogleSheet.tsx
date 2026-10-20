@@ -129,7 +129,7 @@ export function CalendarGoogleSheet({
     try {
       await apiClient.post("/api/calendar/sync");
       void refreshSync();
-      setFeedback({ text: "Sync queued.", variant: "info" });
+      setFeedback({ text: "Sync requested.", variant: "info" });
     } catch {
       setFeedback({ text: "Connect Google Calendar before syncing.", variant: "error" });
     } finally {
