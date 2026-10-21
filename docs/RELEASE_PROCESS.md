@@ -45,7 +45,8 @@ Any PR that adds a file to `packages/db/drizzle/` (a new migration) must:
 6. If the release includes a migration, say so at the top of the release notes. The hosted deploy
    applies it automatically: CI runs `deploy-hosted.sh --migrate`, which reads `DATABASE_URL_ADMIN`
    from `~/.bashrc` on the droplet (the admin URL is never stored in GitHub). Watch the deploy job
-   for the migration step; if it fails the old containers keep running.
+   for the migration step. The migration path pauses API and worker before DDL; if it fails,
+   they remain stopped for operator recovery. Fix forward before restarting.
 
 If a release goes bad, see [docs/ROLLBACK.md](ROLLBACK.md).
 

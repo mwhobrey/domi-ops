@@ -202,3 +202,11 @@ export async function ensureMyallyfileSyncScheduler(redisUrl: string): Promise<v
     },
   );
 }
+
+/** Retry durable Calendar intents even if the original wake-up job was missed. */
+export async function ensureCalendarPushScheduler(redisUrl: string): Promise<void> {
+  await getSyncQueue(redisUrl).upsertJobScheduler("calendar-push-retry", { every: 60_000 }, {
+    name: "google.calendar.push.scan", data: { name: "google.calendar.push.scan", payload: { householdId: "scan" } },
+    opts: { removeOnComplete: 20, removeOnFail: 50 },
+  });
+}

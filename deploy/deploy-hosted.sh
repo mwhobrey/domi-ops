@@ -192,6 +192,8 @@ echo "==> docker compose pull"
 "${COMPOSE[@]}" pull
 
 if [[ "$RUN_MIGRATE" -eq 1 ]]; then
+  echo "==> pausing API and worker for a coordinated schema upgrade"
+  "${COMPOSE[@]}" stop api worker
   echo "==> applying database migrations (admin connection)"
   "${COMPOSE[@]}" run --rm -T --no-deps \
     -e "DATABASE_URL=${MIGRATE_ADMIN_URL}" \
@@ -217,7 +219,11 @@ echo "==> checking for pending migrations"
 if ! "${COMPOSE[@]}" run --rm -T --no-deps --entrypoint node api \
     packages/db/scripts/check-pending-migrations.mjs; then
   echo "" >&2
-  echo "ABORTING deploy — containers were NOT touched. See message above." >&2
+  if [[ "$RUN_MIGRATE" -eq 1 ]]; then
+    echo "ABORTING deploy — API and worker remain paused. Fix the migration/grant failure before restarting." >&2
+  else
+    echo "ABORTING deploy — containers were NOT touched. See message above." >&2
+  fi
   if [[ "$RUN_MIGRATE" -ne 1 ]]; then
     echo "Hint: on the droplet, export DATABASE_URL_ADMIN in ~/.bashrc, then re-run with:" >&2
     echo "      deploy/deploy-hosted.sh --migrate" >&2

@@ -1,5 +1,34 @@
 # Current state
 
+## Calendar create/delete sync correction (local, pending deployment)
+
+- Time-grid drafts previously reset the selected end to 10 AM; an evening event could
+  reach Google as a reversed same-day range (`timeRangeEmpty`). Preserve draft dates
+  and times, reject invalid ranges in form/API/mapper, and roll default ends past midnight.
+- Migration `0102_calendar_delete_outbox` binds outbox rows directly to household and
+  connection. `event_id` becomes SET NULL so delete snapshots survive local removal.
+  Its household policy validates event and connection ownership; worker scans retain
+  their existing explicit policy. Legacy undeliverable orphan intents are removed.
+- DELETE locks the event, snapshots the Google destination/ID, cancels queued
+  create/update work, and deletes locally in one transaction. An interrupted first
+  create uses the same deterministic Google ID for cleanup. Import-only/non-owner
+  deletes do not call Google. Recoverable failures remain queued and excluded from pulls.
+  Malformed or missing/remapped destinations fail the run and are removed without a provider call.
+- The worker retries durable Calendar work every minute (`google.calendar.push.scan`),
+  records safe provider errors and keeps failed local edits from being overwritten by a
+  pull. Status includes pending exports. The UI polls while visible and replaces the
+  request acknowledgement with completion or an actionable failure.
+- Outbox export holds event/mapping locks through the provider call to serialize first
+  export with deletion and destination changes. Each request times out after 30 seconds,
+  but a batch (up to 50 rows) and subsequent pulls can hold a transaction for minutes.
+  Editing/deleting affected events may wait. A lease-based redesign needs versioned
+  event/destination snapshots and delete cancellation; a claim alone loses this protection.
+- Upgrade API and worker together using the deployment scripts, which pause them before
+  migrations/recreation. Back up first; expect a brief maintenance interruption. A failed
+  migration/grant check leaves them stopped for operator recovery, not an old-schema restart.
+- Local tests and synthetic Google responses do not establish provider acceptance. After
+  deployment, rehearse create, edit, delete, Google absence and repeat sync on the demo lane.
+
 *Two live deployments: the single-tenant dogfood at `https://whome.whobrey.me`, and the private hosted Starter beta at `app.domi-ops.com` (`DEPLOYMENT_MODE=shared`, real Stripe, invite-only). Repo is public. Remaining launch work is the public hosted opening — [07_LAUNCH.md](./07_LAUNCH.md). Prefer bug fixes and hosted hardening over new module polish.*
 
 ## What is working (implemented paths)
@@ -287,10 +316,11 @@ remain separate from the software release; use
   its first Google push. Once it has a `googleEventId`, edits use the same
   connection-owner and bidirectional-mode checks as imported events; do not reject
   it solely by source. Local regression coverage includes this lifecycle.
-- **Known deletion gap (v0.11.2 source audit):** `DELETE /api/calendar/events/:id`
-  deletes only the Domi row; no Google deletion is queued or sent. Do not claim
-  deletion sync in the OAuth video until implemented and verified. Reconnecting
-  Calendar also resets its mode to `GOOGLE_CALENDAR_DEFAULT_SYNC_MODE`.
+- **Google deletion sync (pending live rehearsal):** DELETE now queues durable
+  cleanup for owned bidirectional calendars. Provider responses are synthetic in
+  local/CI tests; rehearse the live round-trip before claiming deletion sync in
+  the OAuth video. Reconnecting Calendar also resets its mode to
+  `GOOGLE_CALENDAR_DEFAULT_SYNC_MODE`.
 
 - Google OAuth connect discovers linked sources (`sync_enabled` false until import wizard commit).
 - Google sync upserts by `google_event_id` **per household** (cross-lane match for HomeHub-imported events); fuzzy match when import row lacks `google_event_id`; post-sync dedupe + partial unique index `0012`.

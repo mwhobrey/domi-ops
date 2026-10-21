@@ -86,12 +86,13 @@ export function CalendarGoogleSheet({
 }) {
   const [connections, setConnections] = useState(initialConnections);
   const [syncing, setSyncing] = useState(false);
+  const [requestedAfter, setRequestedAfter] = useState<string | null | undefined>(undefined);
   const [refreshing, setRefreshing] = useState(false);
   const [savingMode, setSavingMode] = useState(false);
-  const [feedback, setFeedback] = useState<{ text: string; variant: "info" | "error" } | null>(
+  const [feedback, setFeedback] = useState<{ text: string; variant: "info" | "error"; kind?: "sync-requested" } | null>(
     null,
   );
-  const { status: syncStatus, refresh: refreshSync, isActive } = useCalendarSyncStatus(open);
+  const { status: syncStatus, error: syncStatusError, refresh: refreshSync, isActive } = useCalendarSyncStatus(open);
 
   useEffect(() => {
     setConnections(initialConnections);
@@ -99,7 +100,7 @@ export function CalendarGoogleSheet({
 
   const connected = connections.length > 0;
   const conn = connections[0];
-  const lastSync = conn?.lastSyncAt;
+  const lastSync = syncStatus?.lastSyncAt ?? conn?.lastSyncAt;
   const syncMode = conn?.syncMode ?? (defaultSyncMode as CalendarConnectionSummary["syncMode"]);
 
   const loadConnections = useCallback(async () => {
@@ -123,13 +124,25 @@ export function CalendarGoogleSheet({
     onOpenImport();
   }
 
+  let visibleFeedback = feedback;
+  if (feedback?.kind === "sync-requested" && requestedAfter !== undefined && syncStatus?.run) {
+    if (syncStatusError || syncStatus.run.active || syncStatus.run.status === "failed" || syncStatus.linked?.some(l => l.syncEnabled && l.lastSyncError)) {
+      visibleFeedback = null;
+    } else if (syncStatus.lastSyncAt && syncStatus.lastSyncAt !== requestedAfter && !syncStatus.pendingExports) {
+      visibleFeedback = { text: "Sync finished.", variant: "info" };
+    } else if (syncStatus.pendingExports) {
+      visibleFeedback = { text: `${syncStatus.pendingExports} event change(s) waiting to export to Google.`, variant: "info" };
+    }
+  }
+
   async function syncNow() {
     setSyncing(true);
+    setRequestedAfter(syncStatus?.lastSyncAt ?? null);
     setFeedback(null);
     try {
       await apiClient.post("/api/calendar/sync");
       void refreshSync();
-      setFeedback({ text: "Sync requested.", variant: "info" });
+      setFeedback({ text: "Sync requested.", variant: "info", kind: "sync-requested" });
     } catch {
       setFeedback({ text: "Connect Google Calendar before syncing.", variant: "error" });
     } finally {
@@ -249,9 +262,9 @@ export function CalendarGoogleSheet({
             </label>
           )}
 
-          {feedback && <Alert variant={feedback.variant}>{feedback.text}</Alert>}
+          {visibleFeedback && <Alert variant={visibleFeedback.variant}>{visibleFeedback.text}</Alert>}
 
-          <CalendarSyncProgress status={syncStatus} compact />
+          <CalendarSyncProgress status={syncStatus} error={syncStatusError} compact />
 
           {isActive && (
             <p className="text-xs text-[var(--color-text-muted)]" role="status" aria-live="polite">

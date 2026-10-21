@@ -74,6 +74,9 @@ echo "==> Domi Ops prod update (tag: ${DOMI_OPS_IMAGE_TAG}, network: ${PROXY_NET
 echo "==> docker compose pull (api, worker, web)"
 "${COMPOSE[@]}" pull api worker web
 
+echo "==> pausing API and worker for a coordinated schema upgrade"
+"${COMPOSE[@]}" stop api worker
+
 echo "==> docker compose up (recreate app containers)"
 "${COMPOSE[@]}" up -d --force-recreate --no-build api worker web
 

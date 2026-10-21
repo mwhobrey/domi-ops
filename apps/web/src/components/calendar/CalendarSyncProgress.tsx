@@ -5,11 +5,14 @@ import { Alert } from "../ui";
 
 export function CalendarSyncProgress({
   status,
+  error,
   compact = false,
 }: {
   status: CalendarSyncStatus | null;
+  error?: string | null;
   compact?: boolean;
 }) {
+  if (error) return <Alert variant="error" className="text-sm">{error}</Alert>;
   if (!status?.connected || !status.run) return null;
 
   const { run, linked = [] } = status;
@@ -21,16 +24,21 @@ export function CalendarSyncProgress({
 
   if (!run.active && run.status !== "failed" && !compact) {
     const errors = linked.filter((l) => l.lastSyncError);
-    if (!errors.length) return null;
+    if (!errors.length && !status.pendingExports) return null;
   }
 
   if (run.status === "idle" && !run.error) {
     const errors = linked.filter((l) => l.syncEnabled && l.lastSyncError);
-    if (!errors.length) return null;
+    if (!errors.length && !status.pendingExports) return null;
   }
 
   return (
     <div className={compact ? "space-y-2" : "space-y-3"}>
+      {!run.active && run.status !== "failed" && Boolean(status.pendingExports) && (
+        <Alert variant="info" className="text-sm">
+          {status.pendingExports} event change(s) waiting to export to Google.
+        </Alert>
+      )}
       {run.active && (
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-2 text-sm">

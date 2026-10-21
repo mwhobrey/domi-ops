@@ -10,6 +10,18 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Fixed
 
+- Bidirectional Google Calendar deletion retains a durable, household-scoped outbox
+  intent after the local event is removed; retries accept already-absent events and
+  do not reimport pending deletions. Requires migration `0102_calendar_delete_outbox`
+  and a coordinated API/worker upgrade. Deployment scripts pause API and worker
+  before the schema change; failed migration checks leave them stopped for recovery.
+- Creating an event from a selected calendar time range preserves its end time and
+  end date instead of resetting it to 10 AM. Form and API reject empty/reversed
+  time ranges, and default one-hour Google events roll correctly across midnight.
+- Calendar exports retry durable pending work every minute. Provider failures remain
+  visible with actionable errors, pending changes are counted, and sync feedback
+  follows completion or failure instead of leaving a permanent request message.
+
 - Bidirectional Calendar sync keeps sending edits to events originally created in
   Domi Ops after their first successful Google push, subject to connection ownership
   and sync mode.

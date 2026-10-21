@@ -5,6 +5,7 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  index,
   text,
   time,
   timestamp,
@@ -234,10 +235,12 @@ export const calendarCategoryImportMappings = pgTable(
 
 export const calendarSyncOutbox = pgTable("calendar_sync_outbox", {
   id: uuid("id").primaryKey().defaultRandom(),
-  eventId: uuid("event_id").references(() => calendarEvents.id, { onDelete: "cascade" }),
+  householdId: uuid("household_id").notNull().references(() => households.id, { onDelete: "cascade" }),
+  connectionId: uuid("connection_id").notNull().references(() => calendarConnections.id, { onDelete: "cascade" }),
+  eventId: uuid("event_id").references(() => calendarEvents.id, { onDelete: "set null" }),
   operation: varchar("operation", { length: 16 }).notNull(),
   payloadJson: text("payload_json"),
   attempts: integer("attempts").notNull().default(0),
   lastError: text("last_error"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [index("calendar_sync_outbox_connection_created").on(t.connectionId, t.createdAt)]);

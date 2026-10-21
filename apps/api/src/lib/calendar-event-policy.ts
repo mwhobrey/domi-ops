@@ -4,7 +4,7 @@ import {
   calendarEvents,
   linkedGoogleCalendars,
 } from "@domi-ops/db";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 export type CalendarEventRow = typeof calendarEvents.$inferSelect;
 
@@ -45,7 +45,7 @@ export async function loadEventPolicyContext(
       calendarConnections,
       eq(linkedGoogleCalendars.connectionId, calendarConnections.id),
     )
-    .where(eq(calendarConnections.householdId, householdId));
+    .where(and(eq(calendarConnections.householdId, householdId), eq(linkedGoogleCalendars.syncEnabled, true)));
 
   const linkedByTargetCalendar = new Map<string, LinkedTargetMeta>();
   for (const row of rows) {

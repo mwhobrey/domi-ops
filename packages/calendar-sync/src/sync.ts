@@ -4,6 +4,7 @@ import type { Database } from "@domi-ops/db";
 import {
   calendarConnections,
   calendarEvents,
+  calendarSyncOutbox,
   eventCategories,
   linkedGoogleCalendars,
 } from "@domi-ops/db";
@@ -16,7 +17,7 @@ import {
 } from "./google-event-match.js";
 import { eventToFields, syncWindow } from "./mapper.js";
 import { offsetsFromGoogleEvent, replaceEventReminders } from "./event-reminders.js";
-import { processOutboxForConnection } from "./push.js";
+import { parseOutboxPayload, processOutboxForConnection } from "./push.js";
 import { materializeRecurringForHousehold } from "./recurring.js";
 import { scanCalendarReminders } from "./reminder-scan.js";
 import { scanBudgetAlerts } from "./budget-alert-scan.js";
@@ -39,6 +40,7 @@ import { householdScanEnqueuer } from "./queue.js";
 import { scanMyallyfileSync } from "./myallyfile-sync.js";
 import { fanOutWithingsSync, syncWithingsHousehold } from "./withings-sync.js";
 import { scanSchoolReminders } from "./school-reminder-scan.js";
+import { fanOutCalendarPushes } from "./calendar-push-retry.js";
 import { setSyncRun } from "./sync-run.js";
 import type { SyncJobPayload } from "./index.js";
 
@@ -168,7 +170,12 @@ export async function pullLinkedCalendar(
 
   const defaultCategoryKey = await defaultCategoryKeyForCalendar(db, targetCalendarId);
 
+  const deleteRows = await db.select({ payloadJson: calendarSyncOutbox.payloadJson }).from(calendarSyncOutbox)
+    .where(and(eq(calendarSyncOutbox.connectionId, conn.id), eq(calendarSyncOutbox.operation, "delete")));
+  const deleting = new Set(deleteRows.map(r => parseOutboxPayload(r.payloadJson))
+    .filter(p => p.linkedCalendarId === lc.id && p.googleCalendarId === lc.googleCalendarId).map(p => p.googleEventId));
   for (const event of resp.items ?? []) {
+    if (deleting.has(String(event.id))) continue;
     if (event.status === "cancelled") {
       const gid = event.id ? String(event.id) : null;
       if (gid) {
@@ -199,7 +206,7 @@ export async function pullLinkedCalendar(
       (await findFuzzyGoogleEventMatch(db, conn.householdId, fields));
 
     if (existing) {
-      if (existing.syncStatus === "pending") continue;
+      if (existing.syncStatus === "pending" || existing.syncStatus === "error") continue;
       await db
         .update(calendarEvents)
         .set({
@@ -297,6 +304,8 @@ export async function syncConnection(
 
   let done = 0;
   try {
+    // Delete before pulling, so a removed Domi event is not immediately imported again.
+    const pushes = conn.syncMode === "bidirectional" ? await processOutboxForConnection(db, env, connectionId) : null;
     for (const lc of enabled) {
       await setSyncRun(db, connectionId, {
         status: "syncing",
@@ -311,13 +320,10 @@ export async function syncConnection(
       done += 1;
     }
     await dedupeHouseholdGoogleEvents(db, conn.householdId);
-    if (conn.syncMode === "bidirectional") {
-      await processOutboxForConnection(db, env, connectionId);
-    }
     await setSyncRun(db, connectionId, {
-      status: "idle",
+      status: pushes?.failed ? "failed" : "idle",
       progress: null,
-      error: null,
+      error: pushes?.error ?? null,
       touchLastSync: true,
     });
   } catch (e) {
@@ -376,9 +382,16 @@ export async function runCalendarSyncJob(
     }
     case "google.calendar.push": {
       if (!payload.connectionId) throw new Error("connectionId required for calendar push");
-      await processOutboxForConnection(db, env, payload.connectionId);
+      const result = await processOutboxForConnection(db, env, payload.connectionId);
+      await setSyncRun(db, payload.connectionId, {
+        status: result.failed ? "failed" : "idle", error: result.error,
+        touchLastSync: !result.failed,
+      });
       break;
     }
+    case "google.calendar.push.scan":
+      await fanOutCalendarPushes(db, redisUrlOf(env));
+      break;
     case "recurring.materialize":
       await materializeRecurringForHousehold(db, payload.householdId);
       break;

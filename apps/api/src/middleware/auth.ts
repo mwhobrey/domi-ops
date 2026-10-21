@@ -8,6 +8,7 @@ export type { AuthContext };
 export type AppVariables = {
   auth: AuthContext | null;
   userId: string | null;
+  afterTenantCommit?: Array<() => Promise<void>>;
 };
 
 export function createAuthMiddleware(db: Database, env: Env, auth: WhomeBetterAuth) {

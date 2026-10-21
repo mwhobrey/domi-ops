@@ -22,6 +22,7 @@ import {
   dedupeHouseholdGoogleEvents,
   ensureAccessToken,
   enqueueSyncJob,
+  eventTimeRangeError,
   inferGoogleCategories,
   listGoogleCalendars,
   materializeRecurringForHousehold,
@@ -59,6 +60,7 @@ import {
   listVisibleCalendars,
   setHouseholdDefaultCalendar,
 } from "../lib/calendar-lanes.js";
+import { queueEventGoogleDeletions } from "../lib/calendar-event-delete.js";
 import { enrichEventDto } from "../lib/calendar-event-enrich.js";
 import { householdTodayIsoDate } from "../lib/household-time.js";
 import { listNativeCalendarEvents } from "../lib/calendar-native-events.js";
@@ -864,6 +866,8 @@ export function calendarRoutes(db: Database, env: Env) {
       if (!ok) return c.json({ error: "invalid_category" }, 400);
     }
 
+    const rangeError = eventTimeRangeError(body);
+    if (rangeError) return c.json({ error: "invalid_event_range", message: rangeError }, 400);
     const allDay = body.allDay ?? false;
     const eventColor = body.categoryKey ? null : body.color ? normalizeHexColor(body.color) : null;
     const location = normalizeEventLocation(body.location) ?? null;
@@ -991,6 +995,8 @@ export function calendarRoutes(db: Database, env: Env) {
       isModuleEnabled(env, "calendar_sync")
     ) {
       await db.insert(calendarSyncOutbox).values({
+        householdId: auth.householdId,
+        connectionId: link.connectionId,
         eventId: ev!.id,
         operation: "create",
         payloadJson: JSON.stringify({ linkedCalendarId: link.linkedCalendarId }),
@@ -1081,6 +1087,8 @@ export function calendarRoutes(db: Database, env: Env) {
       return c.json({ error: "invalid_drive_buffer", message: patchBufferError }, 400);
     }
 
+    const rangeError = eventTimeRangeError({ ...existing, ...pickEventPatch(body) });
+    if (rangeError) return c.json({ error: "invalid_event_range", message: rangeError }, 400);
     const scheduleChange = isSchedulePatch(body, existing);
     const pushAfter = planEventGooglePush(existing, policyCtx, { ...body, location });
 
@@ -1124,6 +1132,8 @@ export function calendarRoutes(db: Database, env: Env) {
 
     if (pushAfter && isModuleEnabled(env, "calendar_sync")) {
       await db.insert(calendarSyncOutbox).values({
+        householdId: auth.householdId,
+        connectionId: pushAfter.connectionId,
         eventId: ev.id,
         operation: pushAfter.operation,
         payloadJson: JSON.stringify({ linkedCalendarId: pushAfter.linkedCalendarId }),
@@ -1211,27 +1221,47 @@ export function calendarRoutes(db: Database, env: Env) {
     const auth = c.get("auth")!;
     const id = c.req.param("id");
     const recurringScope = c.req.query("recurringScope");
-    const [existing] = await db
-      .select()
-      .from(calendarEvents)
-      .where(and(eq(calendarEvents.id, id), eq(calendarEvents.householdId, auth.householdId)))
-      .limit(1);
-    if (!existing) return c.json({ error: "not_found" }, 404);
-    if (!(await canWriteCalendar(db, existing.calendarId, auth.householdId, auth.userId))) {
-      return c.json({ error: "forbidden", message: "You cannot delete events on this calendar." }, 403);
-    }
-
-    if (existing.recurringRuleId && recurringScope === "series") {
-      await db
-        .delete(calendarEvents)
-        .where(eq(calendarEvents.recurringRuleId, existing.recurringRuleId));
-      await db.delete(recurringRules).where(eq(recurringRules.id, existing.recurringRuleId));
-    } else {
-      await db
-        .delete(calendarEvents)
-        .where(and(eq(calendarEvents.id, id), eq(calendarEvents.householdId, auth.householdId)));
-    }
-    return c.json({ ok: true });
+    const result = await db.transaction(async (transaction) => {
+      const tx = transaction as unknown as Database;
+      const [existing] = await tx.select().from(calendarEvents)
+        .where(and(eq(calendarEvents.id, id), eq(calendarEvents.householdId, auth.householdId)))
+        .limit(1).for("update");
+      if (!existing) return c.json({ error: "not_found" }, 404);
+      if (!(await canWriteCalendar(tx, existing.calendarId, auth.householdId, auth.userId))) {
+        return c.json({ error: "forbidden", message: "You cannot delete events on this calendar." }, 403);
+      }
+      const series = existing.recurringRuleId && recurringScope === "series";
+      const events = series ? await tx.select().from(calendarEvents)
+        .where(and(eq(calendarEvents.recurringRuleId, existing.recurringRuleId!), eq(calendarEvents.householdId, auth.householdId)))
+        .orderBy(asc(calendarEvents.id)).for("update") : [existing];
+      for (const calendarId of new Set(events.map(e => e.calendarId))) {
+        if (!(await canWriteCalendar(tx, calendarId, auth.householdId, auth.userId))) {
+          return c.json({ error: "forbidden", message: "You cannot delete every event in this series." }, 403);
+        }
+      }
+      const ctx = await loadEventPolicyContext(tx, auth.householdId, auth.userId);
+      const connections = await queueEventGoogleDeletions(tx, events, ctx);
+      await tx.delete(calendarEvents).where(and(inArray(calendarEvents.id, events.map(e => e.id)), eq(calendarEvents.householdId, auth.householdId)));
+      if (series) await tx.delete(recurringRules).where(and(eq(recurringRules.id, existing.recurringRuleId!), eq(recurringRules.householdId, auth.householdId)));
+      for (const connectionId of connections) await markSyncQueued(tx, connectionId);
+      return { connections };
+    });
+    if (result instanceof Response) return result;
+    const wakeWorker = async () => {
+      for (const connectionId of result.connections) {
+        try {
+          await enqueueSyncJob(env.REDIS_URL ?? "redis://localhost:6379", "google.calendar.push", {
+            connectionId, householdId: auth.householdId, userId: auth.userId,
+          });
+        } catch {
+          console.error("Calendar delete wakeup failed; the durable push scan will retry.");
+        }
+      }
+    };
+    const afterCommit = c.get("afterTenantCommit");
+    if (afterCommit) afterCommit.push(wakeWorker);
+    else await wakeWorker();
+    return c.json({ ok: true, googleDeletionQueued: result.connections.length > 0 });
   });
 
   app.get("/event-categories", async (c) => {

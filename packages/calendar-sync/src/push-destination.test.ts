@@ -25,7 +25,7 @@ describe("queued Google push destination", () => {
     select: () => ({ from: (table: unknown) => {
       const rows = table === calendarEvents ? [event]
         : table === linkedGoogleCalendars ? [linked]
-          : table === calendarConnections ? [{ id: "connection", syncMode: "bidirectional", timeZone: "UTC" }]
+          : table === calendarConnections ? [{ id: "connection", householdId: "household", syncMode: "bidirectional", timeZone: "UTC" }]
             : table === calendarSyncOutbox ? outbox : [];
       const result = Object.assign(Promise.resolve(rows), {
         where: () => result, limit: () => result, orderBy: () => result,
@@ -40,7 +40,7 @@ describe("queued Google push destination", () => {
 
   beforeEach(() => {
     event = {
-      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", calendarId: "calendar-a",
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", householdId: "household", calendarId: "calendar-a",
       title: "Demo event", description: null, location: null, googleEventId: null,
       startDate: "2026-10-20", endDate: null, startTime: "14:00", endTime: "15:00",
       allDay: false, timeZone: "UTC", syncStatus: "pending",
@@ -78,7 +78,7 @@ describe("queued Google push destination", () => {
     if (operation === "update") event.googleEventId = "google-event";
     const push = operation === "create" ? pushEventCreate : pushEventUpdate;
     expect(await push(db, env, String(event.id), "linked-a")).toBe(true);
-    expect(locks).toBe(1);
+    expect(locks).toBe(2);
     expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/calendars/google-a/events"), expect.objectContaining({
       method: operation === "create" ? "POST" : "PUT",
     }));
@@ -86,7 +86,7 @@ describe("queued Google push destination", () => {
 
   it("discards a superseded outbox intent without exporting or changing the moved event", async () => {
     event.calendarId = "private-calendar-b";
-    outbox = [{ id: "old-intent", eventId: event.id, operation: "create", payloadJson: JSON.stringify({ linkedCalendarId: "linked-a" }) }];
+    outbox = [{ id: "old-intent", connectionId: "connection", eventId: event.id, operation: "create", payloadJson: JSON.stringify({ linkedCalendarId: "linked-a" }) }];
     await processOutboxForConnection(db, env, "connection");
     expect(fetchMock).not.toHaveBeenCalled();
     expect(removed).toEqual([calendarSyncOutbox]);

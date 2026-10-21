@@ -25,9 +25,13 @@ export function createTenantMiddleware(scopedDb: Database, env: Env) {
       return next();
     }
 
-    return withHouseholdContext(baseDb, auth.householdId, async (tx) => {
+    const afterCommit: Array<() => Promise<void>> = [];
+    c.set("afterTenantCommit", afterCommit);
+    const result = await withHouseholdContext(baseDb, auth.householdId, async (tx) => {
       const today = await householdTodayIsoDate(tx, auth.householdId);
       return withHouseholdDate(today, () => runWithScopedDb(tx, () => next()));
     });
+    for (const callback of afterCommit) await callback();
+    return result;
   };
 }
