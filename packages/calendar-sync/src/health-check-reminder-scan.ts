@@ -168,11 +168,11 @@ async function deliverOneCheckReminder(
 }
 
 /**
- * Send the reminders that are due. Returns how many were delivered. Runs under the worker-scan
- * database context (cross-tenant), and the worker passes no options.
+ * Send the reminders that are due. Returns how many were delivered. The worker's household job
+ * supplies household database context; the cross-tenant tick only enqueues those jobs.
  *
  * - `now`: the clock, for tests.
- * - `householdId`: only scan this household. Tests use it so that other suites sharing the
+ * - `householdId`: only scan this household, as the worker does. Tests use it so other suites sharing the
  *   database (and deleting their own households while a scan is mid-sweep) cannot interfere.
  */
 export async function scanHealthCheckReminders(
