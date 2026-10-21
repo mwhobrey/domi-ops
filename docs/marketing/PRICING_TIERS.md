@@ -56,6 +56,16 @@ Source of truth for [WHO-181](https://linear.app/mikewhob-whome/issue/WHO-181) p
 
 ## Module add-ons
 
+### AI assistant integration (owner decision, 2026-10-21)
+
+Standard MCP access and workflow skills are included in the existing Cloud base
+price and available free in MIT self-hosted deployments. MCP is an integration
+capability, not a separately purchased module or add-on SKU. Customers supply
+their compatible assistant accounts; model inference/credits are not included.
+Existing prices are unchanged. This packaging decision does not advertise a
+shipped integration: implementation and client acceptance remain pending. See
+[the M1 decision record](../MCP_M1_DECISIONS.md).
+
 **None at launch.** Table reserved for a future single “extensions” SKU or storage upsell — not per-module à-la-carte.
 
 | Module key | Display name | Monthly add-on |
