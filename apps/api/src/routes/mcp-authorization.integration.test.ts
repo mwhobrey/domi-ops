@@ -39,6 +39,7 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
   const verifier = "v".repeat(64);
   const challenge = createHash("sha256").update(verifier).digest("base64url");
   const callback = "https://assistant.example.test/callback";
+  const cookiePrefix = "mcp" + randomUUID().replaceAll("-", "");
   async function post(path: string, body: unknown, person = owner, headers = person.headers) {
     return fetch(origin + path, { method: "POST", headers, body: JSON.stringify(body), redirect: "manual" });
   }
@@ -98,7 +99,7 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
     origin = "http://127.0.0.1:" + address.port;
     env = envSchema.parse({ NODE_ENV: "test", DEPLOYMENT_MODE: mode, PUBLIC_APP_URL: origin, API_URL: origin,
       DATABASE_URL: url, SESSION_SECRET: "synthetic-who469-session-secret-for-disposable-fixtures-only", MCP_ENABLED: "true", MCP_SYNTHETIC_DEPLOYMENT: "true", MODULES_ENABLED: "core" });
-    auth = createBetterAuth(db, env, { cookiePrefix: "mcp" + randomUUID().replaceAll("-", ""), deferHouseholdMembership: async () => true });
+    auth = createBetterAuth(db, env, { cookiePrefix, deferHouseholdMembership: async () => true });
     app.all("/auth/*", (c) => auth.handler(c.req.raw));
     app.get("/.well-known/oauth-authorization-server/auth", (c) => auth.mcp.metadata(c.req.raw));
     app.route("/api/mcp-auth", mcpAuthorizationRoutes(auth.mcp, env));
@@ -149,6 +150,12 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
     expect((await post("/auth/oauth2/create-client", { redirect_uris: [callback] })).status).toBeGreaterThanOrEqual(400);
     const jwks = await (await fetch(origin + "/auth/jwks")).json() as { keys: Record<string, unknown>[] };
     expect(jwks.keys.length).toBeGreaterThan(0); expect(jwks.keys.every((k: Record<string, unknown>) => !k.d && !k.privateKey)).toBe(true);
+  });
+  it("preserves ordinary sessions with a path in PUBLIC_APP_URL when MCP is disabled", async () => {
+    const off = createBetterAuth(db, { ...env, MCP_ENABLED: false, PUBLIC_APP_URL: origin + "/prefix" }, { cookiePrefix });
+    expect((await off.api.getSession({ headers: owner.headers }))?.user?.id).toBe(owner.userId);
+    expect((await off.handler(new Request(origin + "/auth/oauth2/authorize"))).status).toBe(404);
+    expect(() => off.mcp).toThrow("mcp_disabled");
   });
   it("issues bound tokens, preserves browser sessions, and stores hashed refresh credentials", async () => {
     const token = await connect();
@@ -211,8 +218,7 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
       { sub: stranger.userId }, { exp: undefined }, { scope: "notes:read" }, { cnf: { jkt: "synthetic-sender-binding" } },
     ]) {
       const invalid = await new SignJWT({ ...claims, ...override }).setProtectedHeader({ ...header, alg: algorithm }).sign(key);
-      const denied = await auth.mcp.authorize(bearer(invalid)).then(() => false, () => true);
-      expect(denied, Object.keys(override).join(",")).toBe(true);
+      await expect(auth.mcp.authorize(bearer(invalid)), Object.keys(override).join(",")).rejects.toMatchObject({ status: 401 });
     }
   });
   it("supports operator-registered confidential clients and hashes their secrets", async () => {
@@ -257,6 +263,36 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
     const other = await begin(); const pending = await prepare(other);
     await withUserLookupContext(db, owner.userId, (tx) => tx.update(mcpPendingConsents).set({ expiresAt: new Date(0) }).where(eq(mcpPendingConsents.id, pending.pendingId)));
     expect((await decide(other, pending.pendingId)).status).toBe(409);
+  });
+  async function activeConnections() {
+    return owned(owner, (tx) => tx.select({ id: mcpConnections.id }).from(mcpConnections).where(and(
+      eq(mcpConnections.userId, owner.userId), eq(mcpConnections.clientId, clientId), eq(mcpConnections.status, "active"),
+    )));
+  }
+  it("consumes the same pending consent exactly once under concurrent decisions", async () => {
+    const q = await begin(); const p = await prepare(q);
+    const results = await Promise.all([decide(q, p.pendingId), decide(q, p.pendingId)]);
+    expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
+    expect(await activeConnections()).toHaveLength(1);
+    expect((await decide(q, p.pendingId)).status).toBe(409);
+  });
+  it("redeems an authorization code exactly once under concurrent exchange", async () => {
+    const q = await begin(); const p = await prepare(q);
+    const decision = await (await decide(q, p.pendingId)).json() as { redirectUri: string };
+    const code = new URL(decision.redirectUri).searchParams.get("code")!;
+    const results = await Promise.all([exchange(code), exchange(code)]);
+    expect(results.filter((r) => r.status === 200)).toHaveLength(1);
+    expect(results.filter((r) => r.status >= 400)).toHaveLength(1);
+    // Code replay may defensively revoke the newly issued token family.
+    expect((await activeConnections()).length).toBeLessThanOrEqual(1);
+    expect((await exchange(code)).status).toBeGreaterThanOrEqual(400);
+  });
+  it("rotates a refresh token exactly once under concurrent redemption", async () => {
+    const token = await connect();
+    const results = await Promise.all([refresh(token.refresh_token), refresh(token.refresh_token)]);
+    expect(results.filter((r) => r.status === 200)).toHaveLength(1);
+    expect(results.filter((r) => r.status >= 400)).toHaveLength(1);
+    expect((await refresh(token.refresh_token)).status).toBeGreaterThanOrEqual(400);
   });
   it("requires explicit adult/privacy consent and excludes child and foreign household access", async () => {
     const query = await begin();
@@ -328,11 +364,27 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
     }
     expect((await decide(query, pending.pendingId)).status).toBe(409);
   });
+  (process.env.MCP_TEST_ADMIN_DATABASE_URL ? it : it.skip)("keeps a replacement active when old provider cleanup fails", async () => {
+    const old = await connect();
+    const admin = createDb(process.env.MCP_TEST_ADMIN_DATABASE_URL!);
+    try {
+      await admin.execute(sql`revoke update on mcp_oauth_refresh_tokens from domi_ops_oauth`);
+      const fresh = await connect();
+      expect(await auth.mcp.authorize(bearer(fresh.access_token))).toMatchObject({ connectionId: fresh.connectionId });
+      await expect(auth.mcp.authorize(bearer(old.access_token))).rejects.toMatchObject({ status: 401 });
+      expect(await activeConnections()).toEqual([{ id: fresh.connectionId }]);
+    } finally {
+      await admin.execute(sql`grant update on mcp_oauth_refresh_tokens to domi_ops_oauth`);
+      await closeDb(admin);
+    }
+    expect((await refresh(old.refresh_token)).status).toBeGreaterThanOrEqual(400);
+  });
   it("reconnects with a new immutable grant and cannot expand or resurrect an old grant", async () => {
-    const old = await connect(); await auth.mcp.revokeConnection(owner.headers, old.connectionId);
+    const old = await connect();
     const fresh = await connect(owner, ["shopping:read", "notes:read", "offline_access"]);
     expect(fresh.connectionId).not.toBe(old.connectionId);
     await expect(auth.mcp.authorize(bearer(old.access_token))).rejects.toMatchObject({ status: 401 });
+    expect((await refresh(old.refresh_token)).status).toBeGreaterThanOrEqual(400);
     await expect(owned(owner, (tx) => tx.update(mcpConnections).set({ status: "active", revokedAt: null }).where(eq(mcpConnections.id, old.connectionId)))).rejects.toThrow();
     await expect(owned(owner, (tx) => tx.update(mcpConnections).set({ scopes }).where(eq(mcpConnections.id, fresh.connectionId)))).rejects.toThrow();
     await owned(owner, (tx) => tx.update(mcpConnections).set({ scopes: ["shopping:read", "offline_access"] }).where(eq(mcpConnections.id, fresh.connectionId)));
@@ -352,7 +404,7 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
   });
   it("does not resurrect connections after household opt-out and opt-in", async () => {
     const token = await connect(); await auth.mcp.setHouseholdEnabled(owner.headers, owner.householdId, false);
-    await expect(auth.mcp.authorize(bearer(token.access_token))).rejects.toThrow();
+    await expect(auth.mcp.authorize(bearer(token.access_token))).rejects.toMatchObject({ status: 401 });
     await auth.mcp.setHouseholdEnabled(owner.headers, owner.householdId, true);
     await expect(auth.mcp.authorize(bearer(token.access_token))).rejects.toMatchObject({ status: 401 });
   });

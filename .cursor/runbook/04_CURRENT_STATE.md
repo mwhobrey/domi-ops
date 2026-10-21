@@ -10,7 +10,9 @@
   NOBYPASSRLS and has no domain grants; hosted migration re-grants app membership.
 - Backend controls live at `/api/mcp-auth`; bearer verification checks live grants,
   membership, client profile and modules. Local/provider revocation and membership/
-  role/household changes invalidate old tokens; reconnect creates a new grant ID.
+  role/household changes invalidate old tokens; reconnect creates a new grant ID and
+  atomically revokes prior active grants for the same member/household/client, even
+  when provider cleanup fails. Disabled MCP does not validate the MCP-only URL rules.
 - Connection UI (`/ai/consent`), MCP transport/tools, operational limits/audit retention
   and real-client acceptance remain WHO-470 onward. Keep disabled until those gates pass.
 - Setup, exact dependencies, migration/role requirements and the disposable single/shared

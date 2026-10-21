@@ -147,7 +147,8 @@ tool and must not retain a tenant transaction across transport/client interactio
 
 ## Verification
 
-After `npm ci`, run the disposable PostgreSQL regression suite on Windows:
+Prerequisites: Docker, mise, and PowerShell 7.3+. After `npm ci`, run the
+disposable PostgreSQL regression suite on Windows:
 
 ```powershell
 ./scripts/test-mcp-auth.ps1
@@ -171,9 +172,13 @@ These are application/database and loopback HTTP results. Real reverse-proxy/TLS
 provider accounts, the future consent UI, actual MCP tool execution and production
 acceptance are not established by this issue's tests.
 
-Final local verification (2026-10-21): 50 database/auth regressions passed (40 MCP
+Final local verification (2026-10-21, PR review fixes): 60 database/auth regressions passed (50 MCP
 tests across single/shared mode, plus 10 existing sign-in/RLS checks); repository
 typecheck passed all 17 tasks; regular suite passed 1,479 tests with 860 database/
 environment-dependent tests skipped; API build and tracked/new-file whitespace
 checks passed. The database regressions above run separately and do not rely on
 the regular suite's skipped integrations. All owned disposable containers were removed.
+The review-fix run also covers concurrent consumption of each one-use credential,
+automatic replacement of old grants despite cleanup failure, and ordinary session
+access with MCP disabled and a prefixed application URL. Household opt-out revokes
+the grant through its database trigger, so outstanding JWTs fail with 401.

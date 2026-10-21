@@ -121,7 +121,7 @@ export function createApplication(env: Env, options: { stripeFactory?: Parameter
 
   // Session → auth context must run before calendar OAuth (reads c.get("auth") on /start).
   app.use("*", createDemoProtectionMiddleware(env));
-  app.route("/api/mcp-auth", mcpAuthorizationRoutes(betterAuth.mcp, env));
+  if (env.MCP_ENABLED) app.route("/api/mcp-auth", mcpAuthorizationRoutes(betterAuth.mcp, env));
   app.get("/.well-known/oauth-authorization-server/auth", (c) => {
     if (!env.MCP_ENABLED || env.DEMO_MODE) return c.json({ error: "not_found" }, 404);
     return betterAuth.mcp.metadata(c.req.raw);

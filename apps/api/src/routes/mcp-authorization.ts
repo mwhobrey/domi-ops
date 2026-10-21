@@ -10,7 +10,9 @@ const prepare = z.object({
 }).strict();
 const decide = z.object({ pendingId: z.string().uuid(), oauthQuery: z.string().max(12000), accept: z.boolean() }).strict();
 
-/** Browser-session control plane, mounted before long-lived tenant middleware. */
+/** Intentionally bypasses requireAuth's long-lived tenant transaction. Every action
+ * authenticates via McpAuthorization.session()/member() with household scoping;
+ * this router additionally enforces deployment/demo, exact Origin and cross-site checks. */
 export function mcpAuthorizationRoutes(auth: McpAuthorization, env: Env) {
   const app = new Hono();
   app.use("*", bodyLimit({ maxSize: 16384, onError: (c) => c.json({ error: "request_too_large" }, 413) }));

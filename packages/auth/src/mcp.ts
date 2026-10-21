@@ -249,12 +249,24 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string) {
           await this.revokeConnection(headers, connection.id);
           deny("authorization_failed", 409);
         }
-        await withUserLookupContext(db, current.user.id, (lookup) => withHouseholdContext(lookup, connection.householdId, async (tx) => {
+        const replaced = await withUserLookupContext(db, current.user.id, (lookup) => withHouseholdContext(lookup, connection.householdId, async (tx) => {
+          // Serialize simultaneous approvals with membership changes and each other.
+          await tx.select({ id: householdMembers.id }).from(householdMembers).where(eq(householdMembers.id, connection.memberId)).for("update");
+          const owner = await member(tx, current.user.id, connection.householdId);
+          if (owner.role !== connection.grantedRole) deny("authorization_failed", 409);
+          await householdAccess(tx, connection.householdId, connection.scopes);
+          const replaced = await tx.update(mcpConnections).set({ status: "revoked", revokedAt: new Date() }).where(and(
+            eq(mcpConnections.householdId, connection.householdId), eq(mcpConnections.userId, current.user.id),
+            eq(mcpConnections.clientId, connection.clientId), eq(mcpConnections.status, "active"),
+          )).returning({ id: mcpConnections.id });
           const [active] = await tx.update(mcpConnections).set({ status: "active", activatedAt: new Date() }).where(and(
             eq(mcpConnections.id, connection.id), eq(mcpConnections.userId, current.user.id), eq(mcpConnections.status, "pending"), gt(mcpConnections.expiresAt, new Date()),
           )).returning({ id: mcpConnections.id });
           if (!active) deny("authorization_failed", 409);
+          return replaced;
         }));
+        // Local replacement already committed; provider cleanup cannot undo approval.
+        for (const old of replaced) await this.revokeConnection(headers, old.id).catch(() => {});
         return { accepted: true as const, redirectUri: redirect, connectionId: connection.id };
       },
       async authorize(request: Request, requiredScopes: readonly string[] = []) {

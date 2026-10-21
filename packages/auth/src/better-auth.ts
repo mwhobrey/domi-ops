@@ -6,7 +6,7 @@ import type { Env } from "@domi-ops/config";
 import { devLoopbackOrigins } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
 import { baAccounts, baSessions, baVerifications, users, withUserLookupContext, mcpProviderSchema } from "@domi-ops/db";
-import { createMcpAuthorization, type McpAuthorization } from "./mcp.js";
+import { createMcpAuthorization, McpAuthorizationError, type McpAuthorization } from "./mcp.js";
 import { mcpAuthAdapter } from "./mcp-adapter.js";
 import { ensureHouseholdMembership } from "./household-membership.js";
 import { sendPasswordResetEmail, sendVerificationEmail } from "./mail.js";
@@ -48,7 +48,7 @@ export function createBetterAuth(db: Database, env: Env, options: { deferHouseho
     };
   }
 
-  const mcp = createMcpAuthorization(db, env, secret);
+  const mcp = env.MCP_ENABLED ? createMcpAuthorization(db, env, secret) : null;
   // Keys match Better Auth model names; SQL names are owned by the Drizzle tables.
   const schema = { users, ba_sessions: baSessions, ba_accounts: baAccounts, ba_verifications: baVerifications, ...mcpProviderSchema };
   const auth = betterAuth({
@@ -163,7 +163,7 @@ export function createBetterAuth(db: Database, env: Env, options: { deferHouseho
         maxUsernameLength: USERNAME_MAX_LENGTH,
         usernameValidator: (value) => USERNAME_PATTERN.test(value),
       }),
-      ...(env.MCP_ENABLED ? [jwt(), mcp.provider] : []),
+      ...(mcp ? [jwt(), mcp.provider] : []),
     ],
     advanced: {
       ...(options.cookiePrefix ? { cookiePrefix: options.cookiePrefix } : {}),
@@ -220,6 +220,9 @@ export function createBetterAuth(db: Database, env: Env, options: { deferHouseho
       if (!env.MCP_ENABLED && (path.startsWith("/auth/oauth2/") || path.startsWith("/auth/admin/oauth2/") || path === "/auth/jwks" || path.includes("/.well-known/"))) return Response.json({ error: "not_found" }, { status: 404 });
       return auth.handler(request);
     },
-    mcp: mcp.attach(auth),
+    get mcp() {
+      if (!mcp) throw new McpAuthorizationError("mcp_disabled");
+      return mcp.attach(auth);
+    },
   };
 }
