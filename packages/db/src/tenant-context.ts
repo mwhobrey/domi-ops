@@ -48,6 +48,23 @@ export async function withUserLookupContext<T>(
   return withLocalConfig(db, AUTH_USER_SETTING, userId, fn);
 }
 
+/** Only a verified token reference may enter this pre-household lookup. */
+export async function withMcpConnectionContext<T>(db: Database, userId: string, connectionId: string, fn: (tx: Database) => Promise<T>): Promise<T> {
+  return withUserLookupContext(db, userId, (tx) => withLocalConfig(tx, "app.mcp_connection_id", connectionId, fn));
+}
+
+/** Credential repository only. This role has no household/domain table grants. */
+export async function withMcpProviderContext<T>(db: Database, fn: (tx: Database) => Promise<T>): Promise<T> {
+  return db.transaction(async (transaction) => {
+    const tx = transaction as unknown as Database;
+    const [previous] = await tx.execute<{ role: string }>(sql`select current_user as role`);
+    await tx.execute(sql`set local role domi_ops_oauth`);
+    const result = await fn(tx);
+    await tx.execute(sql`set local role ${sql.identifier(previous.role)}`);
+    return result;
+  });
+}
+
 /**
  * Greenfield bootstrap / CLI — bypass household RLS on scoped tables.
  * Requires `system_bootstrap` policies (0039).

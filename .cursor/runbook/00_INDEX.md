@@ -41,6 +41,8 @@
 - `docs/ARCHITECTURE.md` — product tiers, cutover checklist
 - `docs/adr/001-public-launch-scope.md` — OSS + hosted launch policy
 - `docs/GOOGLE_OAUTH_SETUP.md` — Google Cloud Console redirect URIs
+- `docs/MCP_M1_DECISIONS.md` — resolved MCP design, included Cloud/free self-host packaging and compatibility evidence
+- `docs/MCP_AUTHORIZATION.md` — WHO-469 authorization foundation, roles/migration, consent API and self-host/hosted regression suite; UI/tools pending
 - `docs/SECURITY_REVIEW.md` — pre-launch security checklist (WHO-172)
 - `docs/HOSTED_RLS.md` — hosted tenant context + RLS policies
 - `docs/HOSTED_TENANT_TESTS.md` — cross-tenant leak test matrix (WHO-197)

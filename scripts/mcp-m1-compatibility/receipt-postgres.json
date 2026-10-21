@@ -1,0 +1,1230 @@
+{
+  "baseline": "02cee513b42757f23a7feb3807769b3505b00ec4",
+  "node": "v22.23.2",
+  "checks": [
+    "Better Auth 1.7.10 + OAuth provider 1.7.10 + existing username/JWT composition initializes",
+    "Existing custom auth model names support synthetic signup and browser session",
+    "Discovery excludes machine client-credentials grants",
+    "Adding JWT support does not expose the generic browser-session /token endpoint",
+    "Deployment-local issuer discovery exposes S256 and exact auth endpoint routing",
+    "Wrong PKCE verifier rejected",
+    "Authorization code with S256 issues resource-bound access and refresh tokens",
+    "Resource helper verifies JWT and rejects wrong audience, issuer, scope and expiry",
+    "Official SDK v2 client discovers and calls authenticated stateless Hono tool over HTTP",
+    "MCP endpoint denies requests without a bearer token",
+    "Refresh rotates tokens and makes the consumed refresh token inactive",
+    "Revocation endpoint invalidates the current refresh token",
+    "Revoked refresh token cannot mint another access token",
+    "Provider consent reference binds immutable application grant claim across refresh",
+    "Stateless JWT verification still accepts a signature-valid token after refresh revocation; live grant checks are required",
+    "Public client PKCE flow issues tokens without a client secret",
+    "PostgreSQL Drizzle adapter completes OAuth lifecycle with UUID IDs and custom auth model names",
+    "Restricted-role two-household RLS fixture denies missing/wrong context, cross-household update and pooled context leakage"
+  ],
+  "limits": [
+    "Synthetic PostgreSQL tables generated from provider schema; not production migrations, app domain routes or live-client acceptance."
+  ],
+  "postgresSchema": {
+    "users": {
+      "table": "users",
+      "fields": {
+        "displayName": {
+          "column": "display_name",
+          "type": "text",
+          "required": true
+        },
+        "email": {
+          "column": "email",
+          "type": "text",
+          "required": true
+        },
+        "emailVerified": {
+          "column": "email_verified",
+          "type": "boolean",
+          "required": true
+        },
+        "imageUrl": {
+          "column": "image_url",
+          "type": "text",
+          "required": false
+        },
+        "createdAt": {
+          "column": "created_at",
+          "type": "timestamptz",
+          "required": true
+        },
+        "updatedAt": {
+          "column": "updated_at",
+          "type": "timestamptz",
+          "required": true
+        },
+        "username": {
+          "column": "username",
+          "type": "text",
+          "required": false
+        },
+        "displayUsername": {
+          "column": "display_username",
+          "type": "text",
+          "required": false
+        }
+      }
+    },
+    "ba_sessions": {
+      "table": "ba_sessions",
+      "fields": {
+        "expiresAt": {
+          "column": "expires_at",
+          "type": "timestamptz",
+          "required": true
+        },
+        "token": {
+          "column": "token",
+          "type": "text",
+          "required": true
+        },
+        "createdAt": {
+          "column": "created_at",
+          "type": "timestamptz",
+          "required": true
+        },
+        "updatedAt": {
+          "column": "updated_at",
+          "type": "timestamptz",
+          "required": true
+        },
+        "ipAddress": {
+          "column": "ip_address",
+          "type": "text",
+          "required": false
+        },
+        "userAgent": {
+          "column": "user_agent",
+          "type": "text",
+          "required": false
+        },
+        "userId": {
+          "column": "user_id",
+          "type": "uuid",
+          "required": true
+        }
+      }
+    },
+    "ba_accounts": {
+      "table": "ba_accounts",
+      "fields": {
+        "accountId": {
+          "column": "account_id",
+          "type": "text",
+          "required": true
+        },
+        "providerId": {
+          "column": "provider_id",
+          "type": "text",
+          "required": true
+        },
+        "userId": {
+          "column": "user_id",
+          "type": "uuid",
+          "required": true
+        },
+        "accessToken": {
+          "column": "access_token",
+          "type": "text",
+          "required": false
+        },
+        "refreshToken": {
+          "column": "refresh_token",
+          "type": "text",
+          "required": false
+        },
+        "idToken": {
+          "column": "id_token",
+          "type": "text",
+          "required": false
+        },
+        "accessTokenExpiresAt": {
+          "column": "access_token_expires_at",
+          "type": "timestamptz",
+          "required": false
+        },
+        "refreshTokenExpiresAt": {
+          "column": "refresh_token_expires_at",
+          "type": "timestamptz",
+          "required": false
+        },
+        "scope": {
+          "column": "scope",
+          "type": "text",
+          "required": false
+        },
+        "password": {
+          "column": "password",
+          "type": "text",
+          "required": false
+        },
+        "createdAt": {
+          "column": "created_at",
+          "type": "timestamptz",
+          "required": true
+        },
+        "updatedAt": {
+          "column": "updated_at",
+          "type": "timestamptz",
+          "required": true
+        }
+      }
+    },
+    "ba_verifications": {
+      "table": "ba_verifications",
+      "fields": {
+        "identifier": {
+          "column": "identifier",
+          "type": "text",
+          "required": true
+        },
+        "value": {
+          "column": "value",
+          "type": "text",
+          "required": true
+        },
+        "expiresAt": {
+          "column": "expires_at",
+          "type": "timestamptz",
+          "required": true
+        },
+        "createdAt": {
+          "column": "created_at",
+          "type": "timestamptz",
+          "required": true
+        },
+        "updatedAt": {
+          "column": "updated_at",
+          "type": "timestamptz",
+          "required": true
+        }
+      }
+    },
+    "jwks": {
+      "table": "jwks",
+      "fields": {
+        "publicKey": {
+          "column": "public_key",
+          "type": "text",
+          "required": true
+        },
+        "privateKey": {
+          "column": "private_key",
+          "type": "text",
+          "required": true
+        },
+        "createdAt": {
+          "column": "created_at",
+          "type": "timestamptz",
+          "required": true
+        },
+        "expiresAt": {
+          "column": "expires_at",
+          "type": "timestamptz",
+          "required": false
+        },
+        "alg": {
+          "column": "alg",
+          "type": "text",
+          "required": false
+        },
+        "crv": {
+          "column": "crv",
+          "type": "text",
+          "required": false
+        }
+      }
+    },
+    "oauthClient": {
+      "table": "oauth_client",
+      "fields": {
+        "clientId": {
+          "column": "client_id",
+          "type": "text",
+          "required": true
+        },
+        "clientSecret": {
+          "column": "client_secret",
+          "type": "text",
+          "required": false
+        },
+        "clientDiscoveryId": {
+          "column": "client_discovery_id",
+          "type": "text",
+          "required": false
+        },
+        "disabled": {
+          "column": "disabled",
+          "type": "boolean",
+          "required": false
+        },
+        "skipConsent": {
+          "column": "skip_consent",
+          "type": "boolean",
+          "required": false
+        },
+        "enableEndSession": {
+          "column": "enable_end_session",
+          "type": "boolean",
+          "required": false
+        },
+        "subjectType": {
+          "column": "subject_type",
+          "type": "text",
+          "required": false
+        },
+        "scopes": {
+          "column": "scopes",
+          "type": "text[]",
+          "required": false
+        },
+        "clientCredentialsScopes": {
+          "column": "client_credentials_scopes",
+          "type": "text[]",
+          "required": false
+        },
+        "userId": {
+          "column": "user_id",
+          "type": "uuid",
+          "required": false
+        },
+        "createdAt": {
+          "column": "created_at",
+          "type": "timestamptz",
+          "required": false
+        },
+        "updatedAt": {
+          "column": "updated_at",
+          "type": "timestamptz",
+          "required": false
+        },
+        "name": {
+          "column": "name",
+          "type": "text",
+          "required": false
+        },
+        "uri": {
+          "column": "uri",
+          "type": "text",
+          "required": false
+        },
+        "icon": {
+          "column": "icon",
+          "type": "text",
+          "required": false
+        },
+        "contacts": {
+          "column": "contacts",
+          "type": "text[]",
+          "required": false
+        },
+        "tos": {
+          "column": "tos",
+          "type": "text",
+          "required": false
+        },
+        "policy": {
+          "column": "policy",
+          "type": "text",
+          "required": false
+        },
+        "softwareId": {
+          "column": "software_id",
+          "type": "text",
+          "required": false
+        },
+        "softwareVersion": {
+          "column": "software_version",
+          "type": "text",
+          "required": false
+        },
+        "softwareStatement": {
+          "column": "software_statement",
+          "type": "text",
+          "required": false
+        },
+        "redirectUris": {
+          "column": "redirect_uris",
+          "type": "text[]",
+          "required": true
+        },
+        "postLogoutRedirectUris": {
+          "column": "post_logout_redirect_uris",
+          "type": "text[]",
+          "required": false
+        },
+        "backchannelLogoutUri": {
+          "column": "backchannel_logout_uri",
+          "type": "text",
+          "required": false
+        },
+        "backchannelLogoutSessionRequired": {
+          "column": "backchannel_logout_session_required",
+          "type": "boolean",
+          "required": false
+        },
+        "tokenEndpointAuthMethod": {
+          "column": "token_endpoint_auth_method",
+          "type": "text",
+          "required": false
+        },
+        "applicationType": {
+          "column": "application_type",
+          "type": "text",
+          "required": false
+        },
+        "jwks": {
+          "column": "jwks",
+          "type": "text",
+          "required": false
+        },
+        "jwksUri": {
+          "column": "jwks_uri",
+          "type": "text",
+          "required": false
+        },
+        "grantTypes": {
+          "column": "grant_types",
+          "type": "text[]",
+          "required": false
+        },
+        "responseTypes": {
+          "column": "response_types",
+          "type": "text[]",
+          "required": false
+        },
+        "requirePKCE": {
+          "column": "require_p_k_c_e",
+          "type": "boolean",
+          "required": false
+        },
+        "dpopBoundAccessTokens": {
+          "column": "dpop_bound_access_tokens",
+          "type": "boolean",
+          "required": false
+        },
+        "referenceId": {
+          "column": "reference_id",
+          "type": "text",
+          "required": false
+        },
+        "metadata": {
+          "column": "metadata",
+          "type": "jsonb",
+          "required": false
+        }
+      }
+    },
+    "oauthResource": {
+      "table": "oauth_resource",
+      "fields": {
+        "identifier": {
+          "column": "identifier",
+          "type": "text",
+          "required": true
+        },
+        "name": {
+          "column": "name",
+          "type": "text",
+          "required": true
+        },
+        "accessTokenTtl": {
+          "column": "access_token_ttl",
+          "type": "integer",
+          "required": false
+        },
+        "refreshTokenTtl": {
+          "column": "refresh_token_ttl",
+          "type": "integer",
+          "required": false
+        },
+        "signingAlgorithm": {
+          "column": "signing_algorithm",
+          "type": "text",
+          "required": false
+        },
+        "signingKeyId": {
+          "column": "signing_key_id",
+          "type": "text",
+          "required": false
+        },
+        "allowedScopes": {
+          "column": "allowed_scopes",
+          "type": "text[]",
+          "required": false
+        },
+        "customClaims": {
+          "column": "custom_claims",
+          "type": "jsonb",
+          "required": false
+        },
+        "dpopBoundAccessTokensRequired": {
+          "column": "dpop_bound_access_tokens_required",
+          "type": "boolean",
+          "required": false
+        },
+        "disabled": {
+          "column": "disabled",
+          "type": "boolean",
+          "required": false
+        },
+        "createdAt": {
+          "column": "created_at",
+          "type": "timestamptz",
+          "required": false
+        },
+        "updatedAt": {
+          "column": "updated_at",
+          "type": "timestamptz",
+          "required": false
+        },
+        "policyVersion": {
+          "column": "policy_version",
+          "type": "integer",
+          "required": false
+        },
+        "metadata": {
+          "column": "metadata",
+          "type": "jsonb",
+          "required": false
+        }
+      }
+    },
+    "oauthClientResource": {
+      "table": "oauth_client_resource",
+      "fields": {
+        "clientId": {
+          "column": "client_id",
+          "type": "text",
+          "required": true
+        },
+        "resourceId": {
+          "column": "resource_id",
+          "type": "text",
+          "required": true
+        },
+        "metadata": {
+          "column": "metadata",
+          "type": "jsonb",
+          "required": false
+        },
+        "createdAt": {
+          "column": "created_at",
+          "type": "timestamptz",
+          "required": false
+        }
+      }
+    },
+    "oauthRefreshToken": {
+      "table": "oauth_refresh_token",
+      "fields": {
+        "token": {
+          "column": "token",
+          "type": "text",
+          "required": true
+        },
+        "clientId": {
+          "column": "client_id",
+          "type": "text",
+          "required": true
+        },
+        "sessionId": {
+          "column": "session_id",
+          "type": "uuid",
+          "required": false
+        },
+        "userId": {
+          "column": "user_id",
+          "type": "uuid",
+          "required": true
+        },
+        "referenceId": {
+          "column": "reference_id",
+          "type": "text",
+          "required": false
+        },
+        "authorizationCodeId": {
+          "column": "authorization_code_id",
+          "type": "text",
+          "required": false
+        },
+        "resources": {
+          "column": "resources",
+          "type": "text[]",
+          "required": false
+        },
+        "requestedUserInfoClaims": {
+          "column": "requested_user_info_claims",
+          "type": "text[]",
+          "required": false
+        },
+        "expiresAt": {
+          "column": "expires_at",
+          "type": "timestamptz",
+          "required": false
+        },
+        "createdAt": {
+          "column": "created_at",
+          "type": "timestamptz",
+          "required": false
+        },
+        "revoked": {
+          "column": "revoked",
+          "type": "timestamptz",
+          "required": false
+        },
+        "rotatedAt": {
+          "column": "rotated_at",
+          "type": "timestamptz",
+          "required": false
+        },
+        "rotationReplayResponse": {
+          "column": "rotation_replay_response",
+          "type": "text",
+          "required": false
+        },
+        "rotationReplayExpiresAt": {
+          "column": "rotation_replay_expires_at",
+          "type": "timestamptz",
+          "required": false
+        },
+        "authTime": {
+          "column": "auth_time",
+          "type": "timestamptz",
+          "required": false
+        },
+        "confirmation": {
+          "column": "confirmation",
+          "type": "jsonb",
+          "required": false
+        },
+        "scopes": {
+          "column": "scopes",
+          "type": "text[]",
+          "required": true
+        }
+      }
+    },
+    "oauthAccessToken": {
+      "table": "oauth_access_token",
+      "fields": {
+        "token": {
+          "column": "token",
+          "type": "text",
+          "required": false
+        },
+        "clientId": {
+          "column": "client_id",
+          "type": "text",
+          "required": true
+        },
+        "sessionId": {
+          "column": "session_id",
+          "type": "uuid",
+          "required": false
+        },
+        "userId": {
+          "column": "user_id",
+          "type": "uuid",
+          "required": false
+        },
+        "referenceId": {
+          "column": "reference_id",
+          "type": "text",
+          "required": false
+        },
+        "authorizationCodeId": {
+          "column": "authorization_code_id",
+          "type": "text",
+          "required": false
+        },
+        "resources": {
+          "column": "resources",
+          "type": "text[]",
+          "required": false
+        },
+        "requestedUserInfoClaims": {
+          "column": "requested_user_info_claims",
+          "type": "text[]",
+          "required": false
+        },
+        "refreshId": {
+          "column": "refresh_id",
+          "type": "uuid",
+          "required": false
+        },
+        "expiresAt": {
+          "column": "expires_at",
+          "type": "timestamptz",
+          "required": false
+        },
+        "createdAt": {
+          "column": "created_at",
+          "type": "timestamptz",
+          "required": false
+        },
+        "revoked": {
+          "column": "revoked",
+          "type": "timestamptz",
+          "required": false
+        },
+        "confirmation": {
+          "column": "confirmation",
+          "type": "jsonb",
+          "required": false
+        },
+        "scopes": {
+          "column": "scopes",
+          "type": "text[]",
+          "required": true
+        }
+      }
+    },
+    "oauthConsent": {
+      "table": "oauth_consent",
+      "fields": {
+        "clientId": {
+          "column": "client_id",
+          "type": "text",
+          "required": true
+        },
+        "userId": {
+          "column": "user_id",
+          "type": "uuid",
+          "required": false
+        },
+        "referenceId": {
+          "column": "reference_id",
+          "type": "text",
+          "required": false
+        },
+        "resources": {
+          "column": "resources",
+          "type": "text[]",
+          "required": false
+        },
+        "requestedUserInfoClaims": {
+          "column": "requested_user_info_claims",
+          "type": "text[]",
+          "required": false
+        },
+        "scopes": {
+          "column": "scopes",
+          "type": "text[]",
+          "required": true
+        },
+        "createdAt": {
+          "column": "created_at",
+          "type": "timestamptz",
+          "required": false
+        },
+        "updatedAt": {
+          "column": "updated_at",
+          "type": "timestamptz",
+          "required": false
+        }
+      }
+    },
+    "oauthClientAssertion": {
+      "table": "oauth_client_assertion",
+      "fields": {
+        "expiresAt": {
+          "column": "expires_at",
+          "type": "timestamptz",
+          "required": true
+        }
+      }
+    }
+  },
+  "providerSchema": {
+    "oauthClient": {
+      "clientId": {
+        "type": "string",
+        "required": true
+      },
+      "clientSecret": {
+        "type": "string",
+        "required": false
+      },
+      "clientDiscoveryId": {
+        "type": "string",
+        "required": false
+      },
+      "disabled": {
+        "type": "boolean",
+        "required": false
+      },
+      "skipConsent": {
+        "type": "boolean",
+        "required": false
+      },
+      "enableEndSession": {
+        "type": "boolean",
+        "required": false
+      },
+      "subjectType": {
+        "type": "string",
+        "required": false
+      },
+      "scopes": {
+        "type": "string[]",
+        "required": false
+      },
+      "clientCredentialsScopes": {
+        "type": "string[]",
+        "required": false
+      },
+      "userId": {
+        "type": "string",
+        "required": false,
+        "references": {
+          "model": "user",
+          "field": "id"
+        }
+      },
+      "createdAt": {
+        "type": "date",
+        "required": false
+      },
+      "updatedAt": {
+        "type": "date",
+        "required": false
+      },
+      "name": {
+        "type": "string",
+        "required": false
+      },
+      "uri": {
+        "type": "string",
+        "required": false
+      },
+      "icon": {
+        "type": "string",
+        "required": false
+      },
+      "contacts": {
+        "type": "string[]",
+        "required": false
+      },
+      "tos": {
+        "type": "string",
+        "required": false
+      },
+      "policy": {
+        "type": "string",
+        "required": false
+      },
+      "softwareId": {
+        "type": "string",
+        "required": false
+      },
+      "softwareVersion": {
+        "type": "string",
+        "required": false
+      },
+      "softwareStatement": {
+        "type": "string",
+        "required": false
+      },
+      "redirectUris": {
+        "type": "string[]",
+        "required": true
+      },
+      "postLogoutRedirectUris": {
+        "type": "string[]",
+        "required": false
+      },
+      "backchannelLogoutUri": {
+        "type": "string",
+        "required": false
+      },
+      "backchannelLogoutSessionRequired": {
+        "type": "boolean",
+        "required": false
+      },
+      "tokenEndpointAuthMethod": {
+        "type": "string",
+        "required": false
+      },
+      "applicationType": {
+        "type": "string",
+        "required": false
+      },
+      "jwks": {
+        "type": "string",
+        "required": false
+      },
+      "jwksUri": {
+        "type": "string",
+        "required": false
+      },
+      "grantTypes": {
+        "type": "string[]",
+        "required": false
+      },
+      "responseTypes": {
+        "type": "string[]",
+        "required": false
+      },
+      "requirePKCE": {
+        "type": "boolean",
+        "required": false
+      },
+      "dpopBoundAccessTokens": {
+        "type": "boolean",
+        "required": false
+      },
+      "referenceId": {
+        "type": "string",
+        "required": false
+      },
+      "metadata": {
+        "type": "json",
+        "required": false
+      }
+    },
+    "oauthResource": {
+      "identifier": {
+        "type": "string",
+        "required": true
+      },
+      "name": {
+        "type": "string",
+        "required": true
+      },
+      "accessTokenTtl": {
+        "type": "number",
+        "required": false
+      },
+      "refreshTokenTtl": {
+        "type": "number",
+        "required": false
+      },
+      "signingAlgorithm": {
+        "type": "string",
+        "required": false
+      },
+      "signingKeyId": {
+        "type": "string",
+        "required": false
+      },
+      "allowedScopes": {
+        "type": "string[]",
+        "required": false
+      },
+      "customClaims": {
+        "type": "json",
+        "required": false
+      },
+      "dpopBoundAccessTokensRequired": {
+        "type": "boolean",
+        "required": false
+      },
+      "disabled": {
+        "type": "boolean",
+        "required": false
+      },
+      "createdAt": {
+        "type": "date",
+        "required": false
+      },
+      "updatedAt": {
+        "type": "date",
+        "required": false
+      },
+      "policyVersion": {
+        "type": "number",
+        "required": false
+      },
+      "metadata": {
+        "type": "json",
+        "required": false
+      }
+    },
+    "oauthClientResource": {
+      "clientId": {
+        "type": "string",
+        "required": true,
+        "references": {
+          "model": "oauthClient",
+          "field": "clientId",
+          "onDelete": "cascade"
+        }
+      },
+      "resourceId": {
+        "type": "string",
+        "required": true,
+        "references": {
+          "model": "oauthResource",
+          "field": "identifier",
+          "onDelete": "cascade"
+        }
+      },
+      "metadata": {
+        "type": "json",
+        "required": false
+      },
+      "createdAt": {
+        "type": "date",
+        "required": false
+      }
+    },
+    "oauthRefreshToken": {
+      "token": {
+        "type": "string",
+        "required": true
+      },
+      "clientId": {
+        "type": "string",
+        "required": true,
+        "references": {
+          "model": "oauthClient",
+          "field": "clientId"
+        }
+      },
+      "sessionId": {
+        "type": "string",
+        "required": false,
+        "references": {
+          "model": "session",
+          "field": "id",
+          "onDelete": "set null"
+        }
+      },
+      "userId": {
+        "type": "string",
+        "required": true,
+        "references": {
+          "model": "user",
+          "field": "id"
+        }
+      },
+      "referenceId": {
+        "type": "string",
+        "required": false
+      },
+      "authorizationCodeId": {
+        "type": "string",
+        "required": false
+      },
+      "resources": {
+        "type": "string[]",
+        "required": false
+      },
+      "requestedUserInfoClaims": {
+        "type": "string[]",
+        "required": false
+      },
+      "expiresAt": {
+        "type": "date"
+      },
+      "createdAt": {
+        "type": "date"
+      },
+      "revoked": {
+        "type": "date",
+        "required": false
+      },
+      "rotatedAt": {
+        "type": "date",
+        "required": false
+      },
+      "rotationReplayResponse": {
+        "type": "string",
+        "required": false
+      },
+      "rotationReplayExpiresAt": {
+        "type": "date",
+        "required": false
+      },
+      "authTime": {
+        "type": "date",
+        "required": false
+      },
+      "confirmation": {
+        "type": "json",
+        "required": false
+      },
+      "scopes": {
+        "type": "string[]",
+        "required": true
+      }
+    },
+    "oauthAccessToken": {
+      "token": {
+        "type": "string"
+      },
+      "clientId": {
+        "type": "string",
+        "required": true,
+        "references": {
+          "model": "oauthClient",
+          "field": "clientId"
+        }
+      },
+      "sessionId": {
+        "type": "string",
+        "required": false,
+        "references": {
+          "model": "session",
+          "field": "id",
+          "onDelete": "set null"
+        }
+      },
+      "userId": {
+        "type": "string",
+        "required": false,
+        "references": {
+          "model": "user",
+          "field": "id"
+        }
+      },
+      "referenceId": {
+        "type": "string",
+        "required": false
+      },
+      "authorizationCodeId": {
+        "type": "string",
+        "required": false
+      },
+      "resources": {
+        "type": "string[]",
+        "required": false
+      },
+      "requestedUserInfoClaims": {
+        "type": "string[]",
+        "required": false
+      },
+      "refreshId": {
+        "type": "string",
+        "required": false,
+        "references": {
+          "model": "oauthRefreshToken",
+          "field": "id"
+        }
+      },
+      "expiresAt": {
+        "type": "date"
+      },
+      "createdAt": {
+        "type": "date"
+      },
+      "revoked": {
+        "type": "date",
+        "required": false
+      },
+      "confirmation": {
+        "type": "json",
+        "required": false
+      },
+      "scopes": {
+        "type": "string[]",
+        "required": true
+      }
+    },
+    "oauthConsent": {
+      "clientId": {
+        "type": "string",
+        "required": true,
+        "references": {
+          "model": "oauthClient",
+          "field": "clientId"
+        }
+      },
+      "userId": {
+        "type": "string",
+        "required": false,
+        "references": {
+          "model": "user",
+          "field": "id"
+        }
+      },
+      "referenceId": {
+        "type": "string",
+        "required": false
+      },
+      "resources": {
+        "type": "string[]",
+        "required": false
+      },
+      "requestedUserInfoClaims": {
+        "type": "string[]",
+        "required": false
+      },
+      "scopes": {
+        "type": "string[]",
+        "required": true
+      },
+      "createdAt": {
+        "type": "date"
+      },
+      "updatedAt": {
+        "type": "date"
+      }
+    },
+    "oauthClientAssertion": {
+      "expiresAt": {
+        "type": "date",
+        "required": true
+      }
+    }
+  },
+  "clientFields": [
+    "client_id",
+    "client_secret",
+    "client_secret_expires_at",
+    "scope",
+    "user_id",
+    "client_id_issued_at",
+    "client_name",
+    "client_uri",
+    "logo_uri",
+    "contacts",
+    "tos_uri",
+    "policy_uri",
+    "jwks",
+    "jwks_uri",
+    "software_id",
+    "software_version",
+    "software_statement",
+    "redirect_uris",
+    "post_logout_redirect_uris",
+    "backchannel_logout_uri",
+    "backchannel_logout_session_required",
+    "token_endpoint_auth_method",
+    "grant_types",
+    "response_types",
+    "application_type",
+    "disabled",
+    "skip_consent",
+    "enable_end_session",
+    "require_pkce",
+    "dpop_bound_access_tokens",
+    "subject_type",
+    "reference_id",
+    "resources"
+  ],
+  "tokenResponseFields": [
+    "access_token",
+    "expires_in",
+    "expires_at",
+    "token_type",
+    "refresh_token",
+    "scope"
+  ],
+  "authMetadata": {
+    "issuerPath": "/auth",
+    "tokenPath": "/auth/oauth2/token",
+    "grantTypes": [
+      "authorization_code",
+      "refresh_token"
+    ]
+  },
+  "dependencyPinning": "Pin @better-auth/core 1.7.10 and better-call 1.4.2 alongside provider/auth 1.7.10 to avoid peer auto-selection of 1.7.12",
+  "refreshPolicy": "Include offline_access in the resource scope allowlist; it is a lifecycle scope, never a domain permission"
+}

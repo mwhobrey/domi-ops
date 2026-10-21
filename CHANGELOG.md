@@ -8,6 +8,15 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+### Added
+
+- Opt-in delegated OAuth authorization foundation for assistant integrations on both
+  self-hosted and hosted deployments: scoped consent, PKCE, rotating refresh tokens,
+  immutable household/member grants and immediate connection/membership revocation.
+  Disabled by default; connection UI and MCP tools are not yet available. Requires
+  migration `0103_mcp_authorization` and the updated application-role grants; see
+  [MCP authorization setup](docs/MCP_AUTHORIZATION.md).
+
 ## [0.11.3] - 2026-10-21
 
 Upgrades from v0.11.2 require migration `0102_calendar_delete_outbox` and a coordinated

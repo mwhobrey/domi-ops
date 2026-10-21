@@ -6,6 +6,8 @@ export {
   WORKER_SCAN_SETTING,
   withHouseholdContext,
   withUserLookupContext,
+  withMcpConnectionContext,
+  withMcpProviderContext,
   withSystemContext,
   withWorkerScanContext,
 } from "./tenant-context.js";

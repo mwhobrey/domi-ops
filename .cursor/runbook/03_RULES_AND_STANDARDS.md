@@ -40,6 +40,7 @@
 ### API (Hono)
 
 - **Auth:** `requireAuth` → `401` JSON `{ error: "unauthorized" }` unless dev bypass (`!AUTH_REQUIRED && NODE_ENV === development`).
+- **MCP control plane exemption:** `/api/mcp-auth` intentionally mounts before `requireAuth`/tenant middleware to avoid holding a tenant transaction during provider calls. Every action must authenticate via `McpAuthorization.session()` and resolve membership under household scope; no development auth bypass. Router checks additionally require MCP enabled, demo off, exact Origin and non-cross-site requests, with a 16 KiB body limit.
 - **Module disabled:** `403` with `{ error: "<module>_disabled" }` (e.g. `core_disabled`).
 - **Config:** Invalid env throws at startup with Zod issue list — process exits, no partial boot.
 - **No global error handler** — unhandled exceptions become 500 from Hono default; add explicit `try/catch` when introducing risky IO.
