@@ -722,6 +722,13 @@
       "when": 1792281600000,
       "tag": "0102_calendar_delete_outbox",
       "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1792609200000,
+      "tag": "0103_mcp_authorization",
+      "breakpoints": true
     }
   ]
 }

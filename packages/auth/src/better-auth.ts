@@ -1,11 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { username } from "better-auth/plugins";
+import { username, jwt } from "better-auth/plugins";
 import type { Env } from "@domi-ops/config";
 import { devLoopbackOrigins } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
-import { baAccounts, baSessions, baVerifications, users, withUserLookupContext } from "@domi-ops/db";
+import { baAccounts, baSessions, baVerifications, users, withUserLookupContext, mcpProviderSchema } from "@domi-ops/db";
+import { createMcpAuthorization, type McpAuthorization } from "./mcp.js";
+import { mcpAuthAdapter } from "./mcp-adapter.js";
 import { ensureHouseholdMembership } from "./household-membership.js";
 import { sendPasswordResetEmail, sendVerificationEmail } from "./mail.js";
 import { USERNAME_MAX_LENGTH, USERNAME_MIN_LENGTH, USERNAME_PATTERN } from "./username.js";
@@ -20,7 +22,7 @@ export interface WhomeBetterAuth {
   handler: (request: Request) => Response | Promise<Response>;
 }
 
-export function createBetterAuth(db: Database, env: Env, options: { deferHouseholdMembership?: (headers: Headers) => Promise<boolean>; cookiePrefix?: string } = {}): WhomeBetterAuth {
+export function createBetterAuth(db: Database, env: Env, options: { deferHouseholdMembership?: (headers: Headers) => Promise<boolean>; cookiePrefix?: string } = {}): WhomeBetterAuth & { mcp: McpAuthorization } {
   const secret =
     env.SESSION_SECRET ?? "dev-only-insecure-secret-replace-before-production!!";
 
@@ -46,7 +48,10 @@ export function createBetterAuth(db: Database, env: Env, options: { deferHouseho
     };
   }
 
-  return betterAuth({
+  const mcp = createMcpAuthorization(db, env, secret);
+  // Keys match Better Auth model names; SQL names are owned by the Drizzle tables.
+  const schema = { users, ba_sessions: baSessions, ba_accounts: baAccounts, ba_verifications: baVerifications, ...mcpProviderSchema };
+  const auth = betterAuth({
     secret,
     baseURL: env.PUBLIC_APP_URL,
     basePath: "/auth",
@@ -57,16 +62,10 @@ export function createBetterAuth(db: Database, env: Env, options: { deferHouseho
             env.PUBLIC_APP_URL,
             ...(env.EXTRA_TRUSTED_ORIGINS?.split(",").map((o) => o.trim()).filter(Boolean) ?? []),
           ],
-    database: drizzleAdapter(db, {
-      provider: "pg",
-      // Keys must match modelName below (not Better Auth defaults like "user"/"session").
-      schema: {
-        users,
-        ba_sessions: baSessions,
-        ba_accounts: baAccounts,
-        ba_verifications: baVerifications,
-      },
-    }),
+    disabledPaths: ["/token"],
+    database: env.MCP_ENABLED
+      ? mcpAuthAdapter(db, schema, new Set(Object.keys(mcpProviderSchema)))
+      : drizzleAdapter(db, { provider: "pg", schema }),
     user: {
       modelName: "users",
       // Drizzle property names — SQL columns stay snake_case in @domi-ops/db schema.
@@ -164,6 +163,7 @@ export function createBetterAuth(db: Database, env: Env, options: { deferHouseho
         maxUsernameLength: USERNAME_MAX_LENGTH,
         usernameValidator: (value) => USERNAME_PATTERN.test(value),
       }),
+      ...(env.MCP_ENABLED ? [jwt(), mcp.provider] : []),
     ],
     advanced: {
       ...(options.cookiePrefix ? { cookiePrefix: options.cookiePrefix } : {}),
@@ -211,4 +211,15 @@ export function createBetterAuth(db: Database, env: Env, options: { deferHouseho
       },
     },
   });
+  return {
+    api: auth.api,
+    handler: (request) => {
+      const path = new URL(request.url).pathname;
+      // Only the one-use application consent endpoint may enter these continuations.
+      if (path === "/auth/oauth2/consent" || path === "/auth/oauth2/continue") return Response.json({ error: "consent_required" }, { status: 403 });
+      if (!env.MCP_ENABLED && (path.startsWith("/auth/oauth2/") || path.startsWith("/auth/admin/oauth2/") || path === "/auth/jwks" || path.includes("/.well-known/"))) return Response.json({ error: "not_found" }, { status: 404 });
+      return auth.handler(request);
+    },
+    mcp: mcp.attach(auth),
+  };
 }

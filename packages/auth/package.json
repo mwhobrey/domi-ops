@@ -17,10 +17,13 @@
     "user:cleanup": "node dist/cleanup-user-cli.js"
   },
   "dependencies": {
+    "@better-auth/core": "1.7.10",
+    "@better-auth/oauth-provider": "1.7.10",
     "@domi-ops/config": "*",
     "@domi-ops/crypto": "*",
     "@domi-ops/db": "*",
-    "better-auth": "^1.7.10",
+    "better-auth": "1.7.10",
+    "better-call": "1.4.2",
     "drizzle-orm": "^0.45.4",
     "nodemailer": "^10.1.2"
   },

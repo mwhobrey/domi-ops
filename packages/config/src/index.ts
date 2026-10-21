@@ -48,6 +48,10 @@ export const envSchema = z
     SESSION_SECRET: z.string().min(32).optional(),
     ENCRYPTION_KEY: z.string().min(16).optional(),
     DATABASE_URL: z.string().url(),
+    /** Delegated assistant access is deployment opt-in; household consent is also required. */
+    MCP_ENABLED: z.string().optional().transform((v) => v === "true" || v === "1"),
+    /** Only on a separate deployment populated exclusively with synthetic data. */
+    MCP_SYNTHETIC_DEPLOYMENT: z.string().optional().transform((v) => v === "true" || v === "1"),
     DEPLOYMENT_MODE: deploymentMode.default("single"),
     /** Hosted product tier — optional until Family launch; Starter is default shared mode. */
     HOSTED_TIER: hostedTier.optional(),
@@ -179,6 +183,13 @@ export const envSchema = z
     STRIPE_PRICE_STARTER_ANNUAL: z.string().optional(),
   })
   .superRefine((data, ctx) => {
+    if (data.MCP_ENABLED) {
+      const url = new URL(data.PUBLIC_APP_URL);
+      const devLoopback = data.NODE_ENV !== "production" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) && url.protocol === "http:";
+      if (url.username || url.password || url.search || url.hash || !["", "/"].includes(url.pathname) || (url.protocol !== "https:" && !devLoopback)) {
+        ctx.addIssue({ code: "custom", path: ["PUBLIC_APP_URL"], message: "MCP requires a canonical HTTPS origin (HTTP loopback allowed outside production)" });
+      }
+    }
     if (data.NODE_ENV === "production") {
       if (!data.SESSION_SECRET || data.SESSION_SECRET.length < 32) {
         ctx.addIssue({

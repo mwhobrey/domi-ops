@@ -78,6 +78,10 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return [
       {
+        source: "/.well-known/oauth-authorization-server/auth",
+        destination: `${apiUrl}/.well-known/oauth-authorization-server/auth`,
+      },
+      {
         source: "/api/:path*",
         destination: `${apiUrl}/api/:path*`,
       },

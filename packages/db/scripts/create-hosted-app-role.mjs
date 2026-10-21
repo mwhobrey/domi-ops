@@ -33,6 +33,11 @@ GRANT USAGE ON SCHEMA app TO domi_ops_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO domi_ops_app;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO domi_ops_app;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA app TO domi_ops_app;
+GRANT domi_ops_oauth TO domi_ops_app;
+-- Credentials are available only after the provider repository explicitly SET LOCAL ROLE.
+REVOKE ALL ON mcp_jwks, mcp_oauth_clients, mcp_oauth_resources, mcp_oauth_client_resources,
+  mcp_oauth_refresh_tokens, mcp_oauth_access_tokens, mcp_oauth_consents,
+  mcp_oauth_client_assertions, mcp_client_profiles FROM domi_ops_app;
 
 -- Drizzle's migrator (drizzle-orm/postgres-js/migrator) tracks applied migrations in
 -- "drizzle"."__drizzle_migrations" (not schema "public"). This role needs read access to that

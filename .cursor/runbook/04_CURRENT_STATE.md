@@ -1,5 +1,21 @@
 # Current state
 
+## MCP delegated authorization foundation (WHO-469; local, not deployed)
+
+- Migration `0103_mcp_authorization` adds provider credentials/keys and immutable
+  household/member grants, one-use pending consent, selections/settings and audit schema.
+- `MCP_ENABLED=false` by default; hosted and self-host use the same local issuer and
+  consent model, with no integration SKU/license requirement. Ordinary browser/Google
+  auth retains its existing path when disabled. New credential role is non-login,
+  NOBYPASSRLS and has no domain grants; hosted migration re-grants app membership.
+- Backend controls live at `/api/mcp-auth`; bearer verification checks live grants,
+  membership, client profile and modules. Local/provider revocation and membership/
+  role/household changes invalidate old tokens; reconnect creates a new grant ID.
+- Connection UI (`/ai/consent`), MCP transport/tools, operational limits/audit retention
+  and real-client acceptance remain WHO-470 onward. Keep disabled until those gates pass.
+- Setup, exact dependencies, migration/role requirements and the disposable single/shared
+  auth regression suite: [MCP_AUTHORIZATION.md](../../docs/MCP_AUTHORIZATION.md).
+
 ## Calendar create/delete sync correction (local, pending deployment)
 
 - Time-grid drafts previously reset the selected end to 10 AM; an evening event could
