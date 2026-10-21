@@ -1,7 +1,8 @@
 import { Worker } from "bullmq";
 import * as Sentry from "@sentry/node";
 import { loadEnv } from "@domi-ops/config";
-import { createDb, withHouseholdContext, withWorkerScanContext } from "@domi-ops/db";
+import { createDb, withWorkerScanContext } from "@domi-ops/db";
+import { runHouseholdSyncJob } from "./lib/household-sync-job.js";
 import { initSentry } from "./lib/sentry.js";
 import {
   SYNC_QUEUE,
@@ -9,6 +10,7 @@ import {
   type SyncJobPayload,
   runCalendarSyncJob,
   ensureCalendarReminderScheduler,
+  ensureCalendarPushScheduler,
   ensureChoreReminderScheduler,
   ensureExpenseBudgetScheduler,
   ensureSchoolReminderScheduler,
@@ -28,6 +30,7 @@ const redisUrl = env.REDIS_URL ?? "redis://localhost:6379";
 
 const CROSS_TENANT_SCAN_JOBS = new Set<SyncJobName>([
   "calendar.reminder.scan",
+  "google.calendar.push.scan",
   "chore.reminder.scan",
   "expense.budget.scan",
   "school.reminder.scan",
@@ -66,14 +69,7 @@ const worker = new Worker<{ name: SyncJobName; payload: SyncJobPayload }>(
       );
     }
 
-    const householdId = payload.householdId;
-    if (!householdId || householdId === "scan") {
-      throw new Error(`householdId required for job ${name}`);
-    }
-
-    return withHouseholdContext(db, householdId, (tx) =>
-      runCalendarSyncJob(tx, env, name, payload),
-    );
+    return runHouseholdSyncJob(db, env, name, payload);
   },
   { connection: { url: redisUrl } },
 );
@@ -94,6 +90,10 @@ worker.on("failed", (job, err) => {
     tags: { jobName: job?.data.name },
     extra: { householdId: job?.data.payload.householdId },
   });
+});
+
+void ensureCalendarPushScheduler(redisUrl).catch((err) => {
+  console.error("Failed to schedule calendar push retries", err);
 });
 
 void ensureCalendarReminderScheduler(redisUrl).catch((err) => {

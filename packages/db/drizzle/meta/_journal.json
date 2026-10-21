@@ -715,6 +715,13 @@
       "when": 1792204800000,
       "tag": "0101_goals_recurring_isolation",
       "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1792281600000,
+      "tag": "0102_calendar_delete_outbox",
+      "breakpoints": true
     }
   ]
 }

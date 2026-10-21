@@ -82,6 +82,7 @@ describe("saving events on a bidirectional Google calendar", () => {
     expect(res.status).toBe(200);
     expect(state.event.syncStatus).toBe("pending");
     expect(state.outbox).toEqual([{
+      householdId: "household", connectionId: "connection",
       eventId: "event", operation: "create", payloadJson: JSON.stringify({ linkedCalendarId: "linked-calendar" }),
     }]);
     expect(state.enqueue).toHaveBeenCalledWith("redis://unused", "google.calendar.push", {

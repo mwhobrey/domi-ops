@@ -33,7 +33,7 @@ import {
 } from "./ui";
 import { ScheduleConflictChecker } from "./ScheduleConflictChecker";
 import { eventFormToConflictFormState } from "../lib/schedule-conflict";
-import { adjustTimedEventEndOnStartChange } from "../lib/event-form-times";
+import { addMinutesToLocalDateTime, adjustTimedEventEndOnStartChange } from "../lib/event-form-times";
 import { useHouseholdToday } from "./HouseholdTimeProvider";
 
 type EventCategory = {
@@ -264,8 +264,9 @@ export function CalendarEventSheet({
         setStartDate(createDraft.startDate);
         setStartTime(createDraft.startTime);
         setAllDay(createDraft.allDay);
-        setEndDate(createDraft.endDate ?? "");
-        setEndTime(createDraft.endTime ?? "10:00");
+        const defaultEnd = addMinutesToLocalDateTime(createDraft.startDate, createDraft.startTime || "09:00", 60);
+        setEndDate(createDraft.endDate ?? (createDraft.endTime ? "" : defaultEnd.date));
+        setEndTime(createDraft.endTime ?? defaultEnd.time);
         setDriveBufferBefore(
           createDraft.driveBufferBeforeMinutes != null
             ? String(createDraft.driveBufferBeforeMinutes)
@@ -280,9 +281,9 @@ export function CalendarEventSheet({
         setStartDate(todayRef.current);
         setStartTime("09:00");
         setAllDay(false);
+        setEndDate("");
+        setEndTime("10:00");
       }
-      setEndDate("");
-      setEndTime("10:00");
       setColor("#3b82f6");
       setCategoryKey("");
       setCalendarId(defaultCalendarId ?? "");
@@ -380,6 +381,10 @@ export function CalendarEventSheet({
     e.preventDefault();
     if (endDate && endDate < startDate) {
       setError("End date must be on or after start date.");
+      return;
+    }
+    if (!allDay && startTime && endTime && (!endDate || endDate === startDate) && endTime <= startTime) {
+      setError("End time must be after start time. For an overnight event, choose the next end date.");
       return;
     }
     const payload = buildPayload();

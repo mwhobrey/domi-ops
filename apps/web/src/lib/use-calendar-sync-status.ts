@@ -6,6 +6,7 @@ import { apiClient } from "./client-api";
 export type CalendarSyncStatus = {
   connected: boolean;
   syncMode?: string;
+  pendingExports?: number;
   lastSyncAt?: string | null;
   run?: {
     status: string;
@@ -31,7 +32,7 @@ export function useCalendarSyncStatus(pollWhenActive = true) {
       const data = await apiClient.get<CalendarSyncStatus>("/api/calendar/sync/status");
       setStatus(data);
     } catch {
-      setStatus({ connected: false });
+      // Keep the connection and polling alive across a temporary network failure.
     } finally {
       setLoading(false);
     }
@@ -42,10 +43,11 @@ export function useCalendarSyncStatus(pollWhenActive = true) {
   }, [refresh]);
 
   useEffect(() => {
-    if (!pollWhenActive || !status?.run?.active) return;
-    const t = setInterval(() => void refresh(), 2000);
+    if (!pollWhenActive) return;
+    const interval = status?.run?.active || status?.pendingExports ? 2000 : 10_000;
+    const t = setInterval(() => void refresh(), interval);
     return () => clearInterval(t);
-  }, [pollWhenActive, status?.run?.active, refresh]);
+  }, [pollWhenActive, status?.run?.active, status?.pendingExports, refresh]);
 
   return { status, loading, refresh, isActive: Boolean(status?.run?.active) };
 }

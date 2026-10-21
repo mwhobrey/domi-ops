@@ -1,5 +1,28 @@
 # Current state
 
+## Calendar create/delete sync correction (local, pending deployment)
+
+- Time-grid drafts previously reset the selected end to 10 AM; an evening event could
+  reach Google as a reversed same-day range (`timeRangeEmpty`). Preserve draft dates
+  and times, reject invalid ranges in form/API/mapper, and roll default ends past midnight.
+- Migration `0102_calendar_delete_outbox` binds outbox rows directly to household and
+  connection. `event_id` becomes SET NULL so delete snapshots survive local removal.
+  Its household policy validates event and connection ownership; worker scans retain
+  their existing explicit policy. Legacy undeliverable orphan intents are removed.
+- DELETE locks the event, snapshots the Google destination/ID, cancels queued
+  create/update work, and deletes locally in one transaction. An interrupted first
+  create uses the same deterministic Google ID for cleanup. Import-only/non-owner
+  deletes do not call Google. Failed deletes remain queued and are excluded from pulls.
+- The worker retries durable Calendar work every minute (`google.calendar.push.scan`),
+  records safe provider errors and keeps failed local edits from being overwritten by a
+  pull. Status includes pending exports. The UI polls while visible and replaces the
+  request acknowledgement with completion or an actionable failure.
+- Upgrade API and worker together using the deployment scripts, which pause them before
+  migrations/recreation. Back up first; expect a brief maintenance interruption. A failed
+  migration/grant check leaves them stopped for operator recovery, not an old-schema restart.
+- Local tests and synthetic Google responses do not establish provider acceptance. After
+  deployment, rehearse create, edit, delete, Google absence and repeat sync on the demo lane.
+
 *Two live deployments: the single-tenant dogfood at `https://whome.whobrey.me`, and the private hosted Starter beta at `app.domi-ops.com` (`DEPLOYMENT_MODE=shared`, real Stripe, invite-only). Repo is public. Remaining launch work is the public hosted opening — [07_LAUNCH.md](./07_LAUNCH.md). Prefer bug fixes and hosted hardening over new module polish.*
 
 ## What is working (implemented paths)

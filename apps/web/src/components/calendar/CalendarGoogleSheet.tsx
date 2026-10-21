@@ -86,6 +86,7 @@ export function CalendarGoogleSheet({
 }) {
   const [connections, setConnections] = useState(initialConnections);
   const [syncing, setSyncing] = useState(false);
+  const [requestedAfter, setRequestedAfter] = useState<string | null | undefined>(undefined);
   const [refreshing, setRefreshing] = useState(false);
   const [savingMode, setSavingMode] = useState(false);
   const [feedback, setFeedback] = useState<{ text: string; variant: "info" | "error" } | null>(
@@ -99,7 +100,7 @@ export function CalendarGoogleSheet({
 
   const connected = connections.length > 0;
   const conn = connections[0];
-  const lastSync = conn?.lastSyncAt;
+  const lastSync = syncStatus?.lastSyncAt ?? conn?.lastSyncAt;
   const syncMode = conn?.syncMode ?? (defaultSyncMode as CalendarConnectionSummary["syncMode"]);
 
   const loadConnections = useCallback(async () => {
@@ -123,8 +124,20 @@ export function CalendarGoogleSheet({
     onOpenImport();
   }
 
+  let visibleFeedback = feedback;
+  if (feedback?.text === "Sync requested." && requestedAfter !== undefined && syncStatus?.run) {
+    if (syncStatus.run.active || syncStatus.run.status === "failed" || syncStatus.linked?.some(l => l.syncEnabled && l.lastSyncError)) {
+      visibleFeedback = null;
+    } else if (syncStatus.lastSyncAt && syncStatus.lastSyncAt !== requestedAfter && !syncStatus.pendingExports) {
+      visibleFeedback = { text: "Sync finished.", variant: "info" };
+    } else if (syncStatus.pendingExports) {
+      visibleFeedback = { text: `${syncStatus.pendingExports} event change(s) waiting to export to Google.`, variant: "info" };
+    }
+  }
+
   async function syncNow() {
     setSyncing(true);
+    setRequestedAfter(syncStatus?.lastSyncAt ?? null);
     setFeedback(null);
     try {
       await apiClient.post("/api/calendar/sync");
@@ -249,7 +262,7 @@ export function CalendarGoogleSheet({
             </label>
           )}
 
-          {feedback && <Alert variant={feedback.variant}>{feedback.text}</Alert>}
+          {visibleFeedback && <Alert variant={visibleFeedback.variant}>{visibleFeedback.text}</Alert>}
 
           <CalendarSyncProgress status={syncStatus} compact />
 

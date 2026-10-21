@@ -1,310 +1,158 @@
 import type { Env } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
-import {
-  calendarConnections,
-  calendarEvents,
-  calendarSyncOutbox,
-  linkedGoogleCalendars,
-} from "@domi-ops/db";
-import { asc, eq } from "drizzle-orm";
+import { calendarConnections, calendarEvents, calendarSyncOutbox, linkedGoogleCalendars } from "@domi-ops/db";
+import { and, asc, eq } from "drizzle-orm";
 import { CalendarCredentialsError, ensureAccessToken } from "./client.js";
 import { listReminderOffsetsForEvent } from "./event-reminders.js";
+import { eventTimeRangeError } from "./event-time.js";
 import { eventToGoogleBody } from "./mapper.js";
 
-async function googleCalendarMutate(
-  accessToken: string,
-  method: "GET" | "PUT" | "POST" | "DELETE",
-  path: string,
-  body?: Record<string, unknown>,
-): Promise<Record<string, unknown>> {
-  const url = new URL(`https://www.googleapis.com/calendar/v3${path}`);
-  const res = await fetch(url.toString(), {
-    method,
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
-    body: body ? JSON.stringify(body) : undefined,
+export class CalendarPushError extends Error {}
+class GoogleCalendarRequestError extends Error {
+  constructor(readonly status: number, message: string) { super(message); }
+}
+
+async function googleCalendarMutate(token: string, method: "PUT" | "POST" | "DELETE", path: string, body?: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const res = await fetch(`https://www.googleapis.com/calendar/v3${path}`, {
+    method, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(30_000),
   });
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Google Calendar API ${res.status}: ${text}`);
-  }
-  if (res.status === 204) return {};
-  return (await res.json()) as Record<string, unknown>;
-}
-
-export async function pushEventUpdate(
-  db: Database,
-  env: Env,
-  eventId: string,
-  linkedCalendarId: string,
-): Promise<boolean> {
-  // Worker calls run in a household transaction; keep moves behind this export's snapshot.
-  const [ev] = await db
-    .select()
-    .from(calendarEvents)
-    .where(eq(calendarEvents.id, eventId))
-    .limit(1)
-    .for("update");
-  if (!ev?.googleEventId) return false;
-
-  const [lc] = await db
-    .select()
-    .from(linkedGoogleCalendars)
-    .where(eq(linkedGoogleCalendars.id, linkedCalendarId))
-    .limit(1);
-  if (!lc?.syncEnabled || lc.targetCalendarId !== ev.calendarId) return false;
-
-  const [conn] = await db
-    .select()
-    .from(calendarConnections)
-    .where(eq(calendarConnections.id, lc.connectionId))
-    .limit(1);
-  if (!conn || conn.syncMode !== "bidirectional") return false;
-
-  const tz = conn.timeZone ?? "UTC";
-  const reminderOffsets = await listReminderOffsetsForEvent(db, ev.id);
-  const body = eventToGoogleBody({ ...ev, reminderOffsets }, tz);
-  try {
-    let accessToken: string;
+    let reason = "";
     try {
-      accessToken = await ensureAccessToken(db, env, conn);
-    } catch (e) {
-      if (e instanceof CalendarCredentialsError) return false;
-      throw e;
-    }
-    const updated = await googleCalendarMutate(
-      accessToken,
-      "PUT",
-      `/calendars/${encodeURIComponent(lc.googleCalendarId)}/events/${encodeURIComponent(ev.googleEventId)}`,
-      body,
-    );
-    await db
-      .update(calendarEvents)
-      .set({
-        googleEtag: updated.etag ? String(updated.etag) : ev.googleEtag,
-        syncStatus: "synced",
-        updatedAt: new Date(),
-      })
-      .where(eq(calendarEvents.id, ev.id));
-    return true;
-  } catch (err) {
-    // Was a bare `catch {}` — every push failure (bad token, 404'd Google event, malformed
-    // body, whatever) silently became a no-op "pending" status with zero trace anywhere.
-    // Confirmed live: a real push failed, the outbox row got dropped anyway (see
-    // processOutboxForConnection's `ev?.syncStatus === "synced"` check below, which reads the
-    // *pre-push* default value, not the outcome of this call), and nothing surfaced it.
-    console.error(
-      `[calendar-sync] push failed for event ${ev.id} -> linked calendar ${linkedCalendarId}:`,
-      err instanceof Error ? err.message : err,
-    );
-    await db
-      .update(calendarEvents)
-      .set({ syncStatus: "pending", updatedAt: new Date() })
-      .where(eq(calendarEvents.id, ev.id));
-    return false;
+      const response = await res.json() as { error?: { errors?: { reason?: string }[] } };
+      reason = response.error?.errors?.[0]?.reason ?? "";
+    } catch { /* An upstream proxy may return HTML. */ }
+    throw new GoogleCalendarRequestError(res.status, reason === "timeRangeEmpty"
+      ? "Google rejected the event times. Set the end after the start, with the next end date for overnight events."
+      : res.status === 401 || res.status === 403
+        ? "Google Calendar access was denied. Check calendar write access or reconnect Google."
+        : `Google Calendar returned HTTP ${res.status}. Try syncing again.`);
   }
+  return res.status === 204 ? {} : await res.json() as Record<string, unknown>;
 }
 
-/**
- * Google custom event IDs must be lowercase base32hex (`0-9a-v`), 5-1024 chars, unique per
- * calendar. A UUID with its hyphens stripped is exactly 32 lowercase hex chars (`0-9a-f`, a
- * strict subset of `a-v`) — deterministic per event, so retrying a create after a partial
- * failure (Google's POST succeeded, our own DB write afterward didn't — crash, connection drop)
- * hits Google's own 409 "already exists" instead of silently creating a duplicate event.
- */
-function googleEventIdFromLocalId(eventId: string): string {
+function pushError(error: unknown): CalendarPushError {
+  if (error instanceof CalendarPushError) return error;
+  return new CalendarPushError(error instanceof GoogleCalendarRequestError ? error.message
+    : error instanceof CalendarCredentialsError ? "Google Calendar access expired or is unavailable. Reconnect Google in Calendar settings."
+      : "Could not reach Google Calendar. Try syncing again.");
+}
+
+/** UUID hex is a valid Google base32hex ID; retries address the same event. */
+export function googleEventIdFromLocalId(eventId: string): string {
   return eventId.replace(/-/g, "").toLowerCase();
 }
 
-/**
- * Push a brand-new local event to Google for the first time (WHO-252). Unlike pushEventUpdate,
- * this event has no googleEventId yet — that's the whole point — so it does a Calendar API
- * `POST` (insert) instead of a `PUT`, then stores the id/etag Google hands back so every
- * subsequent edit can go through the normal pushEventUpdate path.
- */
-export async function pushEventCreate(
-  db: Database,
-  env: Env,
-  eventId: string,
-  linkedCalendarId: string,
-): Promise<boolean> {
-  // The row lock serializes an in-flight first export with later calendar moves.
-  const [ev] = await db
-    .select()
-    .from(calendarEvents)
-    .where(eq(calendarEvents.id, eventId))
-    .limit(1)
-    .for("update");
-  if (!ev) return false;
-  // A save can queue another create while the first export is in flight. Preserve
-  // that save's newer contents once the first job has recorded the Google ID.
-  if (ev.googleEventId) {
-    return ev.syncStatus === "pending"
-      ? pushEventUpdate(db, env, eventId, linkedCalendarId)
-      : false;
+async function pushEvent(db: Database, env: Env, eventId: string, linkedCalendarId: string, operation: "create" | "update"): Promise<boolean> {
+  const [ev] = await db.select().from(calendarEvents).where(eq(calendarEvents.id, eventId)).limit(1).for("update");
+  if (!ev || (operation === "update" && !ev.googleEventId)) return false;
+  if (operation === "create" && ev.googleEventId) {
+    if (ev.syncStatus === "synced") return false;
+    operation = "update";
   }
-
-  const [lc] = await db
-    .select()
-    .from(linkedGoogleCalendars)
-    .where(eq(linkedGoogleCalendars.id, linkedCalendarId))
-    .limit(1);
+  const [lc] = await db.select().from(linkedGoogleCalendars).where(eq(linkedGoogleCalendars.id, linkedCalendarId)).limit(1).for("update");
   if (!lc?.syncEnabled || lc.targetCalendarId !== ev.calendarId) return false;
-
-  const [conn] = await db
-    .select()
-    .from(calendarConnections)
-    .where(eq(calendarConnections.id, lc.connectionId))
-    .limit(1);
-  if (!conn || conn.syncMode !== "bidirectional") return false;
-
-  const tz = conn.timeZone ?? "UTC";
-  const reminderOffsets = await listReminderOffsetsForEvent(db, ev.id);
-  const googleEventId = googleEventIdFromLocalId(ev.id);
-  const body = { ...eventToGoogleBody({ ...ev, reminderOffsets }, tz), id: googleEventId };
+  const [conn] = await db.select().from(calendarConnections).where(eq(calendarConnections.id, lc.connectionId)).limit(1);
+  if (!conn || conn.householdId !== ev.householdId || conn.syncMode !== "bidirectional") return false;
+  let updated: Record<string, unknown>;
+  const googleId = ev.googleEventId ?? googleEventIdFromLocalId(ev.id);
+  const path = `/calendars/${encodeURIComponent(lc.googleCalendarId)}/events`;
   try {
-    let accessToken: string;
-    try {
-      accessToken = await ensureAccessToken(db, env, conn);
-    } catch (e) {
-      if (e instanceof CalendarCredentialsError) return false;
-      throw e;
+    const rangeError = eventTimeRangeError(ev);
+    if (rangeError) throw new CalendarPushError(rangeError);
+    const reminderOffsets = await listReminderOffsetsForEvent(db, ev.id);
+    const body = eventToGoogleBody({ ...ev, reminderOffsets }, conn.timeZone ?? "UTC");
+    const token = await ensureAccessToken(db, env, conn);
+    if (operation === "update") {
+      updated = await googleCalendarMutate(token, "PUT", `${path}/${encodeURIComponent(googleId)}`, body);
+    } else {
+      try { updated = await googleCalendarMutate(token, "POST", path, { ...body, id: googleId }); }
+      catch (error) {
+        if (!(error instanceof GoogleCalendarRequestError) || error.status !== 409) throw error;
+        // The previous POST may have succeeded before its local transaction was lost.
+        updated = await googleCalendarMutate(token, "PUT", `${path}/${encodeURIComponent(googleId)}`, body);
+      }
     }
-
-    let created: Record<string, unknown>;
-    try {
-      created = await googleCalendarMutate(
-        accessToken,
-        "POST",
-        `/calendars/${encodeURIComponent(lc.googleCalendarId)}/events`,
-        body,
-      );
-    } catch (err) {
-      if (!(err instanceof Error) || !/Google Calendar API 409/.test(err.message)) throw err;
-      // Google already has an event under our deterministic id — a prior attempt's POST
-      // succeeded but the local DB write after it didn't. Adopt what's already there instead of
-      // treating this as a fresh failure (which would just retry the POST and 409 forever).
-      created = await googleCalendarMutate(
-        accessToken,
-        "GET",
-        `/calendars/${encodeURIComponent(lc.googleCalendarId)}/events/${encodeURIComponent(googleEventId)}`,
-      );
-    }
-    await db
-      .update(calendarEvents)
-      .set({
-        googleEventId: created.id ? String(created.id) : googleEventId,
-        googleEtag: created.etag ? String(created.etag) : null,
-        syncStatus: "synced",
-        updatedAt: new Date(),
-      })
-      .where(eq(calendarEvents.id, ev.id));
-    return true;
-  } catch (err) {
-    console.error(
-      `[calendar-sync] create-push failed for event ${ev.id} -> linked calendar ${linkedCalendarId}:`,
-      err instanceof Error ? err.message : err,
-    );
-    await db
-      .update(calendarEvents)
-      .set({ syncStatus: "pending", updatedAt: new Date() })
-      .where(eq(calendarEvents.id, ev.id));
-    return false;
+  } catch (error) {
+    const failure = pushError(error);
+    await db.update(calendarEvents).set({ syncStatus: "error", updatedAt: new Date() }).where(eq(calendarEvents.id, ev.id));
+    throw failure;
   }
+  await db.update(calendarEvents).set({
+    googleEventId: updated.id ? String(updated.id) : googleId,
+    googleEtag: updated.etag ? String(updated.etag) : ev.googleEtag,
+    syncStatus: "synced", updatedAt: new Date(),
+  }).where(eq(calendarEvents.id, ev.id));
+  return true;
+}
+export const pushEventCreate = (db: Database, env: Env, eventId: string, linkedCalendarId: string) => pushEvent(db, env, eventId, linkedCalendarId, "create");
+export const pushEventUpdate = (db: Database, env: Env, eventId: string, linkedCalendarId: string) => pushEvent(db, env, eventId, linkedCalendarId, "update");
+
+export type DeletePayload = { linkedCalendarId: string; googleCalendarId: string; googleEventId: string };
+export function parseOutboxPayload(raw: string | null): Partial<DeletePayload> {
+  try {
+    const value: unknown = JSON.parse(raw ?? "{}");
+    if (!value || typeof value !== "object") return {};
+    const result: Partial<DeletePayload> = {};
+    for (const key of ["linkedCalendarId", "googleCalendarId", "googleEventId"] as const) {
+      const field = (value as Record<string, unknown>)[key];
+      if (typeof field === "string" && field.length > 0 && field.length <= 256) result[key] = field;
+    }
+    return result;
+  } catch { return {}; }
 }
 
-export async function processOutboxForConnection(
-  db: Database,
-  env: Env,
-  connectionId: string,
-  limit = 50,
-): Promise<void> {
-  const rows = await db
-    .select()
-    .from(calendarSyncOutbox)
-    .orderBy(asc(calendarSyncOutbox.createdAt))
-    .limit(limit * 3);
-
-  // Unscoped by design (see below) — every connection's linked-calendar ids, not just this one's.
-  const linked = await db
-    .select({
-      id: linkedGoogleCalendars.id,
-      connectionId: linkedGoogleCalendars.connectionId,
-      targetCalendarId: linkedGoogleCalendars.targetCalendarId,
-      syncEnabled: linkedGoogleCalendars.syncEnabled,
-    })
-    .from(linkedGoogleCalendars);
-  const linkedIds = new Set(
-    linked.filter((l) => l.connectionId === connectionId).map((l) => l.id),
-  );
-  const allLinkedIds = new Set(linked.map((l) => l.id));
-
-  let processed = 0;
-  for (const row of rows) {
-    if (processed >= limit) break;
-    if (!row.eventId) {
-      await db.delete(calendarSyncOutbox).where(eq(calendarSyncOutbox.id, row.id));
-      continue;
-    }
-    let payload: { linkedCalendarId?: string } = {};
-    try {
-      payload = JSON.parse(row.payloadJson ?? "{}") as typeof payload;
-    } catch {
-      payload = {};
-    }
-    const lcId = payload.linkedCalendarId;
-    if (!lcId || !allLinkedIds.has(lcId)) {
-      // Genuinely orphaned — no linkedCalendarId at all, or it points at a linked calendar that
-      // no longer exists for *any* connection. Safe to drop.
-      await db.delete(calendarSyncOutbox).where(eq(calendarSyncOutbox.id, row.id));
-      continue;
-    }
-    if (!linkedIds.has(lcId)) {
-      // The row query above (`rows`) isn't scoped to this connection at all — it was pulling
-      // every household's outbox rows and deleting whichever ones didn't happen to belong to
-      // *this* connection, on every single connection's processing run. That silently dropped
-      // other households' pending sync work continuously. This row belongs to a different,
-      // still-valid connection — leave it for that connection's own run to pick up.
-      continue;
-    }
-
-    const destination = linked.find((l) => l.id === lcId);
-    const [currentEvent] = await db
-      .select({ calendarId: calendarEvents.calendarId })
-      .from(calendarEvents)
-      .where(eq(calendarEvents.id, row.eventId))
-      .limit(1);
-    if (!currentEvent || !destination?.syncEnabled || destination.targetCalendarId !== currentEvent.calendarId) {
-      await db.delete(calendarSyncOutbox).where(eq(calendarSyncOutbox.id, row.id));
-      continue;
-    }
-
-    let ok = false;
-    if (row.operation === "update") {
-      ok = await pushEventUpdate(db, env, row.eventId, lcId);
-    } else if (row.operation === "create") {
-      ok = await pushEventCreate(db, env, row.eventId, lcId);
-    }
-
-    const [ev] = await db
-      .select({ syncStatus: calendarEvents.syncStatus })
-      .from(calendarEvents)
-      .where(eq(calendarEvents.id, row.eventId))
-      .limit(1);
-
-    if (ok || ev?.syncStatus === "synced") {
-      await db.delete(calendarSyncOutbox).where(eq(calendarSyncOutbox.id, row.id));
-    } else {
-      await db
-        .update(calendarSyncOutbox)
-        .set({
-          attempts: row.attempts + 1,
-          lastError: "retry",
-        })
-        .where(eq(calendarSyncOutbox.id, row.id));
-    }
-    processed += 1;
+export async function pushEventDelete(db: Database, env: Env, row: typeof calendarSyncOutbox.$inferSelect): Promise<boolean> {
+  const payload = parseOutboxPayload(row.payloadJson);
+  if (!payload.linkedCalendarId || !payload.googleCalendarId || !payload.googleEventId) throw new CalendarPushError("The queued Google deletion has no valid destination.");
+  const [lc] = await db.select().from(linkedGoogleCalendars).where(eq(linkedGoogleCalendars.id, payload.linkedCalendarId)).limit(1).for("update");
+  if (!lc || lc.connectionId !== row.connectionId || lc.googleCalendarId !== payload.googleCalendarId) throw new CalendarPushError("The Google calendar mapping changed. The queued deletion was not sent.");
+  const [conn] = await db.select().from(calendarConnections).where(eq(calendarConnections.id, row.connectionId)).limit(1);
+  if (!conn || conn.householdId !== row.householdId || conn.syncMode !== "bidirectional" || !lc.syncEnabled) throw new CalendarPushError("Enable bidirectional sync for this calendar to finish its queued deletion.");
+  try {
+    const token = await ensureAccessToken(db, env, conn);
+    await googleCalendarMutate(token, "DELETE", `/calendars/${encodeURIComponent(payload.googleCalendarId)}/events/${encodeURIComponent(payload.googleEventId)}`);
+  } catch (error) {
+    if (!(error instanceof GoogleCalendarRequestError) || ![404, 410].includes(error.status)) throw pushError(error);
   }
+  return true;
+}
+
+export type OutboxResult = { failed: number; error: string | null };
+export async function processOutboxForConnection(db: Database, env: Env, connectionId: string, limit = 50): Promise<OutboxResult> {
+  const rows = await db.select().from(calendarSyncOutbox).where(eq(calendarSyncOutbox.connectionId, connectionId)).orderBy(asc(calendarSyncOutbox.createdAt)).limit(limit);
+  const linked = await db.select().from(linkedGoogleCalendars).where(eq(linkedGoogleCalendars.connectionId, connectionId));
+  const result: OutboxResult = { failed: 0, error: null };
+  for (const row of rows) {
+    if (row.connectionId !== connectionId) continue;
+    const payload = parseOutboxPayload(row.payloadJson);
+    const lcId = payload.linkedCalendarId;
+    const destination = linked.find(l => l.id === lcId && l.connectionId === connectionId);
+    try {
+      if (row.operation === "delete") {
+        await pushEventDelete(db, env, row);
+      } else {
+        if (!row.eventId || !destination?.syncEnabled) {
+          await db.delete(calendarSyncOutbox).where(eq(calendarSyncOutbox.id, row.id));
+          continue;
+        }
+        const [ev] = await db.select().from(calendarEvents).where(eq(calendarEvents.id, row.eventId)).limit(1).for("update");
+        if (!ev || destination.targetCalendarId !== ev.calendarId) {
+          await db.delete(calendarSyncOutbox).where(eq(calendarSyncOutbox.id, row.id));
+          continue;
+        }
+        const ok = row.operation === "create" ? await pushEventCreate(db, env, row.eventId, lcId!)
+          : row.operation === "update" ? await pushEventUpdate(db, env, row.eventId, lcId!) : false;
+        if (!ok && ev.syncStatus !== "synced") throw new CalendarPushError("Event export is pending. Check the linked calendar and sync mode.");
+      }
+      await db.delete(calendarSyncOutbox).where(and(eq(calendarSyncOutbox.id, row.id), eq(calendarSyncOutbox.connectionId, connectionId)));
+    } catch (error) {
+      if (!(error instanceof CalendarPushError)) throw error;
+      result.failed += 1;
+      result.error ??= error.message;
+      await db.update(calendarSyncOutbox).set({ attempts: row.attempts + 1, lastError: error.message }).where(eq(calendarSyncOutbox.id, row.id));
+    }
+  }
+  return result;
 }

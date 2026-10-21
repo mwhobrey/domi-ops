@@ -21,16 +21,21 @@ export function CalendarSyncProgress({
 
   if (!run.active && run.status !== "failed" && !compact) {
     const errors = linked.filter((l) => l.lastSyncError);
-    if (!errors.length) return null;
+    if (!errors.length && !status.pendingExports) return null;
   }
 
   if (run.status === "idle" && !run.error) {
     const errors = linked.filter((l) => l.syncEnabled && l.lastSyncError);
-    if (!errors.length) return null;
+    if (!errors.length && !status.pendingExports) return null;
   }
 
   return (
     <div className={compact ? "space-y-2" : "space-y-3"}>
+      {!run.active && run.status !== "failed" && Boolean(status.pendingExports) && (
+        <Alert variant="info" className="text-sm">
+          {status.pendingExports} event change(s) waiting to export to Google.
+        </Alert>
+      )}
       {run.active && (
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-2 text-sm">

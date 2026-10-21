@@ -1,6 +1,7 @@
 import type { Database } from "@domi-ops/db";
 import {
   calendarConnections,
+  calendarSyncOutbox,
   linkedGoogleCalendars,
 } from "@domi-ops/db";
 import { parseSyncRunProgress } from "@domi-ops/calendar-sync";
@@ -37,18 +38,22 @@ export async function buildCalendarSyncStatus(
     .where(eq(linkedGoogleCalendars.connectionId, conn.id))
     .orderBy(asc(linkedGoogleCalendars.summary));
 
+  const pending = await db.select({ lastError: calendarSyncOutbox.lastError }).from(calendarSyncOutbox)
+    .where(eq(calendarSyncOutbox.connectionId, conn.id));
+  const pushError = pending.find(p => p.lastError)?.lastError;
   const progress = parseSyncRunProgress(conn.syncRunProgress);
   const active =
-    conn.syncRunStatus === "queued" || conn.syncRunStatus === "syncing";
+    !pushError && (conn.syncRunStatus === "queued" || conn.syncRunStatus === "syncing");
 
   return {
     connected: true as const,
     syncMode: conn.syncMode,
     lastSyncAt: conn.lastSyncAt,
+    pendingExports: pending.length,
     run: {
-      status: conn.syncRunStatus,
+      status: pushError ? "failed" : conn.syncRunStatus,
       progress,
-      error: conn.syncRunError,
+      error: pushError ?? conn.syncRunError,
       active,
     },
     linked,

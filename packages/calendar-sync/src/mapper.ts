@@ -1,3 +1,4 @@
+import { defaultEventEnd, eventTimeRangeError } from "./event-time.js";
 import {
   googleRemindersBody,
   offsetsFromGoogleEvent,
@@ -127,6 +128,8 @@ export function eventToGoogleBody(
   event: WhomeEventForGoogle,
   tzName: string,
 ): Record<string, unknown> {
+  const rangeError = eventTimeRangeError(event);
+  if (rangeError) throw new Error(rangeError);
   const tz = event.timeZone ?? tzName;
   const body: Record<string, unknown> = {
     summary: event.title,
@@ -138,23 +141,16 @@ export function eventToGoogleBody(
   if (event.allDay || !event.startTime) {
     body.start = { date: event.startDate };
     const endBase = event.endDate ?? event.startDate;
-    const endD = new Date(`${endBase}T12:00:00`);
-    endD.setDate(endD.getDate() + 1);
+    const endD = new Date(`${endBase}T00:00:00Z`);
+    endD.setUTCDate(endD.getUTCDate() + 1);
     body.end = { date: endD.toISOString().slice(0, 10) };
     return body;
   }
-  const [sh, sm] = event.startTime.split(":").map((x) => Number(x));
-  const startIso = `${event.startDate}T${String(sh).padStart(2, "0")}:${String(sm ?? 0).padStart(2, "0")}:00`;
-  let endDate = event.endDate ?? event.startDate;
-  let endTime = event.endTime;
-  if (!endTime) {
-    const startMin = sh * 60 + (sm ?? 0);
-    const endMin = startMin + 60;
-    endTime = `${String(Math.floor(endMin / 60) % 24).padStart(2, "0")}:${String(endMin % 60).padStart(2, "0")}`;
-    if (endMin >= 24 * 60) endDate = event.startDate;
-  }
-  const [eh, em] = (endTime ?? "10:00").split(":").map((x) => Number(x));
-  const endIso = `${endDate}T${String(eh).padStart(2, "0")}:${String(em ?? 0).padStart(2, "0")}:00`;
+  const startIso = `${event.startDate}T${event.startTime.length >= 8 ? event.startTime.slice(0, 8) : `${event.startTime}:00`}`;
+  const fallback = defaultEventEnd(event.endDate ?? event.startDate, event.startTime);
+  const endDate = event.endDate ?? (event.endTime ? event.startDate : fallback.date);
+  const endTime = event.endTime ?? fallback.time;
+  const endIso = `${event.endTime ? endDate : fallback.date}T${endTime.length >= 8 ? endTime.slice(0, 8) : `${endTime}:00`}`;
   body.start = { dateTime: startIso, timeZone: tz };
   body.end = { dateTime: endIso, timeZone: tz };
   return body;

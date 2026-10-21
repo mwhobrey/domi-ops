@@ -9,6 +9,7 @@ export type SyncMode = "import_only" | "manual" | "bidirectional";
 export type SyncJobName =
   | "google.calendar.pull"
   | "google.calendar.push"
+  | "google.calendar.push.scan"
   | "google.calendar.full_import"
   | "recurring.materialize"
   | "calendar.reminder.scan"
@@ -45,6 +46,7 @@ export {
   enqueueSyncJob,
   getSyncQueue,
   ensureCalendarReminderScheduler,
+  ensureCalendarPushScheduler,
   ensureChoreReminderScheduler,
   ensureExpenseBudgetScheduler,
   ensureSchoolReminderScheduler,
@@ -59,7 +61,8 @@ export {
 } from "./queue.js";
 export { runCalendarSyncJob, syncConnection, pullLinkedCalendar } from "./sync.js";
 export { eventToFields, eventToGoogleBody, inferSourceCategory } from "./mapper.js";
-export { processOutboxForConnection, pushEventUpdate, pushEventCreate } from "./push.js";
+export { eventTimeRangeError } from "./event-time.js";
+export { processOutboxForConnection, pushEventUpdate, pushEventCreate, pushEventDelete, googleEventIdFromLocalId, parseOutboxPayload } from "./push.js";
 export {
   materializeRecurringForHousehold,
   occurrenceDates,
