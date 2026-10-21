@@ -7,7 +7,9 @@ import { listReminderOffsetsForEvent } from "./event-reminders.js";
 import { eventTimeRangeError } from "./event-time.js";
 import { eventToGoogleBody } from "./mapper.js";
 
-export class CalendarPushError extends Error {}
+export class CalendarPushError extends Error {
+  constructor(message: string, readonly terminal = false) { super(message); }
+}
 class GoogleCalendarRequestError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
 }
@@ -105,9 +107,9 @@ export function parseOutboxPayload(raw: string | null): Partial<DeletePayload> {
 
 export async function pushEventDelete(db: Database, env: Env, row: typeof calendarSyncOutbox.$inferSelect): Promise<boolean> {
   const payload = parseOutboxPayload(row.payloadJson);
-  if (!payload.linkedCalendarId || !payload.googleCalendarId || !payload.googleEventId) throw new CalendarPushError("The queued Google deletion has no valid destination.");
+  if (!payload.linkedCalendarId || !payload.googleCalendarId || !payload.googleEventId) throw new CalendarPushError("The queued Google deletion has no valid destination.", true);
   const [lc] = await db.select().from(linkedGoogleCalendars).where(eq(linkedGoogleCalendars.id, payload.linkedCalendarId)).limit(1).for("update");
-  if (!lc || lc.connectionId !== row.connectionId || lc.googleCalendarId !== payload.googleCalendarId) throw new CalendarPushError("The Google calendar mapping changed. The queued deletion was not sent.");
+  if (!lc || lc.connectionId !== row.connectionId || lc.googleCalendarId !== payload.googleCalendarId) throw new CalendarPushError("The Google calendar mapping changed. The queued deletion was not sent.", true);
   const [conn] = await db.select().from(calendarConnections).where(eq(calendarConnections.id, row.connectionId)).limit(1);
   if (!conn || conn.householdId !== row.householdId || conn.syncMode !== "bidirectional" || !lc.syncEnabled) throw new CalendarPushError("Enable bidirectional sync for this calendar to finish its queued deletion.");
   try {
@@ -151,7 +153,13 @@ export async function processOutboxForConnection(db: Database, env: Env, connect
       if (!(error instanceof CalendarPushError)) throw error;
       result.failed += 1;
       result.error ??= error.message;
-      await db.update(calendarSyncOutbox).set({ attempts: row.attempts + 1, lastError: error.message }).where(eq(calendarSyncOutbox.id, row.id));
+      if (error.terminal) {
+        // No valid destination remains. Report this run as failed without retrying an undeliverable intent.
+        await db.delete(calendarSyncOutbox).where(eq(calendarSyncOutbox.id, row.id));
+      } else {
+        // Recoverable failures stay durable and are retried by the one-minute scan.
+        await db.update(calendarSyncOutbox).set({ attempts: row.attempts + 1, lastError: error.message }).where(eq(calendarSyncOutbox.id, row.id));
+      }
     }
   }
   return result;

@@ -42,8 +42,8 @@ export async function buildCalendarSyncStatus(
     .where(eq(calendarSyncOutbox.connectionId, conn.id));
   const pushError = pending.find(p => p.lastError)?.lastError;
   const progress = parseSyncRunProgress(conn.syncRunProgress);
-  const active =
-    !pushError && (conn.syncRunStatus === "queued" || conn.syncRunStatus === "syncing");
+  const active = conn.syncRunStatus === "queued" || conn.syncRunStatus === "syncing";
+  const failedPush = !active && pushError;
 
   return {
     connected: true as const,
@@ -51,9 +51,9 @@ export async function buildCalendarSyncStatus(
     lastSyncAt: conn.lastSyncAt,
     pendingExports: pending.length,
     run: {
-      status: pushError ? "failed" : conn.syncRunStatus,
+      status: failedPush ? "failed" : conn.syncRunStatus,
       progress,
-      error: pushError ?? conn.syncRunError,
+      error: failedPush ? pushError : conn.syncRunError,
       active,
     },
     linked,

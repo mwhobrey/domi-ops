@@ -173,7 +173,7 @@ export function CalendarPageClient({
   const openedEventDeepLinkRef = useRef<string | null>(null);
   const openedNewEventDeepLinkRef = useRef(false);
   const connected = initialConnections.length > 0;
-  const { status: syncStatus, refresh: refreshSyncStatus, isActive: syncActive } =
+  const { status: syncStatus, error: syncStatusError, refresh: refreshSyncStatus, isActive: syncActive } =
     useCalendarSyncStatus(connected);
   const syncWasActive = useRef(false);
   const stickyChromeRef = useRef<HTMLDivElement>(null);
@@ -690,7 +690,7 @@ export function CalendarPageClient({
 
       {(syncActive || syncStatus?.run?.status === "failed") && (
         <div className="mb-4 rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface-muted)]/30 p-4">
-          <CalendarSyncProgress status={syncStatus} />
+          <CalendarSyncProgress status={syncStatus} error={syncStatusError} />
         </div>
       )}
 

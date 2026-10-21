@@ -5,11 +5,14 @@ import { Alert } from "../ui";
 
 export function CalendarSyncProgress({
   status,
+  error,
   compact = false,
 }: {
   status: CalendarSyncStatus | null;
+  error?: string | null;
   compact?: boolean;
 }) {
+  if (error) return <Alert variant="error" className="text-sm">{error}</Alert>;
   if (!status?.connected || !status.run) return null;
 
   const { run, linked = [] } = status;

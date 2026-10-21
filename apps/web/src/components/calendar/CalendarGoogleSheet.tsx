@@ -89,10 +89,10 @@ export function CalendarGoogleSheet({
   const [requestedAfter, setRequestedAfter] = useState<string | null | undefined>(undefined);
   const [refreshing, setRefreshing] = useState(false);
   const [savingMode, setSavingMode] = useState(false);
-  const [feedback, setFeedback] = useState<{ text: string; variant: "info" | "error" } | null>(
+  const [feedback, setFeedback] = useState<{ text: string; variant: "info" | "error"; kind?: "sync-requested" } | null>(
     null,
   );
-  const { status: syncStatus, refresh: refreshSync, isActive } = useCalendarSyncStatus(open);
+  const { status: syncStatus, error: syncStatusError, refresh: refreshSync, isActive } = useCalendarSyncStatus(open);
 
   useEffect(() => {
     setConnections(initialConnections);
@@ -125,8 +125,8 @@ export function CalendarGoogleSheet({
   }
 
   let visibleFeedback = feedback;
-  if (feedback?.text === "Sync requested." && requestedAfter !== undefined && syncStatus?.run) {
-    if (syncStatus.run.active || syncStatus.run.status === "failed" || syncStatus.linked?.some(l => l.syncEnabled && l.lastSyncError)) {
+  if (feedback?.kind === "sync-requested" && requestedAfter !== undefined && syncStatus?.run) {
+    if (syncStatusError || syncStatus.run.active || syncStatus.run.status === "failed" || syncStatus.linked?.some(l => l.syncEnabled && l.lastSyncError)) {
       visibleFeedback = null;
     } else if (syncStatus.lastSyncAt && syncStatus.lastSyncAt !== requestedAfter && !syncStatus.pendingExports) {
       visibleFeedback = { text: "Sync finished.", variant: "info" };
@@ -142,7 +142,7 @@ export function CalendarGoogleSheet({
     try {
       await apiClient.post("/api/calendar/sync");
       void refreshSync();
-      setFeedback({ text: "Sync requested.", variant: "info" });
+      setFeedback({ text: "Sync requested.", variant: "info", kind: "sync-requested" });
     } catch {
       setFeedback({ text: "Connect Google Calendar before syncing.", variant: "error" });
     } finally {
@@ -264,7 +264,7 @@ export function CalendarGoogleSheet({
 
           {visibleFeedback && <Alert variant={visibleFeedback.variant}>{visibleFeedback.text}</Alert>}
 
-          <CalendarSyncProgress status={syncStatus} compact />
+          <CalendarSyncProgress status={syncStatus} error={syncStatusError} compact />
 
           {isActive && (
             <p className="text-xs text-[var(--color-text-muted)]" role="status" aria-live="polite">

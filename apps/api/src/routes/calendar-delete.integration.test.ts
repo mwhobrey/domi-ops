@@ -3,11 +3,12 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, inArray, sql } from "drizzle-orm";
 import type { Env } from "@domi-ops/config";
-import { calendarConnections, calendarEvents, calendarSyncOutbox, calendars, closeDb, createDb, createScopedDb, households, linkedGoogleCalendars, runWithScopedDb, users, withHouseholdContext, withSystemContext, type Database } from "@domi-ops/db";
+import { calendarConnections, calendarEvents, calendarSyncOutbox, calendars, closeDb, createDb, createScopedDb, households, linkedGoogleCalendars, users, withHouseholdContext, withSystemContext, type Database } from "@domi-ops/db";
 import { runCalendarSyncJob, pullLinkedCalendar, processOutboxForConnection } from "@domi-ops/calendar-sync";
 import { calendarRoutes } from "./calendar.js";
-import { buildCalendarSyncStatus } from "../lib/calendar-sync-status.js";
+import { markSyncQueued, buildCalendarSyncStatus } from "../lib/calendar-sync-status.js";
 import type { AppVariables } from "../middleware/auth.js";
+import { createTenantMiddleware } from "../middleware/tenant.js";
 
 const state = vi.hoisted(() => ({ enqueue: vi.fn(), pullItems: [] as Record<string, unknown>[] }));
 vi.mock("@domi-ops/calendar-sync", async original => ({ ...await original<typeof import("@domi-ops/calendar-sync")>(), enqueueSyncJob: state.enqueue }));
@@ -26,9 +27,9 @@ suite("durable Google deletion with hosted tenant restrictions", () => {
   let fetchMock: ReturnType<typeof vi.fn>;
   const env = { NODE_ENV: "test", AUTH_REQUIRED: true, DEPLOYMENT_MODE: "single", MODULES_ENABLED: ["calendar_sync"], REDIS_URL: "redis://unused" } as Env;
   const inTenant = <T>(index: number, fn: (tx: Database) => Promise<T>) => withHouseholdContext(db, fixtures[index].householdId, fn);
-  const request = (index: number, path: string, method: string, body?: unknown) => inTenant(index, tx => runWithScopedDb(tx, async () => app.request(path, {
+  const request = async (index: number, path: string, method: string, body?: unknown) => app.request(path, {
     method, headers: { "content-type": "application/json", "x-fixture": String(index) }, body: body === undefined ? undefined : JSON.stringify(body),
-  })));
+  });
   const create = async (index = 0) => {
     const response = await request(index, "/events", "POST", { calendarId: fixtures[index].calendarId, title: "Synthetic demo", startDate: "2026-10-20", startTime: "20:00", endTime: "21:00", timeZone: "America/Chicago", allDay: false });
     expect(response.status).toBe(201);
@@ -61,11 +62,12 @@ suite("durable Google deletion with hosted tenant restrictions", () => {
       c.set("auth", { ...fixtures[Number(c.req.header("x-fixture")) || 0], memberId: randomUUID(), role: "owner", email: null, username: null, name: "Synthetic tester" });
       await next();
     });
+    app.use("*", createTenantMiddleware(scoped, env));
     app.route("/", calendarRoutes(scoped, env));
   });
   beforeEach(async () => {
     state.pullItems = [];
-    state.enqueue.mockClear();
+    state.enqueue.mockReset();
     fetchMock = vi.fn(async (url: string, init: RequestInit) => init.method === "DELETE"
       ? new Response(null, { status: 204 })
       : new Response(JSON.stringify({ id: JSON.parse(String(init.body)).id ?? decodeURIComponent(url.split("/").pop()!), etag: "etag" })));
@@ -112,6 +114,13 @@ suite("durable Google deletion with hosted tenant restrictions", () => {
     expect((await outbox())[0]).toMatchObject({ eventId: null, attempts: 1, lastError: expect.stringContaining("HTTP 503") });
     const status = await inTenant(0, tx => buildCalendarSyncStatus(tx, fixtures[0]));
     expect(status).toMatchObject({ pendingExports: 1, run: { status: "failed", active: false, error: expect.stringContaining("HTTP 503") } });
+    for (const runStatus of ["queued", "syncing"]) {
+      await inTenant(0, async tx => {
+        await markSyncQueued(tx, fixtures[0].connectionId);
+        await tx.update(calendarConnections).set({ syncRunStatus: runStatus });
+        expect(await buildCalendarSyncStatus(tx, fixtures[0])).toMatchObject({ run: { status: runStatus, active: true, error: null } });
+      });
+    }
     state.pullItems = [{ id: id.replaceAll("-", ""), summary: "Would be resurrected", start: { date: "2026-10-20" }, end: { date: "2026-10-21" } }];
     await inTenant(0, tx => pullLinkedCalendar(tx, env, fixtures[0].linkedId));
     expect(await inTenant(0, tx => tx.select().from(calendarEvents))).toEqual([]);
@@ -149,7 +158,8 @@ suite("durable Google deletion with hosted tenant restrictions", () => {
     const id = await create(); await drain(); await request(0, `/events/${id}`, "DELETE");
     await inTenant(0, tx => tx.update(linkedGoogleCalendars).set({ googleCalendarId: "different-destination" }));
     fetchMock.mockClear(); await drain();
-    expect(fetchMock).not.toHaveBeenCalled(); expect((await outbox())[0].lastError).toContain("mapping changed");
+    expect(fetchMock).not.toHaveBeenCalled(); expect(await outbox()).toEqual([]);
+    expect(await inTenant(0, tx => buildCalendarSyncStatus(tx, fixtures[0]))).toMatchObject({ run: { status: "failed", error: expect.stringContaining("mapping changed") } });
   });
 
   it("rejects invalid creates and PATCH ranges before they reach the outbox", async () => {
@@ -179,6 +189,30 @@ suite("durable Google deletion with hosted tenant restrictions", () => {
     const id = await create(); await drain(); await request(0, `/events/${id}`, "DELETE");
     fetchMock.mockResolvedValueOnce(new Response("{}", { status: 403 })); await drain();
     expect((await outbox())[0].lastError).toContain("access was denied");
+  });
+
+
+  it("commits deletion before the queue wakeup and keeps it committed if Redis fails", async () => {
+    const id = await create(); await drain();
+    let committed = false;
+    state.enqueue.mockImplementationOnce(async () => {
+      const intents = await outbox();
+      committed = intents.length === 1 && intents[0].eventId === null;
+      throw new Error("Synthetic Redis failure");
+    });
+    const response = await request(0, "/events/" + id, "DELETE");
+    expect(response.status).toBe(200);
+    expect(committed).toBe(true);
+    expect(await inTenant(0, tx => tx.select().from(calendarEvents))).toEqual([]);
+    await drain(); expect(await outbox()).toEqual([]);
+  });
+
+  it("reports and removes an undeliverable malformed deletion without calling Google", async () => {
+    await inTenant(0, tx => tx.insert(calendarSyncOutbox).values({ householdId: fixtures[0].householdId, connectionId: fixtures[0].connectionId, operation: "delete", payloadJson: "not json" }));
+    await drain();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(await outbox()).toEqual([]);
+    expect(await inTenant(0, tx => buildCalendarSyncStatus(tx, fixtures[0]))).toMatchObject({ run: { status: "failed", error: expect.stringContaining("no valid destination") } });
   });
 
   it("waits for an in-flight first export before deciding which Google event to delete", async () => {

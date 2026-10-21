@@ -1221,7 +1221,7 @@ export function calendarRoutes(db: Database, env: Env) {
     const auth = c.get("auth")!;
     const id = c.req.param("id");
     const recurringScope = c.req.query("recurringScope");
-    return db.transaction(async (transaction) => {
+    const result = await db.transaction(async (transaction) => {
       const tx = transaction as unknown as Database;
       const [existing] = await tx.select().from(calendarEvents)
         .where(and(eq(calendarEvents.id, id), eq(calendarEvents.householdId, auth.householdId)))
@@ -1243,14 +1243,25 @@ export function calendarRoutes(db: Database, env: Env) {
       const connections = await queueEventGoogleDeletions(tx, events, ctx);
       await tx.delete(calendarEvents).where(and(inArray(calendarEvents.id, events.map(e => e.id)), eq(calendarEvents.householdId, auth.householdId)));
       if (series) await tx.delete(recurringRules).where(and(eq(recurringRules.id, existing.recurringRuleId!), eq(recurringRules.householdId, auth.householdId)));
-      for (const connectionId of connections) {
-        await markSyncQueued(tx, connectionId);
-        await enqueueSyncJob(env.REDIS_URL ?? "redis://localhost:6379", "google.calendar.push", {
-          connectionId, householdId: auth.householdId, userId: auth.userId,
-        });
-      }
-      return c.json({ ok: true, googleDeletionQueued: connections.length > 0 });
+      for (const connectionId of connections) await markSyncQueued(tx, connectionId);
+      return { connections };
     });
+    if (result instanceof Response) return result;
+    const wakeWorker = async () => {
+      for (const connectionId of result.connections) {
+        try {
+          await enqueueSyncJob(env.REDIS_URL ?? "redis://localhost:6379", "google.calendar.push", {
+            connectionId, householdId: auth.householdId, userId: auth.userId,
+          });
+        } catch {
+          console.error("Calendar delete wakeup failed; the durable push scan will retry.");
+        }
+      }
+    };
+    const afterCommit = c.get("afterTenantCommit");
+    if (afterCommit) afterCommit.push(wakeWorker);
+    else await wakeWorker();
+    return c.json({ ok: true, googleDeletionQueued: result.connections.length > 0 });
   });
 
   app.get("/event-categories", async (c) => {
