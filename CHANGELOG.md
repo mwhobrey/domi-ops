@@ -8,6 +8,12 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+## [0.11.3] - 2026-10-21
+
+Upgrades from v0.11.2 require migration `0102_calendar_delete_outbox` and a coordinated
+API/worker upgrade. Use the documented deployment scripts; no new dependencies or
+environment variables are required. Existing Withings readings need no re-import.
+
 ### Fixed
 
 - Scheduled vitals checks combine nearby Withings cuff and watch entries, including
