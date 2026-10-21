@@ -13,6 +13,7 @@ export function HealthRow({
   highlighted,
   rowRef,
   overdue = false,
+  wrapSubtitle = false,
 }: {
   title: string;
   subtitle?: string;
@@ -21,6 +22,7 @@ export function HealthRow({
   highlighted?: boolean;
   rowRef?: React.Ref<HTMLDivElement>;
   overdue?: boolean;
+  wrapSubtitle?: boolean;
 }) {
   return (
     <div ref={rowRef}>
@@ -37,7 +39,7 @@ export function HealthRow({
           <div className="min-w-0 text-left">
             <p className="truncate font-medium text-[var(--color-text)]">{title}</p>
             {subtitle || overdue ? (
-              <p className="truncate text-sm text-[var(--color-text-muted)]">
+              <p className={cn("text-sm text-[var(--color-text-muted)]", wrapSubtitle ? "whitespace-normal break-words" : "truncate")}>
                 {overdue ? (
                   <span className="font-medium text-[var(--color-danger)]">
                     Overdue{subtitle ? " · " : ""}

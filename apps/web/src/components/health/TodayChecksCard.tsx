@@ -6,6 +6,7 @@ import { Badge, Button, Card, CardBody, SectionHeader } from "../ui";
 import { HealthRow } from "./TodayTabRows";
 import {
   checkRowValues,
+  checkSessionValues,
   checkSlotBadge,
   describeOffer,
   isCheckSlotPending,
@@ -56,7 +57,8 @@ function CheckSlotLine({ row, actions, nested = false }: { row: CheckSlotRow; ac
   const pending = isCheckSlotPending(row.slot.status);
   const badge = checkSlotBadge(row.slot.status);
   const eventById = new Map(actions.events.map((e) => [e.id, e]));
-  const values = checkRowValues(row.slot.eventId ? eventById.get(row.slot.eventId) : undefined);
+  const values = checkSessionValues(row.slot) ?? checkRowValues(row.slot.eventId ? eventById.get(row.slot.eventId) : undefined);
+  const readingEvents = row.slot.readingEvents ?? [];
   const highlighted = actions.highlightKeys.has(key);
   const busy = actions.busyKey === key;
   const allowed = actions.canAct(row);
@@ -70,10 +72,12 @@ function CheckSlotLine({ row, actions, nested = false }: { row: CheckSlotRow; ac
       highlighted={highlighted}
       overdue={row.slot.status === "overdue"}
       title={row.check.name}
+      wrapSubtitle={readingEvents.length > 0}
       subtitle={[
         // Inside a group the time is in the group's header.
         nested ? null : formatSlotTime(row.slot.scheduledAt),
         values,
+        pending && readingEvents.length > 0 ? "waiting for remaining readings" : null,
         row.slot.source === "event" ? "counted from a reading" : null,
       ]
         .filter(Boolean)
@@ -104,6 +108,23 @@ function CheckSlotLine({ row, actions, nested = false }: { row: CheckSlotRow; ac
         </div>
       }
     />
+    {readingEvents.length > 1 ? (
+      <details className="ml-3 text-sm text-[var(--color-text-muted)]">
+        <summary className="cursor-pointer">View all {readingEvents.length} readings</summary>
+        <ul className="mt-2 space-y-1">
+          {readingEvents.map((event) => (
+            <li key={event.eventId} className="flex flex-wrap items-center justify-between gap-2">
+              <span>{describeOffer(event, formatSlotTime)}</span>
+              {allowed && eventById.get(event.eventId)?.canEdit !== false && eventById.has(event.eventId) ? (
+                <Button size="sm" variant="secondary" disabled={busy} onClick={() => actions.onEdit(eventById.get(event.eventId)!)}>
+                  Edit reading
+                </Button>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      </details>
+    ) : null}
     {offer ? (
       <div
         className="ml-3 flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius-lg)] border border-dashed border-[var(--color-accent)]/50 bg-[var(--color-accent-subtle)] px-3 py-2 text-sm"

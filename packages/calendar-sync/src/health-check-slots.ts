@@ -130,6 +130,8 @@ export type CheckSlotEvent = {
   startedAt: Date | null;
   /** For vitals: the metrics this entry actually holds (e.g. `blood_pressure_systolic`). */
   metrics?: readonly string[];
+  /** Provenance from the Withings measure-group table, not entry text. */
+  withings?: boolean;
 };
 
 export type CheckForSlots = {
@@ -249,7 +251,64 @@ export type SlotResult = {
   logId: string | null;
   /** The completing entry, whether linked by a log or inferred. */
   eventId: string | null;
+  /** Original entries contributing to a Withings session, including an incomplete session. */
+  eventIds?: string[];
 };
+
+/** Group complementary device entries around fixed anchors; never grow a session by chaining. */
+function withingsSessions(input: {
+  check: CheckForSlots;
+  slotTimes: number[];
+  logs: Map<number, CheckSlotLog>;
+  events: readonly CheckSlotEvent[];
+  inferred: Map<number, CheckSlotEvent>;
+  tolerance: number;
+}): Map<number, CheckSlotEvent[]> {
+  const sessions = new Map<number, CheckSlotEvent[]>();
+  const byId = new Map(input.events.map((e) => [e.id, e]));
+  const reserved = new Set<string>();
+  for (const log of input.logs.values()) if (log.healthEventId) reserved.add(log.healthEventId);
+  for (const [slot, event] of input.inferred) {
+    sessions.set(slot, [event]);
+    reserved.add(event.id);
+  }
+  for (const [slot, log] of input.logs) {
+    const event = log.status === "done" && log.healthEventId ? byId.get(log.healthEventId) : undefined;
+    if (event) sessions.set(slot, [event]);
+  }
+  const slots = input.slotTimes.filter((t) => !input.logs.has(t) || input.logs.get(t)!.status === "done");
+  const required = input.check.requiredMetrics ?? [];
+  const candidates = input.events.filter((e) =>
+    e.withings && !reserved.has(e.id) && e.startedAt && e.type === "vitals" &&
+    e.memberId === input.check.memberId && (e.metrics?.length ?? 0) > 0 &&
+    e.metrics!.includes("blood_pressure_systolic") === e.metrics!.includes("blood_pressure_diastolic") &&
+    (required.length === 0 || required.some((m) => e.metrics!.includes(m))),
+  );
+  const add = (slot: number, event: CheckSlotEvent) => {
+    sessions.set(slot, [...(sessions.get(slot) ?? []), event]);
+    reserved.add(event.id);
+  };
+  // First reserve each in-window entry for its nearest slot, even if it only has some metrics.
+  for (const event of candidates) {
+    const nearest = slots.filter((t) => Math.abs(t - event.startedAt!.getTime()) <= input.tolerance)
+      .sort((a, b) => Math.abs(a - event.startedAt!.getTime()) - Math.abs(b - event.startedAt!.getTime()) || a - b)[0];
+    if (nearest !== undefined) add(nearest, event);
+  }
+  const anchors = new Map([...sessions].map(([slot, events]) => [slot, events.filter((e) => e.startedAt)]));
+  // Entries outside the slot window can supplement a nearby anchored session. They cannot
+  // become new anchors: a stream of readings must not extend a morning check into the afternoon.
+  for (const event of candidates) {
+    if (reserved.has(event.id)) continue;
+    const nearest = slots.filter((t) => (anchors.get(t) ?? []).some((anchor) =>
+      Math.abs(anchor.startedAt!.getTime() - event.startedAt!.getTime()) <= input.tolerance,
+    )).sort((a, b) => Math.abs(a - event.startedAt!.getTime()) - Math.abs(b - event.startedAt!.getTime()) || a - b)[0];
+    if (nearest !== undefined) add(nearest, event);
+  }
+  for (const events of sessions.values()) events.sort((a, b) =>
+    (a.startedAt?.getTime() ?? 0) - (b.startedAt?.getTime() ?? 0) || a.id.localeCompare(b.id),
+  );
+  return sessions;
+}
 
 export function minuteMs(at: Date): number {
   return Math.floor(at.getTime() / 60_000) * 60_000;
@@ -273,7 +332,8 @@ export function clockSlotStatus(
  * 2. Entries already linked to *any* slot of this check are spoken for, so they are never also
  *    used to infer a different slot.
  * 3. Of the rest, qualifying entries within the tolerance window complete unanswered slots,
- *    closest first, one entry per slot.
+ *    closest first, one entry per slot. Fixed-time Withings sessions instead assign each imported
+ *    entry to its nearest slot and combine their metrics, including supplements to logged slots.
  * 4. Whatever is left is upcoming, due or overdue by the clock.
  *
  * `slots` decides which slots exist (so pauses, schedule edits and date bounds are the caller's
@@ -287,6 +347,8 @@ export function computeSlotStatuses(input: {
   events: readonly CheckSlotEvent[];
   now: Date;
   toleranceMs?: number;
+  /** Interval schedules are driven by individual readings, rather than fixed sessions. */
+  combineWithings?: boolean;
 }): SlotResult[] {
   const tolerance = input.toleranceMs ?? CHECK_SLOT_TOLERANCE_MS;
 
@@ -298,20 +360,31 @@ export function computeSlotStatuses(input: {
   );
 
   const unanswered = slotTimes.filter((t) => !logBySlot.has(t)).map((t) => new Date(t));
+  const combineWithings = input.check.eventType === "vitals" && input.combineWithings !== false;
   const candidates = input.events.filter(
-    (e) => !linkedEventIds.has(e.id) && eventQualifiesForCheck(e, input.check),
+    (e) => !linkedEventIds.has(e.id) && !(combineWithings && e.withings) && eventQualifiesForCheck(e, input.check),
   );
   const inferred = matchEventsToSlots({ slots: unanswered, events: candidates, toleranceMs: tolerance });
+  const sessions = combineWithings
+    ? withingsSessions({ check: input.check, slotTimes, logs: logBySlot, events: input.events, inferred, tolerance })
+    : new Map<number, CheckSlotEvent[]>();
 
   return slotTimes.map((t): SlotResult => {
     const scheduledAt = new Date(t);
     const log = logBySlot.get(t);
+    const session = sessions.get(t) ?? [];
+    const contributions = session.some((e) => e.withings) ? { eventIds: session.map((e) => e.id) } : {};
     if (log) {
-      return { scheduledAt, status: log.status, source: "log", logId: log.id, eventId: log.healthEventId };
+      return { scheduledAt, status: log.status, source: "log", logId: log.id, eventId: log.healthEventId, ...contributions };
     }
     const event = inferred.get(t);
-    if (event) return { scheduledAt, status: "done", source: "event", logId: null, eventId: event.id };
+    if (event) return { scheduledAt, status: "done", source: "event", logId: null, eventId: event.id, ...contributions };
+    if (session.length > 0 && eventQualifiesForCheck({
+      ...session[0]!, metrics: session.flatMap((e) => [...(e.metrics ?? [])]),
+    }, input.check)) {
+      return { scheduledAt, status: "done", source: "event", logId: null, eventId: session[0]!.id, ...contributions };
+    }
 
-    return { scheduledAt, status: clockSlotStatus(scheduledAt, input.now, tolerance), source: null, logId: null, eventId: null };
+    return { scheduledAt, status: clockSlotStatus(scheduledAt, input.now, tolerance), source: null, logId: null, eventId: null, ...contributions };
   });
 }

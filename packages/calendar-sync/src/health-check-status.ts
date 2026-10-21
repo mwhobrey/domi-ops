@@ -6,6 +6,7 @@ import {
   healthCheckPauses,
   healthEvents,
   healthVitalsReadings,
+  healthWithingsMeasureGroups,
 } from "@domi-ops/db";
 import type { healthChecks } from "@domi-ops/db";
 import { and, between, eq, inArray } from "drizzle-orm";
@@ -68,7 +69,7 @@ type SlotData = {
 
 /**
  * The queries behind `loadCheckSlotStatuses` and `loadCheckIntervalLogs`: pauses, logs (and every
- * link to the entries considered), the nearby entries and the vitals metrics they hold. Five
+ * link to the entries considered), nearby entries, their metrics and Withings provenance. Six
  * queries however many checks there are. All `checks` must belong to one household.
  */
 async function gatherSlotData(
@@ -100,7 +101,7 @@ async function gatherSlotData(
         .filter((c) => c.scheduleKind === "interval")
         .map((c) => parseIntervalSchedule(c.scheduleJson)?.everyMinutes ?? 0),
     ) * 60_000;
-  const padding = input.paddingMs ?? CHECK_SLOT_TOLERANCE_MS;
+  const padding = input.paddingMs ?? CHECK_SLOT_TOLERANCE_MS * 2;
   const windowStart = new Date(rangeStart.getTime() - padding - intervalLookbackMs);
   const windowEnd = new Date(rangeEnd.getTime() + padding);
   const checkIds = checks.map((c) => c.id);
@@ -175,6 +176,13 @@ async function gatherSlotData(
     startedAt: e.startedAt,
     metrics: metricsByEvent.get(e.id),
   }));
+  if (vitalsIds.length > 0) {
+    const imported = await db.select({ eventId: healthWithingsMeasureGroups.eventId })
+      .from(healthWithingsMeasureGroups)
+      .where(and(eq(healthWithingsMeasureGroups.householdId, householdId), inArray(healthWithingsMeasureGroups.eventId, vitalsIds)));
+    const importedIds = new Set(imported.map((e) => e.eventId));
+    for (const event of slotEvents) event.withings = importedIds.has(event.id);
+  }
   const eventTime = new Map(eventRows.map((e) => [e.id, e.startedAt] as const));
 
   return { dates, rangeStart, rangeEnd, today, pausesByCheck, allLogs, slotEvents, eventTime };
@@ -242,8 +250,12 @@ export async function loadCheckSlotStatuses(
   const { checks, timeZone, now } = input;
   if (checks.length === 0) return result;
 
-  const data = await gatherSlotData(db, input);
+  // Include neighboring days when assigning sessions, so querying one day or several gives the
+  // same ownership for readings around midnight.
+  const data = await gatherSlotData(db, { ...input, from: addDaysIso(input.from, -1), to: addDaysIso(input.to, 1) });
   const { dates, rangeStart, rangeEnd, today, pausesByCheck, allLogs, slotEvents } = data;
+  const requestedStart = zonedLocalToUtc(input.from, "00:00", timeZone);
+  const requestedEnd = zonedLocalToUtc(addDaysIso(input.to, 1), "00:00", timeZone);
 
   for (const check of checks) {
     const forCheck = slotCheckFor(check, env);
@@ -302,7 +314,8 @@ export async function loadCheckSlotStatuses(
         logs,
         events: slotEvents.filter((e) => e.memberId === check.memberId && e.type === check.eventType),
         now,
-      }),
+        combineWithings: check.scheduleKind !== "interval",
+      }).filter((s) => s.scheduledAt >= requestedStart && s.scheduledAt < requestedEnd),
     );
   }
   return result;
@@ -365,7 +378,10 @@ export async function loadAttachSuggestions(
   for (const check of eligible) {
     const spokenFor = new Set<string>();
     for (const l of data.allLogs) if (l.checkId === check.id && l.healthEventId) spokenFor.add(l.healthEventId);
-    for (const s of wide.get(check.id) ?? []) if (s.eventId) spokenFor.add(s.eventId);
+    for (const s of wide.get(check.id) ?? []) {
+      if (s.eventId) spokenFor.add(s.eventId);
+      for (const id of s.eventIds ?? []) spokenFor.add(id);
+    }
     const forCheck = slotCheckFor(check, env);
     candidatesByCheck.set(
       check.id,

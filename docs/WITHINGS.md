@@ -10,9 +10,13 @@ when the cuff recorded it, pulse. A Withings watch (ScanWatch) adds blood oxygen
 spot heart rate as `vitals` entries, and its workouts as `exercise` entries. Its daily steps and activity
 and its sleep are kept in their own tables and charted on the Health Trends tab. One way only: Withings to Domi Ops.
 
-There is no matcher for scheduled checks. A slot counts as answered when a reading falls inside its
-30 minute window ([HEALTH_CHECKS.md](./HEALTH_CHECKS.md)), and an imported reading is a reading, so a
-scheduled BP check fills in by itself and an unscheduled one is simply an entry in the log.
+Scheduled vitals checks combine complementary cuff and watch entries in a bounded measurement session.
+A reading within 30 minutes of a check anchors the session; other imports within 30 minutes of that
+anchor contribute too. An explicitly logged entry also anchors its slot, so later imports can supplement
+an already logged check. The combined metrics must cover the template for automatic completion.
+Today shows an average of complete BP pairs and preserves all originals with timestamps. See
+[HEALTH_CHECKS.md](./HEALTH_CHECKS.md) for assignment, privacy and display rules. Unscheduled readings
+remain normal entries in the log. Existing imports participate without a new history import.
 
 ## Withings+ for new accounts
 
@@ -126,8 +130,9 @@ configured on the server (`GET /api/health/withings` says `enabled: false`) or t
   transaction (`OWN_CONTEXT_JOBS` in the worker): the lease, the refresh, each page and the outcome are each
   committed separately, and Withings is only called between them. A worker killed mid-sync (a deploy) loses
   at most the page it was importing, never a token it had already been given.
-- **Readings that miss a scheduled check.** A reading fills a slot on its own within 30 minutes. One taken
-  earlier or later is offered inline on the nearest open check (see "attach prompt" in
+- **Readings that miss a scheduled check.** A qualifying reading fills a slot within 30 minutes;
+  complementary imports can also contribute to an anchored session as described above. An otherwise
+  unassigned qualifying reading is offered inline on the nearest open check (see "attach prompt" in
   [HEALTH_CHECKS.md](./HEALTH_CHECKS.md)): the person taps Attach or Not this one.
 - **What a group becomes.** Each Withings measure group is one `vitals` entry titled "Blood pressure"
   (it has systolic and diastolic) or "Vitals". Measure types kept: 9/10 diastolic/systolic, 11 pulse,

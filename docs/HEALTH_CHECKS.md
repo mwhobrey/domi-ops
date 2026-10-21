@@ -20,6 +20,30 @@ Logging a check writes a normal `health_events` row. A "slot" (one scheduled tim
 answered when there is a `health_check_logs` row for it or a matching reading inside the
 tolerance window (30 minutes). Deleting or re-typing the reading reopens the slot.
 
+### Withings readings from more than one device
+
+Fixed-time vitals checks can use several original entries in one measurement session. A cuff's BP/pulse
+and a watch's temperature/SpO₂ need not be in the same Withings measure group. An imported entry within
+30 minutes of its nearest check time anchors that session. Other Withings entries within 30 minutes of
+an anchor contribute to it, including imports arriving after the slot was logged. An explicitly linked
+entry also anchors its slot. Supplementary entries never become new anchors, so sessions cannot grow
+across the day through a chain of readings. Entries already linked to another slot remain reserved.
+
+The combined metrics must cover the check's template before an inferred session is done. A partial
+session shows the readings already available and stays pending; deliberate logs, skips and misses retain
+their existing precedence. Each imported entry contributes to only one slot per check, with nearest-time
+assignment and ties going to the earlier slot. Neighboring days are considered when assigning entries
+around midnight. Interval checks retain their individual-reading behavior.
+
+Today shows the arithmetic mean of complete BP pairs, rounded to whole mmHg and labeled with the number
+of BP readings. Heart rate uses the latest available pulse recorded alongside a complete BP pair,
+falling back to the latest other heart-rate reading when no BP entry has a pulse. Other metrics show
+their latest value. **View all readings** exposes each original entry
+and its timestamp; entries in a completed session also get the **Counts for** label in the log. Original
+events and values are never merged or replaced by an average. Existing imported history participates
+immediately without re-importing. Entry IDs, timestamps and values are filtered by the viewer's existing
+health permissions before they are returned or averaged.
+
 ### Slot statuses
 
 `done`, `skipped`, `missed` (past the tolerance with no answer), `due`, `overdue`, `upcoming`.

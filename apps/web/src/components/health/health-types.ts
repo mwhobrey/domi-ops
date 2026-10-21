@@ -411,6 +411,9 @@ export interface CheckSlot {
   logId: string | null;
   /** The completing entry, only when the viewer may open it. */
   eventId: string | null;
+  /** All visible entries in this check session. Original measurements remain separate. */
+  eventIds?: string[];
+  readingEvents?: CheckSlotSuggestion[];
   /**
    * A reading near this unanswered slot that was not close enough to count by itself. The person can
    * attach it to the slot; it is only ever a reading the viewer may open.

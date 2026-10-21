@@ -210,22 +210,30 @@ export function healthCheckRoutes(db: Database, env: Env) {
       const linkedIds = [
         ...new Set([
           ...[...statuses.values()].flat().map((r) => r.eventId).filter((id): id is string => id != null),
+          ...[...statuses.values()].flat().flatMap((r) => r.eventIds ?? []),
           ...[...suggestions.values()].flatMap((bySlot) => [...bySlot.values()].map((s) => s.eventId)),
         ]),
       ];
       const openable = new Set<string>();
+      const eventTimes = new Map<string, Date | null>();
       if (linkedIds.length > 0) {
         const visible = await db
-          .select({ id: healthEvents.id })
+          .select({ id: healthEvents.id, startedAt: healthEvents.startedAt })
           .from(healthEvents)
           .where(and(inArray(healthEvents.id, linkedIds), healthEventVisibleWhere(db, auth)));
-        for (const v of visible) openable.add(v.id);
+        for (const v of visible) {
+          openable.add(v.id);
+          eventTimes.set(v.id, v.startedAt);
+        }
       }
       // What each offered reading says, so the prompt can show it ("BP 128/82") without a second request.
       const suggestedIds = [
         ...new Set([...suggestions.values()].flatMap((bySlot) => [...bySlot.values()].map((s) => s.eventId))),
       ].filter((id) => openable.has(id));
-      const suggestedReadings = await loadVitalsReadingsForEvents(db, env, suggestedIds);
+      const suggestedReadings = await loadVitalsReadingsForEvents(db, env, [...new Set([
+        ...suggestedIds,
+        ...[...statuses.values()].flat().flatMap((r) => r.eventIds ?? []).filter((id) => openable.has(id)),
+      ])]);
 
       return c.json({
         timeZone,
@@ -241,6 +249,12 @@ export function healthCheckRoutes(db: Database, env: Env) {
             source: r.source,
             logId: r.logId,
             eventId: r.eventId && openable.has(r.eventId) ? r.eventId : null,
+            eventIds: (r.eventIds ?? (r.eventId ? [r.eventId] : [])).filter((id) => openable.has(id)),
+            readingEvents: (r.eventIds ?? []).filter((id) => openable.has(id) && eventTimes.get(id)).map((id) => ({
+              eventId: id,
+              startedAt: eventTimes.get(id)!.toISOString(),
+              readings: suggestedReadings.get(id) ?? [],
+            })),
             suggestion: (() => {
               const s = suggestions.get(check.id)?.get(r.scheduledAt.getTime());
               if (!s || !openable.has(s.eventId)) return null;

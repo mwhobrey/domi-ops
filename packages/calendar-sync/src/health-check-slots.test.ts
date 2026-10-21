@@ -100,6 +100,69 @@ describe("an unlinked entry completes the slot it is near", () => {
   });
 });
 
+describe("Withings check sessions", () => {
+  const combined = { ...bp, requiredMetrics: [...bp.requiredMetrics!, "heart_rate", "temperature", "blood_oxygen"] };
+  const cuff = (id: string, time: string) => reading(id, `2026-10-02T${time}:00Z`, { withings: true });
+  const scan = reading("scan", "2026-10-02T08:48:00Z", { withings: true, metrics: ["temperature", "blood_oxygen"] });
+  const events = [cuff("bp1", "08:20"), cuff("bp2", "08:45"), cuff("bp3", "08:46"), scan];
+  const compute = (over: Partial<Parameters<typeof computeSlotStatuses>[0]> = {}) => computeSlotStatuses({
+    check: combined, slots: day, logs: [], events, now: at("2026-10-02T10:00:00Z"), ...over,
+  });
+
+  it("combines cuff and ScanWatch readings from the reported morning session", () => {
+    const result = compute();
+    expect(result[0]).toMatchObject({ status: "done", eventIds: ["bp1", "bp2", "bp3", "scan"] });
+    expect(result[1]).toMatchObject({ status: "upcoming", eventId: null });
+    expect(compute({ events: [...events].reverse() })).toEqual(result);
+  });
+
+  it("adds later imports to a slot already explicitly logged with temperature and SpO2", () => {
+    expect(compute({ logs: [{ id: "log", scheduledAt: day[0]!, status: "done", healthEventId: "scan" }] })[0])
+      .toMatchObject({ status: "done", source: "log", eventId: "scan", eventIds: ["bp1", "bp2", "bp3", "scan"] });
+  });
+
+  it("shows partial contributions and reopens inferred completion when a device reading is removed", () => {
+    expect(compute({ events: [events[0]!] })[0]).toMatchObject({ status: "overdue", eventId: null, eventIds: ["bp1"] });
+    expect(compute({ events: events.filter((e) => e.id !== "scan") })[0]!.status).toBe("overdue");
+    expect(compute({ events: events.map((e) => e.id === "scan" ? { ...e, metrics: ["temperature"] } : e) })[0]!.status).toBe("overdue");
+  });
+
+  it("does not chain readings across the day or combine different people and entry types", () => {
+    const late = { ...scan, startedAt: at("2026-10-02T09:12:00Z") };
+    expect(compute({ events: [...events.filter((e) => e.id !== "scan"), late] })[0]!.status).toBe("overdue");
+    for (const wrong of [{ ...scan, memberId: "other" }, { ...scan, type: "pain" }, { ...scan, withings: false }]) {
+      expect(compute({ events: [events[0]!, wrong] })[0]!.status).toBe("overdue");
+    }
+  });
+
+  it("preserves deliberate skips and entries reserved by another slot, including outside the range", () => {
+    expect(compute({ logs: [{ id: "skip", scheduledAt: day[0]!, status: "skipped", healthEventId: null }] })[0])
+      .toMatchObject({ status: "skipped", eventId: null });
+    expect(compute({ logs: [{ id: "elsewhere", scheduledAt: at("2026-10-03T08:00:00Z"), status: "done", healthEventId: "scan" }] })[0]!.status)
+      .toBe("overdue");
+  });
+
+  it("reserves each contributing entry for one adjacent slot", () => {
+    const result = compute({ slots: [day[0]!, at("2026-10-02T08:50:00Z")] });
+    const ids = result.flatMap((s) => s.eventIds ?? []);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(result[0]!.status).toBe("overdue");
+    expect(result[1]!.status).toBe("done");
+  });
+
+  it("does not spill repeated complete BP readings onto a farther adjacent slot", () => {
+    const result = compute({ check: bp, slots: [day[0]!, at("2026-10-02T08:40:00Z")],
+      events: [cuff("a", "08:05"), cuff("b", "08:10"), cuff("c", "08:15")],
+    });
+    expect(result[0]).toMatchObject({ status: "done", eventIds: ["a", "b", "c"] });
+    expect(result[1]!.status).toBe("overdue");
+  });
+
+  it("keeps interval matching unchanged", () => {
+    expect(compute({ combineWithings: false })[0]!.status).toBe("overdue");
+  });
+});
+
 describe("one entry, one slot", () => {
   it("two entries near one slot: the closest completes it, the other does not", () => {
     const r = computeSlotStatuses({

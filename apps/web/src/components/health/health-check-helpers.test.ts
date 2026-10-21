@@ -4,6 +4,7 @@ import {
   checkLogSheet,
   describeOffer,
   checkRowValues,
+  checkSessionValues,
   checkSlotBadge,
   checkSlotRowsForMember,
   findDeepLinkedRow,
@@ -58,6 +59,65 @@ describe("slotCountsByEvent", () => {
   it("ignores slots with no entry, and checks it does not know", () => {
     const slots = new Map([["gone", [slot("12:00", "done", { eventId: "e9" })]]]);
     expect(slotCountsByEvent([check()], slots, fmt).size).toBe(0);
+  });
+
+  it("labels every entry in a completed session, but never claims a partial session is done", () => {
+    const slots = new Map([["c1", [
+      slot("08:00", "done", { eventId: "scan", eventIds: ["bp1", "bp2", "scan"] }),
+      slot("12:00", "due", { eventIds: ["partial"] }),
+    ]]]);
+    expect([...slotCountsByEvent([check()], slots, fmt).keys()]).toEqual(["bp1", "bp2", "scan"]);
+  });
+});
+
+describe("checkSessionValues", () => {
+  const cuff = (eventId: string, time: string, sys: number, dia: number) => ({
+    eventId, startedAt: `2026-10-02T${time}:00Z`, readings: [
+      { metric: "blood_pressure_systolic" as const, value: sys, unit: "mmHg" },
+      { metric: "blood_pressure_diastolic" as const, value: dia, unit: "mmHg" },
+    ],
+  });
+
+  it("averages all complete BP pairs while keeping the originals and latest other metrics", () => {
+    const events = [cuff("bp1", "08:20", 120, 80), cuff("bp2", "08:45", 126, 84), cuff("bp3", "08:46", 114, 76), {
+      eventId: "scan", startedAt: "2026-10-02T08:48:00Z", readings: [
+        { metric: "temperature" as const, value: 98.4, unit: "°F" },
+        { metric: "blood_oxygen" as const, value: 97, unit: "%" },
+      ],
+    }];
+    const before = JSON.stringify(events);
+    expect(checkSessionValues(slot("08:00", "done", { readingEvents: events }))).toBe("BP avg 120/80 (3 readings) · Temp 98.4°F · SpO₂ 97%");
+    expect(JSON.stringify(events)).toBe(before);
+    expect(checkSessionValues(slot("08:00", "done", { readingEvents: [...events].reverse() }))).toBe(checkSessionValues(slot("08:00", "done", { readingEvents: events })));
+  });
+
+  it("does not double count a repeated event or turn one pair into an average", () => {
+    const event = cuff("bp", "08:20", 120, 80);
+    expect(checkSessionValues(slot("08:00", "done", { readingEvents: [event, event] }))).toBe("BP 120/80");
+    expect(checkSessionValues(slot("08:00"))).toBeNull();
+  });
+
+  it("prefers the latest pulse recorded with BP over a later watch pulse", () => {
+    const withPulse = (id: string, time: string, value: number) => {
+      const event = cuff(id, time, 120, 80);
+      return { ...event, readings: [...event.readings, { metric: "heart_rate" as const, value, unit: "bpm" }] };
+    };
+    const events = [withPulse("bp1", "08:20", 65), withPulse("bp2", "08:46", 70), {
+      eventId: "watch", startedAt: "2026-10-02T08:48:00Z",
+      readings: [{ metric: "heart_rate" as const, value: 80, unit: "bpm" }],
+    }];
+    const value = checkSessionValues(slot("08:00", "done", { readingEvents: events }));
+    expect(value).toBe("BP avg 120/80 (2 readings) · HR 70");
+    expect(checkSessionValues(slot("08:00", "done", { readingEvents: [...events].reverse() }))).toBe(value);
+    expect(events[2]!.readings[0]!.value).toBe(80);
+  });
+
+  it("uses the watch pulse when none of the BP entries contains a pulse", () => {
+    const events = [cuff("bp", "08:20", 120, 80), {
+      eventId: "watch", startedAt: "2026-10-02T08:48:00Z",
+      readings: [{ metric: "heart_rate" as const, value: 80, unit: "bpm" }],
+    }];
+    expect(checkSessionValues(slot("08:00", "done", { readingEvents: events }))).toBe("BP 120/80 · HR 80");
   });
 });
 
