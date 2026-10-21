@@ -184,13 +184,44 @@ export function slotCountsByEvent(
   const out = new Map<string, string[]>();
   for (const c of checks) {
     for (const s of slotsByCheck.get(c.id) ?? []) {
-      if (!s.eventId) continue;
-      const labels = out.get(s.eventId) ?? [];
-      labels.push(`${c.name} · ${formatTime(s.scheduledAt)}`);
-      out.set(s.eventId, labels);
+      if (s.status !== "done") continue;
+      for (const id of new Set(s.eventIds ?? (s.eventId ? [s.eventId] : []))) {
+        const labels = out.get(id) ?? [];
+        labels.push(`${c.name} · ${formatTime(s.scheduledAt)}`);
+        out.set(id, labels);
+      }
     }
   }
   return out;
+}
+
+/** Average complete BP pairs for display; all original entries remain available underneath. */
+export function checkSessionValues(slot: CheckSlot): string | null {
+  const readings = new Map<string, CheckSlotSuggestion["readings"][number]>();
+  const events = [...new Map((slot.readingEvents ?? []).map((e) => [e.eventId, e])).values()].sort((a, b) =>
+    Date.parse(a.startedAt) - Date.parse(b.startedAt) || a.eventId.localeCompare(b.eventId),
+  );
+  const pairs: { systolic: number; diastolic: number }[] = [];
+  let cuffPulse: CheckSlotSuggestion["readings"][number] | undefined;
+  for (const event of events) {
+    const sys = event.readings.find((r) => r.metric === "blood_pressure_systolic");
+    const dia = event.readings.find((r) => r.metric === "blood_pressure_diastolic");
+    if (sys?.unit === "mmHg" && dia?.unit === "mmHg" && Number.isFinite(sys.value) && Number.isFinite(dia.value)) {
+      pairs.push({ systolic: sys.value, diastolic: dia.value });
+      const pulse = event.readings.find((r) => r.metric === "heart_rate" && r.unit === "bpm" && Number.isFinite(r.value));
+      if (pulse) cuffPulse = pulse;
+    }
+  }
+  for (const event of events) for (const reading of event.readings) readings.set(reading.metric, reading);
+  if (cuffPulse) readings.set("heart_rate", cuffPulse);
+  if (pairs.length > 1) {
+    readings.delete("blood_pressure_systolic");
+    readings.delete("blood_pressure_diastolic");
+    const sys = Math.round(pairs.reduce((sum, p) => sum + p.systolic, 0) / pairs.length);
+    const dia = Math.round(pairs.reduce((sum, p) => sum + p.diastolic, 0) / pairs.length);
+    return [`BP avg ${sys}/${dia} (${pairs.length} readings)`, formatReadingsSummary([...readings.values()])].filter(Boolean).join(" · ");
+  }
+  return readings.size > 0 ? formatReadingsSummary([...readings.values()]) : null;
 }
 
 /** The entry that answered a done slot, if the viewer can edit it (a skipped or waiting slot has none). */

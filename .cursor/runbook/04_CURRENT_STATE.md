@@ -33,6 +33,15 @@
 
 ## What is working (implemented paths)
 
+- Fixed-time vitals checks group complementary Withings entries around a reading
+  within 30 minutes of the nearest slot, or an explicitly linked entry. Supplementary
+  imports must be within 30 minutes of an anchor and never extend the session through
+  chaining. Combined template metrics govern inferred completion; deliberate logs and
+  skips retain precedence. Today shows mean BP from complete pairs, prefers the latest
+  pulse recorded with BP (other pulse readings are a fallback), and shows original entries
+  with timestamps; visible contributors get Counts for labels. This is derived on read,
+  so existing imports need no backfill or migration. See `docs/HEALTH_CHECKS.md`.
+
 ### v0.11.2 release candidate
 
 Patch cut for the merged UI control and report-export fixes in PR #302. Root

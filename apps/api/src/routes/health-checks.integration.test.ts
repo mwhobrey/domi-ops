@@ -17,6 +17,7 @@ import {
   healthEvents,
   healthMemberAcl,
   healthVitalsReadings,
+  healthWithingsMeasureGroups,
   householdMembers,
   households,
   users,
@@ -1029,6 +1030,30 @@ maybeDescribe("health checks routes (integration)", () => {
       const asStranger = await slotsFor("stranger", check.id, `from=${PAST}&to=${PAST}`);
       expect(compact(asStranger.slots)).toEqual(["08:00 overdue", "12:00 done"]);
       expect(asStranger.slots[1]).toMatchObject({ source: "event", eventId: null });
+    });
+
+    it("returns every visible cuff/watch contribution, including imports after a partial explicit log", async () => {
+      const check = await makeBpCheck({ visibility: "household", template: { metrics: [...BP, "heart_rate", "temperature", "blood_oxygen"] } });
+      const scan = await readingAt(`${PAST}T08:48:00Z`, ["temperature", "blood_oxygen"]);
+      await call("mom", "POST", `/checks/${check.id}/log`, { scheduledAt: `${PAST}T08:00:00Z`, eventId: scan });
+      const ids: string[] = [];
+      for (const time of ["08:20", "08:45", "08:46"]) ids.push(await readingAt(`${PAST}T${time}:00Z`, [...BP, "heart_rate"]));
+      ids.push(scan);
+      await withHouseholdContext(baseDb, people.mom!.householdId, async (tx) => {
+        for (const id of ids) await tx.insert(healthWithingsMeasureGroups).values({
+          householdId: people.mom!.householdId, memberId: people.ally!.memberId,
+          withingsUserId: "check-session-test", grpid: randomUUID(), eventId: id,
+        });
+      });
+      for (const viewer of ["mom", "sitter"]) {
+        const result = await slotsFor(viewer, check.id, `from=${PAST}&to=${PAST}`);
+        expect(result.slots[0]).toMatchObject({ status: "done", source: "log", eventId: scan, eventIds: ids });
+        expect(result.slots[0].readingEvents.map((e: Json) => e.eventId)).toEqual(ids);
+        expect(result.slots[0].readingEvents[0].readings).toHaveLength(3);
+        expect(result.slots[1].suggestion).toBeNull();
+      }
+      const hidden = (await slotsFor("stranger", check.id, `from=${PAST}&to=${PAST}`)).slots[0];
+      expect(hidden).toMatchObject({ status: "done", eventId: null, eventIds: [], readingEvents: [] });
     });
 
     describe("offering a reading that did not count on its own (attach prompt)", () => {

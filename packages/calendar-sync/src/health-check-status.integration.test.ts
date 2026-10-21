@@ -10,6 +10,7 @@ import {
   healthChecks,
   healthEvents,
   healthVitalsReadings,
+  healthWithingsMeasureGroups,
   householdMembers,
   households,
   users,
@@ -90,6 +91,48 @@ maybeDescribe("loadCheckSlotStatuses (integration)", () => {
     return map.get(check.id)!;
   };
   const summary = (r: Awaited<ReturnType<typeof load>>) => r.map((s) => `${s.scheduledAt.toISOString().slice(11, 16)} ${s.status}`);
+
+  async function markWithings(eventId: string) {
+    await withHouseholdContext(db, householdId, (tx) => tx.insert(healthWithingsMeasureGroups).values({
+      householdId, memberId, withingsUserId: "check-session-test", grpid: randomUUID(), eventId,
+    }));
+  }
+
+  it("recognizes original Withings provenance and combines the reported cuff/watch session", async () => {
+    const check = await makeCheck({ templateJson: JSON.stringify({ metrics: [...BP_METRICS, "heart_rate", "temperature", "blood_oxygen"] }) });
+    const ids = [];
+    for (const time of ["08:20", "08:45", "08:46"]) {
+      const id = await makeEvent(`2026-10-02T${time}:00Z`, { metrics: [...BP_METRICS, "heart_rate"] });
+      await markWithings(id);
+      ids.push(id);
+    }
+    const scan = await makeEvent("2026-10-02T08:48:00Z", { metrics: ["temperature", "blood_oxygen"] });
+    await markWithings(scan);
+    ids.push(scan);
+    const result = await load(check, "2026-10-02", "2026-10-02", "2026-10-02T10:00:00Z");
+    expect(result[0]).toMatchObject({ status: "done", eventIds: ids });
+    await withHouseholdContext(db, householdId, (tx) => tx.insert(healthCheckLogs).values({
+      checkId: check.id, scheduledAt: at("2026-10-02T08:00:00Z"), status: "done", healthEventId: scan,
+    }));
+    expect((await load(check, "2026-10-02", "2026-10-02", "2026-10-02T10:00:00Z"))[0])
+      .toMatchObject({ source: "log", eventId: scan, eventIds: ids });
+  });
+
+  it("assigns a midnight session consistently for one-day and multi-day queries", async () => {
+    const check = await makeCheck({
+      scheduleJson: JSON.stringify({ times: ["00:15", "23:45"] }),
+      templateJson: JSON.stringify({ metrics: [...BP_METRICS, "temperature"] }),
+    });
+    const cuff = await makeEvent("2026-10-02T23:50:00Z");
+    const scan = await makeEvent("2026-10-03T00:05:00Z", { metrics: ["temperature"] });
+    await markWithings(cuff);
+    await markWithings(scan);
+    const whole = await load(check, "2026-10-02", "2026-10-03", "2026-10-03T10:00:00Z");
+    const second = await load(check, "2026-10-03", "2026-10-03", "2026-10-03T10:00:00Z");
+    expect(second).toEqual(whole.filter((s) => s.scheduledAt >= at("2026-10-03T00:00:00Z")));
+    const allIds = whole.flatMap((s) => s.eventIds ?? []);
+    expect(new Set(allIds).size).toBe(allIds.length);
+  });
 
   beforeAll(async () => {
     if (!TEST_URL) return;

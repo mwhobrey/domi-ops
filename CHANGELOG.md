@@ -10,6 +10,11 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Fixed
 
+- Scheduled vitals checks combine nearby Withings cuff and watch entries, including
+  readings imported after a check was logged. Today shows average BP with all original
+  readings and timestamps available, prefers pulse recorded with BP over watch pulse,
+  and the log labels each contributing entry.
+
 - Bidirectional Google Calendar deletion retains a durable, household-scoped outbox
   intent after the local event is removed; retries accept already-absent events and
   do not reimport pending deletions. Requires migration `0102_calendar_delete_outbox`

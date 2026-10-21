@@ -1,7 +1,7 @@
 /**
  * The per-type field template of a health check (e.g. which vitals metrics to prompt for), as it
  * is stored. Lives here, not in the API, because the reminder worker needs to read it too: a
- * vitals check only counts an unlinked reading that holds every metric the template names.
+ * vitals check requires every named metric, in one entry or a combined Withings session.
  * Validation of what a client sends stays in the API (`health-check-template.ts` there).
  */
 export type CheckTemplate = {
