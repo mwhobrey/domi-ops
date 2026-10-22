@@ -24,6 +24,7 @@ import { checkOperation } from "../mcp/access.js";
 import { mcpAccessEvents, mcpRequestLeases, mcpConnectionWindows, mcpHouseholdWindows, householdSubscriptions, pruneMcpMetadata } from "@domi-ops/db";
 import { shoppingItems, shoppingRecurring, chores, choresRecurring } from "@domi-ops/db";
 import { readTools } from "../mcp/read-tools.js";
+import { registerMcpAcceptanceCases } from "../mcp/acceptance-cases.js";
 
 const sideEffects = vi.hoisted(() => ({ enqueue: vi.fn(), notify: vi.fn() }));
 vi.mock("@domi-ops/calendar-sync", async (original) => ({ ...await original<typeof import("@domi-ops/calendar-sync")>(), enqueueSyncJob: sideEffects.enqueue, deliverUserNotification: sideEffects.notify }));
@@ -834,4 +835,5 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
     await expect(withMcpProviderContext(db, (tx) => tx.select().from(notes))).rejects.toThrow();
     expect(await db.select().from(oauthClient)).toHaveLength(0);
   });
+  registerMcpAcceptanceCases(() => ({ db, auth, env, origin, cookiePrefix, owner, stranger, colleague, child, ownNote, foreignNote, connect, begin, post, owned, domainSnapshot, sideEffects }));
 });

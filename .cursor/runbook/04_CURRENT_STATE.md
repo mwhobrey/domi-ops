@@ -1,5 +1,20 @@
 # Current state
 
+## MCP security acceptance (WHO-473; local, not deployed)
+
+- Single/self-hosted and shared/hosted restricted-role fixtures now exercise the
+  real application route, conflicting browser cookies, adult roles/stale roles,
+  pooled concurrent identities, note-error equivalence, hostile note instructions,
+  redacted application logs/audit, HTTP limits and saturated-pool deadlines.
+- Domain/notification/outbox snapshots and delivery spies remain unchanged;
+  production MCP bypasses browser tenant middleware and after-commit work.
+  Security metadata writes are permitted. No dependencies/schema/env changes.
+- Dedicated `test-mcp` CI job runs `scripts/test-mcp-auth.ps1 -UseSystemNode` with
+  ephemeral PostgreSQL/TLS. Default local runner retains mise. Ubuntu execution
+  awaits publication; actual clients/edge/privacy/dogfood/hosted pilot remain gates.
+- Evidence and boundaries: [MCP_SECURITY_ACCEPTANCE.md](../../docs/MCP_SECURITY_ACCEPTANCE.md).
+  Keep deployed MCP disabled until rollout gates pass.
+
 ## MCP native read tools (WHO-472; local, not deployed)
 
 - All five approved tools are registered. Discovery/context reflect current token
@@ -17,7 +32,8 @@
   `SESSION_SECRET` in every environment; initialization is lazy for disabled boot.
   No dependencies/schema/env changes.
 - Contracts/reproduction: [MCP_READ_TOOLS.md](../../docs/MCP_READ_TOOLS.md).
-  Broader WHO-473 isolation and later client/dogfood/hosted pilot gates remain.
+  WHO-473 synthetic isolation is implemented locally; later client/dogfood/hosted
+  pilot gates remain.
 
 ## MCP gateway (WHO-471; local, not deployed)
 

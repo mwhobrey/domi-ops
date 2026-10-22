@@ -165,8 +165,9 @@ It includes WHO-469–471 authorization/gateway regressions plus WHO-472:
 
 These are synthetic loopback TLS fixtures using real NOBYPASSRLS app/provider roles
 in both single and shared deployment modes. They do not establish live household,
-public edge, provider-account compatibility or production capacity. WHO-473 owns
-the broader adversarial authorization matrix; client/privacy acceptance, skill
+public edge, provider-account compatibility or production capacity. WHO-473 adds
+the [broader adversarial authorization matrix](MCP_SECURITY_ACCEPTANCE.md);
+client/privacy acceptance, skill
 behavior, self-host dogfood and the separate hosted pilot remain later milestones.
 Keep `MCP_ENABLED=false` on deployed installations until those gates pass.
 
