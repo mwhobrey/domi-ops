@@ -3,9 +3,9 @@
 Implemented locally on the v0.11.3 baseline. No deployment, real client registration,
 Google token change or production migration was performed. This is the authorization
 foundation for [M1's contract](MCP_M1_DECISIONS.md); the connection/consent UI is
-WHO-470 and the MCP transport/tools are WHO-471–473. `/ai/consent` is the planned
-browser page, not a page delivered by this issue. Keep the feature off until those
-pieces and the client acceptance gates are ready.
+WHO-470, now implemented locally in [AI connection controls](MCP_CONNECTIONS.md).
+The MCP transport/tools remain WHO-471–473. Keep the feature off until those pieces
+and the client acceptance gates are ready.
 
 ## Same implementation in every deployment
 
@@ -139,7 +139,8 @@ Revoked rows are tombstones; do not delete/reuse grant IDs before the latest iss
 refresh token expires (which can extend beyond the connection's absolute access ceiling).
 WHO-471 owns access-event recording and scheduled retention: metadata only, 30 days;
 pending consent at most 10 minutes; no raw content, prompts, arguments or credentials.
-WHO-470 owns connection listing, scope/selection narrowing and the consent UI.
+WHO-470 adds connection listing, scope/selection narrowing and the consent UI;
+see [AI connection controls](MCP_CONNECTIONS.md) for its implemented contract.
 It must also bridge signed provider queries through fresh browser login using the
 maintained client plugin and honor the provider's consent redirect after sign-in.
 WHO-471 must revalidate authorization inside the short execution context before each
@@ -169,8 +170,10 @@ revocation, cleanup failure, role changes, reinstatement, scope expansion/narrow
 wrong issuer/audience/client/user, expired/missing-expiry JWTs and DPoP binding.
 
 These are application/database and loopback HTTP results. Real reverse-proxy/TLS,
-provider accounts, the future consent UI, actual MCP tool execution and production
+provider accounts, actual MCP tool execution and production
 acceptance are not established by this issue's tests.
+WHO-470 implements the consent UI locally; its separate verification is recorded in
+[MCP_CONNECTIONS.md](MCP_CONNECTIONS.md).
 
 Final local verification (2026-10-21, PR review fixes): 60 database/auth regressions passed (50 MCP
 tests across single/shared mode, plus 10 existing sign-in/RLS checks); repository

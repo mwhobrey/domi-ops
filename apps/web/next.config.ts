@@ -60,6 +60,14 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        source: "/ai/:path*",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }, { key: "Cache-Control", value: "private, no-store" }],
+      },
+      {
+        source: "/login",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }, { key: "Cache-Control", value: "private, no-store" }],
+      },
+      {
         // Share-card art: stable path, cached a day with a week of stale-while-revalidate.
         source: "/og/:path*",
         headers: [{ key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" }],

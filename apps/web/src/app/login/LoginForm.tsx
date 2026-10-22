@@ -11,6 +11,7 @@ import {
 } from "../../lib/native-auth";
 import { isNativeShell } from "../../lib/native-shell";
 import { Button } from "../../components/ui";
+import { assistantLoginRedirect } from "../../lib/mcp";
 
 type Mode = "sign-in" | "sign-up";
 type SignInMethod = "email" | "username";
@@ -20,11 +21,13 @@ export function LoginForm({
   googleEnabled,
   allowPublicSignup = false,
   noHousehold = false,
+  assistantConsent = null,
 }: {
   nextPath: string;
   googleEnabled: boolean;
   allowPublicSignup?: boolean;
   noHousehold?: boolean;
+  assistantConsent?: string | null;
 }) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("sign-in");
@@ -37,7 +40,16 @@ export function LoginForm({
   const [info, setInfo] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const nativeSocial = isNativeSocialAuthAvailable();
-  const showApple = shouldOfferNativeApple(googleEnabled);
+  const showApple = !assistantConsent && shouldOfferNativeApple(googleEnabled);
+
+  function continueAssistant(data: unknown) {
+    if (!assistantConsent) return false;
+    const target = assistantLoginRedirect(data, window.location.origin);
+    // Better Auth already navigates its redirect:true responses. A second
+    // assignment cancels that navigation and can strand the browser mid-login.
+    if (!(data as { redirect?: boolean } | null)?.redirect) window.location.assign(target);
+    return true;
+  }
 
   async function onSignOut() {
     setError(null);
@@ -87,6 +99,7 @@ export function LoginForm({
           setError(res.error.message ?? "Sign in failed");
           return;
         }
+        if (continueAssistant(res.data)) return;
       } else {
         const res = await authClient.signIn.email({
           email: email.trim(),
@@ -102,6 +115,7 @@ export function LoginForm({
           );
           return;
         }
+        if (continueAssistant(res.data)) return;
       }
       router.push(nextPath);
       router.refresh();
@@ -124,7 +138,7 @@ export function LoginForm({
     setPending(true);
     try {
       // WKWebView popup/redirect die — use native plugin + idToken exchange (WHO-288).
-      if (isNativeShell() && nativeSocial) {
+      if (isNativeShell() && nativeSocial && !assistantConsent) {
         const result = await signInWithNativeSocial("google");
         if (!result.ok) {
           setError(

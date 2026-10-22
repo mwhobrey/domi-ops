@@ -28,6 +28,10 @@ export async function proxyAuthToApi(
     "authorization",
     "accept",
     "accept-language",
+    // Preserve browser fetch metadata for upstream request checks.
+    "sec-fetch-mode",
+    "sec-fetch-site",
+    "sec-fetch-dest",
     "x-forwarded-for",
   ];
   for (const name of forward) {
@@ -77,6 +81,28 @@ export async function proxyAuthToApi(
       : [];
   for (const cookie of setCookies) {
     outHeaders.append("set-cookie", cookie);
+  }
+
+  // The server-side fetch hop is marked "cors" by Undici. The provider therefore
+  // answers navigations with its JSON redirect contract, including social callbacks.
+  const navigation = request.headers.get("sec-fetch-mode") === "navigate";
+  if (navigation && request.method === "GET" && upstream.ok &&
+      (path === "/oauth2/authorize" || path.startsWith("/callback/")) &&
+      upstream.headers.get("content-type")?.includes("application/json")) {
+    let redirectTarget: URL | undefined;
+    try {
+      const result: unknown = JSON.parse(responseBody);
+      if (result && typeof result === "object" && "redirect" in result && result.redirect === true && "url" in result && typeof result.url === "string") {
+        const target = new URL(result.url, request.url);
+        if (target.origin === request.nextUrl.origin && !target.username && !target.password) redirectTarget = target;
+      }
+    } catch { /* Preserve malformed upstream bodies for the caller. */ }
+    if (redirectTarget) {
+      outHeaders.set("location", redirectTarget.href);
+      outHeaders.set("cache-control", "no-store");
+      outHeaders.set("referrer-policy", "no-referrer");
+      return new NextResponse(null, { status: 303, headers: outHeaders });
+    }
   }
 
   return new NextResponse(responseBody, {

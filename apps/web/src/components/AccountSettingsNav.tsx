@@ -7,6 +7,7 @@ import { cn } from "../lib/cn";
 const links = [
   { href: "/profile", label: "Your profile" },
   { href: "/settings", label: "Household", adminOnly: true },
+  { href: "/settings/ai-connections", label: "AI connections" },
 ] as const;
 
 export function AccountSettingsNav({ canManage }: { canManage: boolean }) {
@@ -19,7 +20,7 @@ export function AccountSettingsNav({ canManage }: { canManage: boolean }) {
       className="mb-8 flex flex-wrap gap-1 border-b border-[var(--color-border)]"
     >
       {visible.map((link) => {
-        const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
+        const active = pathname === link.href || (link.href !== "/settings" && pathname.startsWith(`${link.href}/`));
         return (
           <Link
             key={link.href}

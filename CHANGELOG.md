@@ -13,9 +13,14 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 - Opt-in delegated OAuth authorization foundation for assistant integrations on both
   self-hosted and hosted deployments: scoped consent, PKCE, rotating refresh tokens,
   immutable household/member grants and immediate connection/membership revocation.
-  Disabled by default; connection UI and MCP tools are not yet available. Requires
+  Disabled by default; MCP tools are not yet available. Requires
   migration `0103_mcp_authorization` and the updated application-role grants; see
   [MCP authorization setup](docs/MCP_AUTHORIZATION.md).
+- Personal AI connection consent and settings for self-hosted and hosted deployments:
+  explicit note selection, adult/privacy consent, private connection listing, reduced
+  permissions and disconnect. Security controls remain available in hosted read-only
+  mode. The integration stays disabled by default pending gateway/client acceptance;
+  see [AI connection controls](docs/MCP_CONNECTIONS.md).
 
 ## [0.11.3] - 2026-10-21
 
