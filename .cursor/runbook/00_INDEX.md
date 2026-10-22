@@ -47,6 +47,7 @@
 - `docs/MCP_READ_TOOLS.md` — WHO-472 persisted-only domain queries, note selection/ACLs, field omissions and signed byte-aware pagination
 - `docs/MCP_SECURITY_ACCEPTANCE.md` — WHO-473 restricted-role single/shared application matrix, isolation/side-effect evidence, dedicated CI runner and remaining live rollout gates
 - `docs/MCP_BRIEFING_SKILL.md` — WHO-474 portable briefing source, bounded retrieval, installation/version/removal and synthetic example contracts
+- `docs/MCP_CHATGPT.md` — WHO-475 private client packaging, local synthetic lab, real gateway smoke and remaining live ChatGPT acceptance
 - `docs/MCP_CONNECTIONS.md` — WHO-470 consent/settings UI, browser login/proxy continuation, private grant controls and verification; gateway/client gates pending
 - `docs/SECURITY_REVIEW.md` — pre-launch security checklist (WHO-172)
 - `docs/HOSTED_RLS.md` — hosted tenant context + RLS policies

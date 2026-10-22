@@ -26,5 +26,8 @@ ENV NEXT_PUBLIC_APP_URL=$QA_APP_URL NEXT_PUBLIC_DEMO_URL=$QA_APP_URL PUBLIC_MARK
 RUN npm run build -w @domi-ops/www
 ENV NODE_ENV=production DOMI_OPS_DOTENV_LOADED=1
 COPY scripts/hosted-qa ./scripts/hosted-qa
+COPY scripts/mcp-chatgpt ./scripts/mcp-chatgpt
+COPY docs/fixtures ./docs/fixtures
+COPY skills ./skills
 COPY scripts/household-archive.mts ./scripts/
 COPY .env.hosted-prod.example ./

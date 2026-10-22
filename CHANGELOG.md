@@ -10,10 +10,18 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Added
 
+- Private MCP client package generator and optional isolated synthetic ChatGPT
+  evaluation lab. Includes a real OAuth/read/refresh/disconnect smoke and copies
+  the shared briefing skill. Private synthetic ChatGPT OAuth, reads, reconnect,
+  disconnect and a separately installed Work briefing passed. Combined private
+  package import/installation also passed after normalizing registered-server IDs. See
+  [ChatGPT evaluation](docs/MCP_CHATGPT.md).
+
 - Portable household briefing skill source for connected read-only MCP clients,
   with household-local dates, record links, bounded retrieval and explicit missing
   coverage. Includes installation/version/removal guidance and synthetic reference
-  cases; live client acceptance remains pending. See [briefing skill](docs/MCP_BRIEFING_SKILL.md).
+  cases. Private synthetic ChatGPT standalone-skill acceptance is documented;
+  other clients and live-household rollout remain separate. See [briefing skill](docs/MCP_BRIEFING_SKILL.md).
 
 - Dedicated MCP authorization/isolation CI acceptance using disposable PostgreSQL
   and HTTPS, covering single/self-hosted and shared/hosted application boundaries,
@@ -45,6 +53,16 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
   permissions and disconnect. Security controls remain available in hosted read-only
   mode. The integration stays disabled by default pending gateway/client acceptance;
   see [AI connection controls](docs/MCP_CONNECTIONS.md).
+
+### Fixed
+
+- OAuth browser navigation behind hosted and self-hosted reverse proxies keeps
+  the public app origin when opening consent, preserving signed queries and cookies
+  while rejecting foreign and network-path redirect targets.
+
+- MCP requests routed through Next now preserve the public Host when connecting
+  to an internal API hostname, retaining canonical-origin checks and bearer-only
+  forwarding without browser cookies.
 
 ## [0.11.3] - 2026-10-21
 
