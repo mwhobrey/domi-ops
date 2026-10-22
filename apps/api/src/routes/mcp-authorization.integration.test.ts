@@ -9,7 +9,7 @@ import { createBetterAuth, MCP_POLICY_VERSION } from "@domi-ops/auth";
 import { envSchema, type Env } from "@domi-ops/config";
 import {
   createDb, closeDb, households, householdMembers, users, notes, mcpConnections, mcpPendingConsents,
-  mcpNoteSelections, oauthClient, oauthRefreshToken, jwks, withHouseholdContext, withUserLookupContext,
+  mcpNoteSelections, noteShares, oauthClient, oauthRefreshToken, jwks, withHouseholdContext, withUserLookupContext,
   withMcpProviderContext, withSystemContext, withWorkerScanContext, type Database,
 } from "@domi-ops/db";
 import { mcpAuthorizationRoutes } from "./mcp-authorization.js";
@@ -389,6 +389,92 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
     await expect(owned(owner, (tx) => tx.update(mcpConnections).set({ scopes }).where(eq(mcpConnections.id, fresh.connectionId)))).rejects.toThrow();
     await owned(owner, (tx) => tx.update(mcpConnections).set({ scopes: ["shopping:read", "offline_access"] }).where(eq(mcpConnections.id, fresh.connectionId)));
     await expect(auth.mcp.authorize(bearer(fresh.access_token))).rejects.toMatchObject({ status: 401 });
+  });
+  it("previews verified client/identity details without preparing or granting access", async () => {
+    const q = await begin(owner, ["notes:read", "offline_access"]);
+    const before = await owned(owner, (tx) => tx.select({ id: mcpConnections.id }).from(mcpConnections));
+    const response = await post("/api/mcp-auth/consents/preview", { householdId: owner.householdId, oauthQuery: q });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ clientId, clientName: "Synthetic fixture", householdId: owner.householdId, scopes: ["notes:read", "offline_access"], policyVersion: MCP_POLICY_VERSION });
+    expect(await owned(owner, (tx) => tx.select({ id: mcpConnections.id }).from(mcpConnections))).toEqual(before);
+    expect((await post("/api/mcp-auth/consents/preview", { householdId: stranger.householdId, oauthQuery: q })).status).toBe(403);
+    expect((await post("/api/mcp-auth/consents/preview", { householdId: owner.householdId, oauthQuery: q.replace("notes", "shopping") })).status).toBe(400);
+  });
+  it("lists only the authenticated member's grants and safe note titles", async () => {
+    const a = await connect(owner, ["notes:read", "offline_access"], [ownNote]);
+    const b = await connect(colleague);
+    const response = await post("/api/mcp-auth/overview", { householdId: owner.householdId });
+    expect(response.status).toBe(200);
+    const result = await response.json() as { connections: { id: string; selectedNotes: { id: string; title: string }[] }[]; canManage: boolean };
+    expect(result.canManage).toBe(true);
+    expect(result.connections.find((c) => c.id === a.connectionId)?.selectedNotes).toEqual([{ id: ownNote, title: "synthetic" }]);
+    expect(result.connections.some((c) => c.id === b.connectionId)).toBe(false);
+    const other = await (await post("/api/mcp-auth/overview", { householdId: colleague.householdId }, colleague)).json() as { connections: { id: string }[]; canManage: boolean };
+    expect(other.canManage).toBe(false); expect(other.connections.some((c) => c.id === a.connectionId)).toBe(false);
+    expect((await post("/api/mcp-auth/overview", { householdId: stranger.householdId })).status).toBe(403);
+    const text = JSON.stringify(result);
+    for (const secret of [a.refresh_token, a.access_token, "sessionId", "queryHash", "clientSecret"]) expect(text).not.toContain(secret);
+  });
+  it("offers only accessible same-household note titles, including literal searches", async () => {
+    const result = await (await post("/api/mcp-auth/notes", { householdId: owner.householdId })).json() as { notes: { id: string; title: string; content?: string }[] };
+    expect(result.notes.some((n) => n.id === ownNote)).toBe(true); expect(result.notes.some((n) => n.id === foreignNote)).toBe(false);
+    expect(result.notes.every((n) => n.content === undefined)).toBe(true);
+    const other = await (await post("/api/mcp-auth/notes", { householdId: colleague.householdId }, colleague)).json() as typeof result;
+    expect(other.notes.some((n) => n.id === ownNote)).toBe(false);
+    expect(await (await post("/api/mcp-auth/notes", { householdId: owner.householdId, search: "%" })).json()).toEqual({ notes: [] });
+  });
+  it("denies without attestations and consumes any prepared consent", async () => {
+    const q = await begin();
+    const result = await post("/api/mcp-auth/consents/reject", { oauthQuery: q });
+    expect(result.status).toBe(200);
+    const redirect = new URL((await result.json() as { redirectUri: string }).redirectUri);
+    expect(redirect.origin + redirect.pathname).toBe(callback);
+    expect(redirect.searchParams.get("error")).toBe("access_denied");
+    expect(redirect.searchParams.get("state")).toBe(new URLSearchParams(q).get("state"));
+    expect(redirect.searchParams.has("code")).toBe(false);
+    const p = await prepare(q);
+    expect((await post("/api/mcp-auth/consents/reject", { oauthQuery: q })).status).toBe(200);
+    expect((await decide(q, p.pendingId)).status).toBe(409);
+  });
+  it("keeps denial final when it races with approval", async () => {
+    const q = await begin(); const p = await prepare(q);
+    const [decision, rejection] = await Promise.all([decide(q, p.pendingId), post("/api/mcp-auth/consents/reject", { oauthQuery: q })]);
+    expect(rejection.status).toBe(200); expect([200, 409]).toContain(decision.status);
+    const [pending] = await withUserLookupContext(db, owner.userId, (tx) => tx.select().from(mcpPendingConsents).where(eq(mcpPendingConsents.id, p.pendingId)));
+    const [grant] = await owned(owner, (tx) => tx.select().from(mcpConnections).where(eq(mcpConnections.id, pending.connectionId)));
+    expect(grant.status).toBe("revoked"); expect((await decide(q, p.pendingId)).status).toBe(409);
+  });
+  it("allows only grant owners to narrow scopes/selections and requires fresh consent for widening", async () => {
+    const token = await connect(owner, ["shopping:read", "notes:read", "offline_access"], [ownNote]);
+    const path = `/api/mcp-auth/connections/${token.connectionId}/narrow`;
+    expect((await post(path, { scopes: ["shopping:read"], noteIds: [] }, colleague)).status).toBe(403);
+    expect((await post(path, { scopes: ["chores:read"], noteIds: [] })).status).toBe(409);
+    expect((await post(path, { scopes: ["notes:read"], noteIds: [foreignNote] })).status).toBe(409);
+    expect((await post(path, { scopes: ["shopping:read", "offline_access"], noteIds: [] })).status).toBe(200);
+    expect(await owned(owner, (tx) => tx.select().from(mcpNoteSelections).where(eq(mcpNoteSelections.connectionId, token.connectionId)))).toEqual([]);
+    await expect(auth.mcp.authorize(bearer(token.access_token))).rejects.toMatchObject({ status: 401 });
+    const response = await refresh(token.refresh_token, { scope: "shopping:read offline_access" });
+    expect(response.status).toBe(200);
+    expect(await auth.mcp.authorize(bearer((await response.json() as Tokens).access_token))).toMatchObject({ scopes: ["shopping:read", "offline_access"] });
+    expect((await post(path, { scopes: ["shopping:read", "notes:read", "offline_access"], noteIds: [ownNote] })).status).toBe(409);
+    await auth.mcp.revokeConnection(owner.headers, token.connectionId);
+    expect((await post(path, { scopes: ["shopping:read"], noteIds: [] })).status).toBe(409);
+  });
+  it("hides a selected note's title after sharing is removed and permits immediate deselection", async () => {
+    await owned(owner, (tx) => tx.insert(noteShares).values({ noteId: ownNote, memberId: colleague.memberId }));
+    const token = await connect(colleague, ["notes:read", "offline_access"], [ownNote]);
+    await owned(owner, (tx) => tx.delete(noteShares).where(and(eq(noteShares.noteId, ownNote), eq(noteShares.memberId, colleague.memberId))));
+    const overview = await (await post("/api/mcp-auth/overview", { householdId: colleague.householdId }, colleague)).json() as { connections: { id: string; selectedNotes: { id: string; title: string | null }[] }[] };
+    expect(overview.connections.find((c) => c.id === token.connectionId)?.selectedNotes).toEqual([{ id: ownNote, title: null }]);
+    expect((await post(`/api/mcp-auth/connections/${token.connectionId}/narrow`, { scopes: ["notes:read", "offline_access"], noteIds: [] }, colleague)).status).toBe(200);
+    expect(await owned(colleague, (tx) => tx.select().from(mcpNoteSelections).where(eq(mcpNoteSelections.connectionId, token.connectionId)))).toEqual([]);
+  });
+  it("tombstones background access so scoped-down refresh cannot restore it", async () => {
+    const token = await connect();
+    const response = await post(`/api/mcp-auth/connections/${token.connectionId}/narrow`, { scopes: ["shopping:read"], noteIds: [] });
+    expect(response.status).toBe(200); expect(await response.json()).toMatchObject({ updated: true, revoked: true });
+    await expect(auth.mcp.authorize(bearer(token.access_token))).rejects.toMatchObject({ status: 401 });
+    expect((await refresh(token.refresh_token, { scope: "shopping:read" })).status).toBeGreaterThanOrEqual(400);
   });
   it("revokes immediately on membership and role changes, including after reinstatement", async () => {
     const token = await connect(colleague);

@@ -1,13 +1,13 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash } from "node:crypto";
-import { and, eq, exists, gt, inArray, isNull, or } from "drizzle-orm";
+import { and, desc, eq, exists, gt, ilike, inArray, isNull, notInArray, or, sql } from "drizzle-orm";
 import { APIError } from "better-auth/api";
 import { oauthProvider, oauthProviderAuthServerMetadata, verifyOAuthQueryParams } from "@better-auth/oauth-provider";
 import { oauthProviderResourceClient } from "@better-auth/oauth-provider/resource-client";
 import type { betterAuth, BetterAuthOptions } from "better-auth";
 import { isModuleEnabled, parseHouseholdModulesJson, type Env } from "@domi-ops/config";
 import {
-  householdMembers, households, mcpClientProfiles, mcpConnections, mcpHouseholdSettings,
+  householdMembers, households, mcpAccessEvents, mcpClientProfiles, mcpConnections, mcpHouseholdSettings,
   mcpNoteSelections, mcpPendingConsents, notes, noteShares, oauthClient, oauthConsent,
   oauthRefreshToken, oauthAccessToken, withHouseholdContext, withMcpConnectionContext,
   withMcpProviderContext, withUserLookupContext, type Database,
@@ -151,6 +151,106 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string) {
     return {
       urls,
       metadata: oauthProviderAuthServerMetadata(auth),
+      async overview(headers: Headers, householdId: string) {
+        uuid(householdId);
+        const current = await session(headers);
+        const data = await withUserLookupContext(db, current.user.id, (lookup) => withHouseholdContext(lookup, householdId, async (tx) => {
+          const owner = await member(tx, current.user.id, householdId);
+          const [household] = await tx.select({ name: households.name }).from(households).where(eq(households.id, householdId));
+          const [settings] = await tx.select({ enabled: mcpHouseholdSettings.enabled }).from(mcpHouseholdSettings).where(eq(mcpHouseholdSettings.householdId, householdId));
+          const connections = await tx.select({ id: mcpConnections.id, clientId: mcpConnections.clientId, scopes: mcpConnections.scopes,
+            status: mcpConnections.status, createdAt: mcpConnections.createdAt, activatedAt: mcpConnections.activatedAt,
+            expiresAt: mcpConnections.expiresAt, revokedAt: mcpConnections.revokedAt }).from(mcpConnections)
+            .where(and(eq(mcpConnections.householdId, householdId), eq(mcpConnections.userId, current.user.id)))
+            .orderBy(desc(sql`${mcpConnections.status} = 'active'`), desc(mcpConnections.createdAt)).limit(100);
+          const selections = connections.length ? await tx.select({ connectionId: mcpNoteSelections.connectionId, noteId: mcpNoteSelections.noteId, title: notes.title })
+            .from(mcpNoteSelections).leftJoin(notes, and(eq(notes.id, mcpNoteSelections.noteId), or(eq(notes.visibility, "household"), eq(notes.createdByUserId, current.user.id),
+              exists(tx.select({ id: noteShares.noteId }).from(noteShares).where(and(eq(noteShares.noteId, notes.id), eq(noteShares.memberId, owner.id)))))))
+            .where(and(eq(mcpNoteSelections.householdId, householdId), inArray(mcpNoteSelections.connectionId, connections.map((c) => c.id)))) : [];
+          const activity = await tx.select({ connectionId: mcpAccessEvents.connectionId, lastUsedAt: sql<string | null>`max(${mcpAccessEvents.createdAt})` })
+            .from(mcpAccessEvents).where(and(eq(mcpAccessEvents.householdId, householdId), eq(mcpAccessEvents.actorUserId, current.user.id)))
+            .groupBy(mcpAccessEvents.connectionId);
+          return { householdId, householdName: household?.name ?? "Household", memberName: current.user.name,
+            canManage: ["owner", "admin"].includes(owner.role), enabled: settings?.enabled ?? false,
+            connections: connections.map((c) => ({ ...c, expired: c.expiresAt.getTime() <= Date.now(), noteIds: selections.filter((s) => s.connectionId === c.id).map((s) => s.noteId),
+              selectedNotes: selections.filter((s) => s.connectionId === c.id).map((s) => ({ id: s.noteId, title: s.title })),
+              lastUsedAt: activity.find((a) => a.connectionId === c.id)?.lastUsedAt ?? null })) };
+        }));
+        const ids = [...new Set(data.connections.map((c) => c.clientId))];
+        const clients = ids.length ? await withMcpProviderContext(db, (tx) => tx.select({ id: oauthClient.clientId, name: oauthClient.name })
+          .from(oauthClient).where(inArray(oauthClient.clientId, ids))) : [];
+        return { ...data, connections: data.connections.map((c) => ({ ...c, clientName: clients.find((p) => p.id === c.clientId)?.name ?? "Assistant" })) };
+      },
+      async availableNotes(headers: Headers, householdId: string, search = "") {
+        uuid(householdId);
+        const current = await session(headers);
+        return withUserLookupContext(db, current.user.id, (lookup) => withHouseholdContext(lookup, householdId, async (tx) => {
+          const owner = await member(tx, current.user.id, householdId);
+          await householdAccess(tx, householdId, ["notes:read"]);
+          const literal = search.slice(0, 100).replace(/[\\%_]/g, "\\$&");
+          return tx.select({ id: notes.id, title: notes.title }).from(notes).where(and(eq(notes.householdId, householdId),
+            ilike(notes.title, "%" + literal + "%"), or(eq(notes.visibility, "household"), eq(notes.createdByUserId, current.user.id),
+              exists(tx.select({ id: noteShares.noteId }).from(noteShares).where(and(eq(noteShares.noteId, notes.id), eq(noteShares.memberId, owner.id))))),
+          )).orderBy(notes.title, notes.id).limit(100);
+        }));
+      },
+      async previewConsent(headers: Headers, householdId: string, oauthQuery: string) {
+        uuid(householdId);
+        const current = await session(headers);
+        const query = await checkedQuery(oauthQuery);
+        const identity = await withUserLookupContext(db, current.user.id, (lookup) => withHouseholdContext(lookup, householdId, async (tx) => {
+          const owner = await member(tx, current.user.id, householdId);
+          await householdAccess(tx, householdId, query.scopes);
+          const [household] = await tx.select({ name: households.name }).from(households).where(eq(households.id, householdId));
+          return { memberId: owner.id, memberName: current.user.name, householdName: household?.name ?? "Household" };
+        }));
+        return { ...identity, householdId, clientName: query.profile.client.name, clientId: query.profile.client.clientId,
+          provider: query.profile.profile.provider, dataMode: query.profile.profile.dataMode,
+          clientProfileVersion: query.profile.profile.version, scopes: query.scopes, policyVersion: MCP_POLICY_VERSION };
+      },
+      async rejectConsent(headers: Headers, oauthQuery: string) {
+        const current = await session(headers);
+        const query = await checkedQuery(oauthQuery);
+        const pending = await withUserLookupContext(db, current.user.id, (tx) => tx.update(mcpPendingConsents).set({ consumedAt: new Date() })
+          .where(and(eq(mcpPendingConsents.userId, current.user.id), eq(mcpPendingConsents.sessionId, current.session.id),
+            eq(mcpPendingConsents.queryHash, query.queryHash))).returning({ connectionId: mcpPendingConsents.connectionId }));
+        for (const p of pending) await this.revokeConnection(headers, p.connectionId);
+        // Redirect only to the verified, operator-approved URI; denial needs no attestation.
+        const p = new URLSearchParams(oauthQuery);
+        const redirect = new URL(p.get("redirect_uri")!);
+        redirect.searchParams.delete("code");
+        redirect.searchParams.set("error", "access_denied");
+        redirect.searchParams.set("iss", urls.issuer);
+        if (p.has("state")) redirect.searchParams.set("state", p.get("state")!);
+        return { redirectUri: redirect.toString() };
+      },
+      async narrowConnection(headers: Headers, connectionId: string, input: { scopes: string[]; noteIds: string[] }) {
+        uuid(connectionId); input.noteIds.forEach(uuid);
+        if (!input.scopes.length || new Set(input.scopes).size !== input.scopes.length || input.scopes.some((s) => !MCP_SCOPES.includes(s as typeof MCP_SCOPES[number])) ||
+          input.noteIds.length > 100 || new Set(input.noteIds).size !== input.noteIds.length) deny("invalid_input", 400);
+        const current = await session(headers);
+        const result = await withMcpConnectionContext(db, current.user.id, connectionId, async (lookup) => {
+          const [found] = await lookup.select({ householdId: mcpConnections.householdId }).from(mcpConnections)
+            .where(and(eq(mcpConnections.id, connectionId), eq(mcpConnections.userId, current.user.id)));
+          if (!found) deny("connection_unavailable");
+          return withHouseholdContext(lookup, found.householdId, async (tx) => {
+            const [connection] = await tx.select().from(mcpConnections).where(and(eq(mcpConnections.id, connectionId), eq(mcpConnections.userId, current.user.id))).for("update");
+            if (!connection || connection.status !== "active" || connection.expiresAt.getTime() <= Date.now()) deny("inactive_grant", 409);
+            const selected = await tx.select({ noteId: mcpNoteSelections.noteId }).from(mcpNoteSelections).where(eq(mcpNoteSelections.connectionId, connectionId));
+            if (input.scopes.some((s) => !connection.scopes.includes(s)) || input.noteIds.some((id) => !selected.some((s) => s.noteId === id))) deny("fresh_consent_required", 409);
+            if (input.noteIds.length && !input.scopes.includes("notes:read")) deny("invalid_note_selection", 400);
+            // Existing refresh credentials must not regain background access by
+            // requesting fewer scopes. Removing offline access tombstones the grant.
+            const revoked = connection.scopes.includes("offline_access") && !input.scopes.includes("offline_access");
+            await tx.update(mcpConnections).set({ scopes: input.scopes, ...(revoked ? { status: "revoked" as const, revokedAt: new Date() } : {}) }).where(eq(mcpConnections.id, connectionId));
+            await tx.delete(mcpNoteSelections).where(and(eq(mcpNoteSelections.connectionId, connectionId),
+              input.noteIds.length ? notInArray(mcpNoteSelections.noteId, input.noteIds) : undefined));
+            return { updated: true, revoked, scopes: input.scopes, noteIds: input.noteIds };
+          });
+        });
+        if (result.revoked) await this.revokeConnection(headers, connectionId);
+        return result;
+      },
       /** Trusted operator/CLI entry point. Never mount this as an HTTP route. */
       async registerClient(headers: Headers, input: { name: string; redirectUris: string[]; tokenEndpointAuthMethod: "none" | "client_secret_post" | "client_secret_basic"; scopes: string[]; provider: string; profileVersion: string; dataMode: "synthetic" | "household"; enabled?: boolean }) {
         if (!env.MCP_ENABLED) deny("mcp_disabled");

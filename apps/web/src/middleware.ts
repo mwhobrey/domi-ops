@@ -75,7 +75,8 @@ export async function middleware(request: NextRequest) {
   }
 
   const login = new URL("/login", request.url);
-  login.searchParams.set("next", pathname);
+  if (pathname === "/ai/consent") login.search = request.nextUrl.search;
+  login.searchParams.set("next", pathname + (pathname === "/ai/consent" ? request.nextUrl.search : ""));
   return NextResponse.redirect(login);
 }
 
@@ -110,5 +111,6 @@ export const config = {
     "/profile/:path*",
     "/settings",
     "/settings/:path*",
+    "/ai/consent",
   ],
 };

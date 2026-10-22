@@ -2,6 +2,7 @@
 
 import { createAuthClient } from "better-auth/react";
 import { usernameClient } from "better-auth/client/plugins";
+import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 
 /**
  * Same-origin /auth/* via Next route handler — omit baseURL so better-auth uses
@@ -9,5 +10,5 @@ import { usernameClient } from "better-auth/client/plugins";
  */
 export const authClient = createAuthClient({
   basePath: "/auth",
-  plugins: [usernameClient()],
+  plugins: [usernameClient(), oauthProviderClient()],
 });

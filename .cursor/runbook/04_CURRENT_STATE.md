@@ -1,5 +1,21 @@
 # Current state
 
+## AI connection consent and controls (WHO-470; local, not deployed)
+
+- `/ai/consent` shows verified client/member/household identity, read permissions,
+  external-provider disclosure and explicit adult/privacy attestations. Notes default
+  empty; accessible title search and server validation prevent foreign/private leakage.
+- `/settings/ai-connections` lists only the current member's grants and permits
+  disconnect/subset narrowing; owner/admin household opt-out revokes all grants.
+  Controls work in hosted read-only mode and the same self-host API.
+- The maintained browser provider plugin preserves signed queries across email,
+  username and social login. Next converts same-origin provider JSON redirects to
+  303 for browser GET navigation (Undici otherwise marks the API hop cors). Avoid
+  duplicate client redirects and preserve separate Set-Cookie headers.
+- No add-on/license check or migration. `MCP_ENABLED` remains off by default; tools,
+  gateway/audit/retention and actual client acceptance remain WHO-471 onward.
+- Contract and verification: [MCP_CONNECTIONS.md](../../docs/MCP_CONNECTIONS.md).
+
 ## MCP delegated authorization foundation (WHO-469; local, not deployed)
 
 - Migration `0103_mcp_authorization` adds provider credentials/keys and immutable
@@ -13,8 +29,9 @@
   role/household changes invalidate old tokens; reconnect creates a new grant ID and
   atomically revokes prior active grants for the same member/household/client, even
   when provider cleanup fails. Disabled MCP does not validate the MCP-only URL rules.
-- Connection UI (`/ai/consent`), MCP transport/tools, operational limits/audit retention
-  and real-client acceptance remain WHO-470 onward. Keep disabled until those gates pass.
+- Connection UI is implemented locally in WHO-470 above. MCP transport/tools,
+  operational limits/audit retention and real-client acceptance remain WHO-471 onward.
+  Keep disabled until those gates pass.
 - Setup, exact dependencies, migration/role requirements and the disposable single/shared
   auth regression suite: [MCP_AUTHORIZATION.md](../../docs/MCP_AUTHORIZATION.md).
 

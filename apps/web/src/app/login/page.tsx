@@ -5,16 +5,20 @@ import { isPublicSignupAllowed } from "../../lib/allow-public-signup";
 import { loginErrorCode } from "../../lib/login-error";
 import { LoginForm } from "./LoginForm";
 import { DemoRolePicker } from "./DemoRolePicker";
+import { assistantConsentPath } from "../../lib/mcp";
 
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string | string[]; next?: string; hosted?: string; reset?: string; demo?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) for (const part of (Array.isArray(value) ? value : value === undefined ? [] : [value])) query.append(key, part);
+  const assistantConsent = assistantConsentPath(query);
   const isDemoMode = process.env.DEMO_MODE === "true";
   const errorCode = loginErrorCode(params.error);
-  const nextPath = params.next && /^\/(?![\/\\])/.test(params.next) && !/[\x00-\x1f\\]/.test(params.next) ? params.next : "/dashboard";
+  const nextPath = assistantConsent ?? (typeof params.next === "string" && /^\/(?![\/\\])/.test(params.next) && !/[\x00-\x1f\\]/.test(params.next) ? params.next : "/dashboard");
   const cookieStore = await cookies();
   const cookieHeader = cookieStore
     .getAll()
@@ -182,9 +186,10 @@ export default async function LoginPage({
         )}
 
         <LoginForm
+          assistantConsent={assistantConsent}
           nextPath={nextPath}
           googleEnabled={googleEnabled}
-          allowPublicSignup={allowPublicSignup}
+          allowPublicSignup={allowPublicSignup && !assistantConsent}
           noHousehold={noHousehold || errorCode === "no-household"}
         />
 

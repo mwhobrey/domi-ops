@@ -39,8 +39,26 @@ export function mcpAuthorizationRoutes(auth: McpAuthorization, env: Env) {
     return result.data;
   }
   app.post("/consents/prepare", async (c) => c.json(await auth.prepareConsent(c.req.raw.headers, await body(c.req.raw, prepare))));
+  app.post("/overview", async (c) => {
+    const input = await body(c.req.raw, z.object({ householdId: z.string().uuid() }).strict());
+    return c.json(await auth.overview(c.req.raw.headers, input.householdId));
+  });
+  app.post("/notes", async (c) => {
+    const input = await body(c.req.raw, z.object({ householdId: z.string().uuid(), search: z.string().max(100).default("") }).strict());
+    return c.json({ notes: await auth.availableNotes(c.req.raw.headers, input.householdId, input.search) });
+  });
+  app.post("/consents/preview", async (c) => {
+    const input = await body(c.req.raw, z.object({ householdId: z.string().uuid(), oauthQuery: z.string().max(12000) }).strict());
+    return c.json(await auth.previewConsent(c.req.raw.headers, input.householdId, input.oauthQuery));
+  });
+  app.post("/consents/reject", async (c) => {
+    const input = await body(c.req.raw, z.object({ oauthQuery: z.string().max(12000) }).strict());
+    return c.json(await auth.rejectConsent(c.req.raw.headers, input.oauthQuery));
+  });
   app.post("/consents/decide", async (c) => c.json(await auth.decideConsent(c.req.raw.headers, await body(c.req.raw, decide))));
   app.post("/connections/:id/revoke", async (c) => c.json(await auth.revokeConnection(c.req.raw.headers, c.req.param("id"))));
+  app.post("/connections/:id/narrow", async (c) => c.json(await auth.narrowConnection(c.req.raw.headers, c.req.param("id"),
+    await body(c.req.raw, z.object({ scopes: z.array(z.string()).min(1).max(4), noteIds: z.array(z.string().uuid()).max(100) }).strict()))));
   app.post("/household", async (c) => {
     const input = await body(c.req.raw, z.object({ householdId: z.string().uuid(), enabled: z.boolean() }).strict());
     return c.json(await auth.setHouseholdEnabled(c.req.raw.headers, input.householdId, input.enabled));
