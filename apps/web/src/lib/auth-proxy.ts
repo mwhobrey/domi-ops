@@ -89,15 +89,19 @@ export async function proxyAuthToApi(
   if (navigation && request.method === "GET" && upstream.ok &&
       (path === "/oauth2/authorize" || path.startsWith("/callback/")) &&
       upstream.headers.get("content-type")?.includes("application/json")) {
-    const result = JSON.parse(responseBody) as { redirect?: boolean; url?: unknown };
-    if (result.redirect === true && typeof result.url === "string") {
-      const target = new URL(result.url, request.url);
-      if (target.origin === request.nextUrl.origin && !target.username && !target.password) {
-        outHeaders.set("location", target.href);
-        outHeaders.set("cache-control", "no-store");
-        outHeaders.set("referrer-policy", "no-referrer");
-        return new NextResponse(null, { status: 303, headers: outHeaders });
+    let redirectTarget: URL | undefined;
+    try {
+      const result: unknown = JSON.parse(responseBody);
+      if (result && typeof result === "object" && "redirect" in result && result.redirect === true && "url" in result && typeof result.url === "string") {
+        const target = new URL(result.url, request.url);
+        if (target.origin === request.nextUrl.origin && !target.username && !target.password) redirectTarget = target;
       }
+    } catch { /* Preserve malformed upstream bodies for the caller. */ }
+    if (redirectTarget) {
+      outHeaders.set("location", redirectTarget.href);
+      outHeaders.set("cache-control", "no-store");
+      outHeaders.set("referrer-policy", "no-referrer");
+      return new NextResponse(null, { status: 303, headers: outHeaders });
     }
   }
 

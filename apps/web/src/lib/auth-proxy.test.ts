@@ -32,4 +32,9 @@ describe("OAuth browser navigation through the auth proxy", () => {
     const response = await proxyAuthToApi(new NextRequest("https://app.example.test/auth/oauth2/authorize", { headers: { "sec-fetch-mode": "navigate" } }), ["oauth2", "authorize"]);
     expect(response.status).toBe(200); expect(response.headers.has("location")).toBe(false);
   });
+  it.each(["null", "{invalid", '{"redirect":true,"url":"http://["}'])("passes malformed redirect contracts through unchanged: %s", async (body) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(body, { headers: { "content-type": "application/json" } })));
+    const response = await proxyAuthToApi(new NextRequest("https://app.example.test/auth/oauth2/authorize", { headers: { "sec-fetch-mode": "navigate" } }), ["oauth2", "authorize"]);
+    expect(response.status).toBe(200); expect(response.headers.has("location")).toBe(false); expect(await response.text()).toBe(body);
+  });
 });

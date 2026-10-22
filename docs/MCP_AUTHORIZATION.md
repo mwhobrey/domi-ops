@@ -170,8 +170,10 @@ revocation, cleanup failure, role changes, reinstatement, scope expansion/narrow
 wrong issuer/audience/client/user, expired/missing-expiry JWTs and DPoP binding.
 
 These are application/database and loopback HTTP results. Real reverse-proxy/TLS,
-provider accounts, the future consent UI, actual MCP tool execution and production
+provider accounts, actual MCP tool execution and production
 acceptance are not established by this issue's tests.
+WHO-470 implements the consent UI locally; its separate verification is recorded in
+[MCP_CONNECTIONS.md](MCP_CONNECTIONS.md).
 
 Final local verification (2026-10-21, PR review fixes): 60 database/auth regressions passed (50 MCP
 tests across single/shared mode, plus 10 existing sign-in/RLS checks); repository
