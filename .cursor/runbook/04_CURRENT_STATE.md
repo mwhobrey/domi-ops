@@ -1,5 +1,26 @@
 # Current state
 
+## Claude integration (WHO-476; private synthetic acceptance)
+
+- Separate owned lab supports an explicitly configured public HTTPS canonical
+  origin, generated fixture password and API-only outbound JWKS retrieval.
+  Existing loopback labs and production deployments are unchanged.
+- Claude package generator copies the shared briefing skill/license exactly;
+  installed Claude Code validates the manifest. No credentials are packaged.
+- Shared real OAuth/five-read/refresh/disconnect preflight passed through public
+  HTTPS. Claude Pro web connected and listed five read-only tools with the
+  current modern gateway; no speculative legacy protocol support was added.
+- Actual Claude conversation reads passed for all five tools, with exact links
+  and excluded-domain/no-write coverage. Normal client refresh rotation was
+  observed. Reduced chore scope prevented the next read and prompted reconnect;
+  fresh consent revoked/replaced the old grant. The installed combined-plugin
+  briefing then passed with five fresh reads and the skill's coverage/link rules.
+- Product Disconnect blocked the next approved fresh Claude read while the server
+  remained online; all Claude refresh credentials were revoked. The owned public
+  tunnel and new lab containers were then stopped, retaining volumes/receipts.
+  No production, mobile, Code runtime or directory approval is claimed.
+  See [MCP_CLAUDE.md](../../docs/MCP_CLAUDE.md).
+
 ## ChatGPT integration (WHO-475; private synthetic acceptance)
 
 - Local synthetic lab: `node scripts/hosted-qa/run.mjs mcp` reuses owned isolated

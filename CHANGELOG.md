@@ -10,6 +10,13 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Added
 
+- Claude private evaluation package using the shared read-only briefing skill,
+  with explicit public-client OAuth setup and an isolated public HTTPS synthetic
+  lab. Claude Pro web OAuth, five reads, refresh rotation, reduced-scope refusal,
+  reauthorization, disconnect and the installed combined-plugin briefing passed. Broader
+  rollout remains separate.
+  See [Claude evaluation](docs/MCP_CLAUDE.md).
+
 - Private MCP client package generator and optional isolated synthetic ChatGPT
   evaluation lab. Includes a real OAuth/read/refresh/disconnect smoke and copies
   the shared briefing skill. Private synthetic ChatGPT OAuth, reads, reconnect,

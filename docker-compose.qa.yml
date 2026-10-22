@@ -13,7 +13,7 @@ x-env: &env
   AUTH_REQUIRED: "true"
   ALLOW_PUBLIC_SIGNUP: "false"
   MODULES_ENABLED: core,school,calendar_sync,drive,health,goals
-  PUBLIC_APP_URL: http://localhost:${DOMI_QA_WEB_PORT}
+  PUBLIC_APP_URL: ${DOMI_QA_APP_ORIGIN:-http://localhost:${DOMI_QA_WEB_PORT}}
   PUBLIC_MARKETING_URL: http://localhost:${DOMI_QA_WWW_PORT}
   API_URL: http://api:4000
   DATABASE_URL: postgresql://domi_ops_app:${DOMI_QA_APP_PASSWORD}@postgres:5432/domi_ops
@@ -44,6 +44,8 @@ x-env: &env
   GOOGLE_PICKER_API_KEY: ${DOMI_QA_GOOGLE_PICKER_KEY:-}
   QA_STRIPE_MODE: ${DOMI_QA_STRIPE_MODE:-fixture}
   QA_TOKEN: ${DOMI_QA_TOKEN}
+  QA_WEB_PORT: ${DOMI_QA_WEB_PORT}
+  QA_MCP_PUBLIC_ORIGIN: ${DOMI_QA_MCP_PUBLIC_ORIGIN:-}
   QA_COOKIE_PREFIX: domi-ops-qa-${DOMI_QA_WEB_PORT}
   QA_PROVIDER_URL: http://providers:4080
   QA_PROVIDER_PUBLIC_URL: http://localhost:${DOMI_QA_PROVIDER_PORT}
@@ -108,7 +110,7 @@ services:
       context: .
       dockerfile: scripts/hosted-qa/Dockerfile
       args:
-        QA_APP_URL: http://localhost:${DOMI_QA_WEB_PORT}
+        QA_APP_URL: ${DOMI_QA_APP_ORIGIN:-http://localhost:${DOMI_QA_WEB_PORT}}
         QA_MARKETING_URL: http://localhost:${DOMI_QA_WWW_PORT}
     environment:
       <<: *env
@@ -121,6 +123,9 @@ services:
     volumes: ["state:/qa"]
   api:
     <<: *qa
+    # Only the synthetic HTTPS mode enables outbound JWKS retrieval through this
+    # network. Database, object storage, providers and workers stay on internal qa.
+    networks: [qa, mcp-egress]
     command: [node, scripts/hosted-qa/api.mjs]
     environment:
       <<: *env
@@ -144,7 +149,7 @@ services:
       PORT: "3000"
       NEXT_PUBLIC_HOSTED_CHECKOUT_ENABLED: "true"
       NEXT_PUBLIC_OSS_REPO_PUBLIC: "true"
-      PUBLIC_APP_URL: http://localhost:${DOMI_QA_WEB_PORT}
+      PUBLIC_APP_URL: ${DOMI_QA_APP_ORIGIN:-http://localhost:${DOMI_QA_WEB_PORT}}
       PUBLIC_MARKETING_URL: http://localhost:${DOMI_QA_WWW_PORT}
   gateway:
     <<: *qa
@@ -161,6 +166,8 @@ services:
 
 networks:
   edge:
+  mcp-egress:
+    internal: ${DOMI_QA_MCP_EGRESS_INTERNAL:-true}
   qa:
     internal: ${DOMI_QA_INTERNAL:-true}
 volumes:
