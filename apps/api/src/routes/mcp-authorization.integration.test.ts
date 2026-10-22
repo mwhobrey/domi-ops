@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createHash, randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { createServer as createHttpsServer } from "node:https";
 import { decodeJwt, decodeProtectedHeader, importJWK, SignJWT } from "jose";
 import { symmetricDecrypt } from "better-auth/crypto";
 import { serve } from "@hono/node-server";
@@ -13,6 +15,13 @@ import {
   withMcpProviderContext, withSystemContext, withWorkerScanContext, type Database,
 } from "@domi-ops/db";
 import { mcpAuthorizationRoutes } from "./mcp-authorization.js";
+import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
+import { z } from "zod";
+import { mcpGateway } from "../mcp/gateway.js";
+import { admit, finish, metadataContext } from "../mcp/activity.js";
+import { contextTool, pageLimit } from "../mcp/tools.js";
+import { checkOperation } from "../mcp/access.js";
+import { mcpAccessEvents, mcpRequestLeases, mcpConnectionWindows, mcpHouseholdWindows, householdSubscriptions, pruneMcpMetadata } from "@domi-ops/db";
 
 const url = process.env.MCP_TEST_DATABASE_URL ?? process.env.HOSTED_TEST_DATABASE_URL;
 const suite = url ? describe : describe.skip;
@@ -92,17 +101,19 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
     const [role] = await db.execute<{ rolsuper: boolean; rolbypassrls: boolean }>(sql`select rolsuper, rolbypassrls from pg_roles where rolname=current_user`);
     expect(role.rolsuper).toBe(false); expect(role.rolbypassrls).toBe(false);
     const app = new Hono();
-    server = serve({ fetch: app.fetch, hostname: "127.0.0.1", port: 0 });
+    const tls = process.env.MCP_TEST_TLS_KEY_FILE && process.env.MCP_TEST_TLS_CERT_FILE ? { createServer: createHttpsServer, serverOptions: { key: readFileSync(process.env.MCP_TEST_TLS_KEY_FILE), cert: readFileSync(process.env.MCP_TEST_TLS_CERT_FILE) } } : {};
+    server = serve({ fetch: app.fetch, hostname: "127.0.0.1", port: 0, ...tls });
     await new Promise<void>((resolve) => server.listening ? resolve() : server.once("listening", resolve));
     const address = server.address();
     if (!address || typeof address === "string") throw new Error("Expected loopback test server");
-    origin = "http://127.0.0.1:" + address.port;
+    origin = (process.env.MCP_TEST_TLS_KEY_FILE ? "https://" : "http://") + "127.0.0.1:" + address.port;
     env = envSchema.parse({ NODE_ENV: "test", DEPLOYMENT_MODE: mode, PUBLIC_APP_URL: origin, API_URL: origin,
       DATABASE_URL: url, SESSION_SECRET: "synthetic-who469-session-secret-for-disposable-fixtures-only", MCP_ENABLED: "true", MCP_SYNTHETIC_DEPLOYMENT: "true", MODULES_ENABLED: "core" });
     auth = createBetterAuth(db, env, { cookiePrefix, deferHouseholdMembership: async () => true });
     app.all("/auth/*", (c) => auth.handler(c.req.raw));
     app.get("/.well-known/oauth-authorization-server/auth", (c) => auth.mcp.metadata(c.req.raw));
     app.route("/api/mcp-auth", mcpAuthorizationRoutes(auth.mcp, env));
+    app.route("/", mcpGateway(db, auth.mcp, env));
     for (let i = 0; i < 2; i++) {
       const [h] = await withSystemContext(db, (tx) => tx.insert(households).values({ name: "synthetic-mcp-" + randomUUID(), modulesEnabled: '["core"]' }).returning());
       householdIds.push(h.id);
@@ -140,6 +151,175 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
     await new Promise<void>((resolve, reject) => server ? server.close((error) => error ? reject(error) : resolve()) : resolve());
   });
 
+  it("serves protected-resource discovery and bearer challenges without browser cookie fallback", async () => {
+    for (const path of ["/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/api/mcp"]) {
+      const response = await fetch(origin + path);
+      expect(await response.json()).toEqual({ resource: origin + "/api/mcp", authorization_servers: [origin + "/auth"], bearer_methods_supported: ["header"], scopes_supported: scopes.filter((s) => s !== "offline_access") });
+    }
+    const response = await post("/api/mcp", { jsonrpc: "2.0", id: 1, method: "tools/list" });
+    expect(response.status).toBe(401);
+    expect(response.headers.get("www-authenticate")).toContain(origin + "/.well-known/oauth-protected-resource/api/mcp");
+    expect((await fetch(origin + "/api/mcp")).status).toBe(405);
+    const gateway = mcpGateway(db, auth.mcp, env);
+    expect((await gateway.request(origin + "/api/mcp", { method: "POST", headers: { host: "attacker.test" } })).status).toBe(403);
+    const foreignOrigin = new URL(origin); foreignOrigin.protocol = foreignOrigin.protocol === "https:" ? "http:" : "https:";
+    expect((await gateway.request(origin + "/api/mcp", { method: "POST", headers: { host: new URL(origin).host, origin: foreignOrigin.origin } })).status).toBe(403);
+    expect((await mcpGateway(db, auth.mcp, { ...env, MCP_ENABLED: false }).request(origin + "/api/mcp", { method: "POST" })).status).toBe(404);
+  });
+  it("interoperates with the official stateless SDK, validates identity-free input and records metadata only", async () => {
+    const token = await connect();
+    const client = new Client({ name: "synthetic-sdk", version: "1" }, { versionNegotiation: { mode: { pin: "2026-07-28" } } });
+    const transport = new StreamableHTTPClientTransport(new URL(origin + "/api/mcp"), { requestInit: { headers: { authorization: "Bearer " + token.access_token } } });
+    try {
+      await client.connect(transport);
+      expect(client.getServerCapabilities()?.tools?.listChanged).toBe(false);
+      const listed = await client.listTools(); expect(listed.tools.map((t) => t.name)).toEqual(["get_connection_context"]);
+      const result = await client.callTool({ name: "get_connection_context", arguments: {} });
+      expect(result.isError).not.toBe(true);
+      expect(result.structuredContent).toMatchObject({ capabilities: ["shopping:read"], tools: ["get_connection_context"] });
+      const invalid = await client.callTool({ name: "get_connection_context", arguments: { householdId: stranger.householdId } });
+      expect(invalid.isError).toBe(true);
+      await auth.mcp.revokeConnection(owner.headers, token.connectionId);
+      await expect(client.callTool({ name: "get_connection_context", arguments: {} })).rejects.toThrow();
+    } finally { await client.close(); }
+    const events = await owned(owner, (tx) => tx.select().from(mcpAccessEvents).where(eq(mcpAccessEvents.connectionId, token.connectionId)));
+    expect(events.some((e) => e.tool === "get_connection_context" && e.outcome === "succeeded")).toBe(true);
+    expect(events.every((e) => e.actorUserId === owner.userId && !JSON.stringify(e).includes(token.access_token) && !JSON.stringify(e).includes("synthetic-sdk"))).toBe(true);
+    expect(await owned(stranger, (tx) => tx.select().from(mcpAccessEvents).where(eq(mcpAccessEvents.connectionId, token.connectionId)))).toEqual([]);
+    expect(await withWorkerScanContext(db, (tx) => tx.select().from(mcpRequestLeases))).toEqual([]);
+  });
+  it("bounds inputs and results and filters tools by token scope", async () => {
+    const token = await connect();
+    const headers = { host: new URL(origin).host, authorization: "Bearer " + token.access_token, accept: "application/json, text/event-stream", "content-type": "application/json", "mcp-protocol-version": "2026-07-28" };
+    const gateway = mcpGateway(db, auth.mcp, env, [contextTool, { ...contextTool, name: "list_selected_notes", scopes: ["notes:read"] }]);
+    const meta = { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientInfo": { name: "synthetic", version: "1" }, "io.modelcontextprotocol/clientCapabilities": {} };
+    const list = await gateway.request(origin + "/api/mcp", { method: "POST", headers: { ...headers, "mcp-method": "tools/list" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: { _meta: meta } }) });
+    const listed = await list.json() as { result?: { tools: { name: string }[] } };
+    expect(listed, JSON.stringify(listed)).toHaveProperty("result.tools");
+    expect(listed.result!.tools.map((t) => t.name)).toEqual(["get_connection_context"]);
+    expect((await gateway.request(origin + "/api/mcp", { method: "POST", headers, body: JSON.stringify({ data: "x".repeat(65536) }) })).status).toBe(413);
+    const overflow = mcpGateway(db, auth.mcp, env, [{ ...contextTool, output: z.object({ value: z.string() }).strict(), run: async () => ({ value: "x".repeat(32768) }) }]);
+    const result = await overflow.request(origin + "/api/mcp", { method: "POST", headers: { ...headers, "mcp-method": "tools/call", "mcp-name": "get_connection_context" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "get_connection_context", arguments: {}, _meta: meta } }) });
+    expect((await result.json() as { result: { isError: boolean } }).result.isError).toBe(true);
+    expect(pageLimit.parse(undefined)).toBe(25); expect(() => pageLimit.parse(51)).toThrow();
+    expect(await owned(owner, (tx) => tx.select().from(mcpRequestLeases).where(eq(mcpRequestLeases.connectionId, token.connectionId)))).toEqual([]);
+  });
+  it("preserves modern MCP headers through the Next bridge and strips cookies in both directions", async () => {
+    // Load the web workspace at runtime, retaining the API's own compiler root.
+    const bridgePath = new URL("../../../web/src/app/api/mcp/route.ts", import.meta.url).href;
+    const { POST: proxyMcp } = await import(bridgePath) as { POST: (request: Request) => Promise<Response> };
+    const token = await connect();
+    const previousApi = process.env.API_URL;
+    process.env.API_URL = origin;
+    const nativeFetch = globalThis.fetch;
+    const forwarded: Headers[] = [];
+    const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (String(input).endsWith("/api/mcp")) forwarded.push(new Headers(init?.headers));
+      return nativeFetch(input, init);
+    });
+    const client = new Client({ name: "synthetic-proxy", version: "1" }, { versionNegotiation: { mode: { pin: "2026-07-28" } } });
+    const transport = new StreamableHTTPClientTransport(new URL(origin + "/api/mcp"), { requestInit: { headers: { authorization: "Bearer " + token.access_token } }, fetch: async (input, init) => {
+      const headers = new Headers(init?.headers); headers.set("host", new URL(origin).host); headers.set("cookie", owner.headers.get("cookie")!);
+      const response = await proxyMcp(new Request(String(input), { ...init, headers }));
+      expect(response.headers.has("set-cookie")).toBe(false);
+      return response;
+    } });
+    try {
+      await client.connect(transport);
+      expect((await client.callTool({ name: "get_connection_context", arguments: {} })).isError).not.toBe(true);
+      expect(forwarded.some((h) => h.get("mcp-method") === "tools/call" && h.get("mcp-name") === "get_connection_context")).toBe(true);
+      expect(forwarded.every((h) => !h.has("cookie") && h.get("host") === new URL(origin).host)).toBe(true);
+      const denied = await proxyMcp(new Request(origin + "/api/mcp", { method: "POST", headers: { host: new URL(origin).host, cookie: owner.headers.get("cookie")!, "content-type": "application/json" }, body: "{}" }));
+      expect(denied.status).toBe(401); expect(denied.headers.get("www-authenticate")).toContain("oauth-protected-resource/api/mcp");
+    } finally { await client.close(); spy.mockRestore(); if (previousApi === undefined) delete process.env.API_URL; else process.env.API_URL = previousApi; }
+  });
+  it("rechecks the grant in the tool transaction and respects logical read policy", async () => {
+    const token = await connect();
+    await auth.mcp.withGrantContext(bearer(token.access_token), ["shopping:read"], async (tx, identity) => {
+      const rows = await tx.select({ id: households.id }).from(households); expect(rows.map((h) => h.id)).toEqual([owner.householdId]);
+      await checkOperation(tx, env, identity, { module: "core", access: "read" });
+      await expect(checkOperation(tx, env, identity, { module: "core", access: "write" })).rejects.toThrow();
+    });
+    await owned(owner, async (tx) => { await tx.update(householdMembers).set({ role: "admin" }).where(eq(householdMembers.id, owner.memberId)); });
+    await expect(auth.mcp.withGrantContext(bearer(token.access_token), [], async () => "unreachable")).rejects.toThrow();
+    await owned(owner, async (tx) => { await tx.update(householdMembers).set({ role: "owner" }).where(eq(householdMembers.id, owner.memberId)); });
+    const replacement = await connect();
+    const identity = await auth.mcp.authorize(bearer(replacement.access_token));
+    await metadataContext(db, identity, async (tx) => {
+      await checkOperation(tx, { ...env, DEPLOYMENT_MODE: "shared" }, identity, { access: "read" });
+      await expect(checkOperation(tx, { ...env, DEPLOYMENT_MODE: "shared" }, identity, { access: "write" })).rejects.toThrow();
+    });
+    await owned(owner, async (tx) => { await tx.insert(householdSubscriptions).values({ householdId: owner.householdId, modulesEntitled: '["core"]', status: "canceled" }); });
+    try {
+      await auth.mcp.withGrantContext(bearer(replacement.access_token), ["shopping:read"], async (tx, current) => {
+        await checkOperation(tx, { ...env, DEPLOYMENT_MODE: "shared" }, current, { module: "core", access: "read" });
+        await expect(checkOperation(tx, { ...env, DEPLOYMENT_MODE: "shared" }, current, { module: "core", access: "write" })).rejects.toMatchObject({ code: "subscription_read_only", status: 402 });
+      });
+      await owned(owner, async (tx) => { await tx.update(householdSubscriptions).set({ modulesEntitled: '[]' }).where(eq(householdSubscriptions.householdId, owner.householdId)); });
+      await expect(auth.mcp.withGrantContext(bearer(replacement.access_token), ["shopping:read"], (tx, current) => checkOperation(tx, { ...env, DEPLOYMENT_MODE: "shared" }, current, { module: "core", access: "read" }))).rejects.toMatchObject({ code: "tool_unavailable" });
+    } finally { await owned(owner, async (tx) => { await tx.delete(householdSubscriptions).where(eq(householdSubscriptions.householdId, owner.householdId)); }); }
+  });
+  it("shares concurrency and 30/120 minute budgets across gateway instances", async () => {
+    const token = await connect(), identity = await auth.mcp.authorize(bearer(token.access_token));
+    await owned(owner, async (tx) => { await tx.delete(mcpHouseholdWindows); await tx.delete(mcpConnectionWindows); });
+    const pair = await Promise.all([admit(db, identity, "protocol"), admit(db, identity, "protocol")]);
+    expect(pair.every((a) => a.allowed)).toBe(true);
+    expect((await admit(db, identity, "protocol")).allowed).toBe(false);
+    for (const admission of pair) await finish(db, identity, admission.id, "protocol_completed", 1, 0);
+    await owned(owner, async (tx) => { await tx.update(mcpConnectionWindows).set({ calls: 30 }); });
+    expect((await admit(db, identity, "protocol")).allowed).toBe(false);
+    const before = await owned(owner, (tx) => tx.select().from(mcpAccessEvents).where(eq(mcpAccessEvents.connectionId, token.connectionId)));
+    expect((await admit(db, identity, "protocol")).allowed).toBe(false);
+    const after = await owned(owner, (tx) => tx.select().from(mcpAccessEvents).where(eq(mcpAccessEvents.connectionId, token.connectionId)));
+    expect(after.length).toBe(before.length);
+    await owned(owner, async (tx) => { await tx.update(mcpConnectionWindows).set({ calls: 0, throttled: false }); await tx.update(mcpHouseholdWindows).set({ calls: 120 }); });
+    expect((await admit(db, identity, "protocol")).allowed).toBe(false);
+    await owned(owner, async (tx) => { await tx.delete(mcpHouseholdWindows); await tx.delete(mcpConnectionWindows); });
+  });
+  it("retains active rotated refresh rows while deleting expired audit metadata", async () => {
+    const token = await connect();
+    expect((await refresh(token.refresh_token)).status).toBe(200);
+    const prior = await withMcpProviderContext(db, (tx) => tx.select().from(oauthRefreshToken).where(eq(oauthRefreshToken.referenceId, token.connectionId)));
+    const eventId = randomUUID();
+    await owned(owner, async (tx) => { await tx.insert(mcpAccessEvents).values({ id: eventId, requestId: eventId, householdId: owner.householdId, actorUserId: owner.userId, connectionId: token.connectionId, tool: "protocol", outcome: "succeeded", createdAt: new Date(Date.now() - 31 * 86400000) }); });
+    expect(await pruneMcpMetadata(db)).toBeGreaterThan(0);
+    expect(await owned(owner, (tx) => tx.select().from(mcpAccessEvents).where(eq(mcpAccessEvents.id, eventId)))).toEqual([]);
+    const remaining = await withMcpProviderContext(db, (tx) => tx.select().from(oauthRefreshToken).where(eq(oauthRefreshToken.referenceId, token.connectionId)));
+    expect(remaining.length).toBe(prior.length);
+    expect((await owned(owner, (tx) => tx.select().from(mcpConnections).where(eq(mcpConnections.id, token.connectionId))))[0].status).toBe("active");
+  });
+  it("retains revoked tombstones until all credentials expire, then purges them", async () => {
+    const token = await connect();
+    const [grant] = await owned(owner, (tx) => tx.select().from(mcpConnections).where(eq(mcpConnections.id, token.connectionId)));
+    const expiredId = randomUUID(), credentialId = randomUUID();
+    const old = new Date(Date.now() - 32 * 86400000), expired = new Date(Date.now() - 2 * 86400000);
+    await owned(owner, async (tx) => { await tx.insert(mcpConnections).values({ ...grant, id: expiredId, status: "revoked", createdAt: old, activatedAt: old, expiresAt: expired, revokedAt: expired, adultAttestedAt: old, privacyAttestedAt: old }); });
+    await withMcpProviderContext(db, async (tx) => { await tx.insert(oauthRefreshToken).values({ id: credentialId, token: randomUUID(), clientId, userId: owner.userId, referenceId: expiredId, scopes: grant.scopes, expiresAt: new Date(Date.now() + 3600000) }); });
+    await pruneMcpMetadata(db);
+    expect(await owned(owner, (tx) => tx.select().from(mcpConnections).where(eq(mcpConnections.id, expiredId)))).toHaveLength(1);
+    await withMcpProviderContext(db, async (tx) => { await tx.update(oauthRefreshToken).set({ expiresAt: expired }).where(eq(oauthRefreshToken.id, credentialId)); });
+    await pruneMcpMetadata(db);
+    expect(await owned(owner, (tx) => tx.select().from(mcpConnections).where(eq(mcpConnections.id, expiredId)))).toEqual([]);
+    expect(await withMcpProviderContext(db, (tx) => tx.select().from(oauthRefreshToken).where(eq(oauthRefreshToken.id, credentialId)))).toEqual([]);
+  });
+  it("cancels a slow request body at the 10-second deadline and releases admission", async () => {
+    const token = await connect();
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(new TextEncoder().encode('{"jsonrpc":"2.0",')); }, cancel() { cancelled = true; } });
+    const request = new Request(origin + "/api/mcp", { method: "POST", headers: { host: new URL(origin).host, authorization: "Bearer " + token.access_token, "content-type": "application/json" }, body, duplex: "half" } as RequestInit);
+    const started = performance.now();
+    const response = await mcpGateway(db, auth.mcp, env).fetch(request);
+    expect(response.status).toBe(504); expect(performance.now() - started).toBeLessThan(11000);
+    expect(cancelled).toBe(true);
+    let leases: unknown[] = [];
+    for (let i = 0; i < 20; i++) {
+      leases = await owned(owner, (tx) => tx.select().from(mcpRequestLeases).where(eq(mcpRequestLeases.connectionId, token.connectionId)));
+      if (!leases.length) break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    expect(leases).toEqual([]);
+    expect((await owned(owner, (tx) => tx.select().from(mcpAccessEvents).where(eq(mcpAccessEvents.connectionId, token.connectionId))))[0].outcome).toBe("deadline_exceeded");
+  }, 15000);
   it("publishes deployment-local discovery and public-only JWKS; blocks generic JWT and client administration", async () => {
     const metadata = await (await fetch(origin + "/.well-known/oauth-authorization-server/auth")).json() as { issuer: string; code_challenge_methods_supported: string[]; grant_types_supported: string[]; registration_endpoint?: string };
     expect(metadata.issuer).toBe(origin + "/auth"); expect(metadata.code_challenge_methods_supported).toEqual(["S256"]);

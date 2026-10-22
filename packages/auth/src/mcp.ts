@@ -168,7 +168,7 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string) {
               exists(tx.select({ id: noteShares.noteId }).from(noteShares).where(and(eq(noteShares.noteId, notes.id), eq(noteShares.memberId, owner.id)))))))
             .where(and(eq(mcpNoteSelections.householdId, householdId), inArray(mcpNoteSelections.connectionId, connections.map((c) => c.id)))) : [];
           const activity = await tx.select({ connectionId: mcpAccessEvents.connectionId, lastUsedAt: sql<string | null>`max(${mcpAccessEvents.createdAt})` })
-            .from(mcpAccessEvents).where(and(eq(mcpAccessEvents.householdId, householdId), eq(mcpAccessEvents.actorUserId, current.user.id)))
+            .from(mcpAccessEvents).where(and(eq(mcpAccessEvents.householdId, householdId), eq(mcpAccessEvents.actorUserId, current.user.id), gt(mcpAccessEvents.createdAt, new Date(Date.now() - TTL))))
             .groupBy(mcpAccessEvents.connectionId);
           return { householdId, householdName: household?.name ?? "Household", memberName: current.user.name,
             canManage: ["owner", "admin"].includes(owner.role), enabled: settings?.enabled ?? false,
@@ -381,7 +381,26 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string) {
         const scopes = payload.scope.split(" ").filter(Boolean);
         const connection = await liveConnection(payload.sub, payload.domi_grant_id, scopes, payload.client_id);
         if (requiredScopes.some((s) => !connection.scopes.includes(s) || !scopes.includes(s))) deny("insufficient_scope");
-        return { userId: connection.userId, memberId: connection.memberId, householdId: connection.householdId, connectionId: connection.id, scopes };
+        return { userId: connection.userId, memberId: connection.memberId, householdId: connection.householdId, connectionId: connection.id, clientId: connection.clientId, scopes };
+      },
+      /** Short tool transaction; recheck live grant after transport admission. */
+      async withGrantContext<T>(request: Request, requiredScopes: readonly string[], fn: (tx: Database, identity: McpIdentity) => Promise<T>) {
+        request.signal.throwIfAborted();
+        const identity = await this.authorize(request, requiredScopes);
+        request.signal.throwIfAborted();
+        return withUserLookupContext(db, identity.userId, (lookup) => withHouseholdContext(lookup, identity.householdId, async (tx) => {
+          request.signal.throwIfAborted();
+          await tx.execute(sql`select set_config('statement_timeout', '1500ms', true), set_config('lock_timeout', '1000ms', true), set_config('idle_in_transaction_session_timeout', '8000ms', true)`);
+          const [grant] = await tx.select().from(mcpConnections).where(and(eq(mcpConnections.id, identity.connectionId), eq(mcpConnections.userId, identity.userId))).for("share");
+          const current = await member(tx, identity.userId, identity.householdId);
+          if (!grant || grant.status !== "active" || grant.revokedAt || grant.expiresAt.getTime() <= Date.now() || grant.memberId !== current.id ||
+            grant.grantedRole !== current.role || identity.scopes.some((scope) => !grant.scopes.includes(scope))) deny("inactive_grant", 401);
+          await householdAccess(tx, identity.householdId, identity.scopes);
+          request.signal.throwIfAborted();
+          const result = await fn(tx, identity);
+          request.signal.throwIfAborted();
+          return result;
+        }));
       },
       async revokeConnection(headers: Headers, connectionId: string) {
         uuid(connectionId);
@@ -417,3 +436,4 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string) {
 }
 
 export type McpAuthorization = ReturnType<ReturnType<typeof createMcpAuthorization>["attach"]>;
+export type McpIdentity = { userId: string; memberId: string; householdId: string; connectionId: string; clientId: string; scopes: string[] };

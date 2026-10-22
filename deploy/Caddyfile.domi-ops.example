@@ -29,7 +29,14 @@ app.domi-ops.com {
     # bare path collided with the app's own /health page (the Health module) and silently
     # shadowed it for every household. Fixed 2026-08-30 by moving the liveness route under
     # /api instead of carving out a Caddy exception for it.
-    reverse_proxy domiops-web:3000
+    # MCP discovery/provider routes terminate on Hono, preserving app Host/Authorization.
+    @mcp path /api/mcp /.well-known/oauth-protected-resource /.well-known/oauth-protected-resource/api/mcp /.well-known/oauth-authorization-server/auth /auth/oauth2/* /auth/jwks /auth/.well-known/oauth-authorization-server
+    handle @mcp {
+        reverse_proxy api:4000
+    }
+    handle {
+        reverse_proxy domiops-web:3000
+    }
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
         X-Content-Type-Options nosniff

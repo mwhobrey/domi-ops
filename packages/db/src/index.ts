@@ -13,6 +13,7 @@ export {
 } from "./tenant-context.js";
 export { createScopedDb, getBaseDb, runWithScopedDb } from "./scoped-db.js";
 export * from "./schema/index.js";
+export { pruneMcpMetadata } from "./mcp-retention.js";
 export {
   isAsNeededMedScheduleKind,
   narrowGroupScheduleMeta,

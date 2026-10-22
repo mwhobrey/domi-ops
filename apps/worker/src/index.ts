@@ -1,7 +1,7 @@
 import { Worker } from "bullmq";
 import * as Sentry from "@sentry/node";
 import { loadEnv } from "@domi-ops/config";
-import { createDb, withWorkerScanContext } from "@domi-ops/db";
+import { createDb, withWorkerScanContext, pruneMcpMetadata } from "@domi-ops/db";
 import { runHouseholdSyncJob } from "./lib/household-sync-job.js";
 import { initSentry } from "./lib/sentry.js";
 import {
@@ -26,6 +26,17 @@ import {
 const env = loadEnv();
 initSentry(env);
 const db = createDb(env.DATABASE_URL);
+// Retention continues when MCP is disabled. No content or credentials are logged.
+let pruningMcp = false;
+const pruneMcp = async () => {
+  if (pruningMcp) return;
+  pruningMcp = true;
+  try { await pruneMcpMetadata(db); }
+  catch { console.error("MCP metadata retention failed"); }
+  finally { pruningMcp = false; }
+};
+void pruneMcp();
+setInterval(() => { void pruneMcp(); }, 60000).unref();
 const redisUrl = env.REDIS_URL ?? "redis://localhost:6379";
 
 const CROSS_TENANT_SCAN_JOBS = new Set<SyncJobName>([

@@ -15,7 +15,14 @@ whome.whobrey.me {
         reverse_proxy minio:9000
     }
 
-    reverse_proxy domi-ops-web:3000
+    # MCP bypasses browser routing; Caddy preserves public Host/Authorization.
+    @mcp path /api/mcp /.well-known/oauth-protected-resource /.well-known/oauth-protected-resource/api/mcp /.well-known/oauth-authorization-server/auth /auth/oauth2/* /auth/jwks /auth/.well-known/oauth-authorization-server
+    handle @mcp {
+        reverse_proxy api:4000
+    }
+    handle {
+        reverse_proxy domi-ops-web:3000
+    }
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
         X-Content-Type-Options nosniff
@@ -28,7 +35,13 @@ whome.whobrey.me {
 {$DOMI_OPS_DOMAIN} {
     encode gzip zstd
 
-    reverse_proxy web:3000
+    @mcp path /api/mcp /.well-known/oauth-protected-resource /.well-known/oauth-protected-resource/api/mcp /.well-known/oauth-authorization-server/auth /auth/oauth2/* /auth/jwks /auth/.well-known/oauth-authorization-server
+    handle @mcp {
+        reverse_proxy api:4000
+    }
+    handle {
+        reverse_proxy web:3000
+    }
 
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"

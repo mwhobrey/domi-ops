@@ -10,10 +10,17 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Added
 
+- Opt-in MCP gateway for hosted and self-hosted installations, with a private
+  connection-context tool, live permission checks, shared rate/concurrency limits,
+  bounded requests/results and metadata-only activity retention. Requires migration
+  `0104_mcp_gateway`, refreshed application-role grants and coordinated API/worker
+  upgrade. Feature remains disabled pending domain-tool/client acceptance; see
+  [MCP gateway setup](docs/MCP_GATEWAY.md).
+
 - Opt-in delegated OAuth authorization foundation for assistant integrations on both
   self-hosted and hosted deployments: scoped consent, PKCE, rotating refresh tokens,
   immutable household/member grants and immediate connection/membership revocation.
-  Disabled by default; MCP tools are not yet available. Requires
+  Disabled by default; domain MCP tools are not yet available. Requires
   migration `0103_mcp_authorization` and the updated application-role grants; see
   [MCP authorization setup](docs/MCP_AUTHORIZATION.md).
 - Personal AI connection consent and settings for self-hosted and hosted deployments:
