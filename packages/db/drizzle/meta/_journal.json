@@ -729,6 +729,13 @@
       "when": 1792609200000,
       "tag": "0103_mcp_authorization",
       "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "7",
+      "when": 1792695600000,
+      "tag": "0104_mcp_gateway",
+      "breakpoints": true
     }
   ]
 }

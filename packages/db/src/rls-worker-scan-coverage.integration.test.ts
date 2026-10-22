@@ -27,6 +27,7 @@ const NOT_READ_BY_WORKER_SCANS = new Set([
   "mcp_oauth_refresh_tokens", "mcp_oauth_access_tokens", "mcp_oauth_consents", "mcp_oauth_client_assertions",
   "mcp_client_profiles", "mcp_household_settings", "mcp_connections", "mcp_note_selections",
   "mcp_pending_consents", "mcp_access_events",
+  "mcp_household_windows", "mcp_connection_windows", "mcp_request_leases",
   // Goals and recurring bills are read/materialized by tenant requests only.
   "goals", "goal_rewards", "goal_milestones", "goal_progress_events", "goal_reward_redemptions", "expense_recurring",
   // Upload provenance is used only by tenant requests and explicit tenant-scoped maintenance.

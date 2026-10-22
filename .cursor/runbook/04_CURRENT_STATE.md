@@ -1,5 +1,23 @@
 # Current state
 
+## MCP gateway (WHO-471; local, not deployed)
+
+- Dedicated bearer-only `/api/mcp` branch and exact root/path protected-resource
+  metadata precede browser tenant/subscription middleware. Caddy routes these to
+  Hono; Next also supplies a bounded cookie-free bridge preserving modern headers.
+- Official SDK `createMcpHandler`, `legacy: "reject"`, per-request server. Clients
+  must pin version negotiation to `2026-07-28`; the SDK defaults to 2025 otherwise.
+  Only `get_connection_context` is registered; domain tools remain WHO-472.
+- Live grant/role/module checks run in short scoped tool transactions. Hosted
+  read-only subscriptions retain reads within module entitlement; no writes ship.
+- Migration `0104_mcp_gateway` adds shared minute counters, concurrency leases and
+  bounded metadata retention. Reapply app-role grants; upgrade API/worker together.
+  Fixed maintenance deletion has no general worker/system read bypass. Never prune
+  active rotated refresh rows (provider deletion revokes the grant).
+- Local HTTPS/restricted-role and Next bridge regressions, builds/typechecks and
+  Caddy validation are documented in [MCP_GATEWAY.md](../../docs/MCP_GATEWAY.md).
+  Public edge and vendor-client acceptance remain later gates; feature stays off.
+
 ## AI connection consent and controls (WHO-470; local, not deployed)
 
 - `/ai/consent` shows verified client/member/household identity, read permissions,

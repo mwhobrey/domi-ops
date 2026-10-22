@@ -66,6 +66,7 @@ import {
 import { getCookie } from "hono/cookie";
 import { isInvalidInputError } from "./lib/db-errors.js";
 import { mcpAuthorizationRoutes } from "./routes/mcp-authorization.js";
+import { mcpGateway } from "./mcp/gateway.js";
 
 export function createApplication(env: Env, options: { stripeFactory?: Parameters<typeof billingRoutes>[2]; authCookiePrefix?: string } = {}) {
   const baseDb = createDb(env.DATABASE_URL);
@@ -87,6 +88,11 @@ export function createApplication(env: Env, options: { stripeFactory?: Parameter
   });
 
   const app = new Hono<{ Variables: AppVariables }>();
+
+  // Bearer-only MCP terminates before browser cookies, tenant transactions and
+  // method-based subscription middleware. Disabled deployments retain 404s.
+  if (env.MCP_ENABLED && !env.DEMO_MODE) app.route("/", mcpGateway(baseDb, betterAuth.mcp, env));
+  else for (const path of ["/api/mcp", "/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/api/mcp"]) app.all(path, (c) => c.json({ error: "not_found" }, 404));
 
   // WHO-253 — there was no global error handler at all before this; an uncaught throw in any
   // route handler silently became a bare 500 with zero logging anywhere. The console.error below
