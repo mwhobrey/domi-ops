@@ -22,6 +22,11 @@ import { admit, finish, metadataContext } from "../mcp/activity.js";
 import { contextTool, pageLimit } from "../mcp/tools.js";
 import { checkOperation } from "../mcp/access.js";
 import { mcpAccessEvents, mcpRequestLeases, mcpConnectionWindows, mcpHouseholdWindows, householdSubscriptions, pruneMcpMetadata } from "@domi-ops/db";
+import { shoppingItems, shoppingRecurring, chores, choresRecurring } from "@domi-ops/db";
+import { readTools } from "../mcp/read-tools.js";
+
+const sideEffects = vi.hoisted(() => ({ enqueue: vi.fn(), notify: vi.fn() }));
+vi.mock("@domi-ops/calendar-sync", async (original) => ({ ...await original<typeof import("@domi-ops/calendar-sync")>(), enqueueSyncJob: sideEffects.enqueue, deliverUserNotification: sideEffects.notify }));
 
 const url = process.env.MCP_TEST_DATABASE_URL ?? process.env.HOSTED_TEST_DATABASE_URL;
 const suite = url ? describe : describe.skip;
@@ -94,6 +99,27 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
   }
   async function owned<T>(person: Person, fn: (tx: Database) => Promise<T>) {
     return withUserLookupContext(db, person.userId, (lookup) => withHouseholdContext(lookup, person.householdId, fn));
+  }
+  async function toolAccess(noteIds: string[] = [], requestedScopes = scopes, person = owner) {
+    const token = await connect(person, requestedScopes, noteIds);
+    const registry = readTools(env);
+    return { token, async run(name: string, args: Record<string, unknown> = {}) {
+      const tool = registry.find((entry) => entry.name === name)!;
+      return auth.mcp.withGrantContext(bearer(token.access_token), tool.scopes, async (tx, identity) => {
+        await checkOperation(tx, env, identity, tool);
+        return tool.output.parse(await tool.run(tx, identity, tool.input.parse(args), new AbortController().signal)) as { data: Record<string, unknown>[] | Record<string, unknown>; nextCursor: string | null; truncated: boolean; coverage: string };
+      });
+    } };
+  }
+  async function domainSnapshot() {
+    return owned(owner, async (tx) => {
+      const state: Record<string, unknown> = {};
+      for (const table of ["shopping_items", "shopping_recurring", "shopping_trips", "shopping_trip_items", "chores", "chores_recurring", "chore_completions", "chore_member_karma", "notes", "note_shares", "user_notifications", "calendar_sync_outbox", "push_subscriptions"]) {
+        const [row] = await tx.execute(sql`select coalesce(jsonb_agg(to_jsonb(t) order by to_jsonb(t)::text), '[]'::jsonb) as data from ${sql.identifier(table)} t`);
+        state[table] = row.data;
+      }
+      return state;
+    });
   }
 
   beforeAll(async () => {
@@ -173,10 +199,10 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
     try {
       await client.connect(transport);
       expect(client.getServerCapabilities()?.tools?.listChanged).toBe(false);
-      const listed = await client.listTools(); expect(listed.tools.map((t) => t.name)).toEqual(["get_connection_context"]);
+      const listed = await client.listTools(); expect(listed.tools.map((t) => t.name)).toEqual(["get_connection_context", "list_shopping_items"]);
       const result = await client.callTool({ name: "get_connection_context", arguments: {} });
       expect(result.isError).not.toBe(true);
-      expect(result.structuredContent).toMatchObject({ capabilities: ["shopping:read"], tools: ["get_connection_context"] });
+      expect(result.structuredContent).toMatchObject({ capabilities: ["shopping:read"], tools: ["get_connection_context", "list_shopping_items"] });
       const invalid = await client.callTool({ name: "get_connection_context", arguments: { householdId: stranger.householdId } });
       expect(invalid.isError).toBe(true);
       await auth.mcp.revokeConnection(owner.headers, token.connectionId);
@@ -320,6 +346,127 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
     expect(leases).toEqual([]);
     expect((await owned(owner, (tx) => tx.select().from(mcpAccessEvents).where(eq(mcpAccessEvents.connectionId, token.connectionId))))[0].outcome).toBe("deadline_exceeded");
   }, 15000);
+  it("serves all four pure read tools through the SDK without domain, queue or notification effects", async () => {
+    const itemId = randomUUID(), choreId = randomUUID();
+    await owned(owner, async (tx) => {
+      const [template] = await tx.insert(shoppingRecurring).values({ householdId: owner.householdId, item: "UNMATERIALIZED-SHOPPING", nextAt: "2020-01-01", enabled: true }).returning();
+      await tx.insert(shoppingItems).values({ id: itemId, householdId: owner.householdId, item: "Milk", quantity: 2, unit: "litres", notes: "ITEM-NOTE-EXCLUDED", cost: 999, tagsJson: '["aisle:dairy","TAG-EXCLUDED"]' });
+      const [choreTemplate] = await tx.insert(choresRecurring).values({ householdId: owner.householdId, description: "UNMATERIALIZED-CHORE", nextAt: "2020-01-01" }).returning();
+      await tx.insert(chores).values({ id: choreId, householdId: owner.householdId, description: "Wash dishes\nLONG-DESCRIPTION-EXCLUDED", assigneeMemberId: owner.memberId, dueDate: "2020-01-01", recurringId: choreTemplate.id, missedCount: 2, dueReminderSentAt: new Date(), tagsJson: '["CHORE-TAG-EXCLUDED"]' });
+      expect(template.enabled).toBe(true);
+    });
+    await owned(stranger, async (tx) => { await tx.insert(shoppingItems).values({ householdId: stranger.householdId, item: "FOREIGN-SHOPPING" }); await tx.insert(chores).values({ householdId: stranger.householdId, description: "FOREIGN-CHORE" }); });
+    const { token } = await toolAccess([ownNote]);
+    const before = await domainSnapshot();
+    sideEffects.enqueue.mockClear(); sideEffects.notify.mockClear();
+    const client = new Client({ name: "synthetic-domain-tools", version: "1" }, { versionNegotiation: { mode: { pin: "2026-07-28" } } });
+    try {
+      await client.connect(new StreamableHTTPClientTransport(new URL(origin + "/api/mcp"), { requestInit: { headers: { authorization: "Bearer " + token.access_token } } }));
+      expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(["get_connection_context", "list_shopping_items", "list_chores", "list_selected_notes", "get_selected_note"]);
+      const results = [];
+      for (const [name, args] of [["list_shopping_items", {}], ["list_chores", {}], ["list_selected_notes", {}], ["get_selected_note", { noteId: ownNote }]] as const) {
+        const result = await client.callTool({ name, arguments: args }); expect(result.isError, JSON.stringify(result)).not.toBe(true); results.push(result.structuredContent);
+      }
+      expect(results[0]).toMatchObject({ coverage: "persisted_records_only", contentTrust: "untrusted", data: [expect.objectContaining({ id: itemId, title: "Milk", aisle: "dairy", quantity: 2 })] });
+      expect(results[1]).toMatchObject({ data: [expect.objectContaining({ id: choreId, title: "Wash dishes", titleTruncated: true, dueDate: "2020-01-01", assignee: "Synthetic Adult" })] });
+      expect(results[3]).toMatchObject({ data: { id: ownNote, text: "synthetic", textOmitted: false } });
+      const serialized = JSON.stringify(results);
+      for (const excluded of ["ITEM-NOTE-EXCLUDED", "TAG-EXCLUDED", "LONG-DESCRIPTION-EXCLUDED", "CHORE-TAG-EXCLUDED", "UNMATERIALIZED", "FOREIGN-"]) expect(serialized).not.toContain(excluded);
+      const invalid = await client.callTool({ name: "list_shopping_items", arguments: { householdId: stranger.householdId } }); expect(invalid.isError).toBe(true);
+    } finally { await client.close(); }
+    expect(await domainSnapshot()).toEqual(before);
+    expect(sideEffects.enqueue).not.toHaveBeenCalled(); expect(sideEffects.notify).not.toHaveBeenCalled();
+    const events = await owned(owner, (tx) => tx.select().from(mcpAccessEvents).where(eq(mcpAccessEvents.connectionId, token.connectionId)));
+    expect(events.some((event) => event.tool === "get_selected_note" && event.outcome === "succeeded")).toBe(true);
+    expect(JSON.stringify(events)).not.toContain("synthetic-domain-tools"); expect(JSON.stringify(events)).not.toContain("Wash dishes");
+  });
+  it("pages persisted lists within byte bounds and binds cursors to grant, tool and filters", async () => {
+    const prefix = "刀".repeat(85);
+    await owned(owner, async (tx) => { await tx.insert(shoppingItems).values(Array.from({ length: 55 }, (_, i) => ({ householdId: owner.householdId, item: i === 2 ? "😺".repeat(256) : prefix + i, checked: i === 0, tagsJson: '["aisle:' + "冷".repeat(200) + '"]' }))); });
+    const access = await toolAccess();
+    const first = await access.run("list_shopping_items", { limit: 50, checked: "all" });
+    expect(first.truncated).toBe(true); expect((first.data as unknown[]).length).toBeLessThan(50);
+    const seen: string[] = []; let current = first;
+    for (let page = 0; page < 10; page++) {
+      expect(Buffer.byteLength(JSON.stringify(current)) * 2).toBeLessThan(32768 - 1024);
+      seen.push(...(current.data as { id: string }[]).map((row) => row.id));
+      if (!current.nextCursor) break;
+      current = await access.run("list_shopping_items", { limit: 50, checked: "all", cursor: current.nextCursor });
+    }
+    const all = await owned(owner, (tx) => tx.select({ id: shoppingItems.id }).from(shoppingItems));
+    expect(new Set(seen).size).toBe(all.length); expect(seen.length).toBe(all.length);
+    await expect(access.run("list_shopping_items", { checked: "open", cursor: first.nextCursor })).rejects.toThrow();
+    await expect(access.run("list_chores", { cursor: first.nextCursor })).rejects.toThrow();
+    await expect(access.run("list_shopping_items", { checked: "all", cursor: first.nextCursor!.slice(0, -2) + "xx" })).rejects.toThrow();
+    const replacement = await toolAccess();
+    await expect(replacement.run("list_shopping_items", { checked: "all", cursor: first.nextCursor })).rejects.toThrow();
+    await expect(replacement.run("list_shopping_items", { limit: 51 })).rejects.toThrow();
+    await expect(replacement.run("list_chores", { dueBefore: "2026-02-30" })).rejects.toThrow();
+    expect((await replacement.run("list_chores", { dueBefore: "2019-12-31" })).data).toEqual([]);
+  });
+  it("requires selection and live note ACLs for every read, including continuation", async () => {
+    const [shared] = await owned(colleague, (tx) => tx.insert(notes).values({ householdId: owner.householdId, title: "Shared synthetic", content: "part ".repeat(3000), visibility: "private", createdByUserId: colleague.userId }).returning());
+    await owned(colleague, async (tx) => { await tx.insert(noteShares).values({ noteId: shared.id, memberId: owner.memberId }); });
+    const access = await toolAccess([ownNote, shared.id]);
+    const first = await access.run("get_selected_note", { noteId: shared.id }); expect(first.nextCursor).toBeTruthy();
+    await owned(colleague, async (tx) => { await tx.delete(noteShares).where(eq(noteShares.noteId, shared.id)); });
+    const failures = [];
+    for (const args of [{ noteId: shared.id, cursor: first.nextCursor }, { noteId: foreignNote }, { noteId: randomUUID() }]) {
+      try { await access.run("get_selected_note", args); throw new Error("unexpected_success"); } catch (error) { failures.push((error as Error).message); }
+    }
+    expect(failures).toEqual(["note_unavailable", "note_unavailable", "note_unavailable"]);
+    expect((await access.run("list_selected_notes")).data).toEqual([expect.objectContaining({ id: ownNote })]);
+    await owned(owner, async (tx) => { await tx.delete(mcpNoteSelections).where(and(eq(mcpNoteSelections.connectionId, access.token.connectionId), eq(mcpNoteSelections.noteId, ownNote))); });
+    await expect(access.run("get_selected_note", { noteId: ownNote })).rejects.toMatchObject({ code: "note_unavailable" });
+  });
+  it("chunks Unicode note text without gaps and invalidates continuation when content changes", async () => {
+    const content = "😺漢字\"\\\n".repeat(2000);
+    const [note] = await owned(owner, (tx) => tx.insert(notes).values({ householdId: owner.householdId, title: "😺".repeat(256), content }).returning());
+    const access = await toolAccess([note.id]);
+    let result = await access.run("get_selected_note", { noteId: note.id }); const oldCursor = result.nextCursor;
+    expect(result.data).toMatchObject({ titleTruncated: true });
+    const chunks: string[] = [];
+    for (let page = 0; page < 20; page++) {
+      const data = result.data as { text: string };
+      expect(Array.from(data.text).length).toBeLessThanOrEqual(6000);
+      expect(Buffer.byteLength(JSON.stringify({ structuredContent: result, content: [{ type: "text", text: JSON.stringify(result) }] }))).toBeLessThanOrEqual(32768 - 2048);
+      chunks.push(data.text);
+      if (!result.nextCursor) break;
+      result = await access.run("get_selected_note", { noteId: note.id, cursor: result.nextCursor });
+    }
+    expect(chunks.join("")).toBe(content);
+    await owned(owner, async (tx) => { await tx.update(notes).set({ content: "Changed" }).where(eq(notes.id, note.id)); });
+    await expect(access.run("get_selected_note", { noteId: note.id, cursor: oldCursor })).rejects.toMatchObject({ code: "note_unavailable" });
+    expect((await access.run("get_selected_note", { noteId: note.id })).data).toMatchObject({ text: "Changed" });
+  });
+  it("omits linked, embedded and HTML content without loading an external resource", async () => {
+    const contents = ["Native\n[[drive:" + randomUUID() + "|PRIVATE-EMBED]]", "\\[\\[drive:secret\\]\\]", "[Google](https://docs.google.com/private)", "![file](/private/file)", "[file][ref]\n[ref]: /private/file", "<iframe src='/private'></iframe>"];
+    const rows = await owned(owner, (tx) => tx.insert(notes).values(contents.map((content, i) => ({ householdId: owner.householdId, title: "Omitted " + i, content }))).returning());
+    const access = await toolAccess(rows.map((row) => row.id));
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    try {
+      for (const row of rows) {
+        const result = await access.run("get_selected_note", { noteId: row.id });
+        expect(result.data).toMatchObject({ text: "", textOmitted: true, omissionReason: "linked_or_embedded_content" }); expect(result.nextCursor).toBeNull();
+      }
+      expect(fetchSpy.mock.calls.every(([input]) => String(input).startsWith(origin))).toBe(true);
+    } finally { fetchSpy.mockRestore(); }
+  });
+  it("enforces scopes and hosted entitlements in discovery and domain execution", async () => {
+    const access = await toolAccess([], ["shopping:read", "offline_access"]);
+    await expect(access.run("list_chores")).rejects.toMatchObject({ code: "insufficient_scope" });
+    await expect(access.run("list_selected_notes")).rejects.toMatchObject({ code: "insufficient_scope" });
+    await owned(owner, async (tx) => { await tx.insert(householdSubscriptions).values({ householdId: owner.householdId, modulesEntitled: '["core"]', status: "canceled" }); });
+    const gateway = mcpGateway(db, auth.mcp, { ...env, DEPLOYMENT_MODE: "shared" });
+    const request = (method: string, params: Record<string, unknown> = {}) => gateway.request(origin + "/api/mcp", { method: "POST", headers: { host: new URL(origin).host, authorization: "Bearer " + access.token.access_token, "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-method": method, ...(method === "tools/call" ? { "mcp-name": "list_shopping_items" } : {}), "mcp-protocol-version": "2026-07-28" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: { ...params, _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientInfo": { name: "synthetic", version: "1" }, "io.modelcontextprotocol/clientCapabilities": {} } } }) });
+    try {
+      const read = await request("tools/call", { name: "list_shopping_items", arguments: { limit: 1 } });
+      expect((await read.json() as { result: { isError?: boolean } }).result.isError).not.toBe(true);
+      await owned(owner, async (tx) => { await tx.update(householdSubscriptions).set({ modulesEntitled: '[]' }).where(eq(householdSubscriptions.householdId, owner.householdId)); });
+      const listed = await request("tools/list"); expect((await listed.json() as { result: { tools: { name: string }[] } }).result.tools.map((tool) => tool.name)).toEqual(["get_connection_context"]);
+      const denied = await request("tools/call", { name: "list_shopping_items", arguments: {} }); expect(JSON.stringify(await denied.json())).not.toContain("Milk");
+    } finally { await owned(owner, async (tx) => { await tx.delete(householdSubscriptions).where(eq(householdSubscriptions.householdId, owner.householdId)); }); }
+  });
   it("publishes deployment-local discovery and public-only JWKS; blocks generic JWT and client administration", async () => {
     const metadata = await (await fetch(origin + "/.well-known/oauth-authorization-server/auth")).json() as { issuer: string; code_challenge_methods_supported: string[]; grant_types_supported: string[]; registration_endpoint?: string };
     expect(metadata.issuer).toBe(origin + "/auth"); expect(metadata.code_challenge_methods_supported).toEqual(["S256"]);

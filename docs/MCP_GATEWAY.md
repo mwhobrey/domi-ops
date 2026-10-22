@@ -73,14 +73,15 @@ jobs, shell, SQL or arbitrary URL fetch tools are exposed. The response mode is
 automatic JSON; the approved handlers emit no notifications and subscription
 methods are rejected before dispatch.
 
-Production currently registers only `get_connection_context`. It returns this
+WHO-471 introduced `get_connection_context`. It returns this
 connection's own household/member labels, timezone, scopes and current tool name;
 there is no roster, email or private record content. Returned labels are untrusted
 data, never instructions. Strict input `{}` rejects caller-supplied identities.
 
-WHO-472 owns the shopping, chore and explicitly selected-note tools. Their approved
-names are reserved in the code registry but they are not registered or implemented
-here. New handlers must use pure bounded domain reads, declare scope/module policy,
+WHO-472 adds shopping, chore and explicitly selected-note tools through
+[purpose-built read queries](MCP_READ_TOOLS.md). They are now registered alongside
+the context tool and filtered by scope/current module entitlement. New handlers
+must use pure bounded domain reads, declare scope/module policy,
 and check current record ACLs inside the supplied transaction. Do not wrap existing
 shopping/chore list routes: they can materialize recurrence and send notifications.
 

@@ -5,14 +5,15 @@ import { MCP_SCOPES, McpAuthorizationError, mcpUrls, type createMcpAuthorization
 import type { Database } from "@domi-ops/db";
 import type { Env } from "@domi-ops/config";
 import { admit, finish, tagTool } from "./activity.js";
-import { checkOperation, MCP_LIMITS, McpGatewayError } from "./access.js";
+import { checkOperation, permittedTools, MCP_LIMITS, McpGatewayError } from "./access.js";
 import { approvedToolNames, contextTool, type McpTool } from "./tools.js";
 import { readMcpBody } from "./bounds.js";
+import { readTools } from "./read-tools.js";
 
 type Authorization = ReturnType<ReturnType<typeof createMcpAuthorization>["attach"]>;
 
 /** Stateless transport. Only code-reviewed tools may be registered here. */
-export function mcpGateway(db: Database, auth: Authorization, env: Env, tools: readonly McpTool[] = [contextTool]) {
+export function mcpGateway(db: Database, auth: Authorization, env: Env, tools: readonly McpTool[] = [contextTool, ...readTools(env)]) {
   const app = new Hono();
   const urls = mcpUrls(env), canonical = new URL(urls.origin);
   const resourceScopes = MCP_SCOPES.filter((scope) => scope !== "offline_access");
@@ -49,23 +50,26 @@ export function mcpGateway(db: Database, auth: Authorization, env: Env, tools: r
         if (!admission.allowed) return failure("rate_limited", 429, { "Retry-After": String(admission.retryAfter) });
         signal.throwIfAborted();
         const sdk = createMcpHonoApp({ allowedHosts: [canonical.hostname], allowedOrigins: [canonical.hostname], maxRequestBodySize: MCP_LIMITS.requestBytes });
-        sdk.onError(() => failure("invalid_request", 400));
+        sdk.onError((error) => error instanceof McpAuthorizationError ? failure(error.code, error.status, { "WWW-Authenticate": challenge }) : failure("temporarily_unavailable", 503));
         sdk.post("/api/mcp", async (request) => {
           signal.throwIfAborted();
           const parsedBody = (request.get as (key: string) => unknown)("parsedBody");
           const method = parsedBody && typeof parsedBody === "object" && "method" in parsedBody ? parsedBody.method : undefined;
           if (typeof method === "string" && !["server/discover", "tools/list", "tools/call", "initialize", "ping"].includes(method)) return failure("method_not_allowed", 400);
+          const available = await auth.withGrantContext(bearerRequest, [], (tx, current) => permittedTools(tx, env, current, tools));
           handler = createMcpHandler(() => {
             const server = new McpServer({ name: "domi-ops", version: "1.0.0" }, { capabilities: { tools: { listChanged: false } } });
             server.server.onerror = () => {}; // Never forward protocol errors/arguments to telemetry.
-            for (const tool of tools.filter((tool) => tool.scopes.every((scope) => identity!.scopes.includes(scope)))) {
+            for (const tool of available) {
               server.registerTool(tool.name, { description: tool.description, inputSchema: tool.input, outputSchema: tool.output, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } }, async (args) => {
                 outcome = "tool_denied";
                 await tagTool(db, identity!, admission!.id, tool.name);
                 try {
                   const result = await auth.withGrantContext(bearerRequest, tool.scopes, async (tx, current) => {
                     await checkOperation(tx, env, current, tool);
-                    return tool.output.parse(await tool.run(tx, current, tool.input.parse(args), signal));
+                    const value = await tool.run(tx, current, tool.input.parse(args), signal);
+                    if (tool.name === "get_connection_context") value.tools = (await permittedTools(tx, env, current, tools)).map((entry) => entry.name);
+                    return tool.output.parse(value);
                   });
                   signal.throwIfAborted();
                   const text = JSON.stringify(result);

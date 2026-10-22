@@ -44,6 +44,7 @@
 - `docs/MCP_M1_DECISIONS.md` — resolved MCP design, included Cloud/free self-host packaging and compatibility evidence
 - `docs/MCP_AUTHORIZATION.md` — WHO-469 authorization foundation, roles/migration, consent API and self-host/hosted regression suite
 - `docs/MCP_GATEWAY.md` — WHO-471 modern MCP endpoint, shared limits, activity/retention, proxy routing and HTTPS regression runner
+- `docs/MCP_READ_TOOLS.md` — WHO-472 persisted-only domain queries, note selection/ACLs, field omissions and signed byte-aware pagination
 - `docs/MCP_CONNECTIONS.md` — WHO-470 consent/settings UI, browser login/proxy continuation, private grant controls and verification; gateway/client gates pending
 - `docs/SECURITY_REVIEW.md` — pre-launch security checklist (WHO-172)
 - `docs/HOSTED_RLS.md` — hosted tenant context + RLS policies
