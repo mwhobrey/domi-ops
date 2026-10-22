@@ -78,7 +78,7 @@
 | Unit tests | Vitest — `npm run test` (config, crypto, import dry-run, pure API lib) |
 | Integration tests | `npm run test:hosted` — RLS/tenant isolation, billing bootstrap, dose logging. Needs a live Postgres; each file self-skips without `DATABASE_URL`/`HOSTED_TEST_DATABASE_URL`. |
 | E2E | **None** |
-| CI | `.github/workflows/ci.yml` — `build` job (typecheck + build + `npm run test`) and `test-hosted` job (Postgres service → migrate → `seed:hosted-qa` → `db:create-app-role` → `npm run test:hosted`) |
+| CI | `.github/workflows/ci.yml` — `build` job (typecheck + build + `npm run test`), `test-mcp` job (owned PostgreSQL/TLS → full migrations/restricted roles → explicit MCP single/shared matrix), and `test-hosted` job (Postgres service → migrate → `seed:hosted-qa` → `db:create-app-role` → `npm run test:hosted`) |
 
 **Manual verification checklist:**
 

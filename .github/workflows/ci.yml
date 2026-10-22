@@ -74,6 +74,24 @@ jobs:
       - name: Hosted QA safety guards
         run: node --test scripts/hosted-qa/ownership.test.mjs scripts/hosted-qa/cleanup.test.mjs
 
+  test-mcp:
+    name: MCP authorization and isolation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      # Same isolated PostgreSQL/TLS runner as local acceptance; no hosted secrets,
+      # live database, permissive TLS override or seeded production household.
+      - name: MCP restricted-role HTTPS acceptance
+        shell: pwsh
+        run: ./scripts/test-mcp-auth.ps1 -UseSystemNode
+
   test-hosted:
     runs-on: ubuntu-latest
     services:

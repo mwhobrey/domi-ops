@@ -10,6 +10,11 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Added
 
+- Dedicated MCP authorization/isolation CI acceptance using disposable PostgreSQL
+  and HTTPS, covering single/self-hosted and shared/hosted application boundaries,
+  concurrent tenant context, read side effects, hostile content, redaction and
+  resource limits. See [security acceptance](docs/MCP_SECURITY_ACCEPTANCE.md).
+
 - Opt-in read-only MCP tools for persisted shopping items, chores and explicitly
   selected notes, shared by self-hosted and hosted deployments. Reads enforce live
   member scope/module/record access, use bounded signed pagination and leave domain

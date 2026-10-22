@@ -1,6 +1,11 @@
 #Requires -Version 7.3
+param([switch]$UseSystemNode)
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
+function Invoke-McpNode([string]$toolName, [string[]]$toolArgs) {
+    if ($UseSystemNode) { & $toolName @toolArgs }
+    else { & mise exec -- $toolName @toolArgs }
+}
 $container = "domi-mcp-auth-test-$PID"
 $started = $false
 $migrationLog = $null
@@ -45,15 +50,15 @@ try {
     $env:MCP_TEST_DATABASE_URL = $env:HOSTED_TEST_DATABASE_URL
     $env:MCP_TEST_ADMIN_DATABASE_URL = $env:DATABASE_URL
     foreach ($workspace in @('config', 'crypto', 'db', 'auth', 'calendar-sync')) {
-        mise exec -- npm run build -w "@domi-ops/$workspace"
+        Invoke-McpNode 'npm' @('run', 'build', '-w', "@domi-ops/$workspace")
         if ($LASTEXITCODE -ne 0) { throw "Build failed: $workspace" }
     }
     $migrationLog = [System.IO.Path]::GetTempFileName()
-    mise exec -- npm run migrate:run -w @domi-ops/db *> $migrationLog
+    Invoke-McpNode 'npm' @('run', 'migrate:run', '-w', '@domi-ops/db') *> $migrationLog
     if ($LASTEXITCODE -ne 0) { throw 'Database migration failed' }
-    mise exec -- npm run db:create-app-role
+    Invoke-McpNode 'npm' @('run', 'db:create-app-role')
     if ($LASTEXITCODE -ne 0) { throw 'Application role setup failed' }
-    mise exec -- npx vitest run apps/api/src/routes/mcp-authorization.integration.test.ts apps/api/src/mcp/cursors.test.ts packages/auth/src/credential-signin.integration.test.ts packages/auth/src/google-signin.integration.test.ts packages/db/src/rls-worker-scan-coverage.integration.test.ts --reporter=dot
+    Invoke-McpNode 'npx' @('vitest', 'run', 'apps/api/src/routes/mcp-authorization.integration.test.ts', 'apps/api/src/mcp/cursors.test.ts', 'packages/auth/src/credential-signin.integration.test.ts', 'packages/auth/src/google-signin.integration.test.ts', 'packages/db/src/rls-worker-scan-coverage.integration.test.ts', '--reporter=dot')
     if ($LASTEXITCODE -ne 0) { throw 'MCP authorization regressions failed' }
 } catch {
     if ($migrationLog) { Get-Content -LiteralPath $migrationLog -Tail 25 }
