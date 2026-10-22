@@ -133,7 +133,10 @@ after one hour. Changing page size is allowed; changing the tool/filter/grant or
 tampering is rejected. A note content revision change invalidates an existing text
 cursor; restart that note with a fresh request. Every continuation rechecks scopes,
 grant/member/role, module entitlement, selection and ACLs. Cursor possession grants
-no additional access. Secret rotation invalidates outstanding cursors.
+no additional access. Secret rotation invalidates outstanding cursors. In every
+environment, encoding or decoding a cursor without `SESSION_SECRET` fails closed
+with temporary unavailability; there is no development signing-key fallback.
+Initialization remains lazy so a disabled gateway can start without this key.
 
 Gateway deadlines, concurrency/rate admission, metadata-only activity and retention
 remain unchanged. Protocol responses include both text and structured content;
@@ -167,7 +170,7 @@ the broader adversarial authorization matrix; client/privacy acceptance, skill
 behavior, self-host dogfood and the separate hosted pilot remain later milestones.
 Keep `MCP_ENABLED=false` on deployed installations until those gates pass.
 
-Local verification on 2026-10-22: all 108 explicit PostgreSQL/HTTPS/cursor tests
-passed; the regular suite passed 1,496 tests with 916 environment-dependent tests
+Local verification on 2026-10-22: all 109 explicit PostgreSQL/HTTPS/cursor tests
+passed; the regular suite passed 1,497 tests with 916 environment-dependent tests
 skipped. All 17 repository typecheck tasks passed. The owned disposable PostgreSQL
 container and ephemeral TLS key/certificate files were removed after the run.

@@ -35,7 +35,7 @@ function visibleNote(tx: Database, identity: McpIdentity) {
 }
 
 export function readTools(env: Env): McpTool[] {
-  const cursors = mcpCursors(env.SESSION_SECRET ?? "dev-only-insecure-secret-replace-before-production!!");
+  const cursors = mcpCursors(env.SESSION_SECRET);
   const origin = new URL(env.PUBLIC_APP_URL).origin;
   // Lists have no record-specific navigation in the app. Keep stable IDs beside
   // links to their real source page; chores support an existing highlight query.

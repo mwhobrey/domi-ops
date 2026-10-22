@@ -13,7 +13,9 @@
   sensitive content cannot be automatically classified by this schema.
 - Query-bound HMAC cursors expire after one hour. List pages and Unicode note
   chunks shrink to fit JSON byte limits, with honest continuation/truncation;
-  changed note text requires a fresh cursor. No dependencies/schema/env changes.
+  changed note text requires a fresh cursor. Cursor operations fail closed without
+  `SESSION_SECRET` in every environment; initialization is lazy for disabled boot.
+  No dependencies/schema/env changes.
 - Contracts/reproduction: [MCP_READ_TOOLS.md](../../docs/MCP_READ_TOOLS.md).
   Broader WHO-473 isolation and later client/dogfood/hosted pilot gates remain.
 

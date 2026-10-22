@@ -3,6 +3,11 @@ import { mcpCursors } from "./cursors.js";
 
 afterEach(() => vi.useRealTimers());
 describe("MCP cursor integrity", () => {
+  it("allows construction without a secret but refuses all cursor operations", () => {
+    const unavailable = mcpCursors(undefined);
+    expect(() => unavailable.encode("bound", "record")).toThrowError(expect.objectContaining({ code: "temporarily_unavailable", status: 503 }));
+    expect(() => unavailable.decode("bound", "payload.signature")).toThrowError(expect.objectContaining({ code: "temporarily_unavailable", status: 503 }));
+  });
   const cursors = mcpCursors("synthetic-test-secret-that-is-not-a-production-key");
   it("rejects modification, a different grant/query and a different signing key", () => {
     const cursor = cursors.encode("grant-a/shopping/open", "record-a");
