@@ -1,5 +1,24 @@
 # Current state
 
+## MCP native read tools (WHO-472; local, not deployed)
+
+- All five approved tools are registered. Discovery/context reflect current token
+  scopes and module entitlement; domain calls repeat policy inside live grant scope.
+- Shopping/chores read persisted rows directly, without route materialization,
+  roll-forward, reminder, karma, queue or notification effects. Chores expose only
+  a bounded first-line title from the existing description field; later lines/tags
+  stay excluded. Shopping omits costs, notes, receipts and arbitrary tags.
+- Notes require selection AND current household/creator/share ACL on every page.
+  Linked/embedded/HTML notes return metadata with explicit text omission; copied
+  sensitive content cannot be automatically classified by this schema.
+- Query-bound HMAC cursors expire after one hour. List pages and Unicode note
+  chunks shrink to fit JSON byte limits, with honest continuation/truncation;
+  changed note text requires a fresh cursor. Cursor operations fail closed without
+  `SESSION_SECRET` in every environment; initialization is lazy for disabled boot.
+  No dependencies/schema/env changes.
+- Contracts/reproduction: [MCP_READ_TOOLS.md](../../docs/MCP_READ_TOOLS.md).
+  Broader WHO-473 isolation and later client/dogfood/hosted pilot gates remain.
+
 ## MCP gateway (WHO-471; local, not deployed)
 
 - Dedicated bearer-only `/api/mcp` branch and exact root/path protected-resource

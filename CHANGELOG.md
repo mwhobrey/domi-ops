@@ -10,6 +10,13 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Added
 
+- Opt-in read-only MCP tools for persisted shopping items, chores and explicitly
+  selected notes, shared by self-hosted and hosted deployments. Reads enforce live
+  member scope/module/record access, use bounded signed pagination and leave domain
+  state and notifications unchanged. Linked/embedded note text is explicitly omitted.
+  No migration or new configuration; feature remains off pending client/pilot
+  acceptance. See [read tool contracts](docs/MCP_READ_TOOLS.md).
+
 - Opt-in MCP gateway for hosted and self-hosted installations, with a private
   connection-context tool, live permission checks, shared rate/concurrency limits,
   bounded requests/results and metadata-only activity retention. Requires migration

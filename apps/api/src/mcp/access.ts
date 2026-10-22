@@ -2,6 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { households, householdSubscriptions, type Database } from "@domi-ops/db";
 import { isHostedDeployment, isModuleEnabled, parseHouseholdModulesJson, subscriptionAllowsWork, type Env } from "@domi-ops/config";
 import type { McpIdentity } from "@domi-ops/auth";
+import type { McpTool } from "./tools.js";
 
 export class McpGatewayError extends Error {
   constructor(public readonly code: string, public readonly status: 400 | 401 | 403 | 402 | 413 | 429 | 503 | 504 = 403) { super(code); }
@@ -25,4 +26,14 @@ export async function checkOperation(tx: Database, env: Env, identity: McpIdenti
     throw new McpGatewayError("writes_not_enabled");
   }
   await tx.execute(sql`select set_config('statement_timeout', '1500ms', true)`);
+}
+
+export async function permittedTools(tx: Database, env: Env, identity: McpIdentity, registry: readonly McpTool[]) {
+  const permitted: McpTool[] = [];
+  for (const tool of registry) {
+    if (!tool.scopes.every((scope) => identity.scopes.includes(scope))) continue;
+    try { await checkOperation(tx, env, identity, tool); permitted.push(tool); }
+    catch (error) { if (!(error instanceof McpGatewayError && error.code === "tool_unavailable")) throw error; }
+  }
+  return permitted;
 }
