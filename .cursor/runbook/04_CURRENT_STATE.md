@@ -1,5 +1,20 @@
 # Current state
 
+## Portable household briefing skill (WHO-474; local, not installed/deployed)
+
+- Shared instruction source: `skills/domi-ops-household-briefing/SKILL.md`, version
+  0.1.0. Uses only advertised approved reads, context first;12 calls total,
+  two pages/list, three selected notes and two chunks/note maximum.
+- Household-local overdue/today/upcoming/undated grouping, exact returned record
+  links, persisted-only coverage and explicit partial/omitted/unavailable data.
+  Retrieved instructions confer no authority; no writes, excluded domains or fetches.
+- Nine authored synthetic reference scenarios replay against production tool
+  schemas. These are contract fixtures and manual walkthroughs, not model traces.
+  Actual client triggering/compliance/privacy acceptance remains M4.
+- Setup/version/removal: [MCP_BRIEFING_SKILL.md](../../docs/MCP_BRIEFING_SKILL.md).
+  No dependencies/schema/env changes or active-client installation; hosted base
+  inclusion and free self-hosting retained. Deployment MCP stays disabled.
+
 ## MCP security acceptance (WHO-473; local, not deployed)
 
 - Single/self-hosted and shared/hosted restricted-role fixtures now exercise the

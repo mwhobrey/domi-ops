@@ -10,6 +10,11 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Added
 
+- Portable household briefing skill source for connected read-only MCP clients,
+  with household-local dates, record links, bounded retrieval and explicit missing
+  coverage. Includes installation/version/removal guidance and synthetic reference
+  cases; live client acceptance remains pending. See [briefing skill](docs/MCP_BRIEFING_SKILL.md).
+
 - Dedicated MCP authorization/isolation CI acceptance using disposable PostgreSQL
   and HTTPS, covering single/self-hosted and shared/hosted application boundaries,
   concurrent tenant context, read side effects, hostile content, redaction and
