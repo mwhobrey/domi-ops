@@ -1,5 +1,27 @@
 /** Fixed upstream, bearer-only bridge for installations using Next as their proxy. */
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
+import { Readable } from "node:stream";
+
 export const runtime = "nodejs";
+
+function upstream(url: URL, headers: Headers, body: Uint8Array, signal: AbortSignal): Promise<{ body: ReadableStream<Uint8Array>; status: number; headers: Headers }> {
+  // Node fetch replaces Host with the internal API hostname. The native request
+  // preserves the public Host needed by the gateway's canonical-origin check.
+  return new Promise((resolve, reject) => {
+    const send = url.protocol === "https:" ? httpsRequest : httpRequest;
+    const request = send(url, { method: "POST", headers: Object.fromEntries(headers), signal }, (incoming) => {
+      const responseHeaders = new Headers();
+      for (const [name, value] of Object.entries(incoming.headers)) {
+        if (Array.isArray(value)) for (const entry of value) responseHeaders.append(name, entry);
+        else if (value !== undefined) responseHeaders.set(name, value);
+      }
+      resolve({ body: Readable.toWeb(incoming) as ReadableStream<Uint8Array>, status: incoming.statusCode ?? 502, headers: responseHeaders });
+    });
+    request.on("error", reject);
+    request.end(body);
+  });
+}
 
 async function boundedBody(stream: ReadableStream<Uint8Array> | null, maximum: number, signal: AbortSignal) {
   const chunks: Uint8Array[] = [];
@@ -31,7 +53,7 @@ export async function POST(request: Request) {
       if (value !== null) headers.set(name, value);
     }
     const body = await boundedBody(request.body, 65536, signal);
-    const response = await fetch(new URL("/api/mcp", process.env.API_URL ?? "http://localhost:4000"), { method: "POST", headers, body, signal, redirect: "manual", cache: "no-store" });
+    const response = await upstream(new URL("/api/mcp", process.env.API_URL ?? "http://localhost:4000"), headers, body, signal);
     const result = await boundedBody(response.body, 32768, signal);
     const outgoing = new Headers({ "Cache-Control": "no-store" });
     for (const name of ["content-type", "www-authenticate", "allow", "retry-after", "mcp-protocol-version"]) {

@@ -17,18 +17,29 @@ describe("OAuth browser navigation through the auth proxy", () => {
     const request = new NextRequest("https://app.example.test/auth/" + segments.join("/"), { headers: { "sec-fetch-mode": "navigate", accept: "text/html" } });
     const response = await proxyAuthToApi(request, segments);
     expect(response.status).toBe(303);
-    expect(response.headers.get("location")).toBe("https://app.example.test/ai/consent?sig=signed&ba_param=scope&scope=notes%3Aread");
+    expect(response.headers.get("location")).toBe("/ai/consent?sig=signed&ba_param=scope&scope=notes%3Aread");
     expect(response.headers.getSetCookie()).toHaveLength(2);
     expect(response.headers.get("referrer-policy")).toBe("no-referrer");
     expect(new Headers(fetch.mock.calls[0][1].headers).get("sec-fetch-mode")).toBe("navigate");
+  });
+  it("keeps the browser's public origin when Next sees an internal container URL", async () => {
+    const path = "/ai/consent?sig=signed%2Bvalue&ba_param=scope&scope=notes%3Aread";
+    upstream(path);
+    const request = new NextRequest("http://0.0.0.0:3000/auth/oauth2/authorize", {
+      headers: { "sec-fetch-mode": "navigate", host: "household.example.test", "x-forwarded-host": "attacker.invalid" },
+    });
+    const response = await proxyAuthToApi(request, ["oauth2", "authorize"]);
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe(path);
+    expect(new URL(response.headers.get("location")!, "https://household.example.test").origin).toBe("https://household.example.test");
   });
   it("keeps the JSON contract for AJAX so the maintained auth client can redirect", async () => {
     upstream("/ai/consent?sig=signed");
     const response = await proxyAuthToApi(new NextRequest("https://app.example.test/auth/oauth2/authorize", { headers: { "sec-fetch-mode": "cors" } }), ["oauth2", "authorize"]);
     expect(response.status).toBe(200); expect(await response.json()).toMatchObject({ redirect: true });
   });
-  it("does not turn an untrusted origin into a proxy redirect", async () => {
-    upstream("https://foreign.test/steal");
+  it.each(["https://foreign.test/steal", "https://app.example.test//foreign.test/steal"])("does not turn an untrusted origin or network-path target into a proxy redirect: %s", async (url) => {
+    upstream(url);
     const response = await proxyAuthToApi(new NextRequest("https://app.example.test/auth/oauth2/authorize", { headers: { "sec-fetch-mode": "navigate" } }), ["oauth2", "authorize"]);
     expect(response.status).toBe(200); expect(response.headers.has("location")).toBe(false);
   });

@@ -14,7 +14,7 @@ const project = `domi-ops-qa-${createHash("sha256").update(root.toLowerCase()).d
 const marker = "domi-ops-hosted-qa-v1";
 const statePath = join(directory, "state.json"), envPath = join(directory, "compose.env");
 const command = process.argv[2] ?? "run";
-const supported = ["run", "up", "test", "status", "logs", "down", "reset", "providers"];
+const supported = ["run", "up", "mcp", "test", "status", "logs", "down", "reset", "providers"];
 if (!supported.includes(command)) throw new Error(`Use ${supported.join(" | ")}`);
 await mkdir(directory, { recursive: true });
 if (!["status", "logs"].includes(command)) {
@@ -64,13 +64,16 @@ if (command === "providers") {
   if (providers.STRIPE_SECRET_KEY && (!providers.STRIPE_SECRET_KEY.startsWith("sk_test_") || !["STRIPE_WEBHOOK_SECRET", "STRIPE_PRICE_STARTER_MONTHLY", "STRIPE_PRICE_STARTER_ANNUAL"].every((key) => providers[key]))) throw new Error("Stripe sandbox key, webhook secret and both sandbox prices are required; live keys are refused");
   if (!providers.GOOGLE_OAUTH_CLIENT_ID && !providers.STRIPE_SECRET_KEY) throw new Error("No testing credentials supplied");
   state.mode = "providers";
-} else if (["up", "run"].includes(command)) state.mode = "fixture";
+} else if (["up", "run", "mcp"].includes(command)) { state.mode = "fixture"; state.mcp = command === "mcp"; }
 // Preserve provider credentials on status/down; never copy them into state.json or receipts.
-if (["up", "run", "providers"].includes(command)) {
+if (["up", "run", "mcp", "providers"].includes(command)) {
+  if (command === "providers" && state.mcp) throw new Error("MCP lab is synthetic-only; switch to ordinary fixture mode before provider setup");
   const values = { DOMI_QA_IMAGE: state.image, DOMI_QA_INTERNAL: state.mode === "fixture" ? "true" : "false", ...Object.fromEntries(Object.entries(state.ports).map(([key, value]) => [`DOMI_QA_${key.toUpperCase()}_PORT`, String(value)])), ...Object.fromEntries(Object.entries(state.secrets).map(([key, value]) => [`DOMI_QA_${key}`, value])) };
   const names = { GOOGLE_OAUTH_CLIENT_ID: "GOOGLE_CLIENT_ID", GOOGLE_OAUTH_CLIENT_SECRET: "GOOGLE_CLIENT_SECRET", GOOGLE_PICKER_API_KEY: "GOOGLE_PICKER_KEY", STRIPE_SECRET_KEY: "STRIPE_KEY", STRIPE_WEBHOOK_SECRET: "STRIPE_WEBHOOK", STRIPE_PRICE_STARTER_MONTHLY: "STRIPE_MONTHLY", STRIPE_PRICE_STARTER_ANNUAL: "STRIPE_ANNUAL" };
   for (const [key, value] of Object.entries(providers)) values[`DOMI_QA_${names[key]}`] = value;
   values.DOMI_QA_STRIPE_MODE = providers.STRIPE_SECRET_KEY ? "sandbox" : "fixture";
+  values.DOMI_QA_MCP = state.mcp ? "true" : "false";
+  values.DOMI_QA_API_NODE_ENV = state.mcp ? "test" : "production";
   await writeFile(envPath, Object.entries(values).map(([key, value]) => `${key}='${value.replaceAll("'", "\\'")}'`).join("\n") + "\n", { mode: 0o600 });
   await writeFile(statePath, JSON.stringify(state, null, 2), { mode: 0o600 });
 }
@@ -103,6 +106,7 @@ async function start() {
   await compose(["up", "-d", "--wait", "postgres", "archive", "redis", "minio", "mail", "providers", "gateway"]);
   await ready(`${origins.provider}/healthz`);
   await compose(["run", "--rm", "tools", "node", "scripts/hosted-qa/setup.mjs"]);
+  if (state.mcp) await compose(["run", "--rm", "tools", "node", "scripts/mcp-chatgpt/setup.mjs"]);
   await compose(["up", "-d", "api", "worker", "web", "www"]);
   for (const url of [`${origins.web}/api/healthz`, `${origins.web}/login`, `${origins.www}/pricing`, `${origins.mail}/api/v1/messages`]) await ready(url);
   console.log(`\nHosted QA (${state.mode})\nApp: ${origins.web}\nMarketing: ${origins.www}\nEmail inbox: ${origins.mail}\nFixture guide: ${origins.provider}\nUse status, test, down or reset commands. Production and dogfood are separate.`);

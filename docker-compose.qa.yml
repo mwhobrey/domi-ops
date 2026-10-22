@@ -112,6 +112,9 @@ services:
         QA_MARKETING_URL: http://localhost:${DOMI_QA_WWW_PORT}
     environment:
       <<: *env
+      NODE_ENV: ${DOMI_QA_API_NODE_ENV:-production}
+      MCP_ENABLED: ${DOMI_QA_MCP:-false}
+      MCP_SYNTHETIC_DEPLOYMENT: ${DOMI_QA_MCP:-false}
       QA_ADMIN_PASSWORD: ${DOMI_QA_ADMIN_PASSWORD}
       DOMI_OPS_APP_PASSWORD: ${DOMI_QA_APP_PASSWORD}
       QA_ENCRYPTION_KEY: ${DOMI_QA_ENCRYPTION_KEY}
@@ -119,7 +122,11 @@ services:
   api:
     <<: *qa
     command: [node, scripts/hosted-qa/api.mjs]
-    environment: *env
+    environment:
+      <<: *env
+      NODE_ENV: ${DOMI_QA_API_NODE_ENV:-production}
+      MCP_ENABLED: ${DOMI_QA_MCP:-false}
+      MCP_SYNTHETIC_DEPLOYMENT: ${DOMI_QA_MCP:-false}
   worker:
     <<: *qa
     command: [node, apps/worker/dist/index.js]

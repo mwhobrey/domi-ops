@@ -1,6 +1,52 @@
 # Current state
 
-## Portable household briefing skill (WHO-474; local, not installed/deployed)
+## ChatGPT integration (WHO-475; private synthetic acceptance)
+
+- Local synthetic lab: `node scripts/hosted-qa/run.mjs mcp` reuses owned isolated
+  QA resources, adds fictional native reads and a local public OAuth client, and
+  keeps provider credentials/external network mode separate. This checkout uses
+  loopback17180–17186; existing QA/live deployments remain untouched.
+- `scripts/mcp-chatgpt/smoke.mjs` exercises real login/PKCE/selected-note consent,
+  all five tools through Next/API, refresh rotation and disconnect. Its redacted
+  receipt explicitly says this is a synthetic driver, not live ChatGPT acceptance.
+- Fixed Next MCP Host forwarding: Node fetch replaced the public Host with the
+  internal API hostname. Native HTTP/HTTPS preserves the allowlisted Host while
+  retaining fixed upstream, bearer-only headers, no cookies, bounds and timeout.
+- Private plugin generation copies the shared skill unchanged and uses provided
+  OAuth clients; no secrets in manifests or automatic registration. No dependencies,
+  migrations or application env changes. QA-only loopback JWKS relay supports the
+  canonical issuer inside isolated Docker; API/tools alone use test mode.
+- Actual Plus web account created a private synthetic plugin through Secure MCP
+  Tunnel. HTTP loopback discovery needs the vendor's test-only Harpoon plaintext
+  option; runtime keys stay in local process environment references. Client
+  registration uses the exact UI callback and a separate synthetic ChatGPT profile.
+- Actual browser linking exposed an auth redirect to Next's container origin.
+  The proxy now emits browser-relative Location values after its existing origin
+  checks, rejecting network-path targets and preserving signed queries/cookies.
+  Rebuilt QA web completed canonical-origin consent. Actual ChatGPT called all
+  five read tools successfully and rendered matching fictional records. Rotating
+  refresh credentials were observed. Controlled synthetic refresh expiry produced
+  Reconnect; reconsent activated a fresh zero-note grant, and a fresh note list
+  returned zero. Transient response rendering recovered. Product-side Disconnect blocked the next actual
+  client request, which showed Reconnect; no successful reads followed revocation.
+  Earlier direct Chat output added tracking parameters to source links; the
+  installed Work skill preserved all three returned hrefs exactly.
+  Initial combined plugin archives failed because `.app.json` used the browser's
+  `plugin_asdk_app_...` ID instead of the schema-required `asdk_app_...` server ID.
+  Generator normalization fixes this; corrected private archive imported/installed
+  with one connected app and one skill. A compatibility skill-only archive had a
+  separate unexplained generic error. Standalone Skills upload
+  succeeded with the unchanged shared skill/license. Actual installed Work-mode
+  briefing passed five reads, context first, correct household-local grouping and
+  coverage, no saved changes, and exact returned hrefs. Work quota paused the first
+  run; user reset/resume and page reload recovered the complete visible answer.
+  Source0.1.0 is unchanged. A fresh briefing launched through the combined plugin
+  also passed five context-first reads, correct data/date/grouping/coverage,
+  exact source hrefs and no saved changes. No reconnect/quota/rendering issue in
+  that combined run. Desktop/mobile and real-household rollout remain separate.
+  Setup/evidence: [MCP_CHATGPT.md](../../docs/MCP_CHATGPT.md).
+
+## Portable household briefing skill (WHO-474; source, client receipt in WHO-475)
 
 - Shared instruction source: `skills/domi-ops-household-briefing/SKILL.md`, version
   0.1.0. Uses only advertised approved reads, context first;12 calls total,

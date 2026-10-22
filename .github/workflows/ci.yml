@@ -74,6 +74,9 @@ jobs:
       - name: Hosted QA safety guards
         run: node --test scripts/hosted-qa/ownership.test.mjs scripts/hosted-qa/cleanup.test.mjs
 
+      - name: MCP client packaging
+        run: node --test scripts/mcp-chatgpt/package.test.mjs
+
   test-mcp:
     name: MCP authorization and isolation
     runs-on: ubuntu-latest

@@ -94,11 +94,12 @@ export async function proxyAuthToApi(
       const result: unknown = JSON.parse(responseBody);
       if (result && typeof result === "object" && "redirect" in result && result.redirect === true && "url" in result && typeof result.url === "string") {
         const target = new URL(result.url, request.url);
-        if (target.origin === request.nextUrl.origin && !target.username && !target.password) redirectTarget = target;
+        if (target.origin === request.nextUrl.origin && !target.username && !target.password && !target.pathname.startsWith("//")) redirectTarget = target;
       }
     } catch { /* Preserve malformed upstream bodies for the caller. */ }
     if (redirectTarget) {
-      outHeaders.set("location", redirectTarget.href);
+      // The browser knows its public origin; Next's request URL can use a container address.
+      outHeaders.set("location", redirectTarget.pathname + redirectTarget.search + redirectTarget.hash);
       outHeaders.set("cache-control", "no-store");
       outHeaders.set("referrer-policy", "no-referrer");
       return new NextResponse(null, { status: 303, headers: outHeaders });
