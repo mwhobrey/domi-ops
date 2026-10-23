@@ -1,11 +1,12 @@
 import { mkdir, copyFile, writeFile } from "node:fs/promises";
 import { resolve, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { nonPublicMcpHost } from "../hosted-qa/mcp-origin.mjs";
 
 export function pluginConfiguration(origin) {
   const url = new URL(origin);
   if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash ||
-      !["", "/"].includes(url.pathname) || ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) throw new Error("Claude cloud connectors require a canonical public HTTPS origin");
+      !["", "/"].includes(url.pathname) || nonPublicMcpHost(url.hostname)) throw new Error("Claude cloud connectors require a canonical public HTTPS origin");
   return {
     plugin: { name: "domi-ops-household", version: "0.1.0", description: "Read-only household chores, shopping and explicitly selected planning notes.", author: { name: "Domi Ops" }, license: "MIT" },
     mcp: { mcpServers: { "domi-ops": { type: "http", url: url.origin + "/api/mcp" } } },
@@ -14,6 +15,7 @@ export function pluginConfiguration(origin) {
 
 export async function writePlugin({ origin, output }) {
   const { plugin, mcp } = pluginConfiguration(origin);
+  await mkdir(dirname(output), { recursive: true });
   await mkdir(output, { recursive: false });
   await mkdir(join(output, ".claude-plugin"));
   const skill = join(output, "skills", "domi-ops-household-briefing");

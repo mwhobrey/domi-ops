@@ -1,5 +1,15 @@
 # Current state
 
+## Claude evaluation review corrections (WHO-476)
+
+- QA ingress and Claude package validation share URL-normalized IP checks,
+  including private IPv4-mapped IPv6. This rejects non-public literal addresses;
+  it does not establish DNS resolution or cloud reachability.
+- Claude packaging creates missing parent folders but retains an exclusive final
+  directory create, so repeated output still fails without replacement.
+- All 21 focused QA/package/registration checks pass. No live deployment or
+  household connection changed.
+
 ## Gemini integration (WHO-477; private synthetic acceptance)
 
 - Consumer Gemini stays synthetic-only; real-household profiles remain disabled.

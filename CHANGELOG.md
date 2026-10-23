@@ -8,6 +8,13 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+### Fixed
+
+- Synthetic MCP origin checks and Claude package generation reject private,
+  link-local and loopback IP literals, including IPv4-mapped IPv6. Claude
+  packaging creates missing parent folders while still refusing to overwrite an
+  existing package.
+
 ### Added
 
 - Synthetic-only Gemini evaluation setup and portable skill import folder, with

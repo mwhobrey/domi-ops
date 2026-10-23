@@ -26,3 +26,18 @@ test("public lab identity is immutable and cannot switch to provider or ordinary
   assert.equal(configureMcpOrigin({ port: 17180, command: "mcp" }).remote, false);
   for (const command of ["status", "logs", "down", "reset"]) assert.doesNotThrow(() => configureMcpOrigin({ ...options, command }));
 });
+
+test("rejects non-public IP literals including URL-normalized IPv4-mapped IPv6", () => {
+  for (const host of ["0.0.0.0", "10.0.0.1", "127.0.0.2", "127.1", "2130706433", "0x7f000001",
+    "100.64.0.1", "100.127.255.254", "169.254.1.1", "172.16.0.1", "172.31.255.254", "192.168.1.1", "224.0.0.1",
+    "[::]", "[::1]", "[::127.0.0.1]", "[fc00::1]", "[fdff::1]", "[fe80::1]", "[febf::1]", "[fec0::1]", "[ff02::1]",
+    "[::ffff:10.0.0.1]", "[0:0:0:0:0:ffff:a00:1]", "[::ffff:127.0.0.2]", "[::ffff:169.254.1.1]",
+    "[::ffff:172.31.255.254]", "[::ffff:192.168.1.1]", "[::ffff:100.64.0.1]"]) {
+    assert.throws(() => mcpOrigin(`https://${host}`, 18180), undefined, host);
+  }
+  for (const host of ["8.8.8.8", "100.63.255.254", "100.128.0.1", "172.15.255.254", "172.32.0.1",
+    "[2606:4700:4700::1111]", "[::ffff:8.8.8.8]"]) {
+    assert.equal(mcpOrigin(`https://${host}`, 18180).remote, true, host);
+  }
+  assert.deepEqual(mcpOrigin("http://localhost:18180", 18180), { origin: "http://localhost:18180", remote: false });
+});
