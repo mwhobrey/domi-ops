@@ -8,8 +8,9 @@ gateway/tools, data policy and real-client acceptance gates pass.
 ## Member flow
 
 1. An operator pre-registers an approved client and enables the deployment. Profiles
-   remain disabled by default; consumer Gemini remains synthetic-only on a separate
-   synthetic deployment. There is no public client registration UI.
+   remain disabled by default. Gemini household profiles require the updated
+   WHO-478 risk disclosure and fresh consent; existing Gemini evidence is still
+   synthetic-only. There is no public client registration UI.
 2. An owner/admin enables the household at `/settings/ai-connections`. Each eligible
    adult member must separately consent to their own connection. Child/guest roles
    are excluded; an adult attestation is required even for an eligible role.

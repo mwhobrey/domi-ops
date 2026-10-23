@@ -19,9 +19,31 @@
 - All 21 focused QA/package/registration checks pass. No live deployment or
   household connection changed.
 
+## Assistant pilot preparation (WHO-478)
+
+- [Setup](../../docs/MCP_SETUP.md) covers hosted and self-hosted routing, secrets,
+  consent, feature stop and rollback. The new local auth `mcp:client` tool previews
+  without DB access, requires an exact plan hash for public ChatGPT/Claude/Gemini profile
+  registration, uses a private cookie file/restricted DB role and preserves an
+  exclusive attempt journal. Existing provider QA helpers stay synthetic-only.
+- [Pilot plan](../../docs/MCP_PILOT.md) and its private-record template separate
+  fictional acceptance from actual onboarding, usefulness, repeat use, support
+  and attributable cost. Owner self-host first, separately consented hosted next.
+- No real pilot, deployment, production client or public listing was performed.
+  Exact account/privacy attestation, finite pilot window, target deployment
+  authorization and current applicable Google-review status remain entry/release
+  gates. Submitted OAuth recording is acknowledged; approval is not inferred.
+- Standard hosted base inclusion/free self-host is unchanged. Owner approved
+  retaining Gemini with explicit risk disclosure/informed opt-in on 2026-10-23.
+  Current Google requirements/privacy were rechecked. Consent policy v2 requires
+  fresh member consent for prior-policy grants; no silent widening. No deployment
+  or actual household consent was performed. Writes/Google/Health stay separate.
+
 ## Gemini integration (WHO-477; private synthetic acceptance)
 
-- Consumer Gemini stays synthetic-only; real-household profiles remain disabled.
+- WHO-477's Gemini evidence is synthetic-only. WHO-478 supersedes the initial
+  provider ban with reviewed profiles and explicit provider-risk consent; real
+  household use remains an unperformed pilot, not a verified result.
 - Actual web account exposes custom MCP apps, advanced OAuth fields and Skills
   Upload. Keep Activity was already on; no privacy settings changed.
 - Separate public synthetic lab passed shared OAuth/five-tool/refresh/disconnect

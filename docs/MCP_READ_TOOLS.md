@@ -109,8 +109,9 @@ It is an explicit coverage restriction, not a Markdown renderer or a claim to
 classify copied sensitive/provider-derived text. Adult selection/privacy review
 still matters. Attachments, files, embeds, Calendar, School, Health, expenses and
 administrative records are not queried. No link is followed, including instructions
-inside a selected note. Consumer Gemini remains synthetic-only under the existing
-approved-client policy.
+inside a selected note. Gemini's existing receipts remain synthetic; the updated
+WHO-478 approved-client policy allows a reviewed native-data pilot with explicit
+provider-risk disclosure and fresh consent. No live household acceptance is implied.
 
 ## Bounds and continuation
 

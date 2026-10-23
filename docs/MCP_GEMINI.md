@@ -1,7 +1,10 @@
 # Gemini private synthetic evaluation (WHO-477)
 
-Consumer Gemini custom MCP apps are **synthetic-only** under the M1 client
-policy. Keep Gemini unregistered and disabled on real household instances.
+WHO-477 evidence below is **synthetic-only**. WHO-478's owner-approved policy
+now permits reviewed Gemini native-data pilots with explicit training/review/
+retention disclosure and fresh member consent, instead of a blanket provider ban.
+No real Gemini pilot or deployment has been performed. Keep unapproved profiles
+disabled; follow [setup](MCP_SETUP.md) and [provisioning](MCP_PROVISIONING.md).
 Hosted MCP remains included in the base price and self-hosted MCP remains free;
 pricing does not override the client data-handling policy. Gemini API, CLI,
 business accounts and consumer apps are separate surfaces requiring their own

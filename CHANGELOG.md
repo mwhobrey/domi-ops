@@ -21,11 +21,30 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Added
 
+- Hosted/self-hosted assistant setup and bounded pilot guidance, with explicit
+  real-client provisioning gates, consent, disconnect/rollback and a private
+  measurement template. Real-household and hosted pilot results remain pending.
+  See [setup](docs/MCP_SETUP.md) and [pilot plan](docs/MCP_PILOT.md).
+
+- Local operator MCP client provisioning with a database-free preview, exact-plan
+  confirmation, public ChatGPT/Claude/Gemini profile restrictions, private session-file
+  input and exclusive attempt receipts. Registration does not grant member access;
+  no real pilot or production provisioning is claimed. See
+  [operator procedure](docs/MCP_PROVISIONING.md).
+
+- Provider-risk disclosure and informed opt-in retain Gemini as a supported pilot
+  choice instead of a blanket real-data ban. Gemini consent explains required
+  Keep Activity, possible training/human review and retention. **Consent policy v2
+  requires fresh consent for prior-policy MCP grants after upgrade**; ordinary
+  sessions and Google connections are unaffected. No schema migration or live
+  household deployment is included.
+
 - Synthetic-only Gemini evaluation setup and portable skill import folder, with
   exact-callback registration guards. Private consumer OAuth, five reads, refresh
   rotation, scope refusal and the installed briefing are verified; product
-  disconnect revokes the grant and refresh credentials. Real-household Gemini
-  access remains disabled. See [Gemini evaluation](docs/MCP_GEMINI.md).
+  disconnect revokes the grant and refresh credentials. These receipts remain
+  synthetic; the separate WHO-478 informed-consent policy permits a reviewed
+  native-data pilot. See [Gemini evaluation](docs/MCP_GEMINI.md).
 
 - Stateless MCP compatibility for 2025-era clients through the existing scoped
   gateway, alongside modern requests, with bearer and revocation checks shared

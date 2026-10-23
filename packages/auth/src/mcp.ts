@@ -14,7 +14,7 @@ import {
 } from "@domi-ops/db";
 
 export const MCP_SCOPES = ["shopping:read", "chores:read", "notes:read", "offline_access"] as const;
-export const MCP_POLICY_VERSION = "2026-10-21.v1";
+export const MCP_POLICY_VERSION = "2026-10-23.v2";
 const TTL = 30 * 86400_000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 type Connection = typeof mcpConnections.$inferSelect;
@@ -55,7 +55,6 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string) {
     });
     if (!row || row.client.disabled || row.client.skipConsent || !row.client.requirePKCE) deny("client_not_approved");
     if (row.profile.dataMode === "synthetic" && !env.MCP_SYNTHETIC_DEPLOYMENT) deny("synthetic_client_only");
-    if (row.profile.provider === "gemini" && row.profile.dataMode !== "synthetic") deny("synthetic_client_only");
     return row;
   }
 
@@ -256,7 +255,6 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string) {
         if (!env.MCP_ENABLED) deny("mcp_disabled");
         await session(headers);
         if (!input.name || input.name.length > 128 || !input.profileVersion || input.profileVersion.length > 128 || !["chatgpt", "claude", "gemini", "local", "other"].includes(input.provider)) deny("invalid_client_profile", 400);
-        if (input.provider === "gemini" && input.dataMode !== "synthetic") deny("synthetic_client_only");
         if (input.dataMode === "synthetic" && !env.MCP_SYNTHETIC_DEPLOYMENT) deny("synthetic_client_only");
         if (!input.scopes.length || input.scopes.some((s) => !MCP_SCOPES.includes(s as typeof MCP_SCOPES[number]))) deny("invalid_scope", 400);
         if (!input.redirectUris.length || input.redirectUris.length > 10) deny("invalid_redirect_uri", 400);
@@ -327,6 +325,7 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string) {
             const [connection] = await tx.update(mcpConnections).set(input.accept ? { status: "pending" } : { status: "revoked", revokedAt: new Date() }).where(and(
               eq(mcpConnections.id, pending.connectionId), eq(mcpConnections.userId, current.user.id), eq(mcpConnections.householdId, pending.householdId),
               eq(mcpConnections.status, "pending"), eq(mcpConnections.grantedRole, owner.role), eq(mcpConnections.clientProfileVersion, query.profile.profile.version),
+              eq(mcpConnections.policyVersion, MCP_POLICY_VERSION),
             )).returning();
             if (!connection || !sameScopes(connection.scopes, query.scopes)) deny("consent_invalid", 409);
             return connection;

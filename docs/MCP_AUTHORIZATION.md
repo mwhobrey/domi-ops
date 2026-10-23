@@ -20,7 +20,9 @@ HTTP loopback is accepted for development/test only. A household owner/admin mus
 also enable the integration, and each eligible adult grants their own consent.
 `MCP_SYNTHETIC_DEPLOYMENT=true` is an operator assertion that a **separate deployment
 contains only synthetic data**, never a way to label a real household synthetic.
-Consumer Gemini profiles are synthetic-only. Exact vendor/account acceptance remains M4.
+Gemini's original evidence is synthetic-only. WHO-478 permits a reviewed native-data
+profile after explicit provider-risk disclosure and fresh versioned consent.
+Exact live household acceptance remains a separate pilot gate.
 
 Hosted read-only subscriptions retain approved read access, consistent with M1 and
 the existing read/export policy. This issue adds no paid entitlement. WHO-471 must
@@ -90,7 +92,7 @@ development auth bypass never authorizes an MCP tool request.
 | POST path | Input and behavior |
 | --- | --- |
 | `/household` | `{householdId, enabled}`; current owner/admin only |
-| `/consents/prepare` | `{householdId, oauthQuery, noteIds, adultAttested:true, privacyAttested:true, policyVersion:"2026-10-21.v1"}`; notes default empty, maximum 100 accessible IDs |
+| `/consents/prepare` | `{householdId, oauthQuery, noteIds, adultAttested:true, privacyAttested:true, policyVersion:"2026-10-23.v2"}`; notes default empty, maximum 100 accessible IDs |
 | `/consents/decide` | `{pendingId, oauthQuery, accept}`; exact query/session/user binding and one-use consumption; success returns the approved provider redirect URI |
 | `/connections/:id/revoke` | Session owner only; local revocation commits before provider cleanup; reports `providerCleanupComplete` separately |
 

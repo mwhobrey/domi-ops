@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { inspect } from "node:util";
 import { eq, sql } from "drizzle-orm";
-import { createBetterAuth } from "@domi-ops/auth";
+import { createBetterAuth, MCP_POLICY_VERSION } from "@domi-ops/auth";
 import type { Env } from "@domi-ops/config";
 import { closeDb, createDb, householdMembers, households, mcpAccessEvents, mcpConnectionWindows, mcpHouseholdWindows, mcpRequestLeases, notes, type Database } from "@domi-ops/db";
 import { createApplication } from "../app.js";
@@ -108,11 +108,11 @@ export function registerMcpAcceptanceCases(get: () => Fixture) {
           await f.owned(f.owner, async (tx) => { await tx.update(householdMembers).set({ role: "guest" }).where(eq(householdMembers.id, f.colleague.memberId)); });
           expect((await rpc(f, token.access_token, "get_connection_context")).response.status).toBeGreaterThanOrEqual(400);
           const query = await f.begin(f.colleague);
-          const denied = await f.post("/api/mcp-auth/consents/prepare", { householdId: f.colleague.householdId, oauthQuery: query, noteIds: [], adultAttested: true, privacyAttested: true, policyVersion: "2026-10-21.v1" }, f.colleague);
+          const denied = await f.post("/api/mcp-auth/consents/prepare", { householdId: f.colleague.householdId, oauthQuery: query, noteIds: [], adultAttested: true, privacyAttested: true, policyVersion: MCP_POLICY_VERSION }, f.colleague);
           expect(denied.status).toBe(403);
         }
         const query = await f.begin(f.child);
-        expect((await f.post("/api/mcp-auth/consents/prepare", { householdId: f.child.householdId, oauthQuery: query, noteIds: [], adultAttested: true, privacyAttested: true, policyVersion: "2026-10-21.v1" }, f.child)).status).toBe(403);
+        expect((await f.post("/api/mcp-auth/consents/prepare", { householdId: f.child.householdId, oauthQuery: query, noteIds: [], adultAttested: true, privacyAttested: true, policyVersion: MCP_POLICY_VERSION }, f.child)).status).toBe(403);
       } finally { await f.owned(f.owner, async (tx) => { await tx.update(householdMembers).set({ role: "member" }).where(eq(householdMembers.id, f.colleague.memberId)); }); }
     });
 
