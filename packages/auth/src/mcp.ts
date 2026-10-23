@@ -14,7 +14,8 @@ import {
 } from "@domi-ops/db";
 
 export const MCP_SCOPES = ["shopping:read", "chores:read", "notes:read", "offline_access"] as const;
-export const MCP_POLICY_VERSION = "2026-10-21.v1";
+export const MCP_POLICY_VERSION = "2026-10-23.v3";
+const settingsReviewRequired = (provider: string) => ["chatgpt", "claude", "gemini"].includes(provider);
 const TTL = 30 * 86400_000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 type Connection = typeof mcpConnections.$inferSelect;
@@ -55,7 +56,6 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string) {
     });
     if (!row || row.client.disabled || row.client.skipConsent || !row.client.requirePKCE) deny("client_not_approved");
     if (row.profile.dataMode === "synthetic" && !env.MCP_SYNTHETIC_DEPLOYMENT) deny("synthetic_client_only");
-    if (row.profile.provider === "gemini" && row.profile.dataMode !== "synthetic") deny("synthetic_client_only");
     return row;
   }
 
@@ -205,7 +205,7 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string) {
           return { memberId: owner.id, memberName: current.user.name, householdName: household?.name ?? "Household" };
         }));
         return { ...identity, householdId, clientName: query.profile.client.name, clientId: query.profile.client.clientId,
-          provider: query.profile.profile.provider, dataMode: query.profile.profile.dataMode,
+          provider: query.profile.profile.provider, dataMode: query.profile.profile.dataMode, settingsReviewRequired: settingsReviewRequired(query.profile.profile.provider),
           clientProfileVersion: query.profile.profile.version, scopes: query.scopes, policyVersion: MCP_POLICY_VERSION };
       },
       async rejectConsent(headers: Headers, oauthQuery: string) {
@@ -256,7 +256,6 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string) {
         if (!env.MCP_ENABLED) deny("mcp_disabled");
         await session(headers);
         if (!input.name || input.name.length > 128 || !input.profileVersion || input.profileVersion.length > 128 || !["chatgpt", "claude", "gemini", "local", "other"].includes(input.provider)) deny("invalid_client_profile", 400);
-        if (input.provider === "gemini" && input.dataMode !== "synthetic") deny("synthetic_client_only");
         if (input.dataMode === "synthetic" && !env.MCP_SYNTHETIC_DEPLOYMENT) deny("synthetic_client_only");
         if (!input.scopes.length || input.scopes.some((s) => !MCP_SCOPES.includes(s as typeof MCP_SCOPES[number]))) deny("invalid_scope", 400);
         if (!input.redirectUris.length || input.redirectUris.length > 10) deny("invalid_redirect_uri", 400);
@@ -273,13 +272,14 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string) {
         await withMcpProviderContext(db, (tx) => tx.insert(mcpClientProfiles).values({ clientId: client.client_id, provider: input.provider, version: input.profileVersion, dataMode: input.dataMode, enabled: input.enabled ?? false }));
         return client;
       },
-      async prepareConsent(headers: Headers, input: { householdId: string; oauthQuery: string; noteIds: string[]; adultAttested: boolean; privacyAttested: boolean; policyVersion: string }) {
+      async prepareConsent(headers: Headers, input: { householdId: string; oauthQuery: string; noteIds: string[]; adultAttested: boolean; privacyAttested: boolean; providerSettingsReviewed?: boolean; policyVersion: string }) {
         const current = await session(headers);
         if (input.adultAttested !== true || input.privacyAttested !== true || input.policyVersion !== MCP_POLICY_VERSION) deny("attestation_required");
         uuid(input.householdId);
         if (input.noteIds.length > 100 || new Set(input.noteIds).size !== input.noteIds.length) deny("invalid_note_selection", 400);
         input.noteIds.forEach(uuid);
         const query = await checkedQuery(input.oauthQuery);
+        if (settingsReviewRequired(query.profile.profile.provider) && input.providerSettingsReviewed !== true) deny("provider_settings_review_required", 400);
         if (input.noteIds.length && !query.scopes.includes("notes:read")) deny("invalid_scope", 400);
         return withUserLookupContext(db, current.user.id, (lookup) => withHouseholdContext(lookup, input.householdId, async (tx) => {
           const owner = await member(tx, current.user.id, input.householdId);
@@ -327,6 +327,7 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string) {
             const [connection] = await tx.update(mcpConnections).set(input.accept ? { status: "pending" } : { status: "revoked", revokedAt: new Date() }).where(and(
               eq(mcpConnections.id, pending.connectionId), eq(mcpConnections.userId, current.user.id), eq(mcpConnections.householdId, pending.householdId),
               eq(mcpConnections.status, "pending"), eq(mcpConnections.grantedRole, owner.role), eq(mcpConnections.clientProfileVersion, query.profile.profile.version),
+              eq(mcpConnections.policyVersion, MCP_POLICY_VERSION),
             )).returning();
             if (!connection || !sameScopes(connection.scopes, query.scopes)) deny("consent_invalid", 409);
             return connection;

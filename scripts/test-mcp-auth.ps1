@@ -38,7 +38,7 @@ try {
     $ready = $false
     for ($attempt = 0; $attempt -lt 30; $attempt++) {
         $PSNativeCommandUseErrorActionPreference = $false
-        docker exec $container pg_isready -U domi_ops -d domi_ops 2>$null | Out-Null
+        docker exec $container pg_isready -h 127.0.0.1 -U domi_ops -d domi_ops 2>$null | Out-Null
         $ready = $LASTEXITCODE -eq 0
         $PSNativeCommandUseErrorActionPreference = $true
         if ($ready) { break }

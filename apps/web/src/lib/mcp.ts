@@ -18,7 +18,7 @@ export type AiOverview = {
 };
 export type ConsentPreview = {
   householdId: string; householdName: string; memberName: string; clientName: string; clientId: string;
-  provider: string; dataMode: string; clientProfileVersion: string; scopes: string[]; policyVersion: string;
+  provider: string; dataMode: string; clientProfileVersion: string; scopes: string[]; policyVersion: string; settingsReviewRequired: boolean;
 };
 
 /** Preserve the provider-signed fields; unsigned login navigation must not enter consent. */
@@ -46,6 +46,7 @@ export function connectionError(error: unknown): string {
   if (value.status === 404) return "AI connections are not enabled on this deployment. Ask the person who runs your server.";
   if (value.status === 401) return "Your session expired. Sign in again, then restart from your assistant.";
   if (value.status === 409) return "This request expired or the connection changed. Refresh, or restart the connection from your assistant.";
+  if (value.body?.includes("provider_settings_review_required")) return "Review your assistant account’s privacy settings before allowing this connection.";
   if (value.body?.includes("mcp_disabled")) return "AI connections are turned off for this household. An owner or admin can enable them in AI connections.";
   if (value.status === 403) return "This connection is not available to your account. Only eligible adult members can approve their own connections.";
   return "Could not complete the request. Refresh before trying again. If approval was interrupted, restart from your assistant.";

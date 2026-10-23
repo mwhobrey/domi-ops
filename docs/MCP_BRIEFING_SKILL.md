@@ -37,8 +37,9 @@ instructions before installing. It follows the portable
    Clients that support implicit skill matching may select it from the description.
    If no valid connection exists, expect setup guidance rather than a briefing.
 
-Before live household data, complete the M4 client/privacy gates. Gemini consumer
-evaluation remains synthetic-only under the [accepted policy](MCP_M1_DECISIONS.md).
+Before live household data, complete the M4 client/privacy gates. The Gemini
+evaluation evidence remains synthetic; WHO-478's [updated policy](MCP_M1_DECISIONS.md)
+allows a reviewed native-data pilot after explicit provider-risk disclosure/consent.
 Client-specific plugin manifests, import UI steps and live compatibility belong
 to WHO-475–477; they must consume this shared source rather than fork its workflow.
 This change does not install the skill into anyone's active client or alter consent.

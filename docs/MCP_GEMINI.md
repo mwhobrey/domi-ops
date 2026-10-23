@@ -1,7 +1,10 @@
 # Gemini private synthetic evaluation (WHO-477)
 
-Consumer Gemini custom MCP apps are **synthetic-only** under the M1 client
-policy. Keep Gemini unregistered and disabled on real household instances.
+WHO-477 evidence below is **synthetic-only**. WHO-478's owner-approved policy
+now permits reviewed Gemini native-data pilots with explicit training/review/
+retention disclosure and fresh member consent, instead of a blanket provider ban.
+No real Gemini pilot or deployment has been performed. Keep unapproved profiles
+disabled; follow [setup](MCP_SETUP.md) and [provisioning](MCP_PROVISIONING.md).
 Hosted MCP remains included in the base price and self-hosted MCP remains free;
 pricing does not override the client data-handling policy. Gemini API, CLI,
 business accounts and consumer apps are separate surfaces requiring their own
@@ -42,8 +45,9 @@ node scripts/mcp-chatgpt/smoke.mjs
 
 Registration requires the public synthetic lab guards and creates a distinct
 `gemini` / `synthetic` profile with PKCE public-client authentication and only
-`shopping:read chores:read notes:read offline_access`. The provider already rejects
-Gemini profiles on non-synthetic deployments. Metadata stays in the QA volume;
+`shopping:read chores:read notes:read offline_access`. The QA helper remains
+synthetic-only. Household profiles require operator review, explicit enablement
+and fresh member consent before real-data access. Metadata stays in the QA volume;
 console output omits the account-bound callback path. A differing existing client
 requires inspection instead of replacement. Registration does not establish that
 Gemini completed the public-client flow. Enter the returned client ID in Gemini

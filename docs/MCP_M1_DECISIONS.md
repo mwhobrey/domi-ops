@@ -240,26 +240,41 @@ Use synthetic notes first and carefully reviewed minimal data for real dogfood.
 
 ### Provider/client policy decision
 
+WHO-478 update, owner approved 2026-10-23: retain privacy-focused defaults and
+plain provider-specific risk disclosure, while allowing an informed adult to opt
+in to a supported provider. This supersedes the initial consumer Gemini ban;
+technical support and data-handling preferences are separate decisions. No live
+household connection or deployment is authorized by this policy update alone.
+
 | Surface | M1 disposition | Conditions before real data |
 | --- | --- | --- |
 | ChatGPT | Eligible for limited adult pilot after M4 client acceptance | Review exact account controls/terms; record privacy-setting attestation and disclosure. Do not assume API retention or zero-training terms apply to consumer chat |
-| Claude consumer | Eligible for limited adult pilot after M4 client acceptance | Model Improvement off/appropriate Incognito use and no feedback containing household content; disclose retention/safety exceptions |
-| Gemini consumer custom app | Synthetic-only in initial release | Required Keep Activity conflicts with the chosen non-training pilot policy; do not enable real household scope through a generic-client fallback |
+| Claude consumer | Eligible for limited adult pilot after M4 client acceptance | Explain data handling and settings; recommend Model Improvement off/appropriate Incognito use and avoiding content-bearing feedback; require informed consent |
+| Gemini consumer custom app | Eligible for explicitly consented native-data pilot under WHO-478 | Explain required Keep Activity, possible training/human review and reviewed-chat retention; versioned unchecked risk acknowledgment before any grant; remain disabled without operator/household/member opt-in |
 | Business/API/local assistant surfaces | Not automatically equivalent to the consumer product | Approve exact operator-reviewed client profile, retention/settings and credential flow before real data |
 
 Claude's published policy excludes raw connector payloads from training but permits
 conversation copies under applicable settings; deletion/retention has exceptions.
 Gemini's published custom-app prerequisites require Keep Activity, and its privacy
-notice describes training/human review with that setting. Those facts motivate the
-more restrictive initial Gemini disposition, not a claim that native data is
-legally prohibited in every possible Gemini use.
+notice describes training/human review with that setting. Those facts remain in
+the consent disclosure; they do not automatically exclude Gemini after the
+owner's WHO-478 decision. Recommend minimal scopes and no notes initially.
 
 Client eligibility is an operator-managed profile attached to a registered client
-and consent version, not a name supplied by the model. For the synthetic Gemini
-evaluation, use a separate synthetic deployment; real production clients remain
-unregistered/disabled. Domi Ops cannot observe or enforce a remote user's privacy
+and consent version, not a name supplied by the model. Synthetic evaluations use
+separate fictional-only deployments. Real profiles remain disabled by default and
+require reviewed provisioning, household enablement and affirmative member consent.
+Domi Ops cannot observe or enforce a remote user's privacy
 toggle. Record attestation accurately, require reconfirmation when policy changes,
 and never advertise a guarantee of provider non-retention/no-training.
+
+Consent policy `2026-10-23.v3` records acceptance of provider data-use risks,
+the disconnect limitation and a separate settings-review acknowledgment for
+ChatGPT, Claude and Gemini. This is attestation, not remote settings verification.
+Old-policy grants fail live checks and need fresh
+consent after upgrade; no token or grant is silently widened or reactivated.
+The ordinary login session and Google grant are unchanged. No schema migration is
+needed. The Gemini protocol receipts remain synthetic; real dogfood is pending.
 
 Before consent, show exact client/member/household, data fields and optional
 note selection; explain that sharing transfers content to the selected provider.

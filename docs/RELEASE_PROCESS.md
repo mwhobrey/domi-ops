@@ -50,6 +50,28 @@ Any PR that adds a file to `packages/db/drizzle/` (a new migration) must:
 
 If a release goes bad, see [docs/ROLLBACK.md](ROLLBACK.md).
 
+## Assistant integration release gate
+
+For MCP enablement, follow [hosted/self-host setup](MCP_SETUP.md) and the
+[bounded pilot plan](MCP_PILOT.md). Require reviewed source, green restricted-role
+single/shared authorization/isolation checks and distinct self-host/hosted pilot
+receipts before claiming those rollout results. Review the exact real-client
+profile/privacy settings and operator provisioning procedure. Keep unapproved
+profiles and deployment flags off; private fictional-data tests are not a real
+household pilot, vendor approval or deployment authorization.
+
+WHO-478 consent policy `2026-10-23.v3` requires fresh consent from prior-policy
+MCP connections after upgrade, including interrupted approvals. Explain this
+assistant-only reconnect step before rollout; ordinary sessions/Google grants
+are preserved. Gemini remains available with explicit provider-risk disclosure.
+
+The owner reports the Google OAuth recording submitted. Reconfirm current review
+status from its authoritative source for any applicable public release; do not
+infer approval from submission or synthetic sign-in. Google-derived content stays
+behind its separate M6 review. Public plugin publication and each deployment need
+their applicable authorization. This section records gates, not completed release
+or pilot receipts.
+
 ## GHCR image tags
 
 Published by `.github/workflows/publish-images.yml` on every push to `main` and on `v*` tags:

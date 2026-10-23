@@ -7,6 +7,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./mcp-client-provisioning": {
+      "types": "./dist/mcp-client-provisioning.d.ts",
+      "import": "./dist/mcp-client-provisioning.js"
     }
   },
   "scripts": {
@@ -14,7 +18,8 @@
     "dev": "tsc --watch --preserveWatchOutput",
     "typecheck": "tsc --noEmit",
     "bootstrap:owner": "node dist/bootstrap-owner-cli.js",
-    "user:cleanup": "node dist/cleanup-user-cli.js"
+    "user:cleanup": "node dist/cleanup-user-cli.js",
+    "mcp:client": "node dist/mcp-client-cli.js"
   },
   "dependencies": {
     "@better-auth/core": "1.7.10",

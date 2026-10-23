@@ -51,7 +51,9 @@ try {
   const location = begin.headers.get("location") ?? (await begin.json()).url;
   const consent = new URL(location, origin); assert.equal(consent.origin, origin); assert.equal(consent.pathname, "/ai/consent");
   const oauthQuery = consent.searchParams.toString();
-  const pending = await json("/api/mcp-auth/consents/prepare", { householdId: owner.householdId, oauthQuery, noteIds: [config.noteId], adultAttested: true, privacyAttested: true, policyVersion: "2026-10-21.v1" });
+  const preview = await json("/api/mcp-auth/consents/preview", { householdId: owner.householdId, oauthQuery });
+  assert.equal(typeof preview.policyVersion, "string");
+  const pending = await json("/api/mcp-auth/consents/prepare", { householdId: owner.householdId, oauthQuery, noteIds: [config.noteId], adultAttested: true, privacyAttested: true, providerSettingsReviewed: true, policyVersion: preview.policyVersion });
   const accepted = await json("/api/mcp-auth/consents/decide", { pendingId: pending.pendingId, oauthQuery, accept: true }); connectionId = accepted.connectionId;
   const redirect = new URL(accepted.redirectUri); assert.equal(redirect.origin, new URL(config.callback).origin);
   const token = await tokens({ grant_type: "authorization_code", code: redirect.searchParams.get("code"), redirect_uri: config.callback, code_verifier: verifier });

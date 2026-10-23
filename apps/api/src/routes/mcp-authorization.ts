@@ -7,6 +7,7 @@ import type { Env } from "@domi-ops/config";
 const prepare = z.object({
   householdId: z.string().uuid(), oauthQuery: z.string().max(12000), noteIds: z.array(z.string().uuid()).max(100).default([]),
   adultAttested: z.literal(true), privacyAttested: z.literal(true), policyVersion: z.literal(MCP_POLICY_VERSION),
+  providerSettingsReviewed: z.boolean().optional().default(false),
 }).strict();
 const decide = z.object({ pendingId: z.string().uuid(), oauthQuery: z.string().max(12000), accept: z.boolean() }).strict();
 
