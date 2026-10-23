@@ -78,6 +78,11 @@ automatic JSON for modern requests; the SDK may frame finite legacy responses as
 SSE. The approved handlers emit no notifications and subscription methods are
 rejected before dispatch. GET/DELETE remain unsupported.
 
+Batch arrays are rejected before SDK dispatch for both protocol formats. One
+HTTP admission covers one message; it cannot execute a batch under one rate
+charge or concurrency lease. Rejected batches retain bounded protocol-denial
+activity and release their admission without invoking a tool.
+
 WHO-471 introduced `get_connection_context`. It returns this
 connection's own household/member labels, timezone, scopes and current tool name;
 there is no roster, email or private record content. Returned labels are untrusted

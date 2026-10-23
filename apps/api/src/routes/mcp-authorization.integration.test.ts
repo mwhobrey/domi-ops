@@ -255,6 +255,29 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
       expect((await request("tools/call", { name: "get_connection_context", arguments: {} })).status).toBe(401);
     } finally { if (previousApi === undefined) delete process.env.API_URL; else process.env.API_URL = previousApi; }
   });
+  it("rejects legacy and modern batches before any tool executes", async () => {
+    const token = await connect();
+    const run = vi.fn(contextTool.run);
+    const gateway = mcpGateway(db, auth.mcp, env, [{ ...contextTool, run }]);
+    try {
+      for (const version of ["2025-11-25", "2026-07-28"]) {
+        const headers = { host: new URL(origin).host, authorization: "Bearer " + token.access_token, accept: "application/json, text/event-stream",
+          "content-type": "application/json", "mcp-protocol-version": version, "mcp-method": "tools/call", "mcp-name": "get_connection_context" };
+        const meta = { "io.modelcontextprotocol/protocolVersion": version, "io.modelcontextprotocol/clientInfo": { name: "synthetic-batch", version: "1" }, "io.modelcontextprotocol/clientCapabilities": {} };
+        const call = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "get_connection_context", arguments: {}, _meta: meta } };
+        for (const batch of [[], [call], Array.from({ length: 100 }, (_, index) => ({ ...call, id: index + 1 }))]) {
+          const response = await gateway.request(origin + "/api/mcp", { method: "POST", headers, body: JSON.stringify(batch) });
+          expect(response.status).toBe(400);
+          expect(await response.json()).toEqual({ error: "batch_not_supported" });
+          expect(run).not.toHaveBeenCalled();
+        }
+      }
+      const events = await owned(owner, (tx) => tx.select().from(mcpAccessEvents).where(eq(mcpAccessEvents.connectionId, token.connectionId)));
+      expect(events).toHaveLength(6);
+      expect(events.every((event) => event.tool === "protocol" && event.outcome === "invalid_request")).toBe(true);
+      expect(await owned(owner, (tx) => tx.select().from(mcpRequestLeases).where(eq(mcpRequestLeases.connectionId, token.connectionId)))).toEqual([]);
+    } finally { await auth.mcp.revokeConnection(owner.headers, token.connectionId); }
+  });
   it("bounds inputs and results and filters tools by token scope", async () => {
     const token = await connect();
     const headers = { host: new URL(origin).host, authorization: "Bearer " + token.access_token, accept: "application/json, text/event-stream", "content-type": "application/json", "mcp-protocol-version": "2026-07-28" };

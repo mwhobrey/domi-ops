@@ -54,6 +54,8 @@ export function mcpGateway(db: Database, auth: Authorization, env: Env, tools: r
         sdk.post("/api/mcp", async (request) => {
           signal.throwIfAborted();
           const parsedBody = (request.get as (key: string) => unknown)("parsedBody");
+          // One HTTP admission covers one message, never multiple tool executions.
+          if (Array.isArray(parsedBody)) { outcome = "invalid_request"; return failure("batch_not_supported", 400); }
           const method = parsedBody && typeof parsedBody === "object" && "method" in parsedBody ? parsedBody.method : undefined;
           if (typeof method === "string" && !["server/discover", "tools/list", "tools/call", "initialize", "notifications/initialized", "ping"].includes(method)) return failure("method_not_allowed", 400);
           const available = await auth.withGrantContext(bearerRequest, [], (tx, current) => permittedTools(tx, env, current, tools));

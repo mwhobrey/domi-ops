@@ -1,5 +1,14 @@
 # Current state
 
+## MCP batch admission correction (WHO-477)
+
+- Both legacy and modern formats reject batch arrays before SDK dispatch. A
+  request cannot hide multiple reads behind one rate charge/concurrency lease.
+- Restricted-role single/shared regression cases cover empty, singleton and
+  100-call arrays, zero tool invocations, denial activity and lease cleanup.
+- Gemini packaging instructions create their parent folder; the index separates
+  verified live synthetic reads/refresh from unverified broader rollout.
+
 ## Claude evaluation review corrections (WHO-476)
 
 - QA ingress and Claude package validation share URL-normalized IP checks,

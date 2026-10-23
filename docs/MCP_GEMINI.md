@@ -63,6 +63,7 @@ Google's [skill import instructions](https://support.google.com/gemini/answer/17
 accept a ZIP with `SKILL.md` at its root. Generate the shared source unchanged:
 
 ```powershell
+New-Item -ItemType Directory -Force .qa/gemini | Out-Null
 node scripts/mcp-gemini/package.mjs .qa/gemini/NEW-SKILL
 Compress-Archive -Path .qa/gemini/NEW-SKILL/* -DestinationPath .qa/gemini/NEW-SKILL.zip
 ```

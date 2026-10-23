@@ -10,6 +10,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Fixed
 
+- MCP batch request bodies are rejected before dispatch so one HTTP admission
+  cannot run multiple tool calls under a single rate charge/concurrency lease.
+  Both legacy and modern clients retain single-message operation.
+
 - Synthetic MCP origin checks and Claude package generation reject private,
   link-local and loopback IP literals, including IPv4-mapped IPv6. Claude
   packaging creates missing parent folders while still refusing to overwrite an
