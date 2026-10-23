@@ -182,11 +182,18 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
     await new Promise<void>((resolve, reject) => server ? server.close((error) => error ? reject(error) : resolve()) : resolve());
   });
 
-  it("operator provisioning uses a real session and restricted provider role without creating a member grant", async () => {
+  it("operator provisioning requires HTTPS and a real session, without creating a member grant", async () => {
+    const config = { origin, name: "Fictional operator registration", provider: "claude", profileVersion: "pilot.claude.fixture.v1",
+      redirectUri: "https://claude.ai/api/mcp/auth_callback", scopes: ["shopping:read", "offline_access"] };
+    // The broad hosted fixture uses HTTP loopback; production provisioning must
+    // refuse it. The dedicated HTTPS matrix exercises registration in both modes.
+    if (new URL(origin).protocol === "http:") {
+      expect(() => planMcpClient(config, origin)).toThrow("canonical_origin_mismatch");
+      return;
+    }
+    const plan = planMcpClient(config, origin);
     const root = await mkdtemp(join(tmpdir(), "domi-mcp-operator-fixture-"));
     const cookieFile = join(root, "session.private");
-    const plan = planMcpClient({ origin, name: "Fictional operator registration", provider: "claude", profileVersion: "pilot.claude.fixture.v1",
-      redirectUri: "https://claude.ai/api/mcp/auth_callback", scopes: ["shopping:read", "offline_access"] }, origin);
     const before = await owned(owner, (tx) => tx.select().from(mcpConnections));
     try {
       await writeFile(cookieFile, "invalid_session=fictional", { mode: 0o600 });
@@ -608,9 +615,9 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
   });
   it("requires fresh versioned privacy consent before an approved Gemini household client receives data", async () => {
     const geminiCallback = "https://oauth-redirect.googleusercontent.com/r/fictional_pilot_callback";
-    const plan = planMcpClient({ origin, name: "Gemini fictional informed-consent pilot", provider: "gemini", profileVersion: "pilot.gemini.disclosed.v1",
-      redirectUri: geminiCallback, scopes: ["shopping:read", "offline_access"], enabled: true }, origin);
-    const client = await auth.mcp.registerClient(owner.headers, plan.registration); clientIds.push(client.client_id);
+    const client = await auth.mcp.registerClient(owner.headers, { name: "Gemini fictional informed-consent pilot", provider: "gemini", profileVersion: "pilot.gemini.disclosed.v1",
+      redirectUris: [geminiCallback], tokenEndpointAuthMethod: "none", dataMode: "household", scopes: ["shopping:read", "offline_access"], enabled: true });
+    clientIds.push(client.client_id);
     const query = await begin(owner, ["shopping:read", "offline_access"], client.client_id, geminiCallback);
     const preview = await post("/api/mcp-auth/consents/preview", { householdId: owner.householdId, oauthQuery: query });
     expect(await preview.json()).toMatchObject({ provider: "gemini", dataMode: "household", policyVersion: MCP_POLICY_VERSION });
