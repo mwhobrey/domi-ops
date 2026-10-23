@@ -45,8 +45,9 @@ node scripts/mcp-chatgpt/smoke.mjs
 
 Registration requires the public synthetic lab guards and creates a distinct
 `gemini` / `synthetic` profile with PKCE public-client authentication and only
-`shopping:read chores:read notes:read offline_access`. The provider already rejects
-Gemini profiles on non-synthetic deployments. Metadata stays in the QA volume;
+`shopping:read chores:read notes:read offline_access`. The QA helper remains
+synthetic-only. Household profiles require operator review, explicit enablement
+and fresh member consent before real-data access. Metadata stays in the QA volume;
 console output omits the account-bound callback path. A differing existing client
 requires inspection instead of replacement. Registration does not establish that
 Gemini completed the public-client flow. Enter the returned client ID in Gemini

@@ -15,6 +15,7 @@ export function AiConsent() {
   const [selected, setSelected] = useState<string[]>([]);
   const [adult, setAdult] = useState(false);
   const [privacy, setPrivacy] = useState(false);
+  const [settingsReviewed, setSettingsReviewed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -36,12 +37,12 @@ export function AiConsent() {
 
   async function approve(e: React.FormEvent) {
     e.preventDefault();
-    if (!preview || busy || attempted || !adult || !privacy) return;
+    if (!preview || busy || attempted || !adult || !privacy || (preview.settingsReviewRequired && !settingsReviewed)) return;
     setBusy(true); setAttempted(true); setError(null);
     try {
       const pending = await apiClient.post<{ pendingId: string }>("/api/mcp-auth/consents/prepare", {
         householdId: preview.householdId, oauthQuery: query, noteIds: selected,
-        adultAttested: adult, privacyAttested: privacy, policyVersion: preview.policyVersion,
+        adultAttested: adult, privacyAttested: privacy, providerSettingsReviewed: settingsReviewed, policyVersion: preview.policyVersion,
       });
       const result = await apiClient.post<{ redirectUri: string }>("/api/mcp-auth/consents/decide", { pendingId: pending.pendingId, oauthQuery: query, accept: true });
       window.location.assign(result.redirectUri);
@@ -79,10 +80,11 @@ export function AiConsent() {
         <fieldset disabled={busy || attempted} className="space-y-4">
           <legend className="sr-only">Required consent</legend>
           <Checkbox id="ai-adult" label="I am an adult and may share this household information." checked={adult} onChange={(e) => setAdult(e.target.checked)} required />
+          {preview.settingsReviewRequired && <Checkbox id="ai-settings-reviewed" label="I have reviewed this assistant account’s privacy and model-training settings and understand the choice I am making." checked={settingsReviewed} onChange={(e) => setSettingsReviewed(e.target.checked)} required />}
           <Checkbox id="ai-privacy" label="I understand the provider’s training, review and retention risks and agree to share this permitted information. Disconnect cannot erase copies." checked={privacy} onChange={(e) => setPrivacy(e.target.checked)} required />
         </fieldset>
         <div className="flex flex-col gap-3 sm:flex-row">
-          <Button type="submit" disabled={busy || attempted || !adult || !privacy}>Allow connection</Button>
+          <Button type="submit" disabled={busy || attempted || !adult || !privacy || (preview.settingsReviewRequired && !settingsReviewed)}>Allow connection</Button>
           <Button type="button" variant="secondary" disabled={busy} onClick={() => void deny()}>Deny connection</Button>
         </div>
         {attempted && !busy && <p role="status" className="text-sm">For your security, an interrupted approval cannot be repeated. Restart from your assistant.</p>}

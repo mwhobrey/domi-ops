@@ -92,7 +92,7 @@ development auth bypass never authorizes an MCP tool request.
 | POST path | Input and behavior |
 | --- | --- |
 | `/household` | `{householdId, enabled}`; current owner/admin only |
-| `/consents/prepare` | `{householdId, oauthQuery, noteIds, adultAttested:true, privacyAttested:true, policyVersion:"2026-10-23.v2"}`; notes default empty, maximum 100 accessible IDs |
+| `/consents/prepare` | `{householdId, oauthQuery, noteIds, adultAttested:true, privacyAttested:true, providerSettingsReviewed:true, policyVersion:"2026-10-23.v3"}`; notes default empty, maximum 100 accessible IDs |
 | `/consents/decide` | `{pendingId, oauthQuery, accept}`; exact query/session/user binding and one-use consumption; success returns the approved provider redirect URI |
 | `/connections/:id/revoke` | Session owner only; local revocation commits before provider cleanup; reports `providerCleanupComplete` separately |
 
@@ -187,3 +187,9 @@ The review-fix run also covers concurrent consumption of each one-use credential
 automatic replacement of old grants despite cleanup failure, and ordinary session
 access with MCP disabled and a prefixed application URL. Household opt-out revokes
 the grant through its database trigger, so outstanding JWTs fail with 401.
+
+Policy v3 requires a separate unchecked provider-settings review acknowledgment
+for ChatGPT, Claude and Gemini. The server rejects omitted or false
+acknowledgments before creating consent. The versioned privacy acceptance timestamp
+records both settings review and risk acceptance; it does not verify settings
+with the provider. Prior-policy grants and pending consents require fresh approval.

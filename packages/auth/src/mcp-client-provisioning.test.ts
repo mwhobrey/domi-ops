@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, dirname, basename, resolve } from "node:path";
 import { planMcpClient, provisionMcpClient, readMcpOperatorFile } from "./mcp-client-provisioning.js";
@@ -82,6 +82,26 @@ describe("operator MCP provisioning", () => {
     expect(receipt).not.toContain("credential-canary");
     await expect(provisionMcpClient(plan, options)).rejects.toMatchObject({ code: "EEXIST" });
     expect(register).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the journal readable throughout a status replacement", async () => {
+    const files = await fixture(), plan = planMcpClient(config, origin);
+    let release!: () => void, ready!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const started = new Promise<void>((resolve) => { ready = resolve; });
+    const operation = provisionMcpClient(plan, { ...files, confirmPlan: plan.sha256, register: async () => {
+      ready(); await gate; return { client_id: "fictional-client" };
+    } });
+    await started;
+    expect(JSON.parse(await readFile(files.receiptFile, "utf8")).status).toBe("attempting");
+    release();
+    await Promise.all([operation, (async () => {
+      for (let index = 0; index < 40; index++) {
+        expect(["attempting", "registered"]).toContain(JSON.parse(await readFile(files.receiptFile, "utf8")).status);
+      }
+    })()]);
+    expect(JSON.parse(await readFile(files.receiptFile, "utf8")).status).toBe("registered");
+    expect((await readdir(files.root)).filter((name) => name.endsWith(".tmp"))).toEqual([]);
   });
 
   it("bounds private input and rejects multi-header cookies before any mutation", async () => {

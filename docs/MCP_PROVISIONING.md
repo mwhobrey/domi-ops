@@ -97,7 +97,11 @@ assistant setup and leave its secret blank. Member consent remains a separate
 interactive step. No MCP tools, fixture login, household toggles or OAuth grants
 are invoked automatically.
 
-An existing receipt is never replaced or replayed. A failed/interrupted call may
+A receipt present before invocation is never reused or replayed. Status updates
+during the same attempt use a synced temporary file in the same directory followed
+by atomic replacement, so readers see the previous or next complete JSON record.
+An interruption during initial creation can leave an incomplete record before any
+registration call. A failed/interrupted call may
 have created a client before the final result was saved; `attempting`, `uncertain`
 or an incomplete receipt means **inspect before retry**. Keep that receipt, check
 the target's operator-visible provider/profile records through authorized support

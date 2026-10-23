@@ -35,7 +35,11 @@
   gates. Submitted OAuth recording is acknowledged; approval is not inferred.
 - Standard hosted base inclusion/free self-host is unchanged. Owner approved
   retaining Gemini with explicit risk disclosure/informed opt-in on 2026-10-23.
-  Current Google requirements/privacy were rechecked. Consent policy v2 requires
+  All three providers have specific data-use/settings disclosures and a separate
+  settings-review acknowledgment enforced by the server. The v3 privacy timestamp
+  records acceptance of both; remote settings are not verified. Receipt updates
+  use synced temporary files and atomic replacement, with bounded Windows sharing
+  retries that never replay registration. Consent policy v3 requires
   fresh member consent for prior-policy grants; no silent widening. No deployment
   or actual household consent was performed. Writes/Google/Health stay separate.
 

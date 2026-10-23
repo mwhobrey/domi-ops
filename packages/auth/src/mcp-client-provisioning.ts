@@ -1,5 +1,6 @@
-import { createHash } from "node:crypto";
-import { open } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { open, rename, unlink } from "node:fs/promises";
+import { setTimeout } from "node:timers/promises";
 import { MCP_SCOPES, type McpAuthorization } from "./mcp.js";
 
 export class McpProvisioningError extends Error {}
@@ -55,27 +56,36 @@ export async function provisionMcpClient(plan: McpClientPlan, options: {
   const receipt = await open(options.receiptFile, "wx", 0o600);
   const base = { version: 1, planSha256: plan.sha256, origin: plan.origin, provider: plan.registration.provider,
     profileVersion: plan.registration.profileVersion, enabled: plan.registration.enabled, attemptedAt: new Date().toISOString() };
-  const record = async (value: object) => {
-    const bytes = Buffer.from(JSON.stringify({ ...base, ...value }, null, 2) + "\n");
-    let offset = 0;
-    while (offset < bytes.length) {
-      const { bytesWritten } = await receipt.write(bytes, offset, bytes.length - offset, offset);
-      if (!bytesWritten) fail("receipt_write_failed");
-      offset += bytesWritten;
-    }
-    await receipt.truncate(bytes.length);
+  const serialize = (value: object) => JSON.stringify({ ...base, ...value }, null, 2) + "\n";
+  try {
+    await receipt.writeFile(serialize({ status: "attempting" }));
     await receipt.sync();
+  } finally { await receipt.close(); }
+  const record = async (value: object) => {
+    const temporary = options.receiptFile + "." + randomUUID() + ".tmp";
+    const next = await open(temporary, "wx", 0o600);
+    try {
+      try { await next.writeFile(serialize(value)); await next.sync(); }
+      finally { await next.close(); }
+      for (let attempt = 0; ; attempt++) {
+        try { await rename(temporary, options.receiptFile); break; }
+        catch (error) {
+          // Windows readers can briefly deny replacement. Retry only the file operation.
+          if (process.platform !== "win32" || attempt >= 4 || !["EPERM", "EBUSY", "EACCES"].includes((error as NodeJS.ErrnoException).code ?? "")) throw error;
+          await setTimeout(25 * (attempt + 1));
+        }
+      }
+    } finally {
+      await unlink(temporary).catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error; });
+    }
   };
   try {
-    await record({ status: "attempting" });
-    try {
-      const client = await options.register(new Headers({ origin: plan.origin, cookie }), plan.registration);
-      if (typeof client.client_id !== "string" || !client.client_id || client.client_id.length > 256) fail("invalid_registration_result");
-      await record({ status: "registered", clientId: client.client_id });
-      return { ...base, status: "registered", clientId: client.client_id };
-    } catch {
-      await record({ status: "uncertain", action: "inspect_before_retry" });
-      fail("registration_uncertain_inspect_receipt");
-    }
-  } finally { await receipt.close(); }
+    const client = await options.register(new Headers({ origin: plan.origin, cookie }), plan.registration);
+    if (typeof client.client_id !== "string" || !client.client_id || client.client_id.length > 256) fail("invalid_registration_result");
+    await record({ status: "registered", clientId: client.client_id });
+    return { ...base, status: "registered", clientId: client.client_id };
+  } catch {
+    await record({ status: "uncertain", action: "inspect_before_retry" });
+    fail("registration_uncertain_inspect_receipt");
+  }
 }

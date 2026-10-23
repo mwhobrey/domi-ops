@@ -66,7 +66,7 @@ Record 429/retry outcomes honestly; do not raise limits to make onboarding pass.
 ## Stop checks
 
 Stop immediately for unexpected identity/data, excluded domains, a domain write,
-notification/job side effect, credential disclosure, failed revocation, privacy
+notification or job side effect, credential disclosure, failed revocation, privacy
 setting drift, participant withdrawal or material household-service degradation.
 Disconnect the grant/household and use the [feature stop](MCP_SETUP.md#disconnect-disable-and-rollback)
 where needed. Preserve metadata-only evidence and report the narrow observed
@@ -94,3 +94,8 @@ owner's confirmed fact; approval remains unverified in this preparation. The
 native-data pilot cannot clear the M6 Google-content gate. Hosted base inclusion
 and free self-hosting are already approved and do not depend on inventing a paid
 add-on or selling provider inference credits.
+
+Before granting access, ChatGPT, Claude and Gemini users separately acknowledge
+reviewing their account privacy and training settings. Provider-specific guidance
+appears before approval; policy v3 records this review together with risk
+acceptance. This is member attestation, not remote verification.

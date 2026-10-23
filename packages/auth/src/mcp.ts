@@ -14,7 +14,8 @@ import {
 } from "@domi-ops/db";
 
 export const MCP_SCOPES = ["shopping:read", "chores:read", "notes:read", "offline_access"] as const;
-export const MCP_POLICY_VERSION = "2026-10-23.v2";
+export const MCP_POLICY_VERSION = "2026-10-23.v3";
+const settingsReviewRequired = (provider: string) => ["chatgpt", "claude", "gemini"].includes(provider);
 const TTL = 30 * 86400_000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 type Connection = typeof mcpConnections.$inferSelect;
@@ -204,7 +205,7 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string) {
           return { memberId: owner.id, memberName: current.user.name, householdName: household?.name ?? "Household" };
         }));
         return { ...identity, householdId, clientName: query.profile.client.name, clientId: query.profile.client.clientId,
-          provider: query.profile.profile.provider, dataMode: query.profile.profile.dataMode,
+          provider: query.profile.profile.provider, dataMode: query.profile.profile.dataMode, settingsReviewRequired: settingsReviewRequired(query.profile.profile.provider),
           clientProfileVersion: query.profile.profile.version, scopes: query.scopes, policyVersion: MCP_POLICY_VERSION };
       },
       async rejectConsent(headers: Headers, oauthQuery: string) {
@@ -271,13 +272,14 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string) {
         await withMcpProviderContext(db, (tx) => tx.insert(mcpClientProfiles).values({ clientId: client.client_id, provider: input.provider, version: input.profileVersion, dataMode: input.dataMode, enabled: input.enabled ?? false }));
         return client;
       },
-      async prepareConsent(headers: Headers, input: { householdId: string; oauthQuery: string; noteIds: string[]; adultAttested: boolean; privacyAttested: boolean; policyVersion: string }) {
+      async prepareConsent(headers: Headers, input: { householdId: string; oauthQuery: string; noteIds: string[]; adultAttested: boolean; privacyAttested: boolean; providerSettingsReviewed?: boolean; policyVersion: string }) {
         const current = await session(headers);
         if (input.adultAttested !== true || input.privacyAttested !== true || input.policyVersion !== MCP_POLICY_VERSION) deny("attestation_required");
         uuid(input.householdId);
         if (input.noteIds.length > 100 || new Set(input.noteIds).size !== input.noteIds.length) deny("invalid_note_selection", 400);
         input.noteIds.forEach(uuid);
         const query = await checkedQuery(input.oauthQuery);
+        if (settingsReviewRequired(query.profile.profile.provider) && input.providerSettingsReviewed !== true) deny("provider_settings_review_required", 400);
         if (input.noteIds.length && !query.scopes.includes("notes:read")) deny("invalid_scope", 400);
         return withUserLookupContext(db, current.user.id, (lookup) => withHouseholdContext(lookup, input.householdId, async (tx) => {
           const owner = await member(tx, current.user.id, input.householdId);

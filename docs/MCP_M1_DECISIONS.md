@@ -268,8 +268,10 @@ Domi Ops cannot observe or enforce a remote user's privacy
 toggle. Record attestation accurately, require reconfirmation when policy changes,
 and never advertise a guarantee of provider non-retention/no-training.
 
-Consent policy `2026-10-23.v2` records acceptance of provider data-use risks and
-the disconnect limitation. Old-policy grants fail live checks and need fresh
+Consent policy `2026-10-23.v3` records acceptance of provider data-use risks,
+the disconnect limitation and a separate settings-review acknowledgment for
+ChatGPT, Claude and Gemini. This is attestation, not remote settings verification.
+Old-policy grants fail live checks and need fresh
 consent after upgrade; no token or grant is silently widened or reactivated.
 The ordinary login session and Google grant are unchanged. No schema migration is
 needed. The Gemini protocol receipts remain synthetic; real dogfood is pending.

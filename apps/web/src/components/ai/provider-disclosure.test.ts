@@ -20,5 +20,18 @@ describe("provider disclosure", () => {
     expect(html).toContain("Your information leaves Domi Ops");
     expect(html).toContain("cannot enforce them");
     expect(html).not.toContain("Gemini data-use risks");
+    expect(html).toContain("Claude data-use settings");
+    expect(html).toContain("Model Improvement");
+    expect(html).toContain("content copied into a conversation");
+    expect(html).toContain("https://privacy.claude.com/en/articles/10023580-is-my-data-used-for-model-training");
+  });
+  it("explains ChatGPT settings, feedback and account-specific retention", () => {
+    const html = renderToStaticMarkup(createElement(ProviderDataDisclosure, { provider: "chatgpt" }));
+    expect(html).toContain("ChatGPT data-use settings");
+    expect(html).toContain("Improve the model for everyone");
+    expect(html).toContain("Feedback may share");
+    expect(html).toContain("30 days");
+    expect(html).toContain("https://help.openai.com/en/articles/7730893-data-controls-in-chatgpt");
+    expect(html).not.toContain("Gemini data-use risks");
   });
 });

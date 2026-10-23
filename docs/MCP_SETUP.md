@@ -123,7 +123,7 @@ approved retaining Gemini as an informed opt-in instead of banning the provider.
 This changes policy, not deployment or individual member consent. See [custom-app requirements](https://support.google.com/gemini/answer/17209137)
 and [privacy notice](https://support.google.com/gemini/answer/13594961?hl=en).
 
-Consent policy is now `2026-10-23.v2`. On upgrade, prior-policy MCP grants fail
+Consent policy is now `2026-10-23.v3`. On upgrade, prior-policy MCP grants fail
 live checks and require fresh consent to the expanded disclosure. This affects
 assistant connections, not ordinary sessions or existing Google grants. No data
 scope is automatically added and no schema migration is needed.

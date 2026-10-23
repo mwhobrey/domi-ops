@@ -34,7 +34,9 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 - Provider-risk disclosure and informed opt-in retain Gemini as a supported pilot
   choice instead of a blanket real-data ban. Gemini consent explains required
-  Keep Activity, possible training/human review and retention. **Consent policy v2
+  Keep Activity, possible training/human review and retention. ChatGPT and Claude
+  receive their own settings guidance; all three require a separate settings-review
+  acknowledgment before approval. **Consent policy v3
   requires fresh consent for prior-policy MCP grants after upgrade**; ordinary
   sessions and Google connections are unaffected. No schema migration or live
   household deployment is included.

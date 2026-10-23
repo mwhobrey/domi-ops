@@ -60,7 +60,7 @@ profile/privacy settings and operator provisioning procedure. Keep unapproved
 profiles and deployment flags off; private fictional-data tests are not a real
 household pilot, vendor approval or deployment authorization.
 
-WHO-478 consent policy `2026-10-23.v2` requires fresh consent from prior-policy
+WHO-478 consent policy `2026-10-23.v3` requires fresh consent from prior-policy
 MCP connections after upgrade, including interrupted approvals. Explain this
 assistant-only reconnect step before rollout; ordinary sessions/Google grants
 are preserved. Gemini remains available with explicit provider-risk disclosure.
