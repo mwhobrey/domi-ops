@@ -75,7 +75,7 @@ jobs:
         run: node --test scripts/hosted-qa/ownership.test.mjs scripts/hosted-qa/cleanup.test.mjs scripts/hosted-qa/mcp-origin.test.mjs
 
       - name: MCP client packaging
-        run: node --test scripts/mcp-chatgpt/package.test.mjs scripts/mcp-claude/package.test.mjs
+        run: node --test scripts/mcp-chatgpt/package.test.mjs scripts/mcp-claude/package.test.mjs scripts/mcp-gemini/package.test.mjs scripts/mcp-gemini/registration.test.mjs
 
   test-mcp:
     name: MCP authorization and isolation

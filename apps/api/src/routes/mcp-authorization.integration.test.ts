@@ -181,7 +181,7 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
   it("serves protected-resource discovery and bearer challenges without browser cookie fallback", async () => {
     for (const path of ["/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/api/mcp"]) {
       const response = await fetch(origin + path);
-      expect(await response.json()).toEqual({ resource: origin + "/api/mcp", authorization_servers: [origin + "/auth"], bearer_methods_supported: ["header"], scopes_supported: scopes.filter((s) => s !== "offline_access") });
+      expect(await response.json()).toEqual({ resource: origin + "/api/mcp", authorization_servers: [origin + "/auth"], bearer_methods_supported: ["header"], scopes_supported: scopes });
     }
     const response = await post("/api/mcp", { jsonrpc: "2.0", id: 1, method: "tools/list" });
     expect(response.status).toBe(401);
@@ -214,6 +214,46 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
     expect(events.every((e) => e.actorUserId === owner.userId && !JSON.stringify(e).includes(token.access_token) && !JSON.stringify(e).includes("synthetic-sdk"))).toBe(true);
     expect(await owned(stranger, (tx) => tx.select().from(mcpAccessEvents).where(eq(mcpAccessEvents.connectionId, token.connectionId)))).toEqual([]);
     expect(await withWorkerScanContext(db, (tx) => tx.select().from(mcpRequestLeases))).toEqual([]);
+  });
+  it("advertises refresh support without granting background access to an access-only request", async () => {
+    const token = await connect(owner, ["shopping:read"]);
+    expect(token.refresh_token).toBeUndefined();
+    expect(await auth.mcp.authorize(bearer(token.access_token))).toMatchObject({ scopes: ["shopping:read"] });
+    const stored = await withMcpProviderContext(db, (tx) => tx.select({ id: oauthRefreshToken.id }).from(oauthRefreshToken).where(eq(oauthRefreshToken.referenceId, token.connectionId)));
+    expect(stored).toEqual([]);
+    const response = await post(`/api/mcp-auth/connections/${token.connectionId}/narrow`, { scopes: ["shopping:read", "offline_access"], noteIds: [] });
+    expect(response.status).toBe(409);
+    await auth.mcp.revokeConnection(owner.headers, token.connectionId);
+  });
+  it.each(["2025-03-26", "2025-06-18", "2025-11-25"])("serves %s clients through the bearer-only Next bridge with scope and revocation checks", async (version) => {
+    const bridgePath = new URL("../../../web/src/app/api/mcp/route.ts", import.meta.url).href;
+    const { POST: proxyMcp } = await import(bridgePath) as { POST: (request: Request) => Promise<Response> };
+    const token = await connect();
+    const previousApi = process.env.API_URL;
+    process.env.API_URL = origin;
+    let sequence = 0;
+    const request = (method: string, params?: Record<string, unknown>, authenticated = true, notification = false) => proxyMcp(new Request(origin + "/api/mcp", {
+      method: "POST", headers: { host: new URL(origin).host, "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": version,
+        cookie: owner.headers.get("cookie")!, ...(authenticated ? { authorization: "Bearer " + token.access_token } : {}) },
+      body: JSON.stringify({ jsonrpc: "2.0", ...(notification ? {} : { id: ++sequence }), method, ...(params ? { params } : {}) }),
+    }));
+    const result = async (response: Response) => {
+      expect(response.status).toBe(200); expect(response.headers.has("set-cookie")).toBe(false);
+      const text = await response.text();
+      return JSON.parse(response.headers.get("content-type")?.includes("text/event-stream") ? text.split("\n").find((line) => line.startsWith("data: "))!.slice(6) : text);
+    };
+    try {
+      expect((await request("initialize", { protocolVersion: version, capabilities: {}, clientInfo: { name: "synthetic-legacy", version: "1" } }, false)).status).toBe(401);
+      const initialized = await result(await request("initialize", { protocolVersion: version, capabilities: {}, clientInfo: { name: "synthetic-legacy", version: "1" } }));
+      expect(initialized.result.protocolVersion).toBe(version);
+      expect((await request("notifications/initialized", undefined, true, true)).status).toBe(202);
+      expect((await result(await request("tools/list"))).result.tools.map((tool: { name: string }) => tool.name)).toEqual(["get_connection_context", "list_shopping_items"]);
+      expect((await result(await request("tools/call", { name: "get_connection_context", arguments: {} }))).result.structuredContent.capabilities).toEqual(["shopping:read"]);
+      expect((await result(await request("tools/call", { name: "list_selected_notes", arguments: {} }))).error).toBeDefined();
+      expect((await request("resources/list")).status).toBe(400);
+      await auth.mcp.revokeConnection(owner.headers, token.connectionId);
+      expect((await request("tools/call", { name: "get_connection_context", arguments: {} })).status).toBe(401);
+    } finally { if (previousApi === undefined) delete process.env.API_URL; else process.env.API_URL = previousApi; }
   });
   it("bounds inputs and results and filters tools by token scope", async () => {
     const token = await connect();
