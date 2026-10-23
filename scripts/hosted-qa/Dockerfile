@@ -28,6 +28,7 @@ ENV NODE_ENV=production DOMI_OPS_DOTENV_LOADED=1
 COPY scripts/hosted-qa ./scripts/hosted-qa
 COPY scripts/mcp-chatgpt ./scripts/mcp-chatgpt
 COPY scripts/mcp-claude ./scripts/mcp-claude
+COPY scripts/mcp-gemini ./scripts/mcp-gemini
 COPY docs/fixtures ./docs/fixtures
 COPY skills ./skills
 COPY scripts/household-archive.mts ./scripts/

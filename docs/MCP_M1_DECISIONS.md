@@ -57,6 +57,18 @@ versions; if one needs a legacy path, add SDK-supported compatibility in a focus
 change before claiming support. No custom protocol parser, sampling, resources,
 subscriptions or agent jobs are in v1.
 
+WHO-477 compatibility update: actual Gemini completed OAuth token exchange but
+received an authenticated protocol rejection from the modern-only gateway. The
+SDK's stateless 2025 mode now serves both formats from the same authorized factory,
+with finite legacy SSE framing where the SDK requires it. Restricted-role tests
+cover 2025 initialization, reads, scope refusal and revocation in single/shared
+deployments. Actual Gemini 2025-11-25 discovery, five reads, refresh rotation and
+installed briefing now pass; scope refusal and grant/credential revocation are
+verified with the evidence limits in MCP_GEMINI.md. Discovery also advertises
+the existing `offline_access` scope so clients can request refresh support. It is
+never added to an existing grant or token without explicit request/consent. This
+does not enable production Gemini.
+
 Future production dependency commands, not executed on app workspaces in M1:
 
 ```sh

@@ -1,5 +1,48 @@
 # Current state
 
+## Gemini integration (WHO-477; private synthetic acceptance)
+
+- Consumer Gemini stays synthetic-only; real-household profiles remain disabled.
+- Actual web account exposes custom MCP apps, advanced OAuth fields and Skills
+  Upload. Keep Activity was already on; no privacy settings changed.
+- Separate public synthetic lab passed shared OAuth/five-tool/refresh/disconnect
+  preflight. This is local-inspector evidence, not live Gemini acceptance.
+- Root skill packaging preserves the shared briefing and license. QA registration
+  requires an exact observed Google callback and synthetic deployment guards.
+- User approved Gemini connection warning and private skill upload. The ZIP
+  imported, Save skill completed, and the shared briefing appears as Active.
+  The installed skill and connector, explicitly selected through @ mentions,
+  produced a real five-read briefing with context first, correct household date,
+  fixture records, exact links, coverage limits and no writes. Google refresh
+  credentials rotated four times during these reads.
+  Exact user-observed Google relay callback is now registered to a Gemini
+  synthetic-only profile; idempotent registration passed. After the user completed
+  Google's step, real PKCE/read-scope login and selected-note consent passed.
+  Actual token exchange, 2025-11-25 initialize, initialized notification and tool
+  listing passed after SDK stateless compatibility was enabled. UI reported ready;
+  HEAD/GET 405 probes did not block setup. Same auth/tenant/bounds, no persistent
+  sessions or GET transport. Explicit @ selection invokes the installed skill,
+  but access-only setup initially left the conversation without an app connection.
+  Gemini initially requested no offline scope, so no refresh credential was issued. Discovery
+  now advertises offline_access, matching the existing provider allowlist and
+  Google's required refresh-token contract. Fresh explicit consent remains required;
+  existing grants are never broadened automatically. Saved-app retry still asked
+  for three reads only and was declined. User approved removing/recreating only
+  the synthetic connector. Fresh setup with the same endpoint/client then requested
+  offline_access and passed explicit consent, token issuance and actual reads.
+  Removing chore scope blocked the next actual Gemini read; server refresh was
+  refused and the reply reported unavailable without reusing data.
+  Product Disconnect then revoked the grant and all five refresh credentials;
+  the next client request returned unavailable/no data. Scope reduction had
+  already denied the client before disconnect; isolated revocation is covered
+  by the regression suite. Owned tunnel/lab stopped with volumes retained.
+  Blank Google notice requires manual assistance; temporary owned diagnostics
+  exclude credentials/content. All 135 restricted-role checks and 17 typecheck tasks,
+  modern public preflight and full image build pass.
+  Only this owned lab was reset and rebuilt after its temporary tunnel stopped;
+  the renewed public preflight passed again.
+  See [MCP_GEMINI.md](../../docs/MCP_GEMINI.md).
+
 ## Claude integration (WHO-476; private synthetic acceptance)
 
 - Separate owned lab supports an explicitly configured public HTTPS canonical
@@ -122,8 +165,9 @@
 - Dedicated bearer-only `/api/mcp` branch and exact root/path protected-resource
   metadata precede browser tenant/subscription middleware. Caddy routes these to
   Hono; Next also supplies a bounded cookie-free bridge preserving modern headers.
-- Official SDK `createMcpHandler`, `legacy: "reject"`, per-request server. Clients
-  must pin version negotiation to `2026-07-28`; the SDK defaults to 2025 otherwise.
+- Official SDK `createMcpHandler`, per-request server. WHO-477 enables the SDK's
+  stateless 2025 compatibility after actual Gemini token exchange reached an
+  authenticated protocol rejection. Modern test clients pin `2026-07-28`.
   Only `get_connection_context` is registered; domain tools remain WHO-472.
 - Live grant/role/module checks run in short scoped tool transactions. Hosted
   read-only subscriptions retain reads within module entitlement; no writes ship.
