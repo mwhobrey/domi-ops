@@ -8,6 +8,12 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+- Optional deployment-wide MCP read-scope configuration keeps discovery and
+  authorization aligned for shopping/chore-only pilots. Disabled scopes are
+  rejected during registration, consent, refresh and live access. This prevents
+  a discovery-driven client from requesting notes when that pilot excludes them.
+  Existing deployments retain all three reads unless explicitly narrowed.
+
 ### Fixed
 
 - MCP batch request bodies are rejected before dispatch so one HTTP admission

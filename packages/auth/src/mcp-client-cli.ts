@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { parseArgs } from "node:util";
-import { loadEnv } from "@domi-ops/config";
+import { loadEnv, mcpSupportedScopes } from "@domi-ops/config";
 import { createDb, closeDb } from "@domi-ops/db";
 import { sql } from "drizzle-orm";
 import { createBetterAuth } from "./better-auth.js";
@@ -15,7 +15,7 @@ async function main() {
   }
   if (!values.config) throw new McpProvisioningError("config_file_required");
   const env = loadEnv();
-  const plan = planMcpClient(JSON.parse(await readMcpOperatorFile(values.config, 16384)), env.PUBLIC_APP_URL);
+  const plan = planMcpClient(JSON.parse(await readMcpOperatorFile(values.config, 16384)), env.PUBLIC_APP_URL, mcpSupportedScopes(env));
   if (!values.apply) {
     console.log(JSON.stringify({ mode: "plan", sha256: plan.sha256, origin: plan.origin, provider: plan.registration.provider,
       profileVersion: plan.registration.profileVersion, scopes: plan.registration.scopes, enabled: plan.registration.enabled,

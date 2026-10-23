@@ -77,6 +77,21 @@ No new integration SKU is required.
 
 ### HTTPS and discovery
 
+`MCP_READ_SCOPES` optionally limits this deployment's reads. For a shopping/chore
+pilot, set `MCP_READ_SCOPES=shopping:read,chores:read` consistently on its services.
+Both resource and issuer discovery advertise that subset plus `offline_access`;
+registration, consent, token refresh and live access enforce it. Omitting the
+setting retains all three reads. Empty, duplicate or unknown values fail startup.
+Changing it requires an application restart. Disabled scopes are refused for
+existing tokens too; this does not widen or reactivate a grant.
+
+This is deployment-wide, including on hosted services. Review all affected
+connections before narrowing it; it is not a per-household setting. Individual
+consent and note selection still restrict each grant. Gemini requests every
+advertised scope in the observed flow, so align the deployment's advertised reads
+with the reviewed client profile before creating its connector. Do not add note
+permission to bypass a shopping/chore-only pilot's scope mismatch.
+
 Route the exact [gateway/discovery/provider paths](MCP_GATEWAY.md#enablement-and-routing)
 through the supported Caddy or Next bridge, preserving public Host and bearer
 Authorization. Issuer is `PUBLIC_APP_URL/auth`; resource is
