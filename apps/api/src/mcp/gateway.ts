@@ -16,7 +16,7 @@ type Authorization = ReturnType<ReturnType<typeof createMcpAuthorization>["attac
 export function mcpGateway(db: Database, auth: Authorization, env: Env, tools: readonly McpTool[] = [contextTool, ...readTools(env)]) {
   const app = new Hono();
   const urls = mcpUrls(env), canonical = new URL(urls.origin);
-  const resourceScopes = MCP_SCOPES.filter((scope) => scope !== "offline_access");
+  const resourceScopes = [...MCP_SCOPES];
   const challenge = `Bearer resource_metadata="${urls.origin}/.well-known/oauth-protected-resource/api/mcp"`;
   const failure = (code: string, status: number, headers?: Record<string, string>) => Response.json({ error: code }, { status, headers: { "Cache-Control": "no-store", ...headers } });
   if (tools.some((tool) => !approvedToolNames.includes(tool.name) || tool.access !== "read") || new Set(tools.map((t) => t.name)).size !== tools.length) throw new Error("Invalid MCP tool registry");
@@ -54,8 +54,10 @@ export function mcpGateway(db: Database, auth: Authorization, env: Env, tools: r
         sdk.post("/api/mcp", async (request) => {
           signal.throwIfAborted();
           const parsedBody = (request.get as (key: string) => unknown)("parsedBody");
+          // One HTTP admission covers one message, never multiple tool executions.
+          if (Array.isArray(parsedBody)) { outcome = "invalid_request"; return failure("batch_not_supported", 400); }
           const method = parsedBody && typeof parsedBody === "object" && "method" in parsedBody ? parsedBody.method : undefined;
-          if (typeof method === "string" && !["server/discover", "tools/list", "tools/call", "initialize", "ping"].includes(method)) return failure("method_not_allowed", 400);
+          if (typeof method === "string" && !["server/discover", "tools/list", "tools/call", "initialize", "notifications/initialized", "ping"].includes(method)) return failure("method_not_allowed", 400);
           const available = await auth.withGrantContext(bearerRequest, [], (tx, current) => permittedTools(tx, env, current, tools));
           handler = createMcpHandler(() => {
             const server = new McpServer({ name: "domi-ops", version: "1.0.0" }, { capabilities: { tools: { listChanged: false } } });
@@ -83,7 +85,7 @@ export function mcpGateway(db: Database, auth: Authorization, env: Env, tools: r
               });
             }
             return server;
-          }, { legacy: "reject", responseMode: "auto", maxRequestBodySize: MCP_LIMITS.requestBytes, onerror: () => {} });
+          }, { legacy: "stateless", responseMode: "auto", maxRequestBodySize: MCP_LIMITS.requestBytes, onerror: () => {} });
           const response = await handler.fetch(request.req.raw, { parsedBody });
           const body = await response.text();
           bytes = Buffer.byteLength(body);

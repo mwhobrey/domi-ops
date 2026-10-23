@@ -6,6 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runBrowserChecks } from "./browser.mjs";
 import { assertOwnership, assertVolumes } from "./ownership.mjs";
+import { configureMcpOrigin } from "./mcp-origin.mjs";
 import { openSync, writeFileSync, closeSync, unlinkSync, readFileSync } from "node:fs";
 
 const root = await realpath(resolve(dirname(fileURLToPath(import.meta.url)), "../.."));
@@ -30,15 +31,19 @@ if (!["status", "logs"].includes(command)) {
   process.once("exit", () => { try { unlinkSync(lock); } catch {} });
 }
 let state = await readFile(statePath, "utf8").then(JSON.parse).catch((e) => { if (e.code === "ENOENT") return null; throw e; });
+const fresh = !state;
 if (!state) {
   if (["down", "reset", "test", "status", "logs"].includes(command)) throw new Error("No owned QA stack found. Run npm run qa:hosted:up first.");
   const base = Number(process.env.DOMI_QA_BASE_PORT ?? 13180);
   if (!Number.isInteger(base) || base < 1024 || base > 60000) throw new Error("DOMI_QA_BASE_PORT must be 1024–60000");
   state = { marker, root, project, mode: "fixture", image: `${project}:local`, ports: Object.fromEntries(["web", "www", "mail", "provider", "db", "archive", "s3"].map((name, i) => [name, base + i])), secrets: Object.fromEntries(["ADMIN_PASSWORD", "APP_PASSWORD", "SESSION_SECRET", "ENCRYPTION_KEY", "S3_PASSWORD", "TOKEN"].map((name) => [name, randomBytes(32).toString("hex")])) };
   await checkPorts(state.ports);
-  await writeFile(statePath, JSON.stringify(state, null, 2), { mode: 0o600 });
 }
 assertOwnership(state, root, project);
+const localOrigin = `http://localhost:${state.ports.web}`;
+const canonicalMcp = configureMcpOrigin({ origin: state.mcpOrigin, port: state.ports.web, command, requested: process.env.DOMI_QA_MCP_ORIGIN, fresh });
+if (command === "mcp") state.mcpOrigin = canonicalMcp.origin;
+const publicMcp = canonicalMcp.remote;
 
 const baseEnv = { ...process.env };
 for (const name of Object.keys(baseEnv)) if (name.startsWith("DOMI_QA_")) delete baseEnv[name];
@@ -74,6 +79,9 @@ if (["up", "run", "mcp", "providers"].includes(command)) {
   values.DOMI_QA_STRIPE_MODE = providers.STRIPE_SECRET_KEY ? "sandbox" : "fixture";
   values.DOMI_QA_MCP = state.mcp ? "true" : "false";
   values.DOMI_QA_API_NODE_ENV = state.mcp ? "test" : "production";
+  values.DOMI_QA_APP_ORIGIN = state.mcpOrigin ?? localOrigin;
+  values.DOMI_QA_MCP_PUBLIC_ORIGIN = publicMcp ? state.mcpOrigin : "";
+  values.DOMI_QA_MCP_EGRESS_INTERNAL = publicMcp ? "false" : "true";
   await writeFile(envPath, Object.entries(values).map(([key, value]) => `${key}='${value.replaceAll("'", "\\'")}'`).join("\n") + "\n", { mode: 0o600 });
   await writeFile(statePath, JSON.stringify(state, null, 2), { mode: 0o600 });
 }
@@ -113,7 +121,7 @@ async function start() {
 }
 if (["down", "reset"].includes(command)) {
   if (await owned()) await compose(["down", ...(command === "reset" ? ["--volumes"] : []), "--remove-orphans"]);
-  if (command === "reset") { state.mode = "fixture"; await writeFile(statePath, JSON.stringify(state, null, 2)); console.log("Only this harness project's containers and named volumes were reset. Receipts retained."); }
+  if (command === "reset") { state.mode = "fixture"; state.mcp = false; delete state.mcpOrigin; await writeFile(statePath, JSON.stringify(state, null, 2)); console.log("Only this harness project's containers and named volumes were reset. Receipts retained."); }
 } else if (command === "status") await compose(["ps"]);
 else if (command === "logs") await compose(["logs", "--tail", "80"]);
 else {

@@ -3,12 +3,11 @@ import { eq } from "drizzle-orm";
 import { createDb, closeDb, withHouseholdContext, shoppingItems, chores } from "@domi-ops/db";
 import { createBetterAuth } from "@domi-ops/auth";
 import { loadEnv } from "@domi-ops/config";
+import { assertSyntheticMcpOrigin } from "../hosted-qa/mcp-origin.mjs";
 
 // This operator entry point is shipped only in the owned QA tools image.
 const env = loadEnv();
-if (!env.MCP_ENABLED || !env.MCP_SYNTHETIC_DEPLOYMENT || env.NODE_ENV !== "test" ||
-    process.env.QA_TOKEN?.length !== 64 || !env.DATABASE_URL.includes("@postgres:5432/domi_ops") ||
-    !/^http:\/\/localhost:\d+$/.test(env.PUBLIC_APP_URL)) throw new Error("Owned loopback synthetic MCP lab required");
+assertSyntheticMcpOrigin(env);
 const fixture = JSON.parse(await readFile("/qa/fixtures.json", "utf8"));
 const prior = await readFile("/qa/mcp.json", "utf8").then(JSON.parse).catch((e) => { if (e.code === "ENOENT") return null; throw e; });
 if (prior) { console.log("Existing synthetic MCP client retained; consent still required."); process.exit(0); }

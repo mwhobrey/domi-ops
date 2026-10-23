@@ -59,19 +59,29 @@ npm install --save-exact -w @domi-ops/api @modelcontextprotocol/server@2.3.1 @mo
 npm install --save-dev --save-exact -w @domi-ops/api @modelcontextprotocol/client@2.3.1
 ```
 
-Use the SDK's `createMcpHandler` with `legacy: "reject"`. A fresh server is created
-for each exchange. The modern 2026-07-28 request envelope and matching standard
-headers are required. **The SDK client defaults to the 2025 handshake**; test clients
-must explicitly set `versionNegotiation: { mode: { pin: "2026-07-28" } }`. The legacy
-`WebStandardStreamableHTTPServerTransport` alone does not implement this revision.
+Use the SDK's `createMcpHandler` with `legacy: "stateless"`. A fresh server is created
+for each exchange, with the same authorization and tool registry for both formats.
+Modern 2026-07-28 requests require their envelope and matching standard headers.
+2025 clients use `initialize` and `notifications/initialized`; no persistent session
+is created. The SDK client defaults to that handshake; tests for the modern path
+explicitly set `versionNegotiation: { mode: { pin: "2026-07-28" } }`.
+Protected-resource discovery advertises the three read scopes and `offline_access`
+for clients needing refresh. Advertising a scope never grants it: refresh still
+requires an explicit requested scope and member consent.
 See the [official SDK source](https://github.com/modelcontextprotocol/typescript-sdk)
 and [protocol specification](https://modelcontextprotocol.io/specification/2026-07-28).
 
 Only server discovery, tool listing/calls and protocol negotiation/probes are
-accepted. No persistent sessions, subscriptions/SSE, resources, prompts, sampling,
+accepted. No persistent sessions, subscriptions, resources, prompts, sampling,
 jobs, shell, SQL or arbitrary URL fetch tools are exposed. The response mode is
-automatic JSON; the approved handlers emit no notifications and subscription
-methods are rejected before dispatch.
+automatic JSON for modern requests; the SDK may frame finite legacy responses as
+SSE. The approved handlers emit no notifications and subscription methods are
+rejected before dispatch. GET/DELETE remain unsupported.
+
+Batch arrays are rejected before SDK dispatch for both protocol formats. One
+HTTP admission covers one message; it cannot execute a batch under one rate
+charge or concurrency lease. Rejected batches retain bounded protocol-denial
+activity and release their admission without invoking a tool.
 
 WHO-471 introduced `get_connection_context`. It returns this
 connection's own household/member labels, timezone, scopes and current tool name;

@@ -5,6 +5,7 @@ import { readFile, writeFile, realpath } from "node:fs/promises";
 import { dirname, resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { assertOwnership } from "../hosted-qa/ownership.mjs";
+import { mcpOrigin } from "../hosted-qa/mcp-origin.mjs";
 
 const root = await realpath(resolve(dirname(fileURLToPath(import.meta.url)), "../.."));
 const directory = join(root, ".qa", "hosted"), state = JSON.parse(await readFile(join(directory, "state.json"), "utf8"));
@@ -15,7 +16,7 @@ const container = `${project}-providers-1`;
 const [inspected] = JSON.parse(execFileSync("docker", ["inspect", container], { encoding: "utf8" }));
 assert.equal(inspected.Config.Labels["com.docker.compose.project"], project);
 const config = JSON.parse(execFileSync("docker", ["exec", container, "cat", "/qa/mcp.json"], { encoding: "utf8" }));
-const origin = `http://localhost:${state.ports.web}`; assert.equal(config.origin, origin);
+const origin = mcpOrigin(state.mcpOrigin ?? `http://localhost:${state.ports.web}`, state.ports.web).origin; assert.equal(config.origin, origin);
 const fixtureResponse = await fetch(`http://localhost:${state.ports.provider}/__qa/fixtures`, { headers: { "x-qa-token": state.secrets.TOKEN }, signal: AbortSignal.timeout(10000) });
 assert.ok(fixtureResponse.ok, "Owned fixture lookup failed");
 const fixture = await fixtureResponse.json(), owner = fixture.households.find((household) => household.label === "alpha");

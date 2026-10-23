@@ -8,7 +8,36 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+### Fixed
+
+- MCP batch request bodies are rejected before dispatch so one HTTP admission
+  cannot run multiple tool calls under a single rate charge/concurrency lease.
+  Both legacy and modern clients retain single-message operation.
+
+- Synthetic MCP origin checks and Claude package generation reject private,
+  link-local and loopback IP literals, including IPv4-mapped IPv6. Claude
+  packaging creates missing parent folders while still refusing to overwrite an
+  existing package.
+
 ### Added
+
+- Synthetic-only Gemini evaluation setup and portable skill import folder, with
+  exact-callback registration guards. Private consumer OAuth, five reads, refresh
+  rotation, scope refusal and the installed briefing are verified; product
+  disconnect revokes the grant and refresh credentials. Real-household Gemini
+  access remains disabled. See [Gemini evaluation](docs/MCP_GEMINI.md).
+
+- Stateless MCP compatibility for 2025-era clients through the existing scoped
+  gateway, alongside modern requests, with bearer and revocation checks shared
+  across both formats. Discovery advertises refresh support, which still requires
+  explicit member consent.
+
+- Claude private evaluation package using the shared read-only briefing skill,
+  with explicit public-client OAuth setup and an isolated public HTTPS synthetic
+  lab. Claude Pro web OAuth, five reads, refresh rotation, reduced-scope refusal,
+  reauthorization, disconnect and the installed combined-plugin briefing passed. Broader
+  rollout remains separate.
+  See [Claude evaluation](docs/MCP_CLAUDE.md).
 
 - Private MCP client package generator and optional isolated synthetic ChatGPT
   evaluation lab. Includes a real OAuth/read/refresh/disconnect smoke and copies

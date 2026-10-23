@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
-import { randomUUID } from "node:crypto";
+import { randomUUID, randomBytes } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { createDb, closeDb, withSystemContext, households, householdMembers, householdSubscriptions, users, baAccounts, notes, schoolClasses, schoolAssignments, schoolEnrollments, healthEvents, driveObjects, browserUploads } from "@domi-ops/db";
 import { hashPassword, provisionUsernameMember } from "@domi-ops/auth";
@@ -17,7 +17,8 @@ for (const host of ["postgres", "archive"]) {
 const previous = await readFile("/qa/fixtures.json", "utf8").then(JSON.parse).catch(() => null);
 if (previous) { console.log("Existing QA fixtures retained. Use qa:hosted:reset for a fresh lab."); process.exit(0); }
 const db = createDb(`postgresql://domi_ops:${process.env.QA_ADMIN_PASSWORD}@postgres:5432/domi_ops`);
-const password = "HostedQa2026!", passwordHash = await hashPassword(password);
+// Public synthetic labs must not use the repository's documented fixture password.
+const password = process.env.QA_MCP_PUBLIC_ORIGIN ? randomBytes(24).toString("base64url") : "HostedQa2026!", passwordHash = await hashPassword(password);
 const fixture = { password, appUrl: process.env.PUBLIC_APP_URL, marketingUrl: process.env.PUBLIC_MARKETING_URL, households: [] };
 const env = { ...process.env, S3_FORCE_PATH_STYLE: true, DRIVE_UPLOAD_MAX_BYTES: 10485760 };
 try {
