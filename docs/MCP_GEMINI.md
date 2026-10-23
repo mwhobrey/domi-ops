@@ -12,6 +12,16 @@ review and evidence. See [M1 decisions](MCP_M1_DECISIONS.md).
 
 ## Account and connection setup
 
+WHO-478 live pilot preflight found that Gemini requested all four advertised
+scopes even when its registered client allowed shopping/chores/refresh only.
+The provider correctly returned `invalid_scope` for `notes:read`, wrapped in a
+JSON redirect response instead of the consent page. No grant or token was issued.
+For a no-notes deployment, use `MCP_READ_SCOPES=shopping:read,chores:read` to align
+both discovery documents and enforcement with that client before setup. This
+deployment-wide setting is not a household permission editor; see
+[scope configuration](MCP_SETUP.md#https-and-discovery). Local regression coverage
+does not establish another successful live linking attempt.
+
 Google's [custom-app help](https://support.google.com/gemini/answer/17209137)
 currently requires a personal Google account, US adult eligibility, English and
 Keep Activity enabled. Setup is on the web; documented mobile availability is

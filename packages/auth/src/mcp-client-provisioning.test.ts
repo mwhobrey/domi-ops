@@ -44,6 +44,12 @@ describe("operator MCP provisioning", () => {
     for (const target of ["http://pilot.example.test", origin + "/path", origin + "?x=1"]) expect(() => planMcpClient(config, target)).toThrow();
   });
 
+  it("refuses disabled deployment scopes before provisioning", () => {
+    const permitted = ["shopping:read", "chores:read", "offline_access"];
+    expect(planMcpClient(config, origin, permitted).registration.scopes).not.toContain("notes:read");
+    expect(() => planMcpClient({ ...config, scopes: ["notes:read"] }, origin, permitted)).toThrow("invalid_scopes");
+  });
+
   it("rejects a changed plan before opening a receipt or calling registration", async () => {
     const files = await fixture(), register = vi.fn();
     const plan = planMcpClient(config, origin);

@@ -21,7 +21,7 @@ export async function readMcpOperatorFile(path: string, limit: number) {
   } finally { await file.close(); }
 }
 
-export function planMcpClient(input: unknown, publicAppUrl: string): McpClientPlan {
+export function planMcpClient(input: unknown, publicAppUrl: string, supportedScopes: readonly string[] = MCP_SCOPES): McpClientPlan {
   if (!input || typeof input !== "object" || Array.isArray(input)) fail("invalid_client_config");
   const config = input as Record<string, unknown>;
   if (Object.keys(config).some((key) => !["origin", "provider", "name", "redirectUri", "profileVersion", "scopes", "enabled"].includes(key))) fail("invalid_client_config");
@@ -37,7 +37,7 @@ export function planMcpClient(input: unknown, publicAppUrl: string): McpClientPl
       callback.origin !== "https://oauth-redirect.googleusercontent.com" || !/^\/r\/[A-Za-z0-9_-]+$/.test(callback.pathname) :
       callback.origin !== "https://chatgpt.com" || !/^\/(?:connector\/oauth\/[A-Za-z0-9_-]+|connector_platform_oauth_redirect)$/.test(callback.pathname))) fail("invalid_provider_callback");
   if (!Array.isArray(config.scopes) || !config.scopes.length || new Set(config.scopes).size !== config.scopes.length ||
-    config.scopes.some((scope) => typeof scope !== "string" || !MCP_SCOPES.includes(scope as typeof MCP_SCOPES[number])) ||
+    config.scopes.some((scope) => typeof scope !== "string" || (!MCP_SCOPES.includes(scope as typeof MCP_SCOPES[number]) || !supportedScopes.includes(scope))) ||
     !config.scopes.some((scope) => scope !== "offline_access")) fail("invalid_scopes");
   if (config.enabled !== undefined && typeof config.enabled !== "boolean") fail("invalid_enabled_state");
   const registration: Registration = { name: config.name, provider: config.provider, profileVersion: config.profileVersion,

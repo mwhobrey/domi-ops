@@ -1,5 +1,19 @@
 # Current state
 
+## Pilot scope discovery correction (WHO-478)
+
+- Gemini requested `notes:read` from global discovery for a shopping/chore-only
+  client; the provider correctly refused it with `invalid_scope` in a JSON
+  redirect response. No household grant or token was issued. Live retries stopped.
+- `MCP_READ_SCOPES` narrows both issuer/resource discovery and provider/live-grant
+  enforcement, with all existing reads retained by default. A no-notes pilot uses
+  `shopping:read,chores:read`; refresh remains supported. This affects the whole
+  deployment, so hosted operators must review other connections before changing it.
+- Local checks pass: 147 restricted-role authorization tests across single/shared
+  modes, 23 focused configuration/provisioning tests and touched typechecks.
+  A reviewed/published build and operator restart are required before using the
+  setting. This does not claim another live Gemini connection or completed pilot.
+
 ## MCP batch admission correction (WHO-477)
 
 - Both legacy and modern formats reject batch arrays before SDK dispatch. A

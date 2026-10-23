@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { validateDevPublicAppUrl, oauthRedirectUris, inferDevWebProfile } from "./dev-url.js";
 import { loadRootDotenv, resetRootDotenvFlag } from "./load-dotenv.js";
+export const MCP_READ_SCOPE_NAMES = ["shopping:read", "chores:read", "notes:read"] as const;
 export { subscriptionAllowsWork, type SubscriptionAccessState } from "./subscription-access.js";
 
 export { loadRootDotenv, resetRootDotenvFlag } from "./load-dotenv.js";
@@ -50,6 +51,8 @@ export const envSchema = z
     DATABASE_URL: z.string().url(),
     /** Delegated assistant access is deployment opt-in; household consent is also required. */
     MCP_ENABLED: z.string().optional().transform((v) => v === "true" || v === "1"),
+    MCP_READ_SCOPES: z.string().transform((value) => value.split(",").map((scope) => scope.trim()))
+      .pipe(z.array(z.enum(MCP_READ_SCOPE_NAMES)).min(1).max(3).refine((scopes) => new Set(scopes).size === scopes.length, "Duplicate MCP read scope")).optional(),
     /** Only on a separate deployment populated exclusively with synthetic data. */
     MCP_SYNTHETIC_DEPLOYMENT: z.string().optional().transform((v) => v === "true" || v === "1"),
     DEPLOYMENT_MODE: deploymentMode.default("single"),
@@ -241,6 +244,10 @@ export const envSchema = z
   });
 
 export type Env = z.infer<typeof envSchema>;
+
+export function mcpSupportedScopes(env: Pick<Env, "MCP_READ_SCOPES">) {
+  return [...(env.MCP_READ_SCOPES ?? MCP_READ_SCOPE_NAMES), "offline_access" as const];
+}
 
 export const KNOWN_HOUSEHOLD_MODULES = [
   "core",

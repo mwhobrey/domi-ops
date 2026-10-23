@@ -5,7 +5,7 @@ import { APIError } from "better-auth/api";
 import { oauthProvider, oauthProviderAuthServerMetadata, verifyOAuthQueryParams } from "@better-auth/oauth-provider";
 import { oauthProviderResourceClient } from "@better-auth/oauth-provider/resource-client";
 import type { betterAuth, BetterAuthOptions } from "better-auth";
-import { isModuleEnabled, parseHouseholdModulesJson, type Env } from "@domi-ops/config";
+import { isModuleEnabled, parseHouseholdModulesJson, mcpSupportedScopes, MCP_READ_SCOPE_NAMES, type Env } from "@domi-ops/config";
 import {
   householdMembers, households, mcpAccessEvents, mcpClientProfiles, mcpConnections, mcpHouseholdSettings,
   mcpNoteSelections, mcpPendingConsents, notes, noteShares, oauthClient, oauthConsent,
@@ -13,7 +13,7 @@ import {
   withMcpProviderContext, withUserLookupContext, type Database,
 } from "@domi-ops/db";
 
-export const MCP_SCOPES = ["shopping:read", "chores:read", "notes:read", "offline_access"] as const;
+export const MCP_SCOPES = [...MCP_READ_SCOPE_NAMES, "offline_access"] as const;
 export const MCP_POLICY_VERSION = "2026-10-23.v3";
 const settingsReviewRequired = (provider: string) => ["chatgpt", "claude", "gemini"].includes(provider);
 const TTL = 30 * 86400_000;
@@ -44,6 +44,7 @@ export function mcpUrls(env: Pick<Env, "PUBLIC_APP_URL">) {
 
 export function createMcpAuthorization(db: Database, env: Env, secret: string) {
   const urls = mcpUrls(env);
+  const supportedScopes = mcpSupportedScopes(env);
   const approval = new AsyncLocalStorage<Binding>();
   const operatorRegistration = new AsyncLocalStorage<boolean>();
 
@@ -69,6 +70,7 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string) {
 
   async function householdAccess(tx: Database, householdId: string, scopes: readonly string[]) {
     if (!env.MCP_ENABLED || env.DEMO_MODE) deny("mcp_disabled");
+    if (scopes.some((scope) => !supportedScopes.includes(scope as typeof MCP_SCOPES[number]))) deny("scope_disabled");
     const [settings] = await tx.select().from(mcpHouseholdSettings).where(eq(mcpHouseholdSettings.householdId, householdId)).limit(1);
     const [household] = await tx.select({ modules: households.modulesEnabled }).from(households).where(eq(households.id, householdId)).limit(1);
     if (!settings?.enabled || !household) deny("mcp_disabled");
@@ -97,10 +99,10 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string) {
 
   const provider = oauthProvider({
     loginPage: "/login", consentPage: "/ai/consent",
-    scopes: [...MCP_SCOPES],
-    resources: [{ identifier: urls.resource, allowedScopes: [...MCP_SCOPES], accessTokenTtl: 300 }],
+    scopes: [...supportedScopes],
+    resources: [{ identifier: urls.resource, allowedScopes: [...supportedScopes], accessTokenTtl: 300 }],
     clientRegistrationDefaultResources: [urls.resource], clientRegistrationAllowedResources: [urls.resource],
-    clientRegistrationAllowedScopes: [...MCP_SCOPES], clientRegistrationRequirePKCE: true,
+    clientRegistrationAllowedScopes: [...supportedScopes], clientRegistrationRequirePKCE: true,
     allowDynamicClientRegistration: false, allowUnauthenticatedClientRegistration: false,
     allowClientKeyRotation: false, allowPublicClientPrelogin: false,
     clientPrivileges: () => operatorRegistration.getStore() === true,
@@ -143,7 +145,7 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string) {
       }
       if (p.get("resource") !== urls.resource || p.get("response_type") !== "code" || p.get("code_challenge_method") !== "S256" || p.has("claims")) deny("invalid_consent_query", 400);
       const scopes = p.get("scope")!.split(" ").filter(Boolean);
-      if (!scopes.length || new Set(scopes).size !== scopes.length || scopes.some((s) => !MCP_SCOPES.includes(s as typeof MCP_SCOPES[number]))) deny("invalid_scope", 400);
+      if (!scopes.length || new Set(scopes).size !== scopes.length || scopes.some((s) => !supportedScopes.includes(s as typeof MCP_SCOPES[number]))) deny("invalid_scope", 400);
       const profile = await clientProfile(p.get("client_id")!);
       if (!profile.client.redirectUris.includes(p.get("redirect_uri")!) || scopes.some((s) => !profile.client.scopes?.includes(s))) deny("invalid_consent_query", 400);
       return { scopes, profile, queryHash: hash(query) };
@@ -226,7 +228,7 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string) {
       },
       async narrowConnection(headers: Headers, connectionId: string, input: { scopes: string[]; noteIds: string[] }) {
         uuid(connectionId); input.noteIds.forEach(uuid);
-        if (!input.scopes.length || new Set(input.scopes).size !== input.scopes.length || input.scopes.some((s) => !MCP_SCOPES.includes(s as typeof MCP_SCOPES[number])) ||
+        if (!input.scopes.length || new Set(input.scopes).size !== input.scopes.length || input.scopes.some((s) => !supportedScopes.includes(s as typeof MCP_SCOPES[number])) ||
           input.noteIds.length > 100 || new Set(input.noteIds).size !== input.noteIds.length) deny("invalid_input", 400);
         const current = await session(headers);
         const result = await withMcpConnectionContext(db, current.user.id, connectionId, async (lookup) => {
@@ -257,7 +259,7 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string) {
         await session(headers);
         if (!input.name || input.name.length > 128 || !input.profileVersion || input.profileVersion.length > 128 || !["chatgpt", "claude", "gemini", "local", "other"].includes(input.provider)) deny("invalid_client_profile", 400);
         if (input.dataMode === "synthetic" && !env.MCP_SYNTHETIC_DEPLOYMENT) deny("synthetic_client_only");
-        if (!input.scopes.length || input.scopes.some((s) => !MCP_SCOPES.includes(s as typeof MCP_SCOPES[number]))) deny("invalid_scope", 400);
+        if (!input.scopes.length || input.scopes.some((s) => !supportedScopes.includes(s as typeof MCP_SCOPES[number]))) deny("invalid_scope", 400);
         if (!input.redirectUris.length || input.redirectUris.length > 10) deny("invalid_redirect_uri", 400);
         for (const uri of input.redirectUris) {
           const url = new URL(uri);

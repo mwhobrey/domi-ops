@@ -1,9 +1,9 @@
 import { Hono } from "hono";
 import { createMcpHonoApp } from "@modelcontextprotocol/hono";
 import { McpServer, createMcpHandler } from "@modelcontextprotocol/server";
-import { MCP_SCOPES, McpAuthorizationError, mcpUrls, type createMcpAuthorization } from "@domi-ops/auth";
+import { McpAuthorizationError, mcpUrls, type createMcpAuthorization } from "@domi-ops/auth";
 import type { Database } from "@domi-ops/db";
-import type { Env } from "@domi-ops/config";
+import { mcpSupportedScopes, type Env } from "@domi-ops/config";
 import { admit, finish, tagTool } from "./activity.js";
 import { checkOperation, permittedTools, MCP_LIMITS, McpGatewayError } from "./access.js";
 import { approvedToolNames, contextTool, type McpTool } from "./tools.js";
@@ -16,7 +16,7 @@ type Authorization = ReturnType<ReturnType<typeof createMcpAuthorization>["attac
 export function mcpGateway(db: Database, auth: Authorization, env: Env, tools: readonly McpTool[] = [contextTool, ...readTools(env)]) {
   const app = new Hono();
   const urls = mcpUrls(env), canonical = new URL(urls.origin);
-  const resourceScopes = [...MCP_SCOPES];
+  const resourceScopes = mcpSupportedScopes(env);
   const challenge = `Bearer resource_metadata="${urls.origin}/.well-known/oauth-protected-resource/api/mcp"`;
   const failure = (code: string, status: number, headers?: Record<string, string>) => Response.json({ error: code }, { status, headers: { "Cache-Control": "no-store", ...headers } });
   if (tools.some((tool) => !approvedToolNames.includes(tool.name) || tool.access !== "read") || new Set(tools.map((t) => t.name)).size !== tools.length) throw new Error("Invalid MCP tool registry");

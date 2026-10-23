@@ -228,6 +228,53 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
     expect((await gateway.request(origin + "/api/mcp", { method: "POST", headers: { host: new URL(origin).host, origin: foreignOrigin.origin } })).status).toBe(403);
     expect((await mcpGateway(db, auth.mcp, { ...env, MCP_ENABLED: false }).request(origin + "/api/mcp", { method: "POST" })).status).toBe(404);
   });
+  it("links a discovery-driven Gemini client without notes and rejects disabled scopes on existing grants", async () => {
+    const oldToken = await connect(owner, scopes, [ownNote]);
+    const oldQuery = await begin(owner, scopes);
+    const originalAuth = auth;
+    const limitedEnv: Env = { ...env, MCP_READ_SCOPES: ["shopping:read", "chores:read"] };
+    const limited = createBetterAuth(db, limitedEnv, { cookiePrefix });
+    const gateway = mcpGateway(db, limited.mcp, limitedEnv);
+    const expected = ["shopping:read", "chores:read", "offline_access"];
+    // The loopback server's auth handlers resolve this variable per request.
+    auth = limited;
+    try {
+      const issuer = z.object({ scopes_supported: z.array(z.string()) }).parse(await (await limited.mcp.metadata(new Request(origin + "/.well-known/oauth-authorization-server/auth"))).json());
+      expect(issuer.scopes_supported).toEqual(expected);
+      for (const path of ["/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/api/mcp"]) {
+        expect(await (await gateway.request(origin + path)).json()).toMatchObject({ scopes_supported: expected });
+      }
+      await expect(limited.mcp.registerClient(owner.headers, { name: "Rejected notes profile", provider: "gemini", profileVersion: "limited.v1",
+        redirectUris: [callback], tokenEndpointAuthMethod: "none", dataMode: "household", scopes: ["notes:read"], enabled: true })).rejects.toMatchObject({ code: "invalid_scope" });
+      await expect(limited.mcp.prepareConsent(owner.headers, { householdId: owner.householdId, oauthQuery: oldQuery, noteIds: [],
+        adultAttested: true, privacyAttested: true, providerSettingsReviewed: true, policyVersion: MCP_POLICY_VERSION })).rejects.toMatchObject({ code: "invalid_scope" });
+      await expect(limited.mcp.authorize(bearer(oldToken.access_token))).rejects.toMatchObject({ code: "scope_disabled" });
+      const clientCallback = "https://oauth-redirect.googleusercontent.com/r/fictional_limited_pilot";
+      const client = await limited.mcp.registerClient(owner.headers, { name: "Fictional no-notes pilot", provider: "gemini", profileVersion: "limited.v1",
+        redirectUris: [clientCallback], tokenEndpointAuthMethod: "none", dataMode: "household", scopes: expected, enabled: true });
+      clientIds.push(client.client_id);
+      const query = await begin(owner, issuer.scopes_supported, client.client_id, clientCallback);
+      const pending = await limited.mcp.prepareConsent(owner.headers, { householdId: owner.householdId, oauthQuery: query, noteIds: [],
+        adultAttested: true, privacyAttested: true, providerSettingsReviewed: true, policyVersion: MCP_POLICY_VERSION });
+      const decision = await limited.mcp.decideConsent(owner.headers, { pendingId: pending.pendingId, oauthQuery: query, accept: true });
+      if (!decision.accepted) throw new Error("Expected accepted fictional consent");
+      const response = await exchange(new URL(decision.redirectUri).searchParams.get("code")!, { client_id: client.client_id, redirect_uri: clientCallback });
+      expect(response.status).toBe(200);
+      const token = await response.json() as Tokens;
+      expect(token.refresh_token).toBeTruthy();
+      expect(await limited.mcp.authorize(bearer(token.access_token))).toMatchObject({ clientId: client.client_id, scopes: expected });
+      await expect(limited.mcp.withGrantContext(bearer(token.access_token), ["notes:read"], async () => "must not run")).rejects.toMatchObject({ code: "insufficient_scope" });
+      const rotated = await refresh(token.refresh_token, { client_id: client.client_id, scope: issuer.scopes_supported.join(" ") });
+      expect(rotated.status).toBe(200);
+      const next = await rotated.json() as Tokens;
+      expect(next.refresh_token).toBeTruthy();
+      expect(next.refresh_token).not.toBe(token.refresh_token);
+      expect((await limited.mcp.authorize(bearer(next.access_token))).scopes).toEqual(expected);
+      const wideRefresh = await refresh(next.refresh_token, { client_id: client.client_id, scope: scopes.join(" ") });
+      expect(wideRefresh.status).toBeGreaterThanOrEqual(400);
+      await limited.mcp.revokeConnection(owner.headers, decision.connectionId);
+    } finally { auth = originalAuth; }
+  });
   it("interoperates with the official stateless SDK, validates identity-free input and records metadata only", async () => {
     const token = await connect();
     const client = new Client({ name: "synthetic-sdk", version: "1" }, { versionNegotiation: { mode: { pin: "2026-07-28" } } });
