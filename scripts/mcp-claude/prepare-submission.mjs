@@ -22,7 +22,7 @@ export async function prepareSubmission({ origin, output }) {
     supportUrl: "https://github.com/mwhobrey/domi-ops/issues/new/choose",
     authentication: { requirement: "always-required", method: "oauth_cimd", secret: "not-required" },
     dataHandling: { apiOwnership: "first-party", reads: true, writes: false, healthData: false, sponsoredContent: false },
-    requiredBeforeSubmit: ["Confirm submitting account/organization and review contact", "Deploy reviewed build to approved stable endpoint and enable Claude", "Verify current public documentation/privacy pages", "Provision a populated fictional reviewer account; keep its credentials private", "Record actual registration-free Claude acceptance and tool checks on submitted endpoint", "Approve listing fields, directory terms and final submission"],
+    requiredBeforeSubmit: ["Confirm submitting account/organization and review contact", "Deploy reviewed build to approved stable endpoint and enable Claude", "Verify current public documentation/privacy pages", "Provision a populated fictional reviewer account; keep its credentials private", "Record actual registration-free Claude acceptance and tool checks on submitted endpoint", "Commit and push the reviewed plugin to integrations/claude/domi-ops-household through a release PR, then validate that GitHub source in the portal", "Approve listing fields, directory terms and final submission"],
   };
   await writeFile(join(output, "listing.draft.json"), JSON.stringify(draft, null, 2) + "\n");
   return draft;

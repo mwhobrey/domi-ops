@@ -43,6 +43,40 @@ read-only scope, docs/privacy/support URLs and CIMD without a secret. Confirm
 the permanent slug, review contact, category choices and publishing account in
 the portal; the first submission establishes listing ownership.
 
+## Commit the reviewed plugin source for the portal
+
+The `.qa` output is an ignored private review artifact, not a GitHub source the
+portal can read. After the endpoint and package pass the launch checks below,
+generate only the reviewed plugin into the intended tracked directory:
+
+```powershell
+mise exec -- node scripts/mcp-claude/package.mjs https://app.domi-ops.com integrations/claude/domi-ops-household
+claude plugin validate integrations/claude/domi-ops-household
+git add -- integrations/claude/domi-ops-household
+```
+
+This is a release handoff, not an instruction to publish the current draft. On
+an authorized release branch, review the generated README, manifest, endpoint,
+skill and license; commit and push them through the normal PR workflow. Merge
+that reviewed PR before selecting `main` as the portal source. The generator
+refuses an existing directory: review updates in a fresh staging directory and
+apply only the intended file changes instead of deleting existing source. Never
+copy the parent `.qa` directory, reviewer credentials or private receipts.
+
+Use these fields for the **Plugin bundle** Source step after that handoff:
+
+- Repository: `https://github.com/mwhobrey/domi-ops`
+- Plugin path: `integrations/claude/domi-ops-household`
+- Branch or tag: `main` after the source PR merges, or an explicitly reviewed
+  release tag containing that directory.
+
+That tracked plugin directory is a future release artifact; it is not present
+merely because the local draft validates. The portal reads the folder containing
+`.claude-plugin/plugin.json`, including its substantive README and license. Run
+the portal's **Validate** and fix every blocking finding before submission; CLI
+validation checks syntax/schema only. A push changes the source commit, so
+select **Re-validate** after each source update.
+
 ## Remaining launch receipts
 
 - Merge/release the reviewed source and authorize the exact stable target update.
@@ -73,7 +107,8 @@ the portal; the first submission establishes listing ownership.
 
 Open [Anthropic's developer portal](https://claude.ai/directory/manage) from the
 account that should own the listing. Prepare the connector, then the plugin.
-Use the draft for connection, listing, use cases and first-party data handling;
+For the plugin, use the reviewed GitHub source fields above, not the local `.qa`
+path. Use the draft for connection, listing, use cases and first-party data handling;
 review every field against the actual deployed endpoint. Keep credentials out
 of descriptions and screenshots. Directory terms and final Submit are owner
 actions requiring approval at that time. No review duration or Verified label
@@ -86,3 +121,5 @@ is promised. This checklist grants no deployment/publication authorization.
 - [Review criteria](https://claude.com/docs/connectors/building/review-criteria)
 - [Authentication and per-customer URLs](https://claude.com/docs/connectors/building/authentication)
 - [Directory/custom connectors and install links](https://claude.com/docs/connectors/building/directory-vs-custom)
+- [Plugin source and submission](https://claude.com/docs/plugins/submit) (checked 2026-10-24)
+- [Portal validation requirements](https://claude.com/docs/plugins/pre-submission-checklist) (checked 2026-10-24)

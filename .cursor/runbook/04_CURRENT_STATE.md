@@ -15,6 +15,8 @@
 - Directory preparation is in `docs/MCP_CLAUDE_SUBMISSION.md`. New onboarding has
   not been deployed or accepted live; listing, real pilot and hosted rollout remain
   separate gates. Review the exact release receipt before deployment/submission.
+  Generated plugins include a public README; the ignored `.qa` draft must pass a
+  reviewed GitHub source handoff before the plugin portal can validate it.
 
 ## Pilot scope discovery correction (WHO-478)
 

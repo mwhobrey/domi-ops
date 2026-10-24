@@ -27,6 +27,7 @@ test("submission preparation retains release gates and refuses to replace review
     assert.equal(draft.serverUrl, options.origin + "/api/mcp");
     assert.deepEqual(draft.authentication, { requirement: "always-required", method: "oauth_cimd", secret: "not-required" });
     assert.ok(draft.requiredBeforeSubmit.some(gate => gate.includes("actual registration-free Claude acceptance")));
+    assert.ok(draft.requiredBeforeSubmit.some(gate => gate.includes("integrations/claude/domi-ops-household") && gate.includes("GitHub source")));
     assert.deepEqual(JSON.parse(await readFile(join(output, "listing.draft.json"), "utf8")), draft);
     assert.deepEqual(await readFile(join(output, "icon.png")), await readFile(new URL("../../apps/web/public/icons/icon-512.png", import.meta.url)));
     assert.equal(/clientSecret|Authorization|bearer|apiKey/i.test(await readFile(join(output, "plugin/.mcp.json"), "utf8")), false);
@@ -43,7 +44,12 @@ test("Claude package preserves the shared skill and license and never replaces a
   try {
     const options = { origin: "https://synthetic.example.test", output };
     await writePlugin(options);
-    assert.deepEqual((await readdir(output)).sort(), [".claude-plugin", ".mcp.json", "skills"]);
+    assert.deepEqual((await readdir(output)).sort(), [".claude-plugin", ".mcp.json", "README.md", "skills"]);
+    const readme = await readFile(join(output, "README.md"), "utf8");
+    assert.ok(readme.replace(/```[\s\S]*?```/g, "").split(/\s+/).filter(Boolean).length >= 40);
+    assert.ok(readme.includes(options.origin + "/api/mcp"));
+    assert.ok(readme.includes("It runs no local commands"));
+    assert.ok(readme.includes("Disconnect in"));
     for (const name of ["SKILL.md", "LICENSE.txt"]) assert.deepEqual(await readFile(join(output, "skills/domi-ops-household-briefing", name)), await readFile(new URL("../../skills/domi-ops-household-briefing/" + name, import.meta.url)));
     await assert.rejects(writePlugin(options), { code: "EEXIST" });
   } finally {

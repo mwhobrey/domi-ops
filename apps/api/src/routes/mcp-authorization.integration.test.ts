@@ -26,7 +26,7 @@ import { admit, finish, metadataContext } from "../mcp/activity.js";
 import { contextTool, pageLimit } from "../mcp/tools.js";
 import { checkOperation } from "../mcp/access.js";
 import { mcpAccessEvents, mcpRequestLeases, mcpConnectionWindows, mcpHouseholdWindows, householdSubscriptions, pruneMcpMetadata } from "@domi-ops/db";
-import { shoppingItems, shoppingRecurring, chores, choresRecurring } from "@domi-ops/db";
+import { shoppingItems, shoppingRecurring, chores, choresRecurring, pushSubscriptions } from "@domi-ops/db";
 import { readTools } from "../mcp/read-tools.js";
 import { registerMcpAcceptanceCases } from "../mcp/acceptance-cases.js";
 
@@ -122,7 +122,9 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
     return owned(owner, async (tx) => {
       const state: Record<string, unknown> = {};
       for (const table of ["shopping_items", "shopping_recurring", "shopping_trips", "shopping_trip_items", "chores", "chores_recurring", "chore_completions", "chore_member_karma", "notes", "note_shares", "user_notifications", "calendar_sync_outbox", "push_subscriptions"]) {
-        const [row] = await tx.execute(sql`select coalesce(jsonb_agg(to_jsonb(t) order by to_jsonb(t)::text), '[]'::jsonb) as data from ${sql.identifier(table)} t`);
+        // Push subscriptions are global; parallel suites own different users' subscriptions.
+        const filter = table === "push_subscriptions" ? sql`where ${inArray(sql`t.user_id`, userIds)}` : sql``;
+        const [row] = await tx.execute(sql`select coalesce(jsonb_agg(to_jsonb(t) order by to_jsonb(t)::text), '[]'::jsonb) as data from ${sql.identifier(table)} t ${filter}`);
         state[table] = row.data;
       }
       return state;
@@ -557,6 +559,20 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
     expect(leases).toEqual([]);
     expect((await owned(owner, (tx) => tx.select().from(mcpAccessEvents).where(eq(mcpAccessEvents.connectionId, token.connectionId))))[0].outcome).toBe("deadline_exceeded");
   }, 15000);
+  it("isolates the side-effect snapshot from unrelated push users while detecting fixture writes", async () => {
+    const outsiderId = randomUUID(), subscriptionId = randomUUID();
+    await withSystemContext(db, (tx) => tx.insert(users).values({ id: outsiderId, email: outsiderId + "@example.test", displayName: "synthetic snapshot outsider" }));
+    try {
+      const before = await domainSnapshot();
+      await db.insert(pushSubscriptions).values({ userId: outsiderId, endpoint: "https://push.example.test/" + randomUUID(), p256dh: "synthetic", authKey: "synthetic" });
+      expect(await domainSnapshot()).toEqual(before);
+      await db.insert(pushSubscriptions).values({ id: subscriptionId, userId: owner.userId, endpoint: "https://push.example.test/" + randomUUID(), p256dh: "synthetic", authKey: "synthetic" });
+      expect((await domainSnapshot()).push_subscriptions).toContainEqual(expect.objectContaining({ id: subscriptionId, user_id: owner.userId }));
+    } finally {
+      await db.delete(pushSubscriptions).where(eq(pushSubscriptions.id, subscriptionId));
+      await withSystemContext(db, (tx) => tx.delete(users).where(eq(users.id, outsiderId)));
+    }
+  });
   it("serves all four pure read tools through the SDK without domain, queue or notification effects", async () => {
     const itemId = randomUUID(), choreId = randomUUID();
     await owned(owner, async (tx) => {
