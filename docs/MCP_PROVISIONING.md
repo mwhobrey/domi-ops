@@ -1,6 +1,10 @@
 # Operator client provisioning (WHO-478)
 
 For new Claude connections, prefer [published-identity onboarding](MCP_CLAUDE.md).
+For new ChatGPT connections, use its separately enabled
+[published-identity onboarding](MCP_CHATGPT.md). Neither path requires an operator
+to extract a member session or manually register a client. The manual procedure
+below remains for explicitly approved clients and historical fixtures.
 It requires no operator session file or manual public-client registration. This
 CLI remains available for other reviewed clients and earlier manual evaluations.
 

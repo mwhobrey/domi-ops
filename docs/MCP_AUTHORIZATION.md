@@ -72,7 +72,11 @@ Domain tools must still recheck the ACL at read time (WHO-472/473).
 
 Clients are deployment-operator approved and exact-redirect only. Manual clients
 remain pre-registered; optional [Claude onboarding](MCP_CLAUDE.md) recognizes its
-single published identity through an operator-enabled CIMD policy.
+single published identity through an operator-enabled CIMD policy. ChatGPT's
+independent opt-in similarly recognizes its exact stable identity/callback and
+managed JWKS URL using `private_key_jwt`. The shared bounded resolver creates no
+household grant; provider profiles and flags remain independent. No DCR or
+arbitrary metadata/key retrieval is enabled. See [ChatGPT setup](MCP_CHATGPT.md).
 Anonymous/authenticated DCR, client/resource administration over ordinary HTTP,
 machine grants, arbitrary metadata lookup and automatic consent are disabled.
 

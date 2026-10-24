@@ -4,6 +4,42 @@ import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, dirname, basename, resolve } from "node:path";
 import { pluginConfiguration, writePlugin } from "./package.mjs";
+import { prepareSubmission } from "./prepare-submission.mjs";
+
+test("submission draft includes portable source, public listing assets and explicit launch gates", async () => {
+  const root = await mkdtemp(join(tmpdir(), "domi-mcp-package-")), output = join(root, "draft");
+  try {
+    const draft = await prepareSubmission({ origin: "https://hosted.example.test", output });
+    assert.equal(draft.readyToSubmit, false);
+    assert.equal(draft.status, "draft-not-uploaded");
+    assert.deepEqual(draft.scopes, ["shopping:read", "chores:read", "offline_access"]);
+    const manifest = JSON.parse(await readFile(join(output, "plugin/plugin.json"), "utf8"));
+    const listing = manifest.extensions["com.openai"].interface;
+    assert.ok(listing.shortDescription.length <= 30);
+    assert.deepEqual(await readFile(join(output, "plugin", listing.logo)), await readFile(new URL("../../apps/web/public/icons/icon-512.png", import.meta.url)));
+    assert.ok((await readFile(join(output, "plugin/README.md"), "utf8")).includes(draft.serverUrl));
+    assert.ok(draft.requiredBeforeSubmit.some(gate => gate.includes("actual registration-free")));
+    await assert.rejects(prepareSubmission({ origin: "https://hosted.example.test", output }), { code: "EEXIST" });
+  } finally {
+    assert.equal(dirname(root), resolve(tmpdir())); assert.match(basename(root), /^domi-mcp-package-/);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("published-identity packages use canonical public origins and default to the no-notes pilot", () => {
+  for (const origin of ["https://hosted.example.test", "https://home.example.test"]) {
+    const config = pluginConfiguration({ origin, clientMode: "cimd" });
+    const auth = config.mcp.mcpServers["domi-ops"].extensions["com.openai"].auth;
+    assert.deepEqual(auth.client, { mode: "cimd" });
+    assert.equal(auth.resource, origin + "/api/mcp");
+    assert.deepEqual(auth.defaultScopes, ["shopping:read", "chores:read", "offline_access"]);
+    assert.equal(/clientSecret|clientId|Authorization|apiKey/.test(JSON.stringify(config)), false);
+    assert.deepEqual(pluginConfiguration({ origin, clientMode: "cimd", readScopes: ["chores:read"] }).mcp.mcpServers["domi-ops"].extensions["com.openai"].auth.defaultScopes, ["chores:read", "offline_access"]);
+  }
+  for (const origin of ["http://localhost:17180", "https://localhost", "https://10.0.0.1", "https://[::1]"]) assert.throws(() => pluginConfiguration({ origin, clientMode: "cimd" }));
+  assert.throws(() => pluginConfiguration({ origin: "https://home.example.test", clientMode: "cimd", clientId: "manual" }));
+  for (const readScopes of [[], ["notes:read", "notes:read"], ["health:read"], "chores:read"]) assert.throws(() => pluginConfiguration({ origin: "https://home.example.test", clientMode: "cimd", readScopes }));
+});
 
 test("each deployment uses its own resource and pre-registered public client without secrets or automatic registration", () => {
   for (const origin of ["https://hosted.example.test", "https://selfhost.example.test", "http://localhost:17180"]) {

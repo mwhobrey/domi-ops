@@ -1,5 +1,19 @@
 # Current state
 
+## ChatGPT published-identity onboarding (WHO-478)
+
+- `MCP_CHATGPT_ENABLED` defaults off. The shared, bounded CIMD resolver recognizes
+  ChatGPT's exact stable identity/callback and only its exact managed JWKS URL.
+  It uses the published `private_key_jwt` preference through the maintained provider;
+  no customer key/secret or DCR is required. Claude retains its independent flag,
+  public-client identity and existing profile version. Discovery grants no household access.
+- Settings displays the instance's endpoint and current ChatGPT setup steps. The
+  package generator's `--cimd` mode requires public HTTPS, omits client credentials,
+  and defaults to shopping/chores/refresh; read scopes can be explicitly narrowed.
+- RFC9207 issuer metadata and success/denial callbacks are regression checked.
+  New ChatGPT onboarding still needs reviewed deployment and actual acceptance.
+  Test it alongside Claude per owner direction; do not infer success from fixtures.
+
 ## Claude onboarding and directory preparation (WHO-478)
 
 - `MCP_CLAUDE_ENABLED=true`, alongside MCP enablement, recognizes only Claude's

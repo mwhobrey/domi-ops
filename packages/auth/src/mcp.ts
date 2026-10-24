@@ -5,7 +5,9 @@ import { APIError } from "better-auth/api";
 import { oauthProvider, oauthProviderAuthServerMetadata, verifyOAuthQueryParams } from "@better-auth/oauth-provider";
 import { oauthProviderResourceClient } from "@better-auth/oauth-provider/resource-client";
 import type { ClientMetadataResourceFetch } from "@better-auth/oauth-provider";
-import { claudeDiscovery, claudeConnectUrl, CLAUDE_CLIENT_ID, CLAUDE_PROFILE_VERSION, isClaudeClient } from "./mcp-claude.js";
+import { claudeConnectUrl, CLAUDE_POLICY } from "./mcp-claude.js";
+import { CHATGPT_POLICY } from "./mcp-chatgpt.js";
+import { isPublishedClient, publishedClientDiscovery } from "./mcp-client-discovery.js";
 import type { betterAuth, BetterAuthOptions } from "better-auth";
 import { isModuleEnabled, parseHouseholdModulesJson, mcpSupportedScopes, MCP_READ_SCOPE_NAMES, type Env } from "@domi-ops/config";
 import {
@@ -47,6 +49,10 @@ export function mcpUrls(env: Pick<Env, "PUBLIC_APP_URL">) {
 export function createMcpAuthorization(db: Database, env: Env, secret: string, metadataFetch?: ClientMetadataResourceFetch) {
   const urls = mcpUrls(env);
   const supportedScopes = mcpSupportedScopes(env);
+  const publishedPolicies = env.DEMO_MODE ? [] : [
+    ...(env.MCP_CLAUDE_ENABLED ? [CLAUDE_POLICY] : []),
+    ...(env.MCP_CHATGPT_ENABLED ? [CHATGPT_POLICY] : []),
+  ];
   const approval = new AsyncLocalStorage<Binding>();
   const operatorRegistration = new AsyncLocalStorage<boolean>();
 
@@ -58,9 +64,10 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string, m
       return row;
     });
     if (!row || row.client.disabled || row.client.skipConsent || !row.client.requirePKCE) deny("client_not_approved");
-    if (row.client.clientDiscoveryId === "cimd" && (!env.MCP_CLAUDE_ENABLED || env.DEMO_MODE || !isClaudeClient(row.client) ||
-      row.profile.provider !== "claude" || row.profile.version !== CLAUDE_PROFILE_VERSION)) deny("client_not_approved");
-    if (clientId === CLAUDE_CLIENT_ID && row.client.clientDiscoveryId !== "cimd") deny("client_not_approved");
+    const policy = publishedPolicies.find((entry) => entry.clientId === clientId);
+    if (row.client.clientDiscoveryId === "cimd" && (!policy || !isPublishedClient(row.client, policy) ||
+      row.profile.provider !== policy.provider || row.profile.version !== policy.version)) deny("client_not_approved");
+    if ([CLAUDE_POLICY.clientId, CHATGPT_POLICY.clientId].includes(clientId) && row.client.clientDiscoveryId !== "cimd") deny("client_not_approved");
     if (row.profile.dataMode === "synthetic" && !env.MCP_SYNTHETIC_DEPLOYMENT) deny("synthetic_client_only");
     return row;
   }
@@ -103,7 +110,7 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string, m
   }
 
   const provider = oauthProvider({
-    extensions: env.MCP_CLAUDE_ENABLED && !env.DEMO_MODE ? [{ clientDiscovery: claudeDiscovery(db, env, metadataFetch) }] : [],
+    extensions: publishedPolicies.length ? [{ clientDiscovery: publishedClientDiscovery(db, env, publishedPolicies, metadataFetch) }] : [],
     loginPage: "/login", consentPage: "/ai/consent",
     scopes: [...supportedScopes],
     resources: [{ identifier: urls.resource, allowedScopes: [...supportedScopes], accessTokenTtl: 300 }],
@@ -180,6 +187,7 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string, m
             .groupBy(mcpAccessEvents.connectionId);
           return { householdId, householdName: household?.name ?? "Household", memberName: current.user.name,
             claude: env.MCP_CLAUDE_ENABLED && !env.DEMO_MODE ? { connectUrl: claudeConnectUrl(urls.origin), serverUrl: urls.resource } : null,
+            chatgpt: env.MCP_CHATGPT_ENABLED && !env.DEMO_MODE ? { serverUrl: urls.resource, setupUrl: "https://chatgpt.com/plugins" } : null,
             canManage: ["owner", "admin"].includes(owner.role), enabled: settings?.enabled ?? false,
             connections: connections.map((c) => ({ ...c, expired: c.expiresAt.getTime() <= Date.now(), noteIds: selections.filter((s) => s.connectionId === c.id).map((s) => s.noteId),
               selectedNotes: selections.filter((s) => s.connectionId === c.id).map((s) => ({ id: s.noteId, title: s.title })),
@@ -213,7 +221,8 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string, m
           const [household] = await tx.select({ name: households.name }).from(households).where(eq(households.id, householdId));
           return { memberId: owner.id, memberName: current.user.name, householdName: household?.name ?? "Household" };
         }));
-        return { ...identity, householdId, clientName: query.profile.client.clientDiscoveryId === "cimd" ? "Claude (claude.ai)" : query.profile.client.name, clientId: query.profile.client.clientId,
+        return { ...identity, householdId, clientName: query.profile.client.clientDiscoveryId === "cimd"
+          ? publishedPolicies.find((entry) => entry.clientId === query.profile.client.clientId)!.displayName : query.profile.client.name, clientId: query.profile.client.clientId,
           provider: query.profile.profile.provider, dataMode: query.profile.profile.dataMode, settingsReviewRequired: settingsReviewRequired(query.profile.profile.provider),
           clientProfileVersion: query.profile.profile.version, scopes: query.scopes, policyVersion: MCP_POLICY_VERSION };
       },

@@ -1,4 +1,4 @@
-# Private ChatGPT evaluation
+# Connect ChatGPT to Domi Ops
 
 WHO-475 provides private client packaging and an isolated local synthetic lab.
 Actual ChatGPT web OAuth, all five read tools, rotating refresh credentials,
@@ -9,14 +9,70 @@ acceptance, not production or general client certification.
 Hosted and self-hosted deployments share the endpoint, consent rules and skill;
 hosted base inclusion and free self-hosting are unchanged.
 
-## Current requirements and scope
+## Hosted and self-hosted onboarding (WHO-478)
+
+On a reviewed deployment, operators enable `MCP_ENABLED=true` and
+`MCP_CHATGPT_ENABLED=true` (default off), retaining the restricted runtime role
+and canonical public HTTPS origin. For the joint Claude/ChatGPT pilot, retain
+`MCP_READ_SCOPES=shopping:read,chores:read`; that setting applies to all assistants
+on the deployment. Enable Claude separately with `MCP_CLAUDE_ENABLED`. No new
+migration, Cloud broker, session extraction or customer OpenAI API key is needed.
+
+The shared resolver accepts only ChatGPT's stable identity
+`https://chatgpt.com/oauth/client.json`, stable callback
+`https://chatgpt.com/connector_platform_oauth_redirect`, and managed keys at
+`https://chatgpt.com/oauth/jwks.json`. It retains the published `private_key_jwt`
+preference through the maintained provider. OpenAI owns those signing keys;
+operators do not provision or distribute a secret. Other identities/key URLs are
+refused before retrieval. Claude keeps its existing public-client identity.
+
+Our issuer metadata advertises RFC9207 issuer identification and the exact same
+issuer as resource discovery. Successful and denied consent redirects carry that
+issuer. This enables the stable ChatGPT identity/callback; callback-ID-specific
+identities are not silently accepted. DCR and anonymous household reads remain off.
+These contracts follow [OpenAI authentication guidance](https://developers.openai.com/plugins/build/auth).
+
+For an adult member:
+
+1. Open Settings → AI Connections; an administrator enables the household.
+2. Open ChatGPT plugins, then Add → Add custom MCP server. Enter the instance's
+   displayed `/api/mcp` URL and choose OAuth with published identity/CIMD if asked.
+   Leave client credentials and request headers empty.
+3. Review ChatGPT's notice, then sign in to Domi Ops and personally approve only
+   the intended household, permissions and provider privacy/settings disclosure.
+4. Use a briefing prompt and review source links. Disconnect in AI Connections
+   to stop future reads; this does not erase provider copies.
+
+See [current connection instructions](https://developers.openai.com/plugins/deploy/connect-chatgpt).
+Account/workspace restrictions still apply. Setup uses the supported custom
+installation flow until a directory listing is approved; no prefilled install
+deep link is assumed. Self-hosters use their own reachable HTTPS origin.
+
+For an unregistered, credential-free package, the generator now supports:
+
+```powershell
+mise exec -- node scripts/mcp-chatgpt/package.mjs --cimd https://YOUR-CANONICAL-HOST .qa/NEW-CHATGPT-PACKAGE
+```
+
+Its default scopes are shopping, chores and refresh. Programmatic generation can
+explicitly select a different supported read subset to match deployment policy;
+notes are never added by default. See [submission preparation](MCP_CHATGPT_SUBMISSION.md).
+The existing manual `provided` and registered-app packaging modes remain available
+for historical fixtures. Do not reuse their old client/tunnel settings for WHome.
+
+Registration-free local protocol coverage does not establish live ChatGPT
+acceptance. The owner requested that both new provider flows be tested together
+after review/deployment. No new household grant or directory upload is implied.
+
+## Historical private evaluation requirements (WHO-475)
 
 Reviewed official documentation on 2026-10-22:
 
 - [Authentication](https://developers.openai.com/plugins/build/auth): use discovery,
   PKCE S256, the exact resource audience and an explicitly registered client. Copy
-  the exact callback shown by the connection UI; do not guess it. Domi Ops keeps
-  anonymous registration, CIMD fetching and machine grants disabled.
+  the exact callback shown by the connection UI; do not guess it. That evaluation
+  used manual registration; the optional published-identity path above supersedes
+  it for new installations. Anonymous registration and machine grants remain disabled.
 - [Plugin packaging](https://developers.openai.com/plugins/build/plugins): the
   portable bundle has root `plugin.json`, `mcp.json` and `skills/`. Its OAuth client
   uses `mode: provided`. Client secrets belong in connection setup, never manifests.

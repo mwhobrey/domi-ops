@@ -119,6 +119,10 @@ Anonymous registration, machine grants and auto-consent remain disabled.
 Claude can instead use the exact published-identity path when the operator sets
 `MCP_CLAUDE_ENABLED=true`; see [Claude onboarding](MCP_CLAUDE.md). This avoids
 manual registration and session extraction on both hosted and self-host servers.
+ChatGPT has its own default-off `MCP_CHATGPT_ENABLED` published-identity path;
+see [ChatGPT onboarding](MCP_CHATGPT.md). Its managed signing keys are fetched
+only from OpenAI's exact approved URL. No customer API key or client secret is
+needed; each member still signs in and reviews the provider disclosure.
 Other metadata identities remain unapproved. The operator CLI below remains for
 manually approved clients and older evaluations.
 

@@ -52,6 +52,7 @@ export const envSchema = z
     /** Delegated assistant access is deployment opt-in; household consent is also required. */
     MCP_ENABLED: z.string().optional().transform((v) => v === "true" || v === "1"),
     MCP_CLAUDE_ENABLED: z.string().optional().transform((v) => v === "true" || v === "1"),
+    MCP_CHATGPT_ENABLED: z.string().optional().transform((v) => v === "true" || v === "1"),
     MCP_READ_SCOPES: z.string().transform((value) => value.split(",").map((scope) => scope.trim()))
       .pipe(z.array(z.enum(MCP_READ_SCOPE_NAMES)).min(1).max(3).refine((scopes) => new Set(scopes).size === scopes.length, "Duplicate MCP read scope")).optional(),
     /** Only on a separate deployment populated exclusively with synthetic data. */

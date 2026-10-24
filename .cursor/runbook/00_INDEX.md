@@ -39,6 +39,7 @@
 
 - `docs/MCP_SETUP.md` / `docs/MCP_PILOT.md` — WHO-478 hosted/self-host setup, provisioning gates, disconnect/rollback and bounded pilot record; real pilot pending
 - `docs/MCP_CLAUDE_SUBMISSION.md` — Claude directory draft, review-account requirements and remaining release gates
+- `docs/MCP_CHATGPT_SUBMISSION.md` — OpenAI portable draft, fictional review account and remaining paired-test/submission gates
 - `README.md` — quick start, import, production pointers
 - `docs/ARCHITECTURE.md` — product tiers, cutover checklist
 - `docs/adr/001-public-launch-scope.md` — OSS + hosted launch policy
