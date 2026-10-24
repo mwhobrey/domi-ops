@@ -30,5 +30,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   const [origin, output, ...extra] = process.argv.slice(2);
   if (!origin || !output || extra.length) throw new Error("Usage: node scripts/mcp-claude/package.mjs CANONICAL_HTTPS_ORIGIN NEW_OUTPUT_DIRECTORY");
   await writePlugin({ origin, output: resolve(output) });
-  console.log("Private Claude evaluation package created. Configure the pre-registered OAuth client in Claude separately; no credentials included or live compatibility claimed.");
+  console.log("Claude package created without credentials. Connect using the deployment's reviewed onboarding; package creation does not establish live connectivity or directory approval.");
 }

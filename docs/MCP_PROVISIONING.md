@@ -1,5 +1,9 @@
 # Operator client provisioning (WHO-478)
 
+For new Claude connections, prefer [published-identity onboarding](MCP_CLAUDE.md).
+It requires no operator session file or manual public-client registration. This
+CLI remains available for other reviewed clients and earlier manual evaluations.
+
 Local operator tool; no HTTP administration endpoint. The same procedure serves
 self-host and hosted deployments using their own canonical URL, app DB role and
 member session. This prepares a client profile, never household opt-in or member

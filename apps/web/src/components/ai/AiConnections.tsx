@@ -5,6 +5,7 @@ import { apiClient } from "../../lib/client-api";
 import { capabilityLabels, connectionError, type AiConnection, type AiOverview } from "../../lib/mcp";
 import { AccountSettingsNav } from "../AccountSettingsNav";
 import { ContentSkeleton } from "../ContentSkeleton";
+import { ClaudeConnectionSetup } from "./ClaudeConnectionSetup";
 import { Button, Card, CardBody, Checkbox, ConfirmDialog, LocalDateTime } from "../ui";
 
 function Connection({ connection, refresh, report, busy, setBusy }: {
@@ -116,6 +117,7 @@ export function AiConnections() {
           {data.canManage ? <Button variant="secondary" disabled={busy} onClick={() => data.enabled ? setDisable(true) : void toggle(true)}>{data.enabled ? "Turn off for household" : "Enable for household"}</Button>
             : <p className="text-sm text-[var(--color-text-muted)]">An owner or admin controls household enablement.</p>}
         </CardBody></Card>
+        {data.claude && <ClaudeConnectionSetup enabled={data.enabled} {...data.claude} />}
         <p className="text-sm">Start a connection in an operator-approved assistant, then return here to review or disconnect it. Adding permissions or notes requires a new approval. Disconnect stops future access; it cannot erase information already copied into an assistant conversation.</p>
         {!data.connections.length && <Card><CardBody>No AI connections yet.</CardBody></Card>}
         {data.connections.map((connection) => <Connection key={connection.id + JSON.stringify(connection.scopes) + connection.noteIds.join()} connection={connection} refresh={refresh} report={setMessage} busy={busy} setBusy={setBusy} />)}

@@ -6,6 +6,10 @@ import { MCP_LIMITS } from "./access.js";
 
 export const pageLimit = z.number().int().min(1).max(MCP_LIMITS.maxPage).default(MCP_LIMITS.defaultPage);
 export const approvedToolNames = ["get_connection_context", "list_shopping_items", "list_chores", "list_selected_notes", "get_selected_note"] as const;
+export const toolTitles: Record<typeof approvedToolNames[number], string> = {
+  get_connection_context: "Read connection context", list_shopping_items: "Read shopping items", list_chores: "Read chores",
+  list_selected_notes: "List selected planning notes", get_selected_note: "Read a selected planning note",
+};
 export type McpTool = {
   name: typeof approvedToolNames[number]; description: string; scopes: string[]; module?: "core"; access: "read" | "write";
   input: z.ZodType<Record<string, unknown>>; output: z.ZodType<Record<string, unknown>>;

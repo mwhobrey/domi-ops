@@ -1,5 +1,5 @@
 #Requires -Version 7.3
-param([switch]$UseSystemNode)
+param([switch]$UseSystemNode, [string]$TestNamePattern)
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
 function Invoke-McpNode([string]$toolName, [string[]]$toolArgs) {
@@ -58,7 +58,9 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Database migration failed' }
     Invoke-McpNode 'npm' @('run', 'db:create-app-role')
     if ($LASTEXITCODE -ne 0) { throw 'Application role setup failed' }
-    Invoke-McpNode 'npx' @('vitest', 'run', 'apps/api/src/routes/mcp-authorization.integration.test.ts', 'apps/api/src/mcp/cursors.test.ts', 'packages/auth/src/credential-signin.integration.test.ts', 'packages/auth/src/google-signin.integration.test.ts', 'packages/db/src/rls-worker-scan-coverage.integration.test.ts', '--reporter=dot')
+    $vitestArgs = @('vitest', 'run', 'apps/api/src/routes/mcp-authorization.integration.test.ts', 'apps/api/src/mcp/cursors.test.ts', 'packages/auth/src/credential-signin.integration.test.ts', 'packages/auth/src/google-signin.integration.test.ts', 'packages/db/src/rls-worker-scan-coverage.integration.test.ts', '--reporter=dot')
+    if ($TestNamePattern) { $vitestArgs += @('-t', $TestNamePattern) }
+    Invoke-McpNode 'npx' $vitestArgs
     if ($LASTEXITCODE -ne 0) { throw 'MCP authorization regressions failed' }
 } catch {
     if ($migrationLog) { Get-Content -LiteralPath $migrationLog -Tail 25 }

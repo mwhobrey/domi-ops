@@ -22,7 +22,7 @@ export interface WhomeBetterAuth {
   handler: (request: Request) => Response | Promise<Response>;
 }
 
-export function createBetterAuth(db: Database, env: Env, options: { deferHouseholdMembership?: (headers: Headers) => Promise<boolean>; cookiePrefix?: string } = {}): WhomeBetterAuth & { mcp: McpAuthorization } {
+export function createBetterAuth(db: Database, env: Env, options: { deferHouseholdMembership?: (headers: Headers) => Promise<boolean>; cookiePrefix?: string; mcpMetadataFetch?: import("@better-auth/oauth-provider").ClientMetadataResourceFetch } = {}): WhomeBetterAuth & { mcp: McpAuthorization } {
   const secret =
     env.SESSION_SECRET ?? "dev-only-insecure-secret-replace-before-production!!";
 
@@ -48,7 +48,7 @@ export function createBetterAuth(db: Database, env: Env, options: { deferHouseho
     };
   }
 
-  const mcp = env.MCP_ENABLED ? createMcpAuthorization(db, env, secret) : null;
+  const mcp = env.MCP_ENABLED ? createMcpAuthorization(db, env, secret, options.mcpMetadataFetch) : null;
   // Keys match Better Auth model names; SQL names are owned by the Drizzle tables.
   const schema = { users, ba_sessions: baSessions, ba_accounts: baAccounts, ba_verifications: baVerifications, ...mcpProviderSchema };
   const auth = betterAuth({

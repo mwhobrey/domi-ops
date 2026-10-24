@@ -125,8 +125,14 @@ capability, not a promise of cross-client support.
 
 ## Authorization and immutable grants
 
-V1 uses operator/owner-approved pre-registered clients. Disable anonymous DCR,
-CIMD fetch, arbitrary callback registration and machine grants. Do not identify a
+V1 originally used operator/owner-approved pre-registered clients. WHO-478 adds
+optional Claude published-identity discovery, enabled per deployment with
+`MCP_CLAUDE_ENABLED`. This is a narrow exception to the original CIMD ban, using
+the maintained DNS-pinned transport, exact Claude identity/callback and local
+versioned profile. No operator session or client registration is needed. It
+creates no household grant, preserves disabled profiles and still requires
+member consent. Anonymous DCR, arbitrary callback registration, arbitrary
+metadata URL fetching and machine grants remain disabled. Do not identify a
 client as trusted from its self-declared name. Register exact verified callback
 URIs per deployment/client; public clients use PKCE with `none`, confidential
 clients use the supported registered secret method plus PKCE. The fixture

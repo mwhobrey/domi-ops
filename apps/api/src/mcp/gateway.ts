@@ -6,7 +6,7 @@ import type { Database } from "@domi-ops/db";
 import { mcpSupportedScopes, type Env } from "@domi-ops/config";
 import { admit, finish, tagTool } from "./activity.js";
 import { checkOperation, permittedTools, MCP_LIMITS, McpGatewayError } from "./access.js";
-import { approvedToolNames, contextTool, type McpTool } from "./tools.js";
+import { approvedToolNames, toolTitles, contextTool, type McpTool } from "./tools.js";
 import { readMcpBody } from "./bounds.js";
 import { readTools } from "./read-tools.js";
 
@@ -63,7 +63,7 @@ export function mcpGateway(db: Database, auth: Authorization, env: Env, tools: r
             const server = new McpServer({ name: "domi-ops", version: "1.0.0" }, { capabilities: { tools: { listChanged: false } } });
             server.server.onerror = () => {}; // Never forward protocol errors/arguments to telemetry.
             for (const tool of available) {
-              server.registerTool(tool.name, { description: tool.description, inputSchema: tool.input, outputSchema: tool.output, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } }, async (args) => {
+              server.registerTool(tool.name, { title: toolTitles[tool.name], description: tool.description, inputSchema: tool.input, outputSchema: tool.output, annotations: { title: toolTitles[tool.name], readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } }, async (args) => {
                 outcome = "tool_denied";
                 await tagTool(db, identity!, admission!.id, tool.name);
                 try {
