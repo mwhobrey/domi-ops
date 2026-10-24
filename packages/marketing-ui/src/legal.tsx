@@ -1,4 +1,4 @@
-export const LEGAL_LAST_UPDATED = "October 16, 2026";
+export const LEGAL_LAST_UPDATED = "October 23, 2026";
 export const LEGAL_CONTACT_EMAIL = "privacy@domi-ops.com";
 
 const bodyClass =
@@ -294,6 +294,35 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
           Members see household-visible content per module permissions. Private notes, Drive
           objects, and health records are limited to owners and people you explicitly share with
           (or grant ACL access).
+        </p>
+      </section>
+
+      <section>
+        <h2>Optional AI assistant connections</h2>
+        <p>
+          An adult member can connect a supported assistant after the instance operator and
+          household administrator enable the integration. Each member approves their own
+          connection and permissions. Approved reads send connection labels and timezone,
+          shopping items, chores, and only explicitly selected planning notes to the chosen
+          assistant provider. Current membership and record permissions still apply. The
+          current integration does not directly access Calendar, School, Health, Drive or
+          attachments, and cannot change household records. Do not select notes containing
+          copied Google-derived, health, child or other excluded information for this workflow.
+        </p>
+        <p>
+          The assistant is a separate service you choose. Its account settings and terms govern
+          its retention, human review and model training. Review those settings and the
+          provider-specific notice before approving access; Domi Ops cannot verify those
+          settings or promise that the provider will not retain or use shared conversation
+          content. Connection setup does not share your Domi Ops password, login session or
+          Google credentials with the assistant.
+        </p>
+        <p>
+          AI connections settings lets you review permissions, remove access or disconnect.
+          Disconnect stops future reads; it cannot erase copies already held by the assistant.
+          Security activity records tool names, outcomes, timing and response sizes rather than
+          returned record content or raw tool arguments, with a 30-day activity retention
+          window. Self-hosted operators administer their own deployment and retention.
         </p>
       </section>
 

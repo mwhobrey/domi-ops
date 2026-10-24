@@ -10,7 +10,7 @@ import { symmetricDecrypt } from "better-auth/crypto";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { createBetterAuth, MCP_POLICY_VERSION } from "@domi-ops/auth";
+import { createBetterAuth, MCP_POLICY_VERSION, CLAUDE_CLIENT_ID, CLAUDE_CALLBACK } from "@domi-ops/auth";
 import { planMcpClient, provisionMcpClient } from "@domi-ops/auth/mcp-client-provisioning";
 import { envSchema, type Env } from "@domi-ops/config";
 import {
@@ -26,7 +26,7 @@ import { admit, finish, metadataContext } from "../mcp/activity.js";
 import { contextTool, pageLimit } from "../mcp/tools.js";
 import { checkOperation } from "../mcp/access.js";
 import { mcpAccessEvents, mcpRequestLeases, mcpConnectionWindows, mcpHouseholdWindows, householdSubscriptions, pruneMcpMetadata } from "@domi-ops/db";
-import { shoppingItems, shoppingRecurring, chores, choresRecurring } from "@domi-ops/db";
+import { shoppingItems, shoppingRecurring, chores, choresRecurring, pushSubscriptions } from "@domi-ops/db";
 import { readTools } from "../mcp/read-tools.js";
 import { registerMcpAcceptanceCases } from "../mcp/acceptance-cases.js";
 
@@ -67,7 +67,9 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
       scope: requestedScopes.join(" "), resource: origin + "/api/mcp", state: randomUUID(),
       code_challenge: challenge, code_challenge_method: "S256" });
     const response = await fetch(origin + "/auth/oauth2/authorize?" + params, { headers: person.headers, redirect: "manual" });
-    const location = response.headers.get("location") ?? (await response.json() as { url: string }).url;
+    const data = response.headers.has("location") ? null : await response.json() as { url?: string };
+    const location = response.headers.get("location") ?? data?.url;
+    if (typeof location !== "string") throw new Error("Fictional authorization failed: " + JSON.stringify(data));
     expect(new URL(location, origin).pathname).toBe("/ai/consent");
     return new URL(location, origin).searchParams.toString();
   }
@@ -120,7 +122,9 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
     return owned(owner, async (tx) => {
       const state: Record<string, unknown> = {};
       for (const table of ["shopping_items", "shopping_recurring", "shopping_trips", "shopping_trip_items", "chores", "chores_recurring", "chore_completions", "chore_member_karma", "notes", "note_shares", "user_notifications", "calendar_sync_outbox", "push_subscriptions"]) {
-        const [row] = await tx.execute(sql`select coalesce(jsonb_agg(to_jsonb(t) order by to_jsonb(t)::text), '[]'::jsonb) as data from ${sql.identifier(table)} t`);
+        // Push subscriptions are global; parallel suites own different users' subscriptions.
+        const filter = table === "push_subscriptions" ? sql`where ${inArray(sql`t.user_id`, userIds)}` : sql``;
+        const [row] = await tx.execute(sql`select coalesce(jsonb_agg(to_jsonb(t) order by to_jsonb(t)::text), '[]'::jsonb) as data from ${sql.identifier(table)} t ${filter}`);
         state[table] = row.data;
       }
       return state;
@@ -227,6 +231,77 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
     const foreignOrigin = new URL(origin); foreignOrigin.protocol = foreignOrigin.protocol === "https:" ? "http:" : "https:";
     expect((await gateway.request(origin + "/api/mcp", { method: "POST", headers: { host: new URL(origin).host, origin: foreignOrigin.origin } })).status).toBe(403);
     expect((await mcpGateway(db, auth.mcp, { ...env, MCP_ENABLED: false }).request(origin + "/api/mcp", { method: "POST" })).status).toBe(404);
+  });
+  it("onboards Claude without registration and preserves consent, isolation, refresh and disable gates", async () => {
+    const originalAuth = auth;
+    const limitedEnv: Env = { ...env, MCP_CLAUDE_ENABLED: true, MCP_READ_SCOPES: ["shopping:read", "chores:read"] };
+    const metadata = { client_id: CLAUDE_CLIENT_ID, client_name: "Claude", client_uri: "https://claude.ai",
+      redirect_uris: [CLAUDE_CALLBACK], grant_types: ["authorization_code", "refresh_token", "urn:ietf:params:oauth:grant-type:jwt-bearer"],
+      response_types: ["code"], token_endpoint_auth_method: "none" };
+    const transport = vi.fn(async () => Response.json(metadata, { headers: { "cache-control": "no-store" } }));
+    const limited = createBetterAuth(db, limitedEnv, { cookiePrefix, mcpMetadataFetch: transport });
+    auth = limited;
+    clientIds.push(CLAUDE_CLIENT_ID);
+    try {
+      const issuer = z.object({ scopes_supported: z.array(z.string()), token_endpoint_auth_methods_supported: z.array(z.string()),
+        client_id_metadata_document_supported: z.boolean(), registration_endpoint: z.string().optional() }).parse(
+        await (await limited.mcp.metadata(new Request(origin + "/.well-known/oauth-authorization-server/auth"))).json());
+      expect(issuer).toMatchObject({ client_id_metadata_document_supported: true });
+      expect(issuer.token_endpoint_auth_methods_supported).toContain("none");
+      expect(issuer.registration_endpoint).toBeUndefined();
+      const overview = await limited.mcp.overview(owner.headers, owner.householdId);
+      expect(overview.claude?.serverUrl).toBe(origin + "/api/mcp");
+      expect(new URL(overview.claude!.connectUrl).searchParams.get("connectorUrl")).toBe(origin + "/api/mcp");
+      expect((await originalAuth.mcp.overview(owner.headers, owner.householdId)).claude).toBeNull();
+      const before = await owned(owner, (tx) => tx.select().from(mcpConnections));
+      const query = await begin(owner, issuer.scopes_supported, CLAUDE_CLIENT_ID, CLAUDE_CALLBACK);
+      expect(transport).toHaveBeenCalled();
+      expect(await owned(owner, (tx) => tx.select().from(mcpConnections))).toEqual(before);
+      const preview = await limited.mcp.previewConsent(owner.headers, owner.householdId, query);
+      expect(preview).toMatchObject({ provider: "claude", dataMode: "synthetic", settingsReviewRequired: true });
+      await expect(limited.mcp.prepareConsent(owner.headers, { householdId: owner.householdId, oauthQuery: query, noteIds: [],
+        adultAttested: true, privacyAttested: true, providerSettingsReviewed: false, policyVersion: MCP_POLICY_VERSION })).rejects.toMatchObject({ code: "provider_settings_review_required" });
+      const pending = await limited.mcp.prepareConsent(owner.headers, { householdId: owner.householdId, oauthQuery: query, noteIds: [],
+        adultAttested: true, privacyAttested: true, providerSettingsReviewed: true, policyVersion: MCP_POLICY_VERSION });
+      const result = await limited.mcp.decideConsent(owner.headers, { pendingId: pending.pendingId, oauthQuery: query, accept: true });
+      if (!result.accepted) throw new Error("Expected explicit fictional consent");
+      const response = await exchange(new URL(result.redirectUri).searchParams.get("code")!, { client_id: CLAUDE_CLIENT_ID, redirect_uri: CLAUDE_CALLBACK });
+      expect(response.status).toBe(200);
+      const token = await response.json() as Tokens;
+      expect(token.refresh_token).toBeTruthy();
+      expect(await limited.mcp.authorize(bearer(token.access_token))).toMatchObject({ clientId: CLAUDE_CLIENT_ID, householdId: owner.householdId });
+      await expect(limited.mcp.revokeConnection(stranger.headers, result.connectionId)).rejects.toBeTruthy();
+      await expect(limited.mcp.withGrantContext(bearer(token.access_token), ["notes:read"], async () => "must not run")).rejects.toMatchObject({ code: "insufficient_scope" });
+      const rotated = await refresh(token.refresh_token, { client_id: CLAUDE_CLIENT_ID });
+      expect(rotated.status).toBe(200);
+      const next = await rotated.json() as Tokens;
+      expect(next.refresh_token).not.toBe(token.refresh_token);
+      await expect(originalAuth.mcp.authorize(bearer(next.access_token))).rejects.toMatchObject({ code: "client_not_approved" });
+      const beforeInvalid = transport.mock.calls.length;
+      const invalid = new URLSearchParams({ response_type: "code", redirect_uri: CLAUDE_CALLBACK, scope: issuer.scopes_supported.join(" "),
+        resource: origin + "/api/mcp", code_challenge: challenge, code_challenge_method: "S256", state: randomUUID() });
+      for (const bad of ["https://127.0.0.1/metadata", CLAUDE_CLIENT_ID + "?copy=1", "https://claude.ai.attacker.test/metadata"]) {
+        invalid.set("client_id", bad);
+        const denied = await fetch(origin + "/auth/oauth2/authorize?" + invalid, { headers: owner.headers, redirect: "manual" });
+        expect(denied.status).toBeGreaterThanOrEqual(400);
+      }
+      expect(transport.mock.calls.length).toBe(beforeInvalid);
+      await withMcpProviderContext(db, (tx) => tx.update(mcpClientProfiles).set({ enabled: false }).where(eq(mcpClientProfiles.clientId, CLAUDE_CLIENT_ID)));
+      await expect(limited.mcp.authorize(bearer(next.access_token))).rejects.toMatchObject({ code: "client_not_approved" });
+      await expect(begin(owner, issuer.scopes_supported, CLAUDE_CLIENT_ID, CLAUDE_CALLBACK)).resolves.toBeTruthy();
+      const [disabled] = await withMcpProviderContext(db, (tx) => tx.select().from(mcpClientProfiles).where(eq(mcpClientProfiles.clientId, CLAUDE_CLIENT_ID)));
+      expect(disabled.enabled).toBe(false);
+      await withMcpProviderContext(db, (tx) => tx.update(mcpClientProfiles).set({ enabled: true }).where(eq(mcpClientProfiles.clientId, CLAUDE_CLIENT_ID)));
+      metadata.redirect_uris = ["https://attacker.test/callback"];
+      expect((await refresh(next.refresh_token, { client_id: CLAUDE_CLIENT_ID })).status).toBeGreaterThanOrEqual(400);
+      await expect(limited.mcp.authorize(bearer(next.access_token))).rejects.toMatchObject({ code: "client_not_approved" });
+      metadata.redirect_uris = [CLAUDE_CALLBACK];
+      await begin(owner, issuer.scopes_supported, CLAUDE_CLIENT_ID, CLAUDE_CALLBACK);
+      await limited.mcp.setHouseholdEnabled(owner.headers, owner.householdId, false);
+      await expect(limited.mcp.authorize(bearer(next.access_token))).rejects.toBeTruthy();
+      await limited.mcp.setHouseholdEnabled(owner.headers, owner.householdId, true);
+      await expect(limited.mcp.authorize(bearer(next.access_token))).rejects.toBeTruthy();
+    } finally { auth = originalAuth; }
   });
   it("links a discovery-driven Gemini client without notes and rejects disabled scopes on existing grants", async () => {
     const oldToken = await connect(owner, scopes, [ownNote]);
@@ -484,6 +559,20 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
     expect(leases).toEqual([]);
     expect((await owned(owner, (tx) => tx.select().from(mcpAccessEvents).where(eq(mcpAccessEvents.connectionId, token.connectionId))))[0].outcome).toBe("deadline_exceeded");
   }, 15000);
+  it("isolates the side-effect snapshot from unrelated push users while detecting fixture writes", async () => {
+    const outsiderId = randomUUID(), subscriptionId = randomUUID();
+    await withSystemContext(db, (tx) => tx.insert(users).values({ id: outsiderId, email: outsiderId + "@example.test", displayName: "synthetic snapshot outsider" }));
+    try {
+      const before = await domainSnapshot();
+      await db.insert(pushSubscriptions).values({ userId: outsiderId, endpoint: "https://push.example.test/" + randomUUID(), p256dh: "synthetic", authKey: "synthetic" });
+      expect(await domainSnapshot()).toEqual(before);
+      await db.insert(pushSubscriptions).values({ id: subscriptionId, userId: owner.userId, endpoint: "https://push.example.test/" + randomUUID(), p256dh: "synthetic", authKey: "synthetic" });
+      expect((await domainSnapshot()).push_subscriptions).toContainEqual(expect.objectContaining({ id: subscriptionId, user_id: owner.userId }));
+    } finally {
+      await db.delete(pushSubscriptions).where(eq(pushSubscriptions.id, subscriptionId));
+      await withSystemContext(db, (tx) => tx.delete(users).where(eq(users.id, outsiderId)));
+    }
+  });
   it("serves all four pure read tools through the SDK without domain, queue or notification effects", async () => {
     const itemId = randomUUID(), choreId = randomUUID();
     await owned(owner, async (tx) => {
@@ -500,7 +589,13 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
     const client = new Client({ name: "synthetic-domain-tools", version: "1" }, { versionNegotiation: { mode: { pin: "2026-07-28" } } });
     try {
       await client.connect(new StreamableHTTPClientTransport(new URL(origin + "/api/mcp"), { requestInit: { headers: { authorization: "Bearer " + token.access_token } } }));
-      expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(["get_connection_context", "list_shopping_items", "list_chores", "list_selected_notes", "get_selected_note"]);
+      const directoryTools = (await client.listTools()).tools;
+      expect(directoryTools.map((tool) => tool.name)).toEqual(["get_connection_context", "list_shopping_items", "list_chores", "list_selected_notes", "get_selected_note"]);
+      for (const tool of directoryTools) {
+        expect(tool.title).toBeTruthy();
+        expect(tool.name.length).toBeLessThanOrEqual(64);
+        expect(tool.annotations).toMatchObject({ title: tool.title, readOnlyHint: true, destructiveHint: false });
+      }
       const results = [];
       for (const [name, args] of [["list_shopping_items", {}], ["list_chores", {}], ["list_selected_notes", {}], ["get_selected_note", { noteId: ownNote }]] as const) {
         const result = await client.callTool({ name, arguments: args }); expect(result.isError, JSON.stringify(result)).not.toBe(true); results.push(result.structuredContent);

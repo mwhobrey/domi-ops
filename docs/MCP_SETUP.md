@@ -115,7 +115,12 @@ status, timestamp and metadata-only request IDs before repeating a linking flow.
 Provision a separate reviewed client per provider and deployment through the
 trusted server-side `createBetterAuth(...).mcp.registerClient` entry point with
 an authenticated session. It is not an ordinary HTTP administration endpoint.
-Anonymous registration, CIMD, machine grants and auto-consent remain disabled.
+Anonymous registration, machine grants and auto-consent remain disabled.
+Claude can instead use the exact published-identity path when the operator sets
+`MCP_CLAUDE_ENABLED=true`; see [Claude onboarding](MCP_CLAUDE.md). This avoids
+manual registration and session extraction on both hosted and self-host servers.
+Other metadata identities remain unapproved. The operator CLI below remains for
+manually approved clients and older evaluations.
 
 The operator must supply the exact observed provider callback, public PKCE S256
 configuration (or a separately reviewed confidential-client configuration), the

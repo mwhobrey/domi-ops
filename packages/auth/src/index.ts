@@ -15,6 +15,7 @@ export * from "./member-label.js";
 export * from "./import-records.js";
 export * from "./setup.js";
 export * from "./mcp.js";
+export { CLAUDE_CLIENT_ID, CLAUDE_CALLBACK } from "./mcp-claude.js";
 export * from "./cleanup-user.js";
 export { hashPassword, verifyPassword } from "better-auth/crypto";
 

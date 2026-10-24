@@ -8,6 +8,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+- Optional Claude onboarding recognizes its published OAuth identity on hosted
+  and self-hosted servers, removing manual client registration and adding a
+  connection link in AI connections. Household/member consent remains required.
+  Added assistant-sharing privacy disclosure and connector submission materials.
 - Optional deployment-wide MCP read-scope configuration keeps discovery and
   authorization aligned for shopping/chore-only pilots. Disabled scopes are
   rejected during registration, consent, refresh and live access. This prevents

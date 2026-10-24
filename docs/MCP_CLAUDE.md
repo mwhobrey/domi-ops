@@ -1,8 +1,51 @@
-# Claude private evaluation (WHO-476)
+# Connect Claude to Domi Ops
 
 This integration uses the shared Domi Ops MCP endpoint and portable household
 briefing skill. Hosted access is included in the base price; self-hosted access
 remains free. No deployment, production enablement or directory listing is implied.
+
+## Hosted and self-hosted onboarding (WHO-478)
+
+On a reviewed deployment, the operator enables `MCP_ENABLED=true` and
+`MCP_CLAUDE_ENABLED=true`. Both default off. For the first shopping/chore-only
+connection, set `MCP_READ_SCOPES=shopping:read,chores:read` consistently on the
+deployment; this also narrows other assistants on that server. Preserve the
+restricted app role and existing signing/encryption secrets. No new migration,
+Cloud account, auth broker, assistant API key or client secret is required.
+
+Hosted operators configure the canonical hosted URL once. Self-host operators
+configure their own stable public HTTPS origin. Each server recognizes Claude's
+exact published identity and creates its own local profile, without a member's
+cookie or manual client registration. No household permission is created then.
+The maintained CIMD transport validates public DNS/TLS and rejects redirects;
+no other metadata URL is accepted. An unavailable document fails closed.
+
+For an adult member:
+
+1. Open **Settings → AI connections**. An owner/admin enables the household.
+2. Choose **Continue in Claude**. The instance-specific link prefills the name
+   and server URL. Confirm the URL and keep **Sign in now** selected.
+3. Choose **Use Claude's published identity** if asked. Leave client credentials
+   and request headers empty. Sign in to Domi Ops through Claude's flow.
+4. Review the member, household, `claude.ai` identity, exact permissions and
+   provider privacy/settings disclosure; approve only the intended access. Notes
+   start empty. Installation and household enablement do not replace consent.
+5. Request a household briefing and verify the returned links. Review or
+   disconnect the connection in Domi Ops at any time. Provider-side copies remain
+   governed by your Claude settings and terms.
+
+The link currently opens Claude's supported custom-connector flow. It is not a
+claim of directory approval; once a listing is published its directory link can
+be offered too. See [submission preparation](MCP_CLAUDE_SUBMISSION.md).
+
+`MCP_CLAUDE_ENABLED=false` stops discovery and access by the published-identity
+client. Existing manually approved clients keep their own policy. A disabled
+local profile is never re-enabled by discovery. Global/household disconnect
+controls remain available; household disable revokes grants permanently.
+
+The new flow has local regression coverage; actual Claude acceptance on a
+deployed build and the real household pilot remain release gates. The historical
+receipt below describes the earlier manual-client fictional-data evaluation.
 
 ## Connection contract
 
@@ -10,11 +53,12 @@ remains free. No deployment, production enablement or directory listing is impli
   Streamable HTTP and OAuth sign-in required. Claude's remote connectors run from
   Anthropic's cloud, including when used from desktop or mobile. A LAN-only URL
   or the private OpenAI Secure MCP Tunnel cannot serve this connection.
-- Register a separate approved public client with exact redirect
+- For the historical manual-client evaluation, register a separate approved public client with exact redirect
   `https://claude.ai/api/mcp/auth_callback`, PKCE S256, token authentication `none`,
   and `shopping:read chores:read notes:read offline_access`. In Claude choose
   **Use your own OAuth client**, enter that client ID, and leave the secret and
-  request headers empty. Domi Ops does not enable DCR or CIMD for this pilot.
+  request headers empty. That earlier evaluation did not use CIMD. Use published
+  identity onboarding above for new Claude installations; DCR stays disabled.
 - Each adult signs in to Domi Ops and grants access for their own household,
   explicitly selecting any notes. App installation, OAuth registration, household
   enablement and member consent are separate operations. Calendar, School,

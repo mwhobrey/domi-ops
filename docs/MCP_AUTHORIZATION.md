@@ -70,9 +70,11 @@ Domain tools must still recheck the ACL at read time (WHO-472/473).
 
 ## Registration and browser control API
 
-Clients are deployment-operator approved, pre-registered and exact-redirect only.
+Clients are deployment-operator approved and exact-redirect only. Manual clients
+remain pre-registered; optional [Claude onboarding](MCP_CLAUDE.md) recognizes its
+single published identity through an operator-enabled CIMD policy.
 Anonymous/authenticated DCR, client/resource administration over ordinary HTTP,
-machine grants, CIMD/remote metadata lookup and automatic consent are disabled.
+machine grants, arbitrary metadata lookup and automatic consent are disabled.
 
 The trusted server-side entry point is `createBetterAuth(...).mcp.registerClient`.
 It requires existing session headers and a bounded configuration: name, exact callback

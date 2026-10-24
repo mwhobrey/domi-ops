@@ -22,6 +22,7 @@
     "mcp:client": "node dist/mcp-client-cli.js"
   },
   "dependencies": {
+    "@better-auth/cimd": "1.7.10",
     "@better-auth/core": "1.7.10",
     "@better-auth/oauth-provider": "1.7.10",
     "@domi-ops/config": "*",

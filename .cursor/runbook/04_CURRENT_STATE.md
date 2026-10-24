@@ -1,5 +1,23 @@
 # Current state
 
+## Claude onboarding and directory preparation (WHO-478)
+
+- `MCP_CLAUDE_ENABLED=true`, alongside MCP enablement, recognizes only Claude's
+  exact published web-client identity using pinned `@better-auth/cimd@1.7.10`.
+  The flag defaults off. Anonymous/DCR registration stays disabled. The maintained
+  Node transport pins public DNS/TLS connections and refuses redirects; other
+  metadata URLs and changed public-client/callback policy fail closed.
+- Discovery creates only a local provider profile, not a household/member grant.
+  Disabling the flag or profile stops its grants; discovery never re-enables a
+  disabled profile. Hosted and self-host use the same consent and isolation path.
+- AI connections offers a canonical-origin Claude install link after household
+  enablement. No client-ID entry, session extraction or broker is needed.
+- Directory preparation is in `docs/MCP_CLAUDE_SUBMISSION.md`. New onboarding has
+  not been deployed or accepted live; listing, real pilot and hosted rollout remain
+  separate gates. Review the exact release receipt before deployment/submission.
+  Generated plugins include a public README; the ignored `.qa` draft must pass a
+  reviewed GitHub source handoff before the plugin portal can validate it.
+
 ## Pilot scope discovery correction (WHO-478)
 
 - Gemini requested `notes:read` from global discovery for a shopping/chore-only
