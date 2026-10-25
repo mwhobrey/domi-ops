@@ -26,7 +26,20 @@ export async function prepareSubmission({ origin, output, readScopes }) {
   await copyFile(join(root, "docs/MCP_CHATGPT_SUBMISSION.md"), join(output, "submission-guide.md"));
   const draft = { status: "draft-not-uploaded", readyToSubmit: false, serverUrl: config.mcp.mcpServers["domi-ops"].url,
     scopes: config.mcp.mcpServers["domi-ops"].extensions["com.openai"].auth.defaultScopes,
-    requiredBeforeSubmit: ["Review merged source and authorize exact stable endpoint deployment", "Verify native ChatGPT identity and managed JWKS reachability", "Record actual registration-free ChatGPT acceptance and paired Claude checks", "Confirm verified publisher organization/project, listing fields and current public URLs", "Prepare isolated populated fictional reviewer account and private review credentials", "Package plugin contents at ZIP root and inspect for private material", "Authorize upload, domain challenge and scan with fictional data", "Review scan results, terms and final submission"] };
+    requiredBeforeSubmit: [
+      "Review merged source and authorize exact stable endpoint deployment",
+      "Verify native ChatGPT identity and managed JWKS reachability",
+      "Record actual registration-free ChatGPT acceptance and paired Claude checks",
+      "Confirm verified publisher organization/project, listing fields and current public URLs",
+      "Prepare isolated populated fictional reviewer account and private review credentials",
+      "Prepare and run exactly five positive test cases with the fictional reviewer account, including scenario, prompt, expected tools and result",
+      "Prepare and run exactly three negative test cases, including prompt or scenario, reason not to act and expected refusal, clarification or safe fallback",
+      "Provide an accessible video walkthrough URL demonstrating the review test cases and plugin functionality",
+      "Prepare release notes identifying the submitted package version and changes",
+      "Package plugin contents at ZIP root and inspect for private material",
+      "Authorize upload, domain challenge and scan with fictional data",
+      "Review scan results, terms and final submission"
+    ] };
   await writeFile(join(output, "listing.draft.json"), JSON.stringify(draft, null, 2) + "\n");
   return draft;
 }

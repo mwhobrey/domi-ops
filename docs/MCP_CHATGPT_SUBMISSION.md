@@ -50,6 +50,23 @@ submission. Keep the proposed listing/category, public product/support/privacy/
 terms URLs and icon accurate for the actual deployed build. Validate the package
 and fix dashboard findings; generating a local draft proves none of those gates.
 
+Before initial MCP review, prepare and verify all required review materials:
+
+- Exactly five positive test cases, each with a scenario, user prompt, expected
+  tools and observable result. Run each using the fictional reviewer account.
+- Exactly three negative test cases, each with a prompt or scenario, why the
+  plugin should not act, and the expected refusal, clarification or safe fallback.
+  Run them with the same account and verify that behavior.
+- A video walkthrough demonstrating the test cases and plugin functionality,
+  available at a reviewer-accessible recording URL. Use fictional data only.
+- Release notes identifying the submitted package version and its changes.
+
+The generator leaves these materials pending; it does not invent passing cases
+or a recording. Add the verified cases to `extensions.com.openai.review.test_cases`
+in `plugin.json`, the recording URL to `review.demo_recording_url`, and release
+notes to `extensions.com.openai.publication.release_notes` before packaging.
+Check the imported materials in the portal's Review details before submission.
+
 Prepare fictional review credentials privately and supply them only in the
 portal's review-details fields after approval. Domain challenges must use the
 exact portal value on an approved target without replacing another app's token.
@@ -62,4 +79,4 @@ on every plan/device is promised.
 - [Authentication and stable identity](https://developers.openai.com/plugins/build/auth)
 - [Package format and CIMD mode](https://developers.openai.com/plugins/build/plugins)
 - [Custom connection and testing](https://developers.openai.com/plugins/deploy/connect-chatgpt)
-- [Submission and domain review](https://developers.openai.com/plugins/deploy/submission)
+- [Submission and domain review](https://developers.openai.com/plugins/deploy/submission) (review materials rechecked 2026-10-25)

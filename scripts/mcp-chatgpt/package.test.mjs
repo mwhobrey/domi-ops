@@ -19,6 +19,12 @@ test("submission draft includes portable source, public listing assets and expli
     assert.deepEqual(await readFile(join(output, "plugin", listing.logo)), await readFile(new URL("../../apps/web/public/icons/icon-512.png", import.meta.url)));
     assert.ok((await readFile(join(output, "plugin/README.md"), "utf8")).includes(draft.serverUrl));
     assert.ok(draft.requiredBeforeSubmit.some(gate => gate.includes("actual registration-free")));
+    const savedDraft = JSON.parse(await readFile(join(output, "listing.draft.json"), "utf8"));
+    const guide = (await readFile(join(output, "submission-guide.md"), "utf8")).replace(/\s+/g, " ").toLowerCase();
+    for (const material of ["five positive test cases", "three negative test cases", "video walkthrough", "release notes"]) {
+      assert.ok(savedDraft.requiredBeforeSubmit.some(gate => gate.includes(material)), `Missing submission gate: ${material}`);
+      assert.ok(guide.includes(material), `Missing submission guidance: ${material}`);
+    }
     await assert.rejects(prepareSubmission({ origin: "https://hosted.example.test", output }), { code: "EEXIST" });
   } finally {
     assert.equal(dirname(root), resolve(tmpdir())); assert.match(basename(root), /^domi-mcp-package-/);
