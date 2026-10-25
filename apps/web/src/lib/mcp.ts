@@ -15,6 +15,7 @@ export type AiConnection = {
 export type AiOverview = {
   householdId: string; householdName: string; memberName: string; enabled: boolean; canManage: boolean;
   claude: { connectUrl: string; serverUrl: string } | null;
+  chatgpt: { setupUrl: string; serverUrl: string } | null;
   connections: AiConnection[];
 };
 export type ConsentPreview = {

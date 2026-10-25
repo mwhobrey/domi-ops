@@ -5,12 +5,12 @@ import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, dirname, basename, resolve } from "node:path";
 import { createServer as createHttpsServer } from "node:https";
-import { decodeJwt, decodeProtectedHeader, importJWK, SignJWT } from "jose";
+import { decodeJwt, decodeProtectedHeader, importJWK, SignJWT, generateKeyPair, exportJWK } from "jose";
 import { symmetricDecrypt } from "better-auth/crypto";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { createBetterAuth, MCP_POLICY_VERSION, CLAUDE_CLIENT_ID, CLAUDE_CALLBACK } from "@domi-ops/auth";
+import { createBetterAuth, MCP_POLICY_VERSION, CLAUDE_CLIENT_ID, CLAUDE_CALLBACK, CHATGPT_CLIENT_ID, CHATGPT_CALLBACK, CHATGPT_JWKS_URI } from "@domi-ops/auth";
 import { planMcpClient, provisionMcpClient } from "@domi-ops/auth/mcp-client-provisioning";
 import { envSchema, type Env } from "@domi-ops/config";
 import {
@@ -232,71 +232,111 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
     expect((await gateway.request(origin + "/api/mcp", { method: "POST", headers: { host: new URL(origin).host, origin: foreignOrigin.origin } })).status).toBe(403);
     expect((await mcpGateway(db, auth.mcp, { ...env, MCP_ENABLED: false }).request(origin + "/api/mcp", { method: "POST" })).status).toBe(404);
   });
-  it("onboards Claude without registration and preserves consent, isolation, refresh and disable gates", async () => {
+  it.each(["claude", "chatgpt"] as const)("onboards %s without registration and preserves consent, isolation, refresh and disable gates", async (providerName) => {
     const originalAuth = auth;
-    const limitedEnv: Env = { ...env, MCP_CLAUDE_ENABLED: true, MCP_READ_SCOPES: ["shopping:read", "chores:read"] };
-    const metadata = { client_id: CLAUDE_CLIENT_ID, client_name: "Claude", client_uri: "https://claude.ai",
-      redirect_uris: [CLAUDE_CALLBACK], grant_types: ["authorization_code", "refresh_token", "urn:ietf:params:oauth:grant-type:jwt-bearer"],
-      response_types: ["code"], token_endpoint_auth_method: "none" };
-    const transport = vi.fn(async () => Response.json(metadata, { headers: { "cache-control": "no-store" } }));
+    const chatgpt = providerName === "chatgpt", id = chatgpt ? CHATGPT_CLIENT_ID : CLAUDE_CLIENT_ID, redirect = chatgpt ? CHATGPT_CALLBACK : CLAUDE_CALLBACK;
+    const limitedEnv: Env = { ...env, MCP_CLAUDE_ENABLED: true, MCP_CHATGPT_ENABLED: true, MCP_READ_SCOPES: ["shopping:read", "chores:read"] };
+    const keys = await generateKeyPair("RS256"), kid = randomUUID();
+    const metadata = { client_id: id, client_name: chatgpt ? "ChatGPT" : "Claude", client_uri: chatgpt ? "https://chatgpt.com/" : "https://claude.ai",
+      redirect_uris: [redirect], grant_types: ["authorization_code", "refresh_token"], response_types: ["code"],
+      token_endpoint_auth_method: chatgpt ? "private_key_jwt" : "none",
+      ...(chatgpt ? { token_endpoint_auth_methods_supported: ["none", "private_key_jwt"], jwks_uri: CHATGPT_JWKS_URI } : {}) };
+    const transport = vi.fn(async (input: string | Request | URL) => {
+      if (String(input) === CHATGPT_JWKS_URI) return Response.json({ keys: [{ ...await exportJWK(keys.publicKey), kid, alg: "RS256", use: "sig" }] }, { headers: { "cache-control": "no-store" } });
+      if (String(input) !== id) throw new Error("Unexpected metadata fetch");
+      return Response.json(metadata, { headers: { "cache-control": "no-store" } });
+    });
+    async function assertion(audience = origin + "/auth/oauth2/token") {
+      return { client_assertion_type: "urn:ietf:params:oauth:client-assertion-type:jwt-bearer", client_assertion:
+        await new SignJWT({}).setProtectedHeader({ alg: "RS256", kid }).setIssuer(id).setSubject(id).setAudience(audience)
+          .setIssuedAt().setExpirationTime("60s").setJti(randomUUID()).sign(keys.privateKey) };
+    }
+    async function refreshClient(token: string) { return refresh(token, { client_id: id, ...(chatgpt ? await assertion() : {}) }); }
     const limited = createBetterAuth(db, limitedEnv, { cookiePrefix, mcpMetadataFetch: transport });
     auth = limited;
-    clientIds.push(CLAUDE_CLIENT_ID);
+    clientIds.push(id);
     try {
       const issuer = z.object({ scopes_supported: z.array(z.string()), token_endpoint_auth_methods_supported: z.array(z.string()),
+        issuer: z.string(), authorization_response_iss_parameter_supported: z.boolean(),
         client_id_metadata_document_supported: z.boolean(), registration_endpoint: z.string().optional() }).parse(
         await (await limited.mcp.metadata(new Request(origin + "/.well-known/oauth-authorization-server/auth"))).json());
       expect(issuer).toMatchObject({ client_id_metadata_document_supported: true });
+      expect(issuer).toMatchObject({ issuer: origin + "/auth", authorization_response_iss_parameter_supported: true });
       expect(issuer.token_endpoint_auth_methods_supported).toContain("none");
       expect(issuer.registration_endpoint).toBeUndefined();
+      if (chatgpt) expect(issuer.token_endpoint_auth_methods_supported).toContain("private_key_jwt");
       const overview = await limited.mcp.overview(owner.headers, owner.householdId);
       expect(overview.claude?.serverUrl).toBe(origin + "/api/mcp");
       expect(new URL(overview.claude!.connectUrl).searchParams.get("connectorUrl")).toBe(origin + "/api/mcp");
       expect((await originalAuth.mcp.overview(owner.headers, owner.householdId)).claude).toBeNull();
+      expect(overview.chatgpt?.serverUrl).toBe(origin + "/api/mcp");
+      expect((await originalAuth.mcp.overview(owner.headers, owner.householdId)).chatgpt).toBeNull();
       const before = await owned(owner, (tx) => tx.select().from(mcpConnections));
-      const query = await begin(owner, issuer.scopes_supported, CLAUDE_CLIENT_ID, CLAUDE_CALLBACK);
+      const deniedQuery = await begin(owner, issuer.scopes_supported, id, redirect);
+      const deniedRedirect = new URL((await limited.mcp.rejectConsent(owner.headers, deniedQuery)).redirectUri);
+      expect(deniedRedirect.searchParams.get("iss")).toBe(origin + "/auth");
+      expect(deniedRedirect.searchParams.get("error")).toBe("access_denied");
+      const query = await begin(owner, issuer.scopes_supported, id, redirect);
       expect(transport).toHaveBeenCalled();
       expect(await owned(owner, (tx) => tx.select().from(mcpConnections))).toEqual(before);
       const preview = await limited.mcp.previewConsent(owner.headers, owner.householdId, query);
-      expect(preview).toMatchObject({ provider: "claude", dataMode: "synthetic", settingsReviewRequired: true });
+      expect(preview).toMatchObject({ provider: providerName, dataMode: "synthetic", settingsReviewRequired: true });
       await expect(limited.mcp.prepareConsent(owner.headers, { householdId: owner.householdId, oauthQuery: query, noteIds: [],
         adultAttested: true, privacyAttested: true, providerSettingsReviewed: false, policyVersion: MCP_POLICY_VERSION })).rejects.toMatchObject({ code: "provider_settings_review_required" });
       const pending = await limited.mcp.prepareConsent(owner.headers, { householdId: owner.householdId, oauthQuery: query, noteIds: [],
         adultAttested: true, privacyAttested: true, providerSettingsReviewed: true, policyVersion: MCP_POLICY_VERSION });
       const result = await limited.mcp.decideConsent(owner.headers, { pendingId: pending.pendingId, oauthQuery: query, accept: true });
       if (!result.accepted) throw new Error("Expected explicit fictional consent");
-      const response = await exchange(new URL(result.redirectUri).searchParams.get("code")!, { client_id: CLAUDE_CLIENT_ID, redirect_uri: CLAUDE_CALLBACK });
+      expect(new URL(result.redirectUri).searchParams.get("iss")).toBe(origin + "/auth");
+      const response = await exchange(new URL(result.redirectUri).searchParams.get("code")!, { client_id: id, redirect_uri: redirect, ...(chatgpt ? await assertion() : {}) });
       expect(response.status).toBe(200);
       const token = await response.json() as Tokens;
       expect(token.refresh_token).toBeTruthy();
-      expect(await limited.mcp.authorize(bearer(token.access_token))).toMatchObject({ clientId: CLAUDE_CLIENT_ID, householdId: owner.householdId });
+      expect(await limited.mcp.authorize(bearer(token.access_token))).toMatchObject({ clientId: id, householdId: owner.householdId });
+      const otherDisabled = createBetterAuth(db, { ...limitedEnv, MCP_CLAUDE_ENABLED: !chatgpt, MCP_CHATGPT_ENABLED: chatgpt }, { cookiePrefix, mcpMetadataFetch: transport });
+      await expect(otherDisabled.mcp.authorize(bearer(token.access_token))).resolves.toMatchObject({ clientId: id });
+      const selectedDisabled = createBetterAuth(db, { ...limitedEnv, MCP_CLAUDE_ENABLED: chatgpt, MCP_CHATGPT_ENABLED: !chatgpt }, { cookiePrefix, mcpMetadataFetch: transport });
+      await expect(selectedDisabled.mcp.authorize(bearer(token.access_token))).rejects.toMatchObject({ code: "client_not_approved" });
       await expect(limited.mcp.revokeConnection(stranger.headers, result.connectionId)).rejects.toBeTruthy();
       await expect(limited.mcp.withGrantContext(bearer(token.access_token), ["notes:read"], async () => "must not run")).rejects.toMatchObject({ code: "insufficient_scope" });
-      const rotated = await refresh(token.refresh_token, { client_id: CLAUDE_CLIENT_ID });
+      if (chatgpt) {
+        expect((await refresh(token.refresh_token, { client_id: id })).status).toBeGreaterThanOrEqual(400);
+        expect((await refresh(token.refresh_token, { client_id: id, ...await assertion("https://wrong.example.test/token") })).status).toBeGreaterThanOrEqual(400);
+        expect(transport.mock.calls.some(([input]) => String(input) === CHATGPT_JWKS_URI)).toBe(true);
+      }
+      const rotated = await refreshClient(token.refresh_token);
       expect(rotated.status).toBe(200);
       const next = await rotated.json() as Tokens;
       expect(next.refresh_token).not.toBe(token.refresh_token);
       await expect(originalAuth.mcp.authorize(bearer(next.access_token))).rejects.toMatchObject({ code: "client_not_approved" });
       const beforeInvalid = transport.mock.calls.length;
-      const invalid = new URLSearchParams({ response_type: "code", redirect_uri: CLAUDE_CALLBACK, scope: issuer.scopes_supported.join(" "),
+      const invalid = new URLSearchParams({ response_type: "code", redirect_uri: redirect, scope: issuer.scopes_supported.join(" "),
         resource: origin + "/api/mcp", code_challenge: challenge, code_challenge_method: "S256", state: randomUUID() });
-      for (const bad of ["https://127.0.0.1/metadata", CLAUDE_CLIENT_ID + "?copy=1", "https://claude.ai.attacker.test/metadata"]) {
+      for (const bad of ["https://127.0.0.1/metadata", id + "?copy=1", "https://chatgpt.com.attacker.test/oauth/client.json"]) {
         invalid.set("client_id", bad);
         const denied = await fetch(origin + "/auth/oauth2/authorize?" + invalid, { headers: owner.headers, redirect: "manual" });
         expect(denied.status).toBeGreaterThanOrEqual(400);
       }
       expect(transport.mock.calls.length).toBe(beforeInvalid);
-      await withMcpProviderContext(db, (tx) => tx.update(mcpClientProfiles).set({ enabled: false }).where(eq(mcpClientProfiles.clientId, CLAUDE_CLIENT_ID)));
+      await withMcpProviderContext(db, (tx) => tx.update(mcpClientProfiles).set({ enabled: false }).where(eq(mcpClientProfiles.clientId, id)));
       await expect(limited.mcp.authorize(bearer(next.access_token))).rejects.toMatchObject({ code: "client_not_approved" });
-      await expect(begin(owner, issuer.scopes_supported, CLAUDE_CLIENT_ID, CLAUDE_CALLBACK)).resolves.toBeTruthy();
-      const [disabled] = await withMcpProviderContext(db, (tx) => tx.select().from(mcpClientProfiles).where(eq(mcpClientProfiles.clientId, CLAUDE_CLIENT_ID)));
+      await expect(begin(owner, issuer.scopes_supported, id, redirect)).resolves.toBeTruthy();
+      const [disabled] = await withMcpProviderContext(db, (tx) => tx.select().from(mcpClientProfiles).where(eq(mcpClientProfiles.clientId, id)));
       expect(disabled.enabled).toBe(false);
-      await withMcpProviderContext(db, (tx) => tx.update(mcpClientProfiles).set({ enabled: true }).where(eq(mcpClientProfiles.clientId, CLAUDE_CLIENT_ID)));
+      await withMcpProviderContext(db, (tx) => tx.update(mcpClientProfiles).set({ enabled: true }).where(eq(mcpClientProfiles.clientId, id)));
+      if (chatgpt) {
+        metadata.jwks_uri = "https://chatgpt.com/unapproved-keys.json";
+        expect((await refreshClient(next.refresh_token)).status).toBeGreaterThanOrEqual(400);
+        expect(transport.mock.calls.some(([input]) => String(input) === metadata.jwks_uri)).toBe(false);
+        await expect(limited.mcp.authorize(bearer(next.access_token))).rejects.toMatchObject({ code: "client_not_approved" });
+        metadata.jwks_uri = CHATGPT_JWKS_URI;
+        await begin(owner, issuer.scopes_supported, id, redirect);
+      }
       metadata.redirect_uris = ["https://attacker.test/callback"];
-      expect((await refresh(next.refresh_token, { client_id: CLAUDE_CLIENT_ID })).status).toBeGreaterThanOrEqual(400);
+      expect((await refreshClient(next.refresh_token)).status).toBeGreaterThanOrEqual(400);
       await expect(limited.mcp.authorize(bearer(next.access_token))).rejects.toMatchObject({ code: "client_not_approved" });
-      metadata.redirect_uris = [CLAUDE_CALLBACK];
-      await begin(owner, issuer.scopes_supported, CLAUDE_CLIENT_ID, CLAUDE_CALLBACK);
+      metadata.redirect_uris = [redirect];
+      await begin(owner, issuer.scopes_supported, id, redirect);
       await limited.mcp.setHouseholdEnabled(owner.headers, owner.householdId, false);
       await expect(limited.mcp.authorize(bearer(next.access_token))).rejects.toBeTruthy();
       await limited.mcp.setHouseholdEnabled(owner.headers, owner.householdId, true);
