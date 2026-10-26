@@ -73,6 +73,31 @@ test("submission draft includes portable source, public listing assets and expli
   }
 });
 
+test("submission listing and README advertise only the selected read scopes", async () => {
+  const root = await mkdtemp(join(tmpdir(), "domi-mcp-package-"));
+  try {
+    const supported = ["shopping:read", "chores:read", "notes:read"];
+    for (let mask = 1; mask < 8; mask++) {
+      const readScopes = supported.filter((_, index) => mask & (1 << index));
+      const output = join(root, String(mask));
+      await prepareSubmission({ origin: "https://hosted.example.test", output, readScopes });
+      const manifest = JSON.parse(await readFile(join(output, "plugin/plugin.json"), "utf8"));
+      const listing = manifest.extensions["com.openai"].interface;
+      const readme = await readFile(join(output, "plugin/README.md"), "utf8");
+      for (const text of [manifest.description, listing.longDescription, readme]) {
+        assert.equal(text.includes("shared household shopping items"), readScopes.includes("shopping:read"));
+        assert.equal(text.includes("shared household chores"), readScopes.includes("chores:read"));
+        assert.equal(text.includes("explicitly selected planning notes"), readScopes.includes("notes:read"));
+      }
+      assert.equal(listing.shortDescription, "Household briefing");
+      assert.ok(listing.defaultPrompt[0].includes("approved"));
+    }
+  } finally {
+    assert.equal(dirname(root), resolve(tmpdir())); assert.match(basename(root), /^domi-mcp-package-/);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("published-identity packages use canonical public origins and default to the no-notes pilot", () => {
   for (const origin of ["https://hosted.example.test", "https://home.example.test"]) {
     const config = pluginConfiguration({ origin, clientMode: "cimd" });

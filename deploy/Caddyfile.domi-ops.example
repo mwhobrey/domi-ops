@@ -4,6 +4,19 @@
 #   docker compose -f docker-compose.prod.yml -f docker-compose.marketing.yml \
 #     -f docker-compose.proxy-external.yml up -d --build
 
+# Explicit aliases also enable automatic TLS for visitors who enter www.
+www.domi-ops.com {
+    redir https://domi-ops.com{uri} 308
+}
+
+www.app.domi-ops.com {
+    redir https://app.domi-ops.com{uri} 308
+}
+
+www.demo.domi-ops.com {
+    redir https://demo.domi-ops.com{uri} 308
+}
+
 domi-ops.com {
     encode gzip zstd
     reverse_proxy domiops-www:3000

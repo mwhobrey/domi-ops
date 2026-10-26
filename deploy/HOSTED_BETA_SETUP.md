@@ -142,6 +142,11 @@ Caddy is **not** a service in `docker-compose.hosted-prod.yml` — same pattern 
 
 Use [`Caddyfile.domi-ops.example`](./Caddyfile.domi-ops.example) **with one change**: delete the `/s3/*` → `minio:9000` proxy block in the `app.domi-ops.com` and `demo.domi-ops.com` stanzas. There's no `minio` container in this stack — Drive files are served directly from DO Spaces via `S3_PUBLIC_URL`, no proxy path needed.
 
+Keep the three explicit `www` redirect blocks and configure their CNAME records
+as listed in [DNS_CUTOVER.md](../docs/marketing/DNS_CUTOVER.md). Existing installs
+must add those blocks to their untracked production `Caddyfile`; updating the
+example or publishing application images does not update the live proxy.
+
 ```bash
 docker run -d --name caddy --restart unless-stopped \
   --network domi_ops_proxy \

@@ -16,12 +16,12 @@ export async function prepareSubmission({ origin, output, readScopes }) {
   await copyFile(join(root, "apps/web/public/icons/icon-512.png"), join(pluginPath, "assets/icon.png"));
   const plugin = JSON.parse(await readFile(join(pluginPath, "plugin.json"), "utf8"));
   plugin.extensions = { "com.openai": { interface: {
-    displayName: "Domi Ops", shortDescription: "Household chores and shopping",
-    longDescription: "Read persisted household shopping items, chores and planning notes you explicitly choose to share. Each adult signs in to Domi Ops and approves their own access. Ask for a household briefing with source links. Read-only: no saved changes or direct Calendar, School, Health, Drive or attachment access. Standard integration is included in hosted pricing and free for self-hosting; a separate ChatGPT account is required.",
+    displayName: "Domi Ops", shortDescription: "Household briefing",
+    longDescription: `${plugin.description} Read persisted records with source links. Each adult signs in to Domi Ops and approves their own access. No saved changes or direct Calendar, School, Health, Drive or attachment access. Standard integration is included in hosted pricing and free for self-hosting; a separate ChatGPT account is required.`,
     developerName: "Domi Ops", category: "Productivity", logo: "./assets/icon.png", composerIcon: "./assets/icon.png",
     websiteURL: "https://domi-ops.com", supportURL: "https://github.com/mwhobrey/domi-ops/issues/new/choose",
     privacyPolicyURL: "https://domi-ops.com/privacy", termsOfServiceURL: "https://domi-ops.com/terms",
-    defaultPrompt: ["Give me a household chores and shopping briefing."]
+    defaultPrompt: ["Give me a household briefing using only my approved Domi Ops read permissions."]
   } } };
   await writeFile(join(pluginPath, "plugin.json"), JSON.stringify(plugin, null, 2) + "\n");
   await copyFile(join(root, "docs/MCP_CHATGPT_SUBMISSION.md"), join(output, "submission-guide.md"));
