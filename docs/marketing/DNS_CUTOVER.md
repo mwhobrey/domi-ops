@@ -64,7 +64,7 @@ Confirm certificate issuance in the logs and test all three aliases:
 
 ```bash
 for host in www.domi-ops.com www.app.domi-ops.com www.demo.domi-ops.com; do
-  curl -sSI "http://$host/pricing?source=www-check"
+  curl -sSIL --max-redirs 5 "http://$host/pricing?source=www-check"
   curl -sSI "https://$host/pricing?source=www-check"
 done
 ```
