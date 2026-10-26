@@ -10,11 +10,21 @@ import { writeReviewMaterials } from "../mcp-review/materials.mjs";
 test("review cases stay within enabled tools and keep real acceptance pending", async () => {
   const root = await mkdtemp(join(tmpdir(), "domi-mcp-package-"));
   try {
-    for (const scopes of [["chores:read"], ["notes:read"], ["shopping:read", "chores:read", "notes:read"]]) {
+    const supported = ["shopping:read", "chores:read", "notes:read"];
+    for (let mask = 1; mask < 8; mask++) {
+      const scopes = supported.filter((_, index) => mask & (1 << index));
       const plan = await writeReviewMaterials({ output: root, scopes, packageVersion: "0.1.1" });
       assert.equal(plan.readyToSubmit, false);
       assert.equal(plan.review.test_cases.positive.length, 5);
       assert.equal(plan.review.test_cases.negative.length, 3);
+      const pagination = plan.review.test_cases.positive.filter(c => c.description.startsWith("Bound pagination of "));
+      assert.equal(pagination.length, 1);
+      assert.ok(pagination[0].prompt.includes("two pages of 25"));
+      assert.ok(pagination[0].expected_behavior.includes("61 accessible matching fictional records"));
+      const emptyCase = plan.review.test_cases.positive.some(c => c.description.startsWith("Distinguish an empty "));
+      assert.equal(emptyCase, scopes.length === 1);
+      assert.equal(plan.fixtureRequirements.some(f => f.includes("For the empty case")), emptyCase);
+      assert.ok(plan.fixtureRequirements.some(f => f.includes("61 matching records")));
       const tools = plan.review.test_cases.positive.map(c => c.tools_triggered).join(",");
       assert.equal(tools.includes("list_shopping_items"), scopes.includes("shopping:read"));
       assert.equal(tools.includes("list_chores"), scopes.includes("chores:read"));

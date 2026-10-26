@@ -1,7 +1,7 @@
 # Domi Ops household briefing
 
-Read your household's persisted chores, shopping items and planning notes you
-explicitly select. Ask Claude for a household briefing or a shopping-and-chores
+Read persisted shared household chores and shopping items.
+Ask Claude for a household briefing or a shopping-and-chores
 check-in. The shared briefing skill explains how to retrieve bounded results,
 report missing coverage and link back to your records. It cannot save changes.
 
@@ -19,9 +19,9 @@ self-hosting; self-hosters generate a package for their own public HTTPS origin.
 
 The plugin declares one remote HTTPS MCP connector and the household briefing
 skill. It runs no local commands, hooks or background programs. Approved reads
-send household labels/timezone, chores, shopping items and selected planning
-notes to Claude. It has no direct Calendar, School, Health, Drive or attachment
-access. Do not select copied Google-derived, health, child or excluded content.
+send household labels/timezone, chores and shopping items to Claude. This launch
+scope has no planning-note, Calendar, School, Health, Drive or attachment access.
+Do not share copied Google-derived, health, child or excluded content.
 Review Claude's privacy settings and terms before consenting. Disconnect in
 Domi Ops AI Connections to stop future reads; this cannot erase provider copies.
 

@@ -25,6 +25,12 @@ test("submission preparation retains release gates and refuses to replace review
     assert.equal(draft.readyToSubmit, false);
     assert.equal(draft.status, "draft-not-submitted");
     assert.equal(draft.serverUrl, options.origin + "/api/mcp");
+    assert.doesNotMatch(draft.oneLiner + " " + draft.description, /notes/i);
+    const manifest = JSON.parse(await readFile(join(output, "plugin/.claude-plugin/plugin.json"), "utf8"));
+    assert.doesNotMatch(manifest.description, /notes/i);
+    const readme = await readFile(join(output, "plugin/README.md"), "utf8");
+    assert.ok(readme.includes("shared household chores and shopping items"));
+    assert.ok(readme.includes("no planning-note"));
     const review = JSON.parse(await readFile(join(output, "review-plan.draft.json"), "utf8"));
     assert.deepEqual(review.scopes, ["shopping:read", "chores:read", "offline_access"]);
     assert.equal(review.execution.status, "not-run");

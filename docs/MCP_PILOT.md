@@ -32,7 +32,7 @@ content out of this public document.
    Google-derived data, Health and reviewed writes remain separate approvals.
 
 Before starting, agree a finite UTC start/end and household timezone, one named
-operator and participant, the one client, approved record scope and stop contact.
+operator and participant, each approved client, approved record scope and stop contact.
 Do not begin an open-ended pilot with an end date to be decided later. Let the
 participant choose whether to return for another briefing; reminders or background
 jobs are not part of this integration. At the end disconnect and verify denial,
