@@ -9,7 +9,7 @@ export function pluginConfiguration({ origin, clientId, authMethod = "none", reg
     // ChatGPT URLs use plugin_asdk_app_..., but .app.json requires the server's asdk_app_... ID.
     const appId = registeredAppId.replace(/^plugin_/, "");
     return {
-      plugin: { $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json", name: "domi-ops-household", version: "0.1.0", description: "Read-only household chores, shopping and explicitly selected planning notes.", license: "MIT", extensions: { "com.openai": { apps: "./.app.json" } } },
+      plugin: { $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json", name: "domi-ops-household", version: "0.1.1", description: "Read-only household chores, shopping and explicitly selected planning notes.", license: "MIT", extensions: { "com.openai": { apps: "./.app.json" } } },
       apps: { apps: { "domi-ops": { id: appId, required: true } } },
     };
   }
@@ -24,7 +24,7 @@ export function pluginConfiguration({ origin, clientId, authMethod = "none", reg
   } else if (readScopes !== undefined || typeof clientId !== "string" || !/^[A-Za-z0-9._:-]{1,256}$/.test(clientId)) throw new Error("Registered public client ID required");
   if (!["none", "client_secret_basic", "client_secret_post"].includes(authMethod)) throw new Error("Unsupported token authentication method");
   return {
-    plugin: { $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json", name: "domi-ops-household", version: "0.1.0", description: "Read-only household chores, shopping and explicitly selected planning notes.", license: "MIT" },
+    plugin: { $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json", name: "domi-ops-household", version: "0.1.1", description: "Read-only household chores, shopping and explicitly selected planning notes.", license: "MIT" },
     mcp: {
       $schema: "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
       mcpServers: {
@@ -36,6 +36,7 @@ export function pluginConfiguration({ origin, clientId, authMethod = "none", reg
                 type: "oauth",
                 client: clientMode === "cimd" ? { mode: "cimd" } : { mode: "provided", clientId, tokenEndpointAuthMethod: authMethod },
                 resource: url.origin + "/api/mcp",
+                ...(clientMode === "cimd" ? { baseScopes: ["offline_access"] } : {}),
                 defaultScopes: clientMode === "cimd" ? [...(readScopes ?? ["shopping:read", "chores:read"]), "offline_access"] : ["shopping:read", "chores:read", "notes:read", "offline_access"],
               },
             },

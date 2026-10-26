@@ -43,9 +43,11 @@ client. Existing manually approved clients keep their own policy. A disabled
 local profile is never re-enabled by discovery. Global/household disconnect
 controls remain available; household disable revokes grants permanently.
 
-The new flow has local regression coverage; actual Claude acceptance on a
-deployed build and the real household pilot remain release gates. The historical
-receipt below describes the earlier manual-client fictional-data evaluation.
+The owner-authorized self-host pilot verified published-identity sign-in and the
+installed shared briefing skill on reviewed build 2085226 with shopping/chores
+only. Real refresh, final revocation, usefulness and hosted submission acceptance
+remain separate checks. The historical receipt below describes the earlier
+manual-client fictional-data evaluation. See [review preparation](MCP_SUBMISSION_REVIEW.md).
 
 ## Connection contract
 

@@ -37,7 +37,8 @@
 
 ## Supplementary docs (outside runbook)
 
-- `docs/MCP_SETUP.md` / `docs/MCP_PILOT.md` — WHO-478 hosted/self-host setup, provisioning gates, disconnect/rollback and bounded pilot record; real pilot pending
+- `docs/MCP_SETUP.md` / `docs/MCP_PILOT.md` — WHO-478 hosted/self-host setup, provisioning gates, disconnect/rollback and bounded self-host pilot; hosted acceptance pending
+- `docs/MCP_SUBMISSION_REVIEW.md` — fictional reviewer fixtures, generated five/three case plan, recording and release handoff
 - `docs/MCP_CLAUDE_SUBMISSION.md` — Claude directory draft, review-account requirements and remaining release gates
 - `docs/MCP_CHATGPT_SUBMISSION.md` — OpenAI portable draft, fictional review account and remaining paired-test/submission gates
 - `README.md` — quick start, import, production pointers

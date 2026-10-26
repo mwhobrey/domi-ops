@@ -46,8 +46,7 @@ export function AiConsent() {
       });
       const result = await apiClient.post<{ redirectUri: string }>("/api/mcp-auth/consents/decide", { pendingId: pending.pendingId, oauthQuery: query, accept: true });
       window.location.assign(result.redirectUri);
-    } catch (e) { setError(connectionError(e)); }
-    finally { setBusy(false); }
+    } catch (e) { setError(connectionError(e)); setBusy(false); }
   }
   async function deny() {
     if (busy) return;
@@ -55,8 +54,7 @@ export function AiConsent() {
     try {
       const result = await apiClient.post<{ redirectUri: string }>("/api/mcp-auth/consents/reject", { oauthQuery: query });
       window.location.assign(result.redirectUri);
-    } catch (e) { setError(connectionError(e)); }
-    finally { setBusy(false); }
+    } catch (e) { setError(connectionError(e)); setBusy(false); }
   }
   return <div className="mx-auto max-w-2xl space-y-4">
     {loading && <div role="status" aria-label="Loading connection"><ContentSkeleton /></div>}
@@ -87,7 +85,8 @@ export function AiConsent() {
           <Button type="submit" disabled={busy || attempted || !adult || !privacy || (preview.settingsReviewRequired && !settingsReviewed)}>Allow connection</Button>
           <Button type="button" variant="secondary" disabled={busy} onClick={() => void deny()}>Deny connection</Button>
         </div>
-        {attempted && !busy && <p role="status" className="text-sm">For your security, an interrupted approval cannot be repeated. Restart from your assistant.</p>}
+        {busy && <p role="status" className="text-sm">Completing your choice and returning to your assistant…</p>}
+        {attempted && !busy && error && <p role="status" className="text-sm">For your security, an interrupted approval cannot be repeated. Restart from your assistant.</p>}
       </form>
     </CardBody></Card>}
     <Link href="/settings/ai-connections" className="inline-block py-3 text-sm underline">Back to AI connections</Link>

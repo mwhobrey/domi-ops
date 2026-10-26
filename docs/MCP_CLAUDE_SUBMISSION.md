@@ -1,10 +1,11 @@
 # Claude connector submission preparation (WHO-478)
 
 The directory package is prepared locally. It is **not submitted or approved**.
-The new registration-free onboarding still needs actual Claude acceptance on the
-reviewed, deployed build. Earlier live synthetic checks used a manual public
-client and cannot establish that new path. No household record belongs in a
-public package or reviewer credentials.
+Published-identity onboarding and the installed briefing passed in the approved
+self-host pilot. The stable hosted submission endpoint still needs its own
+fictional reviewer acceptance; earlier manual-client synthetic results and the
+household pilot cannot establish it. No household record belongs in a public
+package or reviewer credentials.
 
 ## Selected approach
 
@@ -34,7 +35,10 @@ claude plugin validate .qa/claude-submission/NEW-DRAFT/plugin
 
 The exclusive output directory contains `listing.draft.json`, the existing
 512-pixel product icon, this guide and the generated briefing plugin with its
-MIT license. It contains no credential. `readyToSubmit` intentionally stays false
+MIT license, bundled icon and explicit directory links. It also contains an unrun
+`review-plan.draft.json`, `recording-outline.md` and `release-notes.draft.md`;
+see the shared [review guide](MCP_SUBMISSION_REVIEW.md). It contains no credential.
+`readyToSubmit` intentionally stays false
 until the remaining receipts below exist. Generation does not contact Claude,
 the deployment, or the directory. Do not change the flag merely to pass review.
 
@@ -45,19 +49,20 @@ the portal; the first submission establishes listing ownership.
 
 ## Commit the reviewed plugin source for the portal
 
-The `.qa` output is an ignored private review artifact, not a GitHub source the
-portal can read. After the endpoint and package pass the launch checks below,
-generate only the reviewed plugin into the intended tracked directory:
+The source candidate is prepared at `integrations/claude/domi-ops-household`.
+The portal can read it only after its reviewed release PR is merged and pushed.
+The `.qa` output is an ignored private review artifact, not a portal source.
+To prepare an update without overwriting the existing source:
 
 ```powershell
-mise exec -- node scripts/mcp-claude/package.mjs https://app.domi-ops.com integrations/claude/domi-ops-household
-claude plugin validate integrations/claude/domi-ops-household
-git add -- integrations/claude/domi-ops-household
+mise exec -- node scripts/mcp-claude/package.mjs https://app.domi-ops.com .qa/NEW-CLAUDE-SOURCE
+claude plugin validate .qa/NEW-CLAUDE-SOURCE
 ```
 
-This is a release handoff, not an instruction to publish the current draft. On
-an authorized release branch, review the generated README, manifest, endpoint,
-skill and license; commit and push them through the normal PR workflow. Merge
+Compare the fresh output with the prepared source and apply only the intended
+changes. This is a release handoff, not an instruction to publish the draft. On
+an authorized release branch, review the README, manifest, endpoint, icon, skill
+and license; commit and push them through the normal PR workflow. Merge
 that reviewed PR before selecting `main` as the portal source. The generator
 refuses an existing directory: review updates in a fresh staging directory and
 apply only the intended file changes instead of deleting existing source. Never
@@ -70,8 +75,8 @@ Use these fields for the **Plugin bundle** Source step after that handoff:
 - Branch or tag: `main` after the source PR merges, or an explicitly reviewed
   release tag containing that directory.
 
-That tracked plugin directory is a future release artifact; it is not present
-merely because the local draft validates. The portal reads the folder containing
+The prepared directory is a release candidate, not proof of portal availability
+or live readiness. The portal reads the folder containing
 `.claude-plugin/plugin.json`, including its substantive README and license. Run
 the portal's **Validate** and fix every blocking finding before submission; CLI
 validation checks syntax/schema only. A push changes the source commit, so
@@ -122,4 +127,5 @@ is promised. This checklist grants no deployment/publication authorization.
 - [Authentication and per-customer URLs](https://claude.com/docs/connectors/building/authentication)
 - [Directory/custom connectors and install links](https://claude.com/docs/connectors/building/directory-vs-custom)
 - [Plugin source and submission](https://claude.com/docs/plugins/submit) (checked 2026-10-24)
+- [Directory manifest fields](https://code.claude.com/docs/en/plugins-reference) (checked 2026-10-26)
 - [Portal validation requirements](https://claude.com/docs/plugins/pre-submission-checklist) (checked 2026-10-24)

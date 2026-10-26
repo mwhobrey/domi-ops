@@ -1,6 +1,6 @@
 export const capabilityLabels: Record<string, string> = {
-  "shopping:read": "Read shopping lists and items",
-  "chores:read": "Read chores and assignments",
+  "shopping:read": "Read shared household shopping lists and items",
+  "chores:read": "Read shared household chores and assignments",
   "notes:read": "Read only the notes you select",
   offline_access: "Keep access between visits (until expiry or disconnect)",
 };

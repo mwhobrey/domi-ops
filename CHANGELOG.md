@@ -23,6 +23,11 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Fixed
 
+- AI consent stays locked while returning to an assistant after approval or
+  denial. Successful approval no longer flashes the interrupted-approval warning;
+  failed approvals still require a fresh flow. Read labels explicitly identify
+  shared household shopping and chores.
+
 - MCP batch request bodies are rejected before dispatch so one HTTP admission
   cannot run multiple tool calls under a single rate charge/concurrency lease.
   Both legacy and modern clients retain single-message operation.
@@ -33,6 +38,12 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
   existing package.
 
 ### Added
+
+- Assistant submission drafts include scope-matched fictional review cases,
+  recording outlines and draft release notes. Claude packages bundle their icon
+  and listing links, with a prepared GitHub plugin source folder. ChatGPT CIMD
+  packages always request refresh access as a base scope. Publication still
+  requires live reviewer acceptance and the provider's approval process.
 
 - Hosted/self-hosted assistant setup and bounded pilot guidance, with explicit
   real-client provisioning gates, consent, disconnect/rollback and a private

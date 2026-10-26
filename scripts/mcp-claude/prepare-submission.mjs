@@ -2,20 +2,24 @@ import { copyFile, mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { pluginConfiguration, writePlugin } from "./package.mjs";
+import { writeReviewMaterials } from "../mcp-review/materials.mjs";
 
 export async function prepareSubmission({ origin, output }) {
-  const { mcp } = pluginConfiguration(origin);
+  const { mcp, plugin } = pluginConfiguration(origin);
   const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
   await mkdir(dirname(output), { recursive: true });
   await mkdir(output, { recursive: false });
   await writePlugin({ origin, output: join(output, "plugin") });
   await copyFile(join(root, "apps/web/public/icons/icon-512.png"), join(output, "icon.png"));
   await copyFile(join(root, "docs/MCP_CLAUDE_SUBMISSION.md"), join(output, "submission-guide.md"));
+  const scopes = ["shopping:read", "chores:read", "offline_access"];
+  await writeReviewMaterials({ output, scopes, packageVersion: plugin.version });
   const draft = {
     status: "draft-not-submitted", readyToSubmit: false,
+    scopes,
     name: "Domi Ops", suggestedSlug: "domi-ops", serverUrl: mcp.mcpServers["domi-ops"].url,
-    oneLiner: "Read household chores, shopping lists and planning notes you explicitly choose to share.",
-    description: "Bring your household's persisted shopping items, chores and selected planning notes into Claude. Each adult signs in to Domi Ops and approves their own access. Ask for a household briefing or shopping check-in with links back to your records. Read-only: no saved changes, Calendar, School, Health, Drive or attachments. Standard integration is included in the hosted plan and free for self-hosting; a separate Claude account is required. Disconnect future access in Domi Ops AI connections.",
+    oneLiner: "Read shared household chores and shopping lists.",
+    description: "Bring your household's persisted shared shopping items and chores into Claude. Each adult signs in to Domi Ops and approves their own access. Ask for a household briefing or shopping check-in with links back to your records. Read-only: no saved changes, Calendar, School, Health, Drive or attachments. Standard integration is included in the hosted plan and free for self-hosting; a separate Claude account is required. Disconnect future access in Domi Ops AI connections.",
     company: { name: "Domi Ops", website: "https://domi-ops.com" },
     documentationUrl: "https://github.com/mwhobrey/domi-ops/blob/main/docs/MCP_CLAUDE.md",
     privacyPolicyUrl: "https://domi-ops.com/privacy",

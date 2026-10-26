@@ -60,9 +60,17 @@ notes are never added by default. See [submission preparation](MCP_CHATGPT_SUBMI
 The existing manual `provided` and registered-app packaging modes remain available
 for historical fixtures. Do not reuse their old client/tunnel settings for WHome.
 
-Registration-free local protocol coverage does not establish live ChatGPT
-acceptance. The owner requested that both new provider flows be tested together
-after review/deployment. No new household grant or directory upload is implied.
+The approved self-host pilot verified published-identity sign-in plus actual
+context/shopping/chore reads on reviewed build 2085226. The installed Work
+briefing response hit provider model capacity; that is neither an OAuth failure
+nor a completed skill acceptance. Refresh, final revocation, usefulness and hosted
+reviewer acceptance remain separate checks. No directory submission is implied.
+
+For private web testing, first create/connect the custom MCP server, then bundle
+its actual registered app ID with `--registered` and the shared skill. A raw
+remote-MCP ZIP imported privately may offer desktop use only. That private app
+mapping is not accepted for public submission: retain the remote `mcp.json` CIMD
+draft for the public portal. See [review preparation](MCP_SUBMISSION_REVIEW.md).
 
 ## Historical private evaluation requirements (WHO-475)
 

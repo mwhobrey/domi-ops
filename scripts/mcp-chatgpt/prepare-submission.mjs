@@ -2,6 +2,7 @@ import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { pluginConfiguration, writePlugin } from "./package.mjs";
+import { writeReviewMaterials } from "../mcp-review/materials.mjs";
 
 export async function prepareSubmission({ origin, output, readScopes }) {
   const options = { origin, clientMode: "cimd", readScopes };
@@ -24,6 +25,7 @@ export async function prepareSubmission({ origin, output, readScopes }) {
   } } };
   await writeFile(join(pluginPath, "plugin.json"), JSON.stringify(plugin, null, 2) + "\n");
   await copyFile(join(root, "docs/MCP_CHATGPT_SUBMISSION.md"), join(output, "submission-guide.md"));
+  await writeReviewMaterials({ output, scopes: config.mcp.mcpServers["domi-ops"].extensions["com.openai"].auth.defaultScopes, packageVersion: config.plugin.version });
   const draft = { status: "draft-not-uploaded", readyToSubmit: false, serverUrl: config.mcp.mcpServers["domi-ops"].url,
     scopes: config.mcp.mcpServers["domi-ops"].extensions["com.openai"].auth.defaultScopes,
     requiredBeforeSubmit: [

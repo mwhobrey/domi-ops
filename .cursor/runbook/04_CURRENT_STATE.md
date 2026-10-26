@@ -1,5 +1,22 @@
 # Current state
 
+## Consent handoff and submission preparation (WHO-478)
+
+- Approval/denial keeps the consent UI busy until navigation; only failures clear
+  that state. This prevents the interrupted-approval warning from flashing on a
+  successful redirect and keeps both actions locked during handoff. Failed
+  approval remains one-use. Scope labels explicitly identify shared household reads.
+- Claude v0.1.1 packages include their square icon and directory links; source is
+  prepared under `integrations/claude/domi-ops-household`. Both generators include
+  unrun scope-matched reviewer cases, a recording outline and draft release notes.
+  ChatGPT CIMD packages retain refresh as a base scope; private `.app.json` web
+  test packages remain separate from the public remote-MCP submission ZIP.
+- The approved self-host pilot has published-identity connections for both
+  providers. Claude's installed shared skill passed a bounded live briefing;
+  ChatGPT context/domain reads passed, while the installed Work skill response
+  hit provider model capacity. No completed hosted acceptance, usefulness result
+  or public listing is claimed. See `docs/MCP_SUBMISSION_REVIEW.md` for remaining gates.
+
 ## ChatGPT published-identity onboarding (WHO-478)
 
 - `MCP_CHATGPT_ENABLED` defaults off. The shared, bounded CIMD resolver recognizes
@@ -11,8 +28,9 @@
   package generator's `--cimd` mode requires public HTTPS, omits client credentials,
   and defaults to shopping/chores/refresh; read scopes can be explicitly narrowed.
 - RFC9207 issuer metadata and success/denial callbacks are regression checked.
-  New ChatGPT onboarding still needs reviewed deployment and actual acceptance.
-  Test it alongside Claude per owner direction; do not infer success from fixtures.
+  Self-host onboarding/context/domain reads passed on reviewed build 2085226;
+  installed Work skill response and hosted acceptance remain pending. Do not
+  infer broader readiness from fixtures or the ongoing household pilot.
 
 ## Claude onboarding and directory preparation (WHO-478)
 
@@ -26,9 +44,10 @@
   disabled profile. Hosted and self-host use the same consent and isolation path.
 - AI connections offers a canonical-origin Claude install link after household
   enablement. No client-ID entry, session extraction or broker is needed.
-- Directory preparation is in `docs/MCP_CLAUDE_SUBMISSION.md`. New onboarding has
-  not been deployed or accepted live; listing, real pilot and hosted rollout remain
-  separate gates. Review the exact release receipt before deployment/submission.
+- Directory preparation is in `docs/MCP_CLAUDE_SUBMISSION.md`. Self-host onboarding
+  and installed-skill acceptance passed on reviewed build 2085226; the bounded
+  pilot is running. Listing and hosted rollout remain separate gates. Review
+  the exact release receipt before deployment/submission.
   Generated plugins include a public README; the ignored `.qa` draft must pass a
   reviewed GitHub source handoff before the plugin portal can validate it.
 
