@@ -1,8 +1,10 @@
 # OpenAI plugin submission preparation (WHO-478)
 
 Materials are local drafts, not uploaded, submitted, approved or deployed.
-Earlier WHO-475 synthetic acceptance used manual registration. Test the new
-published-identity flow and Claude together before claiming current live readiness.
+The approved self-host pilot verified published-identity connection and actual
+reads; the installed Work briefing response hit model capacity. Hosted reviewer
+acceptance and completion of the pilot remain release gates. Earlier WHO-475
+manual-registration synthetic acceptance is separate evidence.
 
 ## Reproducible draft
 
@@ -10,10 +12,14 @@ published-identity flow and Claude together before claiming current live readine
 mise exec -- node scripts/mcp-chatgpt/prepare-submission.mjs https://app.domi-ops.com .qa/NEW-OPENAI-DRAFT
 ```
 
-The exclusive directory contains `listing.draft.json`, this guide and `plugin/`.
+The exclusive directory contains `listing.draft.json`, this guide and `plugin/`,
+plus unrun `review-plan.draft.json`, `recording-outline.md` and
+`release-notes.draft.md`. The [shared review guide](MCP_SUBMISSION_REVIEW.md)
+describes fictional fixtures and recording execution.
 The portable plugin contains root `plugin.json`, `mcp.json`, README, icon and the
 shared skill/MIT license. Its OAuth client declares `mode: cimd` without a client
-ID or secret, with shopping/chores/refresh by default. The generator performs no
+ID or secret, with shopping/chores/refresh by default. Refresh is also a base
+scope so tool-specific scope selection cannot drop it. The generator performs no
 network request. `readyToSubmit` stays false until actual launch receipts exist.
 
 After reviewing the source and endpoint, ZIP the **contents** of `plugin/` so

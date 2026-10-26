@@ -1,8 +1,12 @@
 # Bounded assistant pilot (WHO-478)
 
-Status: prepared, not run. No real-household onboarding, repeat use, usefulness
-score, support cost or infrastructure cost has been measured by this issue.
-Synthetic results in the three provider guides remain separate evidence.
+Status: an approved self-hosted read-only pilot is running. Published-identity
+onboarding succeeded for Claude and ChatGPT; Claude's installed briefing passed,
+and ChatGPT context/domain reads passed. ChatGPT's installed Work briefing response
+hit provider model capacity. Repeat use, usefulness, support/infrastructure cost,
+hosted acceptance and a final go/no-go remain pending. Synthetic results in the
+provider guides remain separate evidence. Keep private receipts and household
+content out of this public document.
 
 ## Order and entry gates
 
@@ -13,14 +17,14 @@ Synthetic results in the three provider guides remain separate evidence.
 2. Exact account/profile acceptance and privacy review; reviewed real-client
    provisioning procedure; target backup/recovery plan; explicit deployment
    authorization. See [setup](MCP_SETUP.md). Unresolved gates keep real access off.
-3. Owner's self-hosted household, one consenting adult and one approved client
-   first. The owner prefers Gemini and approved risk disclosure plus informed
-   opt-in instead of a provider ban. Gemini is the proposed first pilot surface;
-   actual member consent to the selected account/data scope is still required.
+3. Owner's self-hosted household, one consenting adult and approved Claude and
+   ChatGPT read-only connections. Gemini is deferred while its onboarding/listing
+   path is evaluated; informed opt-in remains the policy rather than a provider
+   ban. Each provider needs its own member consent to the account/data scope.
    Confirm current provider handling and show the versioned disclosure before data.
    Start with shopping/chores and no notes. Any later note is deliberately
-   selected and checked for excluded content. This is a proposed cohort, not
-   evidence that consent or deployment already happened.
+   selected and checked for excluded content. Keep the actual consent, build,
+   start/end and verification receipts in protected operator storage.
 4. Review the self-host receipt before a separate hosted pilot. Hosted needs its
    own opted-in household, restricted-role target, canonical issuer/resource and
    entitlement checks. Do not infer hosted acceptance from the self-host pilot.
@@ -81,8 +85,9 @@ negative/isolation cases on synthetic tenants, never another customer's records.
 
 ## Decision record
 
-Current decision: **hold real-data rollout pending entry gates**. No real pilot
-results exist yet. A synthetic pass does not justify reviewed writes or expansion.
+Current decision: **run only the explicitly approved bounded self-host pilot**.
+Hold broader rollout, hosted enablement and reviewed writes pending their gates
+and the pilot decision. Initial connectivity is not a usefulness or expansion result.
 For each completed target, record observed value, repeat opportunity/use, support
 burden, attributable cost, limitations and the owner's dated decision: stop,
 extend the same bounded read-only pilot, or propose a separately authorized next

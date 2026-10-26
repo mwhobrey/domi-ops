@@ -1,0 +1,14 @@
+{
+  "name": "domi-ops-household",
+  "version": "0.1.1",
+  "description": "Read-only household chores, shopping and explicitly selected planning notes.",
+  "author": {
+    "name": "Domi Ops"
+  },
+  "license": "MIT",
+  "icon": "./assets/icon.png",
+  "documentationUrl": "https://github.com/mwhobrey/domi-ops/blob/main/docs/MCP_CLAUDE.md",
+  "supportUrl": "https://github.com/mwhobrey/domi-ops/issues/new/choose",
+  "privacyPolicyUrl": "https://domi-ops.com/privacy",
+  "termsOfServiceUrl": "https://domi-ops.com/terms"
+}

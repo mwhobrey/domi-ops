@@ -5,6 +5,28 @@ import { tmpdir } from "node:os";
 import { join, dirname, basename, resolve } from "node:path";
 import { pluginConfiguration, writePlugin } from "./package.mjs";
 import { prepareSubmission } from "./prepare-submission.mjs";
+import { writeReviewMaterials } from "../mcp-review/materials.mjs";
+
+test("review cases stay within enabled tools and keep real acceptance pending", async () => {
+  const root = await mkdtemp(join(tmpdir(), "domi-mcp-package-"));
+  try {
+    for (const scopes of [["chores:read"], ["notes:read"], ["shopping:read", "chores:read", "notes:read"]]) {
+      const plan = await writeReviewMaterials({ output: root, scopes, packageVersion: "0.1.1" });
+      assert.equal(plan.readyToSubmit, false);
+      assert.equal(plan.review.test_cases.positive.length, 5);
+      assert.equal(plan.review.test_cases.negative.length, 3);
+      const tools = plan.review.test_cases.positive.map(c => c.tools_triggered).join(",");
+      assert.equal(tools.includes("list_shopping_items"), scopes.includes("shopping:read"));
+      assert.equal(tools.includes("list_chores"), scopes.includes("chores:read"));
+      assert.equal(tools.includes("get_selected_note"), scopes.includes("notes:read"));
+      assert.deepEqual(plan.execution.results, []);
+    }
+    await assert.rejects(writeReviewMaterials({ output: root, scopes: ["offline_access"] }));
+  } finally {
+    assert.equal(dirname(root), resolve(tmpdir())); assert.match(basename(root), /^domi-mcp-package-/);
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 test("submission draft includes portable source, public listing assets and explicit launch gates", async () => {
   const root = await mkdtemp(join(tmpdir(), "domi-mcp-package-")), output = join(root, "draft");
@@ -12,6 +34,15 @@ test("submission draft includes portable source, public listing assets and expli
     const draft = await prepareSubmission({ origin: "https://hosted.example.test", output });
     assert.equal(draft.readyToSubmit, false);
     assert.equal(draft.status, "draft-not-uploaded");
+    const review = JSON.parse(await readFile(join(output, "review-plan.draft.json"), "utf8"));
+    assert.equal(review.execution.status, "not-run");
+    assert.equal(review.packageVersion, "0.1.1");
+    assert.equal(review.recording.url, null);
+    assert.equal(review.review.test_cases.positive.length, 5);
+    assert.equal(review.review.test_cases.negative.length, 3);
+    assert.ok(review.review.test_cases.positive.every(c => c.prompt && c.tools_triggered && c.expected_behavior));
+    assert.equal(JSON.stringify(review.review.test_cases.positive).includes("get_selected_note"), false);
+    assert.ok((await readFile(join(output, "recording-outline.md"), "utf8")).includes("not a recording"));
     assert.deepEqual(draft.scopes, ["shopping:read", "chores:read", "offline_access"]);
     const manifest = JSON.parse(await readFile(join(output, "plugin/plugin.json"), "utf8"));
     const listing = manifest.extensions["com.openai"].interface;
@@ -39,6 +70,7 @@ test("published-identity packages use canonical public origins and default to th
     assert.deepEqual(auth.client, { mode: "cimd" });
     assert.equal(auth.resource, origin + "/api/mcp");
     assert.deepEqual(auth.defaultScopes, ["shopping:read", "chores:read", "offline_access"]);
+    assert.deepEqual(auth.baseScopes, ["offline_access"]);
     assert.equal(/clientSecret|clientId|Authorization|apiKey/.test(JSON.stringify(config)), false);
     assert.deepEqual(pluginConfiguration({ origin, clientMode: "cimd", readScopes: ["chores:read"] }).mcp.mcpServers["domi-ops"].extensions["com.openai"].auth.defaultScopes, ["chores:read", "offline_access"]);
   }
