@@ -46,7 +46,7 @@ test("submission draft includes portable source, public listing assets and expli
     assert.equal(draft.status, "draft-not-uploaded");
     const review = JSON.parse(await readFile(join(output, "review-plan.draft.json"), "utf8"));
     assert.equal(review.execution.status, "not-run");
-    assert.equal(review.packageVersion, "0.1.1");
+    assert.equal(review.packageVersion, "0.1.2");
     assert.equal(review.recording.url, null);
     assert.equal(review.review.test_cases.positive.length, 5);
     assert.equal(review.review.test_cases.negative.length, 3);

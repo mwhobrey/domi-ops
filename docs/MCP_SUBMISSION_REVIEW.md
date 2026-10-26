@@ -4,6 +4,62 @@ Prepare both providers from the same reviewed source and shared skill. Generated
 materials are drafts; they do not upload, create an account, grant access or mark
 acceptance as passed. Hosted inclusion and free self-hosting are unchanged.
 
+## Readiness checkpoint: 2026-10-26
+
+The approved hosted rollout to reviewed build `68cf32c` passed live discovery,
+role/migration, provider-metadata, denial and public privacy checks. A separate
+persistent fictional reviewer household is provisioned from the existing demo's
+shopping/chore fixtures, with pagination, shared assignment, date and completion
+coverage. Fresh password sign-in, membership, manual core entitlement and RLS
+isolation passed. Credentials remain private; the public demo and its reset were
+preserved. No provider grant was created by provisioning.
+
+The fictional account is now connected in both Claude and ChatGPT using their
+published identities, without manually registering a customer client. Both use
+shopping/chores/refresh only. The five positive and three negative prompts ran
+in each provider's actual web UI. Context, shopping, chores, bounded pagination
+and the three refusal cases behaved as expected in the UI. This is observational
+evidence; the fresh backend audit confirms the expected reviewer fixture counts,
+two active scoped grants and only protocol/context/shopping/chore access events.
+
+Claude's installed briefing also exposed a response-quality finding: it estimated
+unseen record counts from numbered titles and treated repeated names as evidence
+of duplicates. The shared skill now explicitly forbids these inferences. Package
+v0.1.2 contains skill v0.1.1; its packaging/source parity checks pass, and the
+updated installed briefings in both ChatGPT and Claude correctly report an
+unknown remaining count without assuming duplicates. Claude used four tool
+calls. Preserve the original finding rather than relabeling that run as a pass.
+
+The extra audit and operator connections initially failed with PostgreSQL `53300`.
+The approved hosted-only correction is applied: `DB_POOL_MAX=3` limits the API's
+two pools plus the worker's pool to nine connections. A fresh backup validated
+before the setting changed; API/worker retain reviewed build `68cf32c` and are
+healthy. Inspection now confirms the database limit is 25 with three reserved
+connections. No migration, web/marketing deployment or WHome change was needed.
+
+Stored token metadata confirms genuine refresh rotations for both providers;
+no token values are in the receipts. Both independent revocation/reconnection
+checks passed: disconnecting either grant blocked its next actual provider call,
+while the other still read context. Fresh consent restored each with unchanged
+scopes. Both returned provider pages needed one browser reload; consent was not
+replayed. Before/after hashes and counts of the reviewer's shopping/chore rows
+match, and the old grants remain revoked.
+
+Local 1080p MP4 walkthroughs and separate revocation/restoration clips are
+recorded. Preserve originals and edit notes: the curated functional videos remove
+idle waits/debugger chrome. The recorded ChatGPT isolation replay was suppressed
+by its platform filter before an integration response; this is a blocked replay,
+not an additional integration pass. Its earlier textual refusal is retained.
+One recorded Claude refusal has an inconsistent conversational assignee count;
+the source records and briefing correctly show two chores per fictional adult.
+These observations remain visible in the private review receipts.
+
+The recordings need owner review and an actual accessible URL. Package/skill
+changes must merge through a release PR; publisher verification, portal scans,
+terms and final submission remain pending. Private execution receipts are under
+`.qa/reviewer-acceptance/evidence`; credentials remain in protected operator
+storage. No video URL, public acceptance or submission is claimed.
+
 ## Generate current drafts
 
 ```powershell

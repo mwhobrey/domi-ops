@@ -8,7 +8,7 @@ export function pluginConfiguration(origin) {
   if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash ||
       !["", "/"].includes(url.pathname) || nonPublicMcpHost(url.hostname)) throw new Error("Claude cloud connectors require a canonical public HTTPS origin");
   return {
-    plugin: { name: "domi-ops-household", version: "0.1.1", description: "Read-only shared household chores and shopping.", author: { name: "Domi Ops" }, license: "MIT",
+    plugin: { name: "domi-ops-household", version: "0.1.2", description: "Read-only shared household chores and shopping.", author: { name: "Domi Ops" }, license: "MIT",
       icon: "./assets/icon.png", documentationUrl: "https://github.com/mwhobrey/domi-ops/blob/main/docs/MCP_CLAUDE.md",
       supportUrl: "https://github.com/mwhobrey/domi-ops/issues/new/choose", privacyPolicyUrl: "https://domi-ops.com/privacy", termsOfServiceUrl: "https://domi-ops.com/terms" },
     mcp: { mcpServers: { "domi-ops": { type: "http", url: url.origin + "/api/mcp" } } },

@@ -17,7 +17,7 @@ export function pluginConfiguration({ origin, clientId, authMethod = "none", reg
     // ChatGPT URLs use plugin_asdk_app_..., but .app.json requires the server's asdk_app_... ID.
     const appId = registeredAppId.replace(/^plugin_/, "");
     return {
-      plugin: { $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json", name: "domi-ops-household", version: "0.1.1", description: "Read-only household chores, shopping and explicitly selected planning notes.", license: "MIT", extensions: { "com.openai": { apps: "./.app.json" } } },
+      plugin: { $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json", name: "domi-ops-household", version: "0.1.2", description: "Read-only household chores, shopping and explicitly selected planning notes.", license: "MIT", extensions: { "com.openai": { apps: "./.app.json" } } },
       apps: { apps: { "domi-ops": { id: appId, required: true } } },
     };
   }
@@ -33,7 +33,7 @@ export function pluginConfiguration({ origin, clientId, authMethod = "none", reg
   if (!["none", "client_secret_basic", "client_secret_post"].includes(authMethod)) throw new Error("Unsupported token authentication method");
   const scopes = clientMode === "cimd" ? [...(readScopes ?? ["shopping:read", "chores:read"]), "offline_access"] : ["shopping:read", "chores:read", "notes:read", "offline_access"];
   return {
-    plugin: { $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json", name: "domi-ops-household", version: "0.1.1", description: `Read-only access to ${readScopeSummary(scopes)}.`, license: "MIT" },
+    plugin: { $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json", name: "domi-ops-household", version: "0.1.2", description: `Read-only access to ${readScopeSummary(scopes)}.`, license: "MIT" },
     mcp: {
       $schema: "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
       mcpServers: {

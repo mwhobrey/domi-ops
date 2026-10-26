@@ -14,6 +14,22 @@ Production operations for **Domi Ops hosted** (`DEPLOYMENT_MODE=shared` on `app.
 
 PgBouncer in **transaction mode** for Starter prod (see ADR 003). Migrations run as a `BYPASSRLS` role — never as the app pool user.
 
+### Database connection budget
+
+`DB_POOL_MAX` applies to each pool, not each container. One API creates separate
+application and authentication pools; one worker adds a third. The hosted example
+sets `DB_POOL_MAX=3`, allowing nine application connections for one API/worker
+pair. The library default remains ten per pool for deployments without an
+override. Count every replica and reserve capacity for operators, migrations and
+managed services; check both database and PgBouncer limits when a pooler is used.
+
+The reviewer rollout hit PostgreSQL `53300` with the default per-pool limits.
+After an approved backup and pool correction, inspection confirmed
+`max_connections=25` with three superuser-reserved slots. Existing deployments
+must set an appropriate value in their own environment and recreate API/worker;
+editing this example does not update live services. Lower limits queue database
+work, so review worker concurrency and latency before increasing traffic.
+
 ## Health & monitoring
 
 | Signal | Check |
