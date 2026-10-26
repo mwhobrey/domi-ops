@@ -2,6 +2,8 @@
 
 ## Consent handoff and submission preparation (WHO-478)
 
+- ChatGPT listing/package descriptions and README derive their advertised reads
+  from the selected scopes; narrow packages do not promise excluded domains.
 - Approval/denial keeps the consent UI busy until navigation; only failures clear
   that state. This prevents the interrupted-approval warning from flashing on a
   successful redirect and keeps both actions locked during handoff. Failed
@@ -356,6 +358,14 @@
 *Two live deployments: the single-tenant dogfood at `https://whome.whobrey.me`, and the private hosted Starter beta at `app.domi-ops.com` (`DEPLOYMENT_MODE=shared`, real Stripe, invite-only). Repo is public. Remaining launch work is the public hosted opening — [07_LAUNCH.md](./07_LAUNCH.md). Prefer bug fixes and hosted hardening over new module polish.*
 
 ## What is working (implemented paths)
+
+- The public Caddy template includes explicit `www`, `www.app` and `www.demo`
+  TLS hosts with 308 redirects to the canonical marketing/app/demo addresses.
+  Hosted production was updated separately on 2026-10-26: all three aliases have
+  working DNS, issued certificates and verified redirects preserving paths and
+  query strings; marketing, app/demo login and app health remain HTTP 200.
+  Existing installs require DNS records and a separate edit of their untracked
+  live `Caddyfile`. See `docs/marketing/DNS_CUTOVER.md` for setup and smoke checks.
 
 - Fixed-time vitals checks group complementary Withings entries around a reading
   within 30 minutes of the nearest slot, or an explicitly linked entry. Supplementary

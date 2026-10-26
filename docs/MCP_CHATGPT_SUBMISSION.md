@@ -21,6 +21,8 @@ shared skill/MIT license. Its OAuth client declares `mode: cimd` without a clien
 ID or secret, with shopping/chores/refresh by default. Refresh is also a base
 scope so tool-specific scope selection cannot drop it. The generator performs no
 network request. `readyToSubmit` stays false until actual launch receipts exist.
+Listing descriptions, package metadata and README follow the selected read scopes;
+the default package makes no selected-note claim. The shared skill remains portable.
 
 After reviewing the source and endpoint, ZIP the **contents** of `plugin/` so
 `plugin.json` is at the archive root. Never ZIP the parent `.qa` directory,

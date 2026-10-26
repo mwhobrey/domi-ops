@@ -23,6 +23,13 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Fixed
 
+- The public Caddy template redirects `www` aliases for marketing, app and demo
+  to their canonical HTTPS hosts, preserving paths and query strings. Existing
+  installs must add the DNS records and update their live Caddyfile.
+
+- ChatGPT submission descriptions and generated setup text match the selected
+  read permissions, including packages that exclude notes or a household domain.
+
 - AI consent stays locked while returning to an assistant after approval or
   denial. Successful approval no longer flashes the interrupted-approval warning;
   failed approvals still require a fresh flow. Read labels explicitly identify
