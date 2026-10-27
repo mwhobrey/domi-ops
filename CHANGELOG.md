@@ -23,6 +23,13 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Fixed
 
+- Household briefing skill v0.1.1 instructs assistants to distinguish record
+  counts from quantities and avoid inferring unseen totals or duplicate records
+  from numbered/repeated titles. Claude and ChatGPT packages are versioned 0.1.2.
+- The hosted environment example sets a database connection budget for the API's
+  two pools and worker pool, preserving operator capacity on small managed
+  clusters. Existing deployments must configure their own pool limit.
+
 - The public Caddy template redirects `www` aliases for marketing, app and demo
   to their canonical HTTPS hosts, preserving paths and query strings. Existing
   installs must add the DNS records and update their live Caddyfile.

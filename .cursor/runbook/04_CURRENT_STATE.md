@@ -1,5 +1,44 @@
 # Current state
 
+## Hosted MCP and reviewer readiness (WHO-478, verified 2026-10-26)
+
+- Approved hosted rollout applied reviewed build `68cf32c` to API/worker/web,
+  marketing and demo web. Additive MCP migrations brought the schema to 105;
+  the application remains non-superuser/non-BYPASSRLS, with provider credentials
+  behind the separate non-login OAuth role. Existing credentials/settings and
+  the `www` redirects were preserved. Hosted discovery, exact shopping/chores/
+  refresh scopes, provider metadata, unauthorized denial and public privacy
+  disclosure passed live checks.
+- A separate persistent fictional reviewer household reuses the public demo's
+  shopping/chore fixtures and adds pagination/date/completion examples. Fresh
+  password login, correct membership, core-only manual entitlement and RLS
+  isolation passed. Credentials and detailed receipts remain in protected operator
+  storage. The public demo/reset was preserved; only the private reviewer
+  household was enabled, and no provider consent or grant was fabricated.
+- Both actual provider web accounts now have separate fictional reviewer
+  connections via CIMD, shopping/chores/refresh only. All five positive and three
+  negative prompts ran in each UI; context/domain/pagination/refusal checks
+  behaved as expected. Claude's installed briefing inferred unread counts and
+  duplicates from titles: preserve this quality finding, not a clean pass.
+- Shared skill v0.1.1 and package v0.1.2 explicitly prohibit these inferences;
+  canonical/mirrored source parity and both packaging suites pass (12 checks).
+  Updated installed briefings passed the regression in both providers; Claude
+  used four reads and made no unseen-count or duplicate inference.
+- Hosted pool exhaustion (PostgreSQL 53300) was corrected with approved
+  DB_POOL_MAX=3 after a validated fresh backup. API has two pools and worker one;
+  total application budget is nine against database max 25 / reserved 3. The same `68cf32c`
+  images are healthy; no migration or WHome change. Fresh audit confirms two
+  reviewer grants, expected fixtures and only protocol/context/domain-read events.
+  Token metadata verifies both providers' genuine refresh rotations. Independent
+  revocation/reconsent passed both directions in actual provider UIs; each old
+  grant remains revoked, with a new scoped grant active. Domain hashes/counts
+  match before/after. Local 1080p MP4s are recorded; actual accessible video URL,
+  source release PR, publisher verification and portal scans/submission remain.
+  Both return pages recovered with one reload after consent. Preserve the
+  ChatGPT platform-suppressed isolation replay and Claude count-wording mistake
+  separately from successful authorization checks. Detailed private evidence is ignored under
+  .qa/reviewer-acceptance; no reviewer credentials in tracked files.
+
 ## Consent handoff and submission preparation (WHO-478)
 
 - ChatGPT listing/package descriptions and README derive their advertised reads
