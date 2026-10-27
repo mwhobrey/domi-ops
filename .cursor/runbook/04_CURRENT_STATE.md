@@ -26,7 +26,7 @@
   used four reads and made no unseen-count or duplicate inference.
 - Hosted pool exhaustion (PostgreSQL 53300) was corrected with approved
   DB_POOL_MAX=3 after a validated fresh backup. API has two pools and worker one;
-  total application budget is nine against database max25/reserved3. The same `68cf32c`
+  total application budget is nine against database max 25 / reserved 3. The same `68cf32c`
   images are healthy; no migration or WHome change. Fresh audit confirms two
   reviewer grants, expected fixtures and only protocol/context/domain-read events.
   Token metadata verifies both providers' genuine refresh rotations. Independent
