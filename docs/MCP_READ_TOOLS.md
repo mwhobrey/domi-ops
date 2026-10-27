@@ -73,7 +73,18 @@ with `titleTruncated=true` for multiline/longer values. Raw description, later l
 tags, priority, karma, reminder state and creator information are excluded. CR/LF
 boundaries are both respected. Assignee display labels use member name/account
 display name only, without email fallback or a separate roster response; revoked
-or foreign-household assignees are not exposed.
+or foreign-household assignees are not exposed. Every current `child` membership
+uses the same generic `Household member` label instead of either name, including
+account-name fallback. Their chores, dates and completion states remain available.
+The label means assigned with the name withheld; it cannot identify or distinguish
+people and must not be used to infer per-person counts. Unassigned chores still
+return `null`. This rule is evaluated on every read in both deployment modes and
+for every provider. No child member ID, role or age is added to the response.
+
+This is assignee-name masking based on the household's current membership role,
+not age verification or a general personal-information scrubber. Chore titles and
+shopping labels are user-entered text and can still contain names or other personal
+information. Adults should review what their household shares before connecting.
 
 Returned record IDs are stable references. Shopping/notes link to their real list
 pages because those pages have no record-specific navigation. Chores use the

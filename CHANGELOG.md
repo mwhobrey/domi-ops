@@ -8,6 +8,9 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+- MCP chore reads retain child-assigned chores while replacing their assignee
+  names with `Household member`, including account-name fallback, on hosted and
+  self-hosted deployments. Adult assignees and unassigned chores retain their labels.
 - Optional ChatGPT onboarding uses its published OAuth identity and managed signing
   keys, with hosted/self-hosted setup guidance and credential-free plugin packaging.
   Household/member consent and existing read-only permissions remain required.

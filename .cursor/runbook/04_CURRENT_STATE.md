@@ -1,5 +1,20 @@
 # Current state
 
+## MCP child-assignee names (WHO-478, 2026-10-27)
+
+- The shared read tool masks names for current child memberships as `Household
+  member` in the SQL projection, retaining the chores and existing pagination.
+  Both the member name and account fallback are withheld. Adult names and genuinely
+  unassigned values keep their existing behavior. No migration or new setting.
+- This masks one field based on membership role; it does not verify age or scrub
+  manually entered titles. Provider submission must not claim full anonymization.
+- The disposable PostgreSQL/TLS matrix passed all 155 checks with restricted
+  roles in single/shared modes. The new SDK regression verifies child-name and
+  account-fallback masking, retained paginated chores, adult/unassigned values,
+  current role/revocation and unchanged domain data. API type checking passed.
+- Review/deployment remain pending; do not infer that the live hosted or
+  self-hosted endpoint already includes this change.
+
 ## Hosted MCP and reviewer readiness (WHO-478, verified 2026-10-26)
 
 - Approved hosted rollout applied reviewed build `68cf32c` to API/worker/web,

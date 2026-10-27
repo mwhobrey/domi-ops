@@ -653,6 +653,65 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
     expect(events.some((event) => event.tool === "get_selected_note" && event.outcome === "succeeded")).toBe(true);
     expect(JSON.stringify(events)).not.toContain("synthetic-domain-tools"); expect(JSON.stringify(events)).not.toContain("Wash dishes");
   });
+  it("retains child-assigned chores while withholding member and account names on every read", async () => {
+    const childName = "Fictional Child Name Canary", accountName = "Fictional Child Account Canary";
+    const [originalMember] = await owned(owner, (tx) => tx.select().from(householdMembers).where(eq(householdMembers.id, child.memberId)));
+    const [originalUser] = await withSystemContext(db, (tx) => tx.select({ displayName: users.displayName }).from(users).where(eq(users.id, child.userId)));
+    const ids: string[] = Array.from({ length: 4 }, () => randomUUID());
+    const client = new Client({ name: "synthetic-assignee-privacy", version: "1" }, { versionNegotiation: { mode: { pin: "2026-07-28" } } });
+    try {
+      await owned(owner, async (tx) => {
+        await tx.update(householdMembers).set({ role: "child", name: childName, accessRevokedAt: null }).where(eq(householdMembers.id, child.memberId));
+        await tx.insert(chores).values(ids.map((id, i) => ({ id, householdId: owner.householdId, description: "Synthetic assignment " + i,
+          assigneeMemberId: i < 2 ? child.memberId : i === 2 ? owner.memberId : null, done: i === 1, dueDate: "2026-10-27" })));
+      });
+      await withSystemContext(db, (tx) => tx.update(users).set({ displayName: accountName }).where(eq(users.id, child.userId)));
+      const { token } = await toolAccess([], ["chores:read", "offline_access"]);
+      await client.connect(new StreamableHTTPClientTransport(new URL(origin + "/api/mcp"), { requestInit: { headers: { authorization: "Bearer " + token.access_token } } }));
+      const read = async (args: Record<string, unknown> = {}) => {
+        const result = await client.callTool({ name: "list_chores", arguments: { status: "all", ...args } });
+        expect(result.isError).not.toBe(true);
+        const serialized = JSON.stringify(result);
+        expect(serialized).not.toContain(childName); expect(serialized).not.toContain(accountName);
+        expect(serialized).not.toContain(child.memberId); expect(serialized).not.toContain(child.userId);
+        return result.structuredContent as { data: { id: string; assignee: string | null; completed: boolean; dueDate: string | null }[]; nextCursor: string | null };
+      };
+      const before = await domainSnapshot();
+      const seen: string[] = [];
+      let cursor: string | undefined;
+      do {
+        const page = await read({ limit: 1, ...(cursor ? { cursor } : {}) });
+        for (const row of page.data) {
+          seen.push(row.id);
+          const i = ids.indexOf(row.id);
+          if (i >= 0) expect(row).toMatchObject({ assignee: i < 2 ? "Household member" : i === 2 ? "Synthetic Adult" : null, completed: i === 1, dueDate: "2026-10-27" });
+        }
+        cursor = page.nextCursor ?? undefined;
+        expect(seen.length).toBeLessThan(20);
+      } while (cursor);
+      expect(new Set(seen).size).toBe(seen.length);
+      for (const id of ids) expect(seen).toContain(id);
+      expect(await domainSnapshot()).toEqual(before);
+
+      // A missing member name must not expose the account-name fallback.
+      await owned(owner, (tx) => tx.update(householdMembers).set({ name: null }).where(eq(householdMembers.id, child.memberId)));
+      expect((await read()).data.find((row) => row.id === ids[0])?.assignee).toBe("Household member");
+      // An existing connection must use the current role and revocation state.
+      await owned(owner, (tx) => tx.update(householdMembers).set({ role: "member", name: "Fictional Adult Label" }).where(eq(householdMembers.id, child.memberId)));
+      expect((await read()).data.find((row) => row.id === ids[0])?.assignee).toBe("Fictional Adult Label");
+      await owned(owner, (tx) => tx.update(householdMembers).set({ role: "child" }).where(eq(householdMembers.id, child.memberId)));
+      expect((await read()).data.find((row) => row.id === ids[0])?.assignee).toBe("Household member");
+      await owned(owner, (tx) => tx.update(householdMembers).set({ accessRevokedAt: new Date() }).where(eq(householdMembers.id, child.memberId)));
+      expect((await read()).data.find((row) => row.id === ids[0])?.assignee).toBeNull();
+    } finally {
+      await client.close();
+      await owned(owner, async (tx) => {
+        await tx.delete(chores).where(inArray(chores.id, ids));
+        await tx.update(householdMembers).set({ role: originalMember.role, name: originalMember.name, accessRevokedAt: originalMember.accessRevokedAt }).where(eq(householdMembers.id, child.memberId));
+      });
+      await withSystemContext(db, (tx) => tx.update(users).set({ displayName: originalUser.displayName }).where(eq(users.id, child.userId)));
+    }
+  });
   it("pages persisted lists within byte bounds and binds cursors to grant, tool and filters", async () => {
     const prefix = "刀".repeat(85);
     await owned(owner, async (tx) => { await tx.insert(shoppingItems).values(Array.from({ length: 55 }, (_, i) => ({ householdId: owner.householdId, item: i === 2 ? "😺".repeat(256) : prefix + i, checked: i === 0, tagsJson: '["aisle:' + "冷".repeat(200) + '"]' }))); });
