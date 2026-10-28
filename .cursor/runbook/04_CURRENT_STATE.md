@@ -1,5 +1,24 @@
 # Current state
 
+## Grok Bot read-only integration (WHO-489, 2026-10-28)
+
+- Owner selected this client before WHO-480. Local flag defaults off; hosted and
+  self-host share the service and included/free pricing. No production deployment
+  or real household grant; the authorized fictional grant was revoked after testing.
+- [Contract](../../docs/MCP_GROK_BOT.md): pin Cursor's shared published metadata
+  identity/redirect set, allow only the cloud callback and shopping/chores/refresh,
+  require privacy/settings acknowledgment and an explicit no-notes deployment read
+  ceiling. Changing that ceiling also affects existing assistants; review rollout.
+- Windows Grok Bot 0.78.1 completed the exact pinned OAuth/S256/scopes flow and a
+  sourced fictional shopping/chores briefing with the saved private skill. Server
+  audit confirmed three reads and refresh rotation; Domi Ops disconnect revoked
+  the grant/refresh rows and the next Bot read required authentication. No combined
+  marketplace import, mobile, empty/partial/scope-reduction or full side-effect
+  snapshot acceptance is claimed. The contract records the remaining cases.
+- Local verification: 157 restricted-role authorization checks, 1542 regular tests
+  and 17 workspace typechecks passed; packaging/QA checks passed. Do not equate
+  Cursor/CLI/API proof with Bot support or call the shared client exclusively Grok.
+
 ## MCP child-assignee names (WHO-478, 2026-10-27)
 
 - The shared read tool masks names for current child memberships as `Household

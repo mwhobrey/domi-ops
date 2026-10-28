@@ -17,6 +17,7 @@ export * from "./setup.js";
 export * from "./mcp.js";
 export { CLAUDE_CLIENT_ID, CLAUDE_CALLBACK } from "./mcp-claude.js";
 export { CHATGPT_CLIENT_ID, CHATGPT_CALLBACK, CHATGPT_JWKS_URI } from "./mcp-chatgpt.js";
+export { GROK_BOT_CLIENT_ID, GROK_BOT_CALLBACK, GROK_BOT_METADATA_CALLBACKS } from "./mcp-grok-bot.js";
 export * from "./cleanup-user.js";
 export { hashPassword, verifyPassword } from "better-auth/crypto";
 

@@ -7,6 +7,7 @@ import { oauthProviderResourceClient } from "@better-auth/oauth-provider/resourc
 import type { ClientMetadataResourceFetch } from "@better-auth/oauth-provider";
 import { claudeConnectUrl, CLAUDE_POLICY } from "./mcp-claude.js";
 import { CHATGPT_POLICY } from "./mcp-chatgpt.js";
+import { GROK_BOT_POLICY } from "./mcp-grok-bot.js";
 import { isPublishedClient, publishedClientDiscovery } from "./mcp-client-discovery.js";
 import type { betterAuth, BetterAuthOptions } from "better-auth";
 import { isModuleEnabled, parseHouseholdModulesJson, mcpSupportedScopes, MCP_READ_SCOPE_NAMES, type Env } from "@domi-ops/config";
@@ -19,7 +20,7 @@ import {
 
 export const MCP_SCOPES = [...MCP_READ_SCOPE_NAMES, "offline_access"] as const;
 export const MCP_POLICY_VERSION = "2026-10-23.v3";
-const settingsReviewRequired = (provider: string) => ["chatgpt", "claude", "gemini"].includes(provider);
+const settingsReviewRequired = (provider: string) => ["chatgpt", "claude", "gemini", "grok-bot"].includes(provider);
 const TTL = 30 * 86400_000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 type Connection = typeof mcpConnections.$inferSelect;
@@ -52,6 +53,7 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string, m
   const publishedPolicies = env.DEMO_MODE ? [] : [
     ...(env.MCP_CLAUDE_ENABLED ? [CLAUDE_POLICY] : []),
     ...(env.MCP_CHATGPT_ENABLED ? [CHATGPT_POLICY] : []),
+    ...(env.MCP_GROK_BOT_ENABLED ? [GROK_BOT_POLICY] : []),
   ];
   const approval = new AsyncLocalStorage<Binding>();
   const operatorRegistration = new AsyncLocalStorage<boolean>();
@@ -67,8 +69,11 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string, m
     const policy = publishedPolicies.find((entry) => entry.clientId === clientId);
     if (row.client.clientDiscoveryId === "cimd" && (!policy || !isPublishedClient(row.client, policy) ||
       row.profile.provider !== policy.provider || row.profile.version !== policy.version)) deny("client_not_approved");
-    if ([CLAUDE_POLICY.clientId, CHATGPT_POLICY.clientId].includes(clientId) && row.client.clientDiscoveryId !== "cimd") deny("client_not_approved");
+    if ([CLAUDE_POLICY.clientId, CHATGPT_POLICY.clientId, GROK_BOT_POLICY.clientId].includes(clientId) && row.client.clientDiscoveryId !== "cimd") deny("client_not_approved");
     if (row.profile.dataMode === "synthetic" && !env.MCP_SYNTHETIC_DEPLOYMENT) deny("synthetic_client_only");
+    // Published metadata may describe other products. Local policy narrows usable callbacks/scopes.
+    if (policy) return { ...row, client: { ...row.client, redirectUris: [policy.callback],
+      scopes: row.client.scopes?.filter(scope => !policy.allowedScopes || policy.allowedScopes.includes(scope)) } };
     return row;
   }
 
@@ -101,6 +106,7 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string, m
     });
     const profile = await clientProfile(connection.clientId);
     if (profile.profile.version !== connection.clientProfileVersion) deny("consent_required", 401);
+    if (scopes.some(scope => !profile.client.scopes?.includes(scope))) deny("insufficient_scope");
     return withUserLookupContext(db, userId, (lookup) => withHouseholdContext(lookup, connection.householdId, async (tx) => {
         const current = await member(tx, userId, connection.householdId);
         if (current.id !== connection.memberId || current.role !== connection.grantedRole) deny("inactive_grant", 401);
@@ -188,6 +194,7 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string, m
           return { householdId, householdName: household?.name ?? "Household", memberName: current.user.name,
             claude: env.MCP_CLAUDE_ENABLED && !env.DEMO_MODE ? { connectUrl: claudeConnectUrl(urls.origin), serverUrl: urls.resource } : null,
             chatgpt: env.MCP_CHATGPT_ENABLED && !env.DEMO_MODE ? { serverUrl: urls.resource, setupUrl: "https://chatgpt.com/plugins" } : null,
+            grokBot: env.MCP_GROK_BOT_ENABLED && !env.DEMO_MODE ? { serverUrl: urls.resource } : null,
             canManage: ["owner", "admin"].includes(owner.role), enabled: settings?.enabled ?? false,
             connections: connections.map((c) => ({ ...c, expired: c.expiresAt.getTime() <= Date.now(), noteIds: selections.filter((s) => s.connectionId === c.id).map((s) => s.noteId),
               selectedNotes: selections.filter((s) => s.connectionId === c.id).map((s) => ({ id: s.noteId, title: s.title })),
