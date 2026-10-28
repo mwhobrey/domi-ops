@@ -2,6 +2,8 @@ export const capabilityLabels: Record<string, string> = {
   "shopping:read": "Read shared household shopping lists and items",
   "chores:read": "Read shared household chores and assignments",
   "notes:read": "Read only the notes you select",
+  "shopping:write": "Propose shopping changes; each change needs your review and confirmation in Domi Ops",
+  "chores:write": "Propose chore changes; each change needs your review and confirmation in Domi Ops",
   offline_access: "Keep access between visits (until expiry or disconnect)",
 };
 

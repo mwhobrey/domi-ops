@@ -736,6 +736,13 @@
       "when": 1792695600000,
       "tag": "0104_mcp_gateway",
       "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "7",
+      "when": 1793102400000,
+      "tag": "0105_mcp_reviewed_writes",
+      "breakpoints": true
     }
   ]
 }

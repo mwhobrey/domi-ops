@@ -70,7 +70,7 @@ export function AiConsent() {
       <section className="space-y-2" aria-label="Requested access">
         <h3 className="font-medium">Requested access</h3>
         <ul className="list-disc space-y-1 pl-5 text-sm">{preview.scopes.map((scope) => <li key={scope}>{capabilityLabels[scope] ?? scope}</li>)}</ul>
-        <p className="text-sm text-[var(--color-text-muted)]">This connection cannot change household data. It does not grant access to Google Calendar, Drive, health records or another member’s private content.</p>
+        <p className="text-sm text-[var(--color-text-muted)]">{preview.scopes.some(scope=>scope.endsWith(":write")) ? "This connection can propose changes. Each change requires a separate review and deliberate confirmation in Domi Ops; saying yes in a chat is not approval." : "This connection cannot change household data."} It does not grant access to Google Calendar, Drive, health records or another member’s private content.</p>
       </section>
       <ProviderDataDisclosure provider={preview.provider} />
       <form onSubmit={approve} className="space-y-5">

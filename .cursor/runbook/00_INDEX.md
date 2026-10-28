@@ -37,6 +37,7 @@
 
 ## Supplementary docs (outside runbook)
 
+- `docs/MCP_REVIEWED_WRITES.md` — WHO-479 server-owned review/idempotency foundation, migration and disabled release boundary; original contract in `MCP_WRITE_CONFIRMATION_PLAN.md`
 - `docs/MCP_SETUP.md` / `docs/MCP_PILOT.md` — WHO-478 hosted/self-host setup, provisioning gates, disconnect/rollback and bounded self-host pilot; hosted acceptance pending
 - `docs/MCP_SUBMISSION_REVIEW.md` — fictional reviewer fixtures, generated five/three case plan, recording and release handoff
 - `docs/MCP_CLAUDE_SUBMISSION.md` — Claude directory draft, review-account requirements and remaining release gates

@@ -10,7 +10,7 @@ export class McpGatewayError extends Error {
 export const MCP_LIMITS = { defaultPage: 25, maxPage: 50, noteCharacters: 6000, resultBytes: 32768, requestBytes: 65536, deadlineMs: 10000, concurrent: 2, connectionPerMinute: 30, householdPerMinute: 120 } as const;
 
 /** Logical operation policy: transport POST is never evidence of a product write. */
-export async function checkOperation(tx: Database, env: Env, identity: McpIdentity, operation: { module?: "core"; access: "read" | "write" }) {
+export async function checkOperation(tx: Database, env: Env, identity: McpIdentity, operation: { module?: "core"; access: "read" | "write" }, reviewedWorkflow = false) {
   if (operation.module) {
     const [household] = await tx.select({ modules: households.modulesEnabled }).from(households).where(eq(households.id, identity.householdId));
     if (!household || !isModuleEnabled(env, operation.module) || !parseHouseholdModulesJson(household.modules).includes(operation.module)) throw new McpGatewayError("tool_unavailable");
@@ -23,7 +23,7 @@ export async function checkOperation(tx: Database, env: Env, identity: McpIdenti
   if (operation.access === "write") {
     const [subscription] = isHostedDeployment(env) ? await tx.select().from(householdSubscriptions).where(eq(householdSubscriptions.householdId, identity.householdId)) : [];
     if (isHostedDeployment(env) && !subscriptionAllowsWork(subscription ?? null)) throw new McpGatewayError("subscription_read_only", 402);
-    throw new McpGatewayError("writes_not_enabled");
+    if (!reviewedWorkflow || !env.MCP_WRITES_ENABLED) throw new McpGatewayError("writes_not_enabled");
   }
   await tx.execute(sql`select set_config('statement_timeout', '1500ms', true)`);
 }
