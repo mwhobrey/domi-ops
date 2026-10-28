@@ -37,7 +37,7 @@ jobs:
       # Exercise the same Node/npm versions and workspace COPY layout as publishing.
       # Node 22 CI alone can accept a lockfile that Node 24 images reject.
       - name: Build production image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ${{ matrix.dockerfile }}
