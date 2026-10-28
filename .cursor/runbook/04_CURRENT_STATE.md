@@ -19,6 +19,12 @@
   targeted web lint passed. Actual review UI passed fictional desktop/mobile,
   deliberate-confirmation, approval-reset, decline, expiry and lost-response checks.
   These results do not claim production adapters or live provider write acceptance.
+- Operator client planning keeps a read-only default even though the known scope
+  catalog now includes writes. A write plan needs the deployment's explicit
+  enabled scope ceiling; registration still rechecks the live configuration.
+  After the CI-discovered planner fix, the full regular suite passed (1,540 tests;
+  998 environment-dependent skips), all 17 typechecks passed again, and the
+  focused provisioning/configuration regression run passed 25 tests.
 
 ## MCP child-assignee names (WHO-478, 2026-10-27)
 

@@ -3,6 +3,7 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, dirname, basename, resolve } from "node:path";
 import { planMcpClient, provisionMcpClient, readMcpOperatorFile } from "./mcp-client-provisioning.js";
+import { mcpSupportedScopes } from "@domi-ops/config";
 
 const origin = "https://pilot.example.test";
 const config = { origin, name: "Private adult pilot", provider: "claude", profileVersion: "pilot.claude.v1",
@@ -48,6 +49,16 @@ describe("operator MCP provisioning", () => {
     const permitted = ["shopping:read", "chores:read", "offline_access"];
     expect(planMcpClient(config, origin, permitted).registration.scopes).not.toContain("notes:read");
     expect(() => planMcpClient({ ...config, scopes: ["notes:read"] }, origin, permitted)).toThrow("invalid_scopes");
+  });
+
+  it("requires an explicitly enabled deployment write-scope ceiling when planning", () => {
+    const write = { ...config, scopes: ["shopping:write"] };
+    const disabled = mcpSupportedScopes({ MCP_WRITES_ENABLED: false, MCP_WRITE_SCOPES: ["shopping:write"] });
+    expect(() => planMcpClient(write, origin)).toThrow("invalid_scopes");
+    expect(() => planMcpClient(write, origin, disabled)).toThrow("invalid_scopes");
+    const enabled = mcpSupportedScopes({ MCP_WRITES_ENABLED: true, MCP_WRITE_SCOPES: ["shopping:write"] });
+    expect(planMcpClient(write, origin, enabled).registration.scopes).toEqual(["shopping:write"]);
+    expect(() => planMcpClient({ ...config, scopes: ["chores:write"] }, origin, enabled)).toThrow("invalid_scopes");
   });
 
   it("rejects a changed plan before opening a receipt or calling registration", async () => {

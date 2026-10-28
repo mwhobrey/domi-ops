@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { open, rename, unlink } from "node:fs/promises";
 import { setTimeout } from "node:timers/promises";
 import { MCP_SCOPES, type McpAuthorization } from "./mcp.js";
+import { mcpSupportedScopes } from "@domi-ops/config";
 
 export class McpProvisioningError extends Error {}
 function fail(code: string): never { throw new McpProvisioningError(code); }
@@ -21,7 +22,7 @@ export async function readMcpOperatorFile(path: string, limit: number) {
   } finally { await file.close(); }
 }
 
-export function planMcpClient(input: unknown, publicAppUrl: string, supportedScopes: readonly string[] = MCP_SCOPES): McpClientPlan {
+export function planMcpClient(input: unknown, publicAppUrl: string, supportedScopes: readonly string[] = mcpSupportedScopes({})): McpClientPlan {
   if (!input || typeof input !== "object" || Array.isArray(input)) fail("invalid_client_config");
   const config = input as Record<string, unknown>;
   if (Object.keys(config).some((key) => !["origin", "provider", "name", "redirectUri", "profileVersion", "scopes", "enabled"].includes(key))) fail("invalid_client_config");
