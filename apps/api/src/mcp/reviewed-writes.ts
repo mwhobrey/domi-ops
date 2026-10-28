@@ -91,7 +91,7 @@ export function reviewedWrites(auth: McpAuthorization, env: Env, operations: rea
     return { intentId: row.id, state: row.state, expiresAt: row.expiresAt.toISOString(), receiptId: row.receiptId, confirmedAt: row.confirmedAt?.toISOString() ?? null };
   }
   async function terminal(tx: Database, identity: McpWriteIdentity, row: Intent, state: "expired" | "stale" | "rejected") {
-    const [updated] = await tx.update(mcpWriteIntents).set({ state, envelope: null, reviewNonceHash: null, reviewSessionHash: null }).where(eq(mcpWriteIntents.id, row.id)).returning();
+    const [updated] = await tx.update(mcpWriteIntents).set({ state, envelope: null }).where(eq(mcpWriteIntents.id, row.id)).returning();
     await event(tx, identity, updated, state); return receipt(updated);
   }
   async function lockTargets(tx: Database, identity: McpWriteIdentity, targets: readonly WriteTarget[], checkRevision: boolean) {

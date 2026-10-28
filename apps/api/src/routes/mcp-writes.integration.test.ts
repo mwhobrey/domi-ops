@@ -157,6 +157,19 @@ for(const mode of ["single","shared"] as const)suite(`Reviewed MCP writes (${mod
     const g=await fixture(),view=await g.review();adapter.version="2";try{expect(await (await g.confirm(view)).json()).toMatchObject({state:"stale"});}finally{adapter.version="1";}
     const h=await fixture();expect(await (await post("/api/mcp-writes/browser/"+h.token.connectionId+"/reject",{intentId:h.change.intentId})).json()).toMatchObject({state:"rejected"});expect((await h.read()).revision).toBe(1);
   });
+  it("returns the recorded terminal outcome idempotently after repeated confirmation",async()=>{
+    const stale=await fixture(),staleView=await stale.review();
+    await owned(owner,tx=>tx.update(shoppingItems).set({item:"Human edit"}).where(eq(shoppingItems.id,stale.id)));
+    for(let i=0;i<2;i++){const response=await stale.confirm(staleView);expect(response.status,await response.clone().text()).toBe(200);expect(await response.json()).toMatchObject({state:"stale"});}
+    expect((await stale.confirm({...staleView,nonce:"x".repeat(43)})).status).toBe(409);
+    const expired=await fixture(),expiredView=await expired.review();
+    await owned(owner,tx=>tx.update(mcpWriteIntents).set({expiresAt:new Date(Date.now()-1000)}).where(eq(mcpWriteIntents.id,expired.change.intentId)));
+    for(let i=0;i<2;i++){const response=await expired.confirm(expiredView);expect(response.status,await response.clone().text()).toBe(200);expect(await response.json()).toMatchObject({state:"expired"});}
+    const rejected=await fixture(),rejectedView=await rejected.review();
+    expect(await (await post("/api/mcp-writes/browser/"+rejected.token.connectionId+"/reject",{intentId:rejected.change.intentId})).json()).toMatchObject({state:"rejected"});
+    for(let i=0;i<2;i++){const response=await rejected.confirm(rejectedView);expect(response.status,await response.clone().text()).toBe(200);expect(await response.json()).toMatchObject({state:"rejected"});}
+    expect((await rejected.confirm(rejectedView,peer)).status).toBeGreaterThanOrEqual(400);
+  });
   it("binds an intent to its original client and immutable grant",async()=>{
     const f=await fixture(),view=await f.review(),otherClient=await register(),other=await connect(owner,scopes,otherClient);
     expect((await post("/api/mcp-writes/status",{intentId:f.change.intentId},owner,other.access_token)).status).toBe(404);
