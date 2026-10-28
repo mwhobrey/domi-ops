@@ -15,6 +15,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 - Migration: `0105_mcp_reviewed_writes` adds proposal/activity tables and revision
   counters/triggers. Run migrations as the migration role and re-grant the restricted
   app role before deploying this build; keep reviewed-write flags disabled.
+- Add default-disabled Grok Bot read-only onboarding groundwork, a pinned shared
+  Cursor cloud OAuth profile, account-wide privacy guidance and credential-free
+  portable briefing package generation. Installed-client acceptance and directory
+  submission remain pending; no existing grant is widened or live service enabled.
 - MCP chore reads retain child-assigned chores while replacing their assignee
   names with `Household member`, including account-name fallback, on hosted and
   self-hosted deployments. Adult assignees and unassigned chores retain their labels.

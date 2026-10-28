@@ -44,6 +44,13 @@ const localOrigin = `http://localhost:${state.ports.web}`;
 const canonicalMcp = configureMcpOrigin({ origin: state.mcpOrigin, port: state.ports.web, command, requested: process.env.DOMI_QA_MCP_ORIGIN, fresh });
 if (command === "mcp") state.mcpOrigin = canonicalMcp.origin;
 const publicMcp = canonicalMcp.remote;
+if (process.env.DOMI_QA_MCP_GROK_BOT !== undefined) {
+  if (command !== "mcp" || !["true", "false"].includes(process.env.DOMI_QA_MCP_GROK_BOT)) throw new Error("Grok Bot QA option is limited to explicit synthetic MCP mode");
+  const requested = process.env.DOMI_QA_MCP_GROK_BOT === "true";
+  if (!fresh && requested !== Boolean(state.grokBot)) throw new Error("Use a fresh synthetic lab for a different provider/discovery scope profile");
+  state.grokBot = requested;
+}
+if (state.grokBot && command === "mcp" && !publicMcp) throw new Error("Grok Bot QA requires its own public HTTPS synthetic origin");
 
 const baseEnv = { ...process.env };
 for (const name of Object.keys(baseEnv)) if (name.startsWith("DOMI_QA_")) delete baseEnv[name];
@@ -78,6 +85,8 @@ if (["up", "run", "mcp", "providers"].includes(command)) {
   for (const [key, value] of Object.entries(providers)) values[`DOMI_QA_${names[key]}`] = value;
   values.DOMI_QA_STRIPE_MODE = providers.STRIPE_SECRET_KEY ? "sandbox" : "fixture";
   values.DOMI_QA_MCP = state.mcp ? "true" : "false";
+  values.DOMI_QA_MCP_GROK_BOT = state.mcp && state.grokBot ? "true" : "false";
+  values.DOMI_QA_MCP_READ_SCOPES = state.grokBot ? "shopping:read,chores:read" : "shopping:read,chores:read,notes:read";
   values.DOMI_QA_API_NODE_ENV = state.mcp ? "test" : "production";
   values.DOMI_QA_APP_ORIGIN = state.mcpOrigin ?? localOrigin;
   values.DOMI_QA_MCP_PUBLIC_ORIGIN = publicMcp ? state.mcpOrigin : "";
@@ -121,7 +130,7 @@ async function start() {
 }
 if (["down", "reset"].includes(command)) {
   if (await owned()) await compose(["down", ...(command === "reset" ? ["--volumes"] : []), "--remove-orphans"]);
-  if (command === "reset") { state.mode = "fixture"; state.mcp = false; delete state.mcpOrigin; await writeFile(statePath, JSON.stringify(state, null, 2)); console.log("Only this harness project's containers and named volumes were reset. Receipts retained."); }
+  if (command === "reset") { state.mode = "fixture"; state.mcp = false; delete state.mcpOrigin; delete state.grokBot; await writeFile(statePath, JSON.stringify(state, null, 2)); console.log("Only this harness project's containers and named volumes were reset. Receipts retained."); }
 } else if (command === "status") await compose(["ps"]);
 else if (command === "logs") await compose(["logs", "--tail", "80"]);
 else {

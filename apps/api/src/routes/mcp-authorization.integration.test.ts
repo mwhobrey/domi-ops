@@ -10,7 +10,7 @@ import { symmetricDecrypt } from "better-auth/crypto";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { createBetterAuth, MCP_POLICY_VERSION, CLAUDE_CLIENT_ID, CLAUDE_CALLBACK, CHATGPT_CLIENT_ID, CHATGPT_CALLBACK, CHATGPT_JWKS_URI } from "@domi-ops/auth";
+import { createBetterAuth, MCP_POLICY_VERSION, CLAUDE_CLIENT_ID, CLAUDE_CALLBACK, CHATGPT_CLIENT_ID, CHATGPT_CALLBACK, CHATGPT_JWKS_URI, GROK_BOT_CLIENT_ID, GROK_BOT_CALLBACK, GROK_BOT_METADATA_CALLBACKS } from "@domi-ops/auth";
 import { planMcpClient, provisionMcpClient } from "@domi-ops/auth/mcp-client-provisioning";
 import { envSchema, type Env } from "@domi-ops/config";
 import {
@@ -232,13 +232,18 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
     expect((await gateway.request(origin + "/api/mcp", { method: "POST", headers: { host: new URL(origin).host, origin: foreignOrigin.origin } })).status).toBe(403);
     expect((await mcpGateway(db, auth.mcp, { ...env, MCP_ENABLED: false }).request(origin + "/api/mcp", { method: "POST" })).status).toBe(404);
   });
-  it.each(["claude", "chatgpt"] as const)("onboards %s without registration and preserves consent, isolation, refresh and disable gates", async (providerName) => {
+  it.each([
+    ["claude", ["shopping:read", "chores:read"]], ["chatgpt", ["shopping:read", "chores:read"]],
+    ["grok-bot", ["shopping:read", "chores:read"]], ["grok-bot", ["shopping:read"]], ["grok-bot", ["chores:read"]],
+  ] as const)("onboards %s with %j without registration and preserves consent, isolation, refresh and disable gates", async (providerName, readScopes) => {
     const originalAuth = auth;
-    const chatgpt = providerName === "chatgpt", id = chatgpt ? CHATGPT_CLIENT_ID : CLAUDE_CLIENT_ID, redirect = chatgpt ? CHATGPT_CALLBACK : CLAUDE_CALLBACK;
-    const limitedEnv: Env = { ...env, MCP_CLAUDE_ENABLED: true, MCP_CHATGPT_ENABLED: true, MCP_READ_SCOPES: ["shopping:read", "chores:read"] };
+    const chatgpt = providerName === "chatgpt", grokBot = providerName === "grok-bot";
+    const id = grokBot ? GROK_BOT_CLIENT_ID : chatgpt ? CHATGPT_CLIENT_ID : CLAUDE_CLIENT_ID;
+    const redirect = grokBot ? GROK_BOT_CALLBACK : chatgpt ? CHATGPT_CALLBACK : CLAUDE_CALLBACK;
+    const limitedEnv: Env = { ...env, MCP_CLAUDE_ENABLED: true, MCP_CHATGPT_ENABLED: true, MCP_GROK_BOT_ENABLED: true, MCP_READ_SCOPES: [...readScopes] };
     const keys = await generateKeyPair("RS256"), kid = randomUUID();
-    const metadata = { client_id: id, client_name: chatgpt ? "ChatGPT" : "Claude", client_uri: chatgpt ? "https://chatgpt.com/" : "https://claude.ai",
-      redirect_uris: [redirect], grant_types: ["authorization_code", "refresh_token"], response_types: ["code"],
+    const metadata = { client_id: id, client_name: grokBot ? "Cursor" : chatgpt ? "ChatGPT" : "Claude", client_uri: grokBot ? "https://cursor.com" : chatgpt ? "https://chatgpt.com/" : "https://claude.ai",
+      redirect_uris: grokBot ? [...GROK_BOT_METADATA_CALLBACKS] : [redirect], grant_types: ["authorization_code", "refresh_token"], response_types: ["code"],
       token_endpoint_auth_method: chatgpt ? "private_key_jwt" : "none",
       ...(chatgpt ? { token_endpoint_auth_methods_supported: ["none", "private_key_jwt"], jwks_uri: CHATGPT_JWKS_URI } : {}) };
     const transport = vi.fn(async (input: string | Request | URL) => {
@@ -281,6 +286,7 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
       expect(await owned(owner, (tx) => tx.select().from(mcpConnections))).toEqual(before);
       const preview = await limited.mcp.previewConsent(owner.headers, owner.householdId, query);
       expect(preview).toMatchObject({ provider: providerName, dataMode: "synthetic", settingsReviewRequired: true });
+      expect(preview.scopes).toEqual([...readScopes, "offline_access"]);
       await expect(limited.mcp.prepareConsent(owner.headers, { householdId: owner.householdId, oauthQuery: query, noteIds: [],
         adultAttested: true, privacyAttested: true, providerSettingsReviewed: false, policyVersion: MCP_POLICY_VERSION })).rejects.toMatchObject({ code: "provider_settings_review_required" });
       const pending = await limited.mcp.prepareConsent(owner.headers, { householdId: owner.householdId, oauthQuery: query, noteIds: [],
@@ -293,12 +299,29 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
       const token = await response.json() as Tokens;
       expect(token.refresh_token).toBeTruthy();
       expect(await limited.mcp.authorize(bearer(token.access_token))).toMatchObject({ clientId: id, householdId: owner.householdId });
-      const otherDisabled = createBetterAuth(db, { ...limitedEnv, MCP_CLAUDE_ENABLED: !chatgpt, MCP_CHATGPT_ENABLED: chatgpt }, { cookiePrefix, mcpMetadataFetch: transport });
+      const otherDisabled = createBetterAuth(db, { ...limitedEnv, MCP_CLAUDE_ENABLED: !grokBot && !chatgpt, MCP_CHATGPT_ENABLED: !grokBot && chatgpt }, { cookiePrefix, mcpMetadataFetch: transport });
       await expect(otherDisabled.mcp.authorize(bearer(token.access_token))).resolves.toMatchObject({ clientId: id });
-      const selectedDisabled = createBetterAuth(db, { ...limitedEnv, MCP_CLAUDE_ENABLED: chatgpt, MCP_CHATGPT_ENABLED: !chatgpt }, { cookiePrefix, mcpMetadataFetch: transport });
+      const selectedDisabled = createBetterAuth(db, { ...limitedEnv, MCP_CLAUDE_ENABLED: grokBot || chatgpt, MCP_CHATGPT_ENABLED: grokBot || !chatgpt, MCP_GROK_BOT_ENABLED: !grokBot }, { cookiePrefix, mcpMetadataFetch: transport });
       await expect(selectedDisabled.mcp.authorize(bearer(token.access_token))).rejects.toMatchObject({ code: "client_not_approved" });
       await expect(limited.mcp.revokeConnection(stranger.headers, result.connectionId)).rejects.toBeTruthy();
       await expect(limited.mcp.withGrantContext(bearer(token.access_token), ["notes:read"], async () => "must not run")).rejects.toMatchObject({ code: "insufficient_scope" });
+      if (grokBot) {
+        expect(overview.grokBot?.serverUrl).toBe(origin + "/api/mcp");
+        expect(overview.grokBot?.scopes).toEqual([...readScopes, "offline_access"]);
+        expect((await originalAuth.mcp.overview(owner.headers, owner.householdId)).grokBot).toBeNull();
+        for (const scope of (["shopping:read", "chores:read"] as const).filter(scope => !readScopes.some(enabled => enabled === scope))) {
+          await expect(limited.mcp.withGrantContext(bearer(token.access_token), [scope], async () => "must not run")).rejects.toMatchObject({ code: "insufficient_scope" });
+        }
+        for (const callback of GROK_BOT_METADATA_CALLBACKS.filter(uri => uri !== redirect)) {
+          const otherProductQuery = await begin(owner, issuer.scopes_supported, id, callback);
+          await expect(limited.mcp.previewConsent(owner.headers, owner.householdId, otherProductQuery)).rejects.toMatchObject({ code: "invalid_consent_query" });
+        }
+        const forged = createBetterAuth(db, { ...limitedEnv, MCP_READ_SCOPES: ["shopping:read", "chores:read", "notes:read"] }, { cookiePrefix, mcpMetadataFetch: transport });
+        auth = forged;
+        const notesQuery = await begin(owner, ["notes:read"], id, redirect);
+        await expect(forged.mcp.previewConsent(owner.headers, owner.householdId, notesQuery)).rejects.toMatchObject({ code: "invalid_consent_query" });
+        auth = limited;
+      }
       if (chatgpt) {
         expect((await refresh(token.refresh_token, { client_id: id })).status).toBeGreaterThanOrEqual(400);
         expect((await refresh(token.refresh_token, { client_id: id, ...await assertion("https://wrong.example.test/token") })).status).toBeGreaterThanOrEqual(400);
@@ -335,7 +358,7 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
       metadata.redirect_uris = ["https://attacker.test/callback"];
       expect((await refreshClient(next.refresh_token)).status).toBeGreaterThanOrEqual(400);
       await expect(limited.mcp.authorize(bearer(next.access_token))).rejects.toMatchObject({ code: "client_not_approved" });
-      metadata.redirect_uris = [redirect];
+      metadata.redirect_uris = grokBot ? [...GROK_BOT_METADATA_CALLBACKS] : [redirect];
       await begin(owner, issuer.scopes_supported, id, redirect);
       await limited.mcp.setHouseholdEnabled(owner.headers, owner.householdId, false);
       await expect(limited.mcp.authorize(bearer(next.access_token))).rejects.toBeTruthy();

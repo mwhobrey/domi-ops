@@ -2,7 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { eq } from "drizzle-orm";
 import { createDb, closeDb, withHouseholdContext, shoppingItems, chores } from "@domi-ops/db";
 import { createBetterAuth } from "@domi-ops/auth";
-import { loadEnv } from "@domi-ops/config";
+import { loadEnv, mcpSupportedScopes } from "@domi-ops/config";
 import { assertSyntheticMcpOrigin } from "../hosted-qa/mcp-origin.mjs";
 
 // This operator entry point is shipped only in the owned QA tools image.
@@ -28,7 +28,7 @@ try {
   // The provider requires a non-loopback HTTPS web callback. The smoke captures
   // the reserved test-domain redirect and never navigates or sends data there.
   const callback = "https://client.example.test/callback";
-  const client = await auth.mcp.registerClient(headers, { name: "Local synthetic MCP inspector", redirectUris: [callback], tokenEndpointAuthMethod: "none", scopes: ["shopping:read", "chores:read", "notes:read", "offline_access"], provider: "local", profileVersion: "who-475.synthetic.v1", dataMode: "synthetic", enabled: true });
+  const client = await auth.mcp.registerClient(headers, { name: "Local synthetic MCP inspector", redirectUris: [callback], tokenEndpointAuthMethod: "none", scopes: mcpSupportedScopes(env), provider: "local", profileVersion: "who-475.synthetic.v1", dataMode: "synthetic", enabled: true });
   await writeFile("/qa/mcp.json", JSON.stringify({ clientId: client.client_id, callback, householdId: alpha.householdId, noteId: alpha.noteId, origin: env.PUBLIC_APP_URL, liveChatGPTVerified: false }, null, 2), { mode: 0o600 });
   console.log("Synthetic shopping/chores and local public OAuth client ready; no member grant or ChatGPT connection created.");
 } finally { await closeDb(db); }
