@@ -141,7 +141,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Deploy via deploy/deploy-hosted.sh
-        uses: appleboy/ssh-action@v1.2.2
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ steps.ssh.outputs.host }}
           username: ${{ steps.ssh.outputs.user }}
