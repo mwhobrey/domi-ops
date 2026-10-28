@@ -45,6 +45,9 @@ The new flag defaults off. Enabling it requires a non-demo deployment and an
 This avoids advertising notes that the Grok Bot profile does not permit. Do not
 silently alter an existing server's ceiling: narrowing this setting also affects
 other assistants and existing note grants. Review that impact before rollout.
+Either read scope may be enabled independently. The setup card obtains the exact
+enabled scopes from the server and retains `offline_access`; do not request a
+disabled domain when configuring the Bot.
 
 Hosted uses the canonical hosted `/api/mcp` endpoint. Each self-host installation
 uses its own reachable HTTPS origin, signing/encryption keys and permissions.
@@ -80,6 +83,8 @@ Bot an ordinary browser login to the household app for this connector test.
 
 ```powershell
 mise exec -- node scripts/mcp-grok-bot/package.mjs https://app.domi-ops.com .qa/grok-bot/NEW-DRAFT
+# For a server with only MCP_READ_SCOPES=shopping:read:
+mise exec -- node scripts/mcp-grok-bot/package.mjs https://selfhost.example.test .qa/grok-bot/SHOPPING-DRAFT shopping:read
 ```
 
 Self-hosters substitute their own canonical origin. Output creation is exclusive:
@@ -88,6 +93,9 @@ an existing directory is refused. The `.cursor-plugin/plugin.json` manifest,
 remote connection, no secrets, local commands, hooks or routines. The public
 `auth.CLIENT_ID` is the pinned metadata URL; `auth.scopes` explicitly requests
 shopping, chores and refresh, rather than relying on a client registration guess.
+The optional final CSV argument selects one or both read scopes and must match
+the deployment's `MCP_READ_SCOPES`. Omission defaults to both; refresh is added
+automatically. Notes, writes, duplicate scopes and empty selections are refused.
 The format is documented by Cursor; actual catalog activation in Grok Bot still
 needs verification.
 

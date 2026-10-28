@@ -13,6 +13,27 @@ test("requires a canonical reachable-style HTTPS origin without credentials or p
   assert.equal(pluginConfiguration("https://selfhost.example.test/").mcp.mcpServers["domi-ops"].url, "https://selfhost.example.test/api/mcp");
 });
 
+test("restricts generated OAuth requests to the selected deployment read scopes", async () => {
+  for (const scopes of [[], ["notes:read"], ["shopping:write"], ["offline_access"], ["shopping:read", "shopping:read"], "shopping:read"]) {
+    assert.throws(() => pluginConfiguration("https://selfhost.example.test", scopes));
+  }
+  const root = await mkdtemp(join(tmpdir(), "domi-grok-scopes-"));
+  try {
+    for (const scope of ["shopping:read", "chores:read"]) {
+      const output = join(root, scope.split(":")[0]);
+      await writePlugin({ origin: "https://selfhost.example.test", output, readScopes: [scope] });
+      const mcp = JSON.parse(await readFile(join(output, "mcp.json"), "utf8"));
+      assert.deepEqual(mcp.mcpServers["domi-ops"].auth.scopes, [scope, "offline_access"]);
+      const readme = await readFile(join(output, "README.md"), "utf8");
+      assert.match(readme, new RegExp(`requested scopes are ${scope}, offline_access`));
+      assert.equal(readme.includes(scope === "shopping:read" ? "chores:read" : "shopping:read"), false);
+    }
+  } finally {
+    assert.equal(dirname(root), resolve(tmpdir())); assert.match(basename(root), /^domi-grok-scopes-/);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("packages only the remote connection and byte-identical shared skill; refuses overwrite", async () => {
   const root = await mkdtemp(join(tmpdir(), "domi-grok-package-"));
   try {

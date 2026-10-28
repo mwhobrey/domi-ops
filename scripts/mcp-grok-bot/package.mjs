@@ -3,21 +3,26 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { nonPublicMcpHost } from "../hosted-qa/mcp-origin.mjs";
 
-export function pluginConfiguration(origin) {
+export function pluginConfiguration(origin, readScopes = ["shopping:read", "chores:read"]) {
   const url = new URL(origin);
   if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash ||
     url.pathname !== "/" || nonPublicMcpHost(url.hostname)) throw new Error("Canonical public HTTPS origin required");
+  if (!Array.isArray(readScopes) || !readScopes.length || readScopes.length > 2 || new Set(readScopes).size !== readScopes.length ||
+    readScopes.some(scope => !["shopping:read", "chores:read"].includes(scope))) throw new Error("One or both deployment read scopes required: shopping:read,chores:read");
+  const domains = readScopes.map(scope => scope === "shopping:read" ? "shopping" : "chores").join(" and ");
   return {
     plugin: { name: "domi-ops-household", displayName: "Domi Ops", author: { name: "MikeWhob" },
-      version: "0.1.0", description: "Read-only shared household shopping and chores with a source-linked briefing.",
+      version: "0.1.0", description: `Read-only shared household ${domains} with a source-linked briefing.`,
       license: "MIT", homepage: "https://domi-ops.com", logo: "assets/icon.png" },
     mcp: { mcpServers: { "domi-ops": { url: url.origin + "/api/mcp",
-      auth: { CLIENT_ID: "https://cursor.com/oauth/mcp-client.json", scopes: ["shopping:read", "chores:read", "offline_access"] } } } },
+      auth: { CLIENT_ID: "https://cursor.com/oauth/mcp-client.json", scopes: [...readScopes, "offline_access"] } } } },
   };
 }
 
-export async function writePlugin({ origin, output }) {
-  const config = pluginConfiguration(origin);
+export async function writePlugin({ origin, output, readScopes }) {
+  const config = pluginConfiguration(origin, readScopes);
+  const requestedScopes = config.mcp.mcpServers["domi-ops"].auth.scopes;
+  const domains = requestedScopes.filter(scope => scope !== "offline_access").map(scope => scope === "shopping:read" ? "shopping" : "chores").join(" and ");
   await mkdir(dirname(output), { recursive: true });
   await mkdir(output, { recursive: false });
   const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -35,7 +40,8 @@ This draft contains one remote MCP endpoint (${config.mcp.mcpServers["domi-ops"]
 and the unchanged shared briefing skill with its MIT license. It contains no
 secrets, local commands, hooks, agents or scheduled routines. Its public OAuth
 client identity is https://cursor.com/oauth/mcp-client.json and its explicit
-requested scopes are shopping:read, chores:read and offline_access. The client
+requested scopes are ${requestedScopes.join(", ")}. These must match the deployment's
+MCP_READ_SCOPES plus offline_access; either read domain may be enabled alone. The client
 ID is a public identity URL, not a secret or API key.
 
 ## Release status
@@ -52,8 +58,8 @@ Cursor desktop and the model API are separate surfaces; no support is implied.
 The operator must explicitly enable the Grok Bot integration and a shopping/chores-only
 deployment read ceiling. A household administrator enables AI connections; each
 eligible adult then signs in to Domi Ops and personally reviews their own grant.
-The grant permits shared household shopping and chores, including other members'
-assigned chores, and refresh access. It does not permit notes or domain writes.
+The grant permits shared household ${domains} and refresh access. Chore access
+includes other members' assigned chores. It does not permit notes or domain writes.
 Do not enter a client secret, API key or request header, or give the Bot a normal
 browser login to the household app. Unexpected permissions are a reason to stop.
 
@@ -80,8 +86,8 @@ or other tools available to a Bot.
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  const [origin, output, ...extra] = process.argv.slice(2);
-  if (!origin || !output || extra.length) throw new Error("Usage: node scripts/mcp-grok-bot/package.mjs CANONICAL_HTTPS_ORIGIN NEW_OUTPUT_DIRECTORY");
-  await writePlugin({ origin, output: resolve(output) });
+  const [origin, output, readScopeArg, ...extra] = process.argv.slice(2);
+  if (!origin || !output || extra.length) throw new Error("Usage: node scripts/mcp-grok-bot/package.mjs CANONICAL_HTTPS_ORIGIN NEW_OUTPUT_DIRECTORY [DEPLOYMENT_READ_SCOPES_CSV]");
+  await writePlugin({ origin, output: resolve(output), readScopes: readScopeArg === undefined ? undefined : readScopeArg.split(",").map(scope => scope.trim()) });
   console.log("Draft generated without credentials. Grok Bot import, connection and marketplace approval remain separate checks.");
 }

@@ -15,9 +15,15 @@
   the grant/refresh rows and the next Bot read required authentication. No combined
   marketplace import, mobile, empty/partial/scope-reduction or full side-effect
   snapshot acceptance is claimed. The contract records the remaining cases.
-- Local verification: 157 restricted-role authorization checks, 1542 regular tests
+- Local verification: 161 restricted-role authorization checks, 1542 regular tests
   and 17 workspace typechecks passed; packaging/QA checks passed. Do not equate
   Cursor/CLI/API proof with Bot support or call the shared client exclusively Grok.
+- Setup/packaging follow the deployment's actual enabled read scopes, including
+  shopping-only or chores-only, with refresh retained. Review fixes passed the
+  full 161-check authorization matrix, 17 typechecks, four UI and three package
+  checks. [Submission preparation](../../docs/MCP_GROK_BOT_SUBMISSION.md) records
+  the MCP-only listing route, private reviewer-access boundary and remaining gates;
+  the background-plate logo is prepared but not deployed.
 
 ## MCP child-assignee names (WHO-478, 2026-10-27)
 

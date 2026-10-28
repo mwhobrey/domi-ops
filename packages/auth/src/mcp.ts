@@ -194,7 +194,7 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string, m
           return { householdId, householdName: household?.name ?? "Household", memberName: current.user.name,
             claude: env.MCP_CLAUDE_ENABLED && !env.DEMO_MODE ? { connectUrl: claudeConnectUrl(urls.origin), serverUrl: urls.resource } : null,
             chatgpt: env.MCP_CHATGPT_ENABLED && !env.DEMO_MODE ? { serverUrl: urls.resource, setupUrl: "https://chatgpt.com/plugins" } : null,
-            grokBot: env.MCP_GROK_BOT_ENABLED && !env.DEMO_MODE ? { serverUrl: urls.resource } : null,
+            grokBot: env.MCP_GROK_BOT_ENABLED && !env.DEMO_MODE ? { serverUrl: urls.resource, scopes: mcpSupportedScopes(env) } : null,
             canManage: ["owner", "admin"].includes(owner.role), enabled: settings?.enabled ?? false,
             connections: connections.map((c) => ({ ...c, expired: c.expiresAt.getTime() <= Date.now(), noteIds: selections.filter((s) => s.connectionId === c.id).map((s) => s.noteId),
               selectedNotes: selections.filter((s) => s.connectionId === c.id).map((s) => ({ id: s.noteId, title: s.title })),

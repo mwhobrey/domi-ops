@@ -5,17 +5,19 @@ import { GrokBotConnectionSetup } from "./GrokBotConnectionSetup.js";
 import { ProviderDataDisclosure } from "./ProviderDataDisclosure.js";
 
 describe("Grok Bot onboarding boundaries", () => {
-  it("gates household setup and identifies the actual endpoint and shared cloud identity", () => {
+  it.each([["shopping:read"], ["chores:read"], ["shopping:read", "chores:read"]])("uses the deployment's enabled read scopes: %j", (...readScopes) => {
     const serverUrl = "https://selfhost.example.test/api/mcp";
-    const disabled = renderToStaticMarkup(createElement(GrokBotConnectionSetup, { enabled: false, serverUrl }));
+    const scopes = [...readScopes, "offline_access"];
+    const disabled = renderToStaticMarkup(createElement(GrokBotConnectionSetup, { enabled: false, serverUrl, scopes }));
     expect(disabled).toContain("Enable AI connections for this household first");
     expect(disabled).not.toContain("Authenticate");
-    const enabled = renderToStaticMarkup(createElement(GrokBotConnectionSetup, { enabled: true, serverUrl }));
+    const enabled = renderToStaticMarkup(createElement(GrokBotConnectionSetup, { enabled: true, serverUrl, scopes }));
     expect(enabled).toContain(serverUrl);
     expect(enabled).toContain("Stop if it asks for notes or write access");
     expect(enabled).toContain("Cursor cloud identity");
     expect(enabled).toContain("https://cursor.com/oauth/mcp-client.json");
-    expect(enabled).toContain("shopping:read chores:read offline_access");
+    expect(enabled).toContain(scopes.join(" "));
+    for (const scope of ["shopping:read", "chores:read"].filter(scope => !readScopes.includes(scope))) expect(enabled).not.toContain(scope);
     expect(enabled).toContain("Do not use automatic client registration");
     expect(enabled).toContain("Directory listing is pending");
   });

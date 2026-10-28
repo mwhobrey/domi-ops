@@ -232,12 +232,15 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
     expect((await gateway.request(origin + "/api/mcp", { method: "POST", headers: { host: new URL(origin).host, origin: foreignOrigin.origin } })).status).toBe(403);
     expect((await mcpGateway(db, auth.mcp, { ...env, MCP_ENABLED: false }).request(origin + "/api/mcp", { method: "POST" })).status).toBe(404);
   });
-  it.each(["claude", "chatgpt", "grok-bot"] as const)("onboards %s without registration and preserves consent, isolation, refresh and disable gates", async (providerName) => {
+  it.each([
+    ["claude", ["shopping:read", "chores:read"]], ["chatgpt", ["shopping:read", "chores:read"]],
+    ["grok-bot", ["shopping:read", "chores:read"]], ["grok-bot", ["shopping:read"]], ["grok-bot", ["chores:read"]],
+  ] as const)("onboards %s with %j without registration and preserves consent, isolation, refresh and disable gates", async (providerName, readScopes) => {
     const originalAuth = auth;
     const chatgpt = providerName === "chatgpt", grokBot = providerName === "grok-bot";
     const id = grokBot ? GROK_BOT_CLIENT_ID : chatgpt ? CHATGPT_CLIENT_ID : CLAUDE_CLIENT_ID;
     const redirect = grokBot ? GROK_BOT_CALLBACK : chatgpt ? CHATGPT_CALLBACK : CLAUDE_CALLBACK;
-    const limitedEnv: Env = { ...env, MCP_CLAUDE_ENABLED: true, MCP_CHATGPT_ENABLED: true, MCP_GROK_BOT_ENABLED: true, MCP_READ_SCOPES: ["shopping:read", "chores:read"] };
+    const limitedEnv: Env = { ...env, MCP_CLAUDE_ENABLED: true, MCP_CHATGPT_ENABLED: true, MCP_GROK_BOT_ENABLED: true, MCP_READ_SCOPES: [...readScopes] };
     const keys = await generateKeyPair("RS256"), kid = randomUUID();
     const metadata = { client_id: id, client_name: grokBot ? "Cursor" : chatgpt ? "ChatGPT" : "Claude", client_uri: grokBot ? "https://cursor.com" : chatgpt ? "https://chatgpt.com/" : "https://claude.ai",
       redirect_uris: grokBot ? [...GROK_BOT_METADATA_CALLBACKS] : [redirect], grant_types: ["authorization_code", "refresh_token"], response_types: ["code"],
@@ -283,6 +286,7 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
       expect(await owned(owner, (tx) => tx.select().from(mcpConnections))).toEqual(before);
       const preview = await limited.mcp.previewConsent(owner.headers, owner.householdId, query);
       expect(preview).toMatchObject({ provider: providerName, dataMode: "synthetic", settingsReviewRequired: true });
+      expect(preview.scopes).toEqual([...readScopes, "offline_access"]);
       await expect(limited.mcp.prepareConsent(owner.headers, { householdId: owner.householdId, oauthQuery: query, noteIds: [],
         adultAttested: true, privacyAttested: true, providerSettingsReviewed: false, policyVersion: MCP_POLICY_VERSION })).rejects.toMatchObject({ code: "provider_settings_review_required" });
       const pending = await limited.mcp.prepareConsent(owner.headers, { householdId: owner.householdId, oauthQuery: query, noteIds: [],
@@ -303,7 +307,11 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
       await expect(limited.mcp.withGrantContext(bearer(token.access_token), ["notes:read"], async () => "must not run")).rejects.toMatchObject({ code: "insufficient_scope" });
       if (grokBot) {
         expect(overview.grokBot?.serverUrl).toBe(origin + "/api/mcp");
+        expect(overview.grokBot?.scopes).toEqual([...readScopes, "offline_access"]);
         expect((await originalAuth.mcp.overview(owner.headers, owner.householdId)).grokBot).toBeNull();
+        for (const scope of (["shopping:read", "chores:read"] as const).filter(scope => !readScopes.some(enabled => enabled === scope))) {
+          await expect(limited.mcp.withGrantContext(bearer(token.access_token), [scope], async () => "must not run")).rejects.toMatchObject({ code: "insufficient_scope" });
+        }
         for (const callback of GROK_BOT_METADATA_CALLBACKS.filter(uri => uri !== redirect)) {
           const otherProductQuery = await begin(owner, issuer.scopes_supported, id, callback);
           await expect(limited.mcp.previewConsent(owner.headers, owner.householdId, otherProductQuery)).rejects.toMatchObject({ code: "invalid_consent_query" });
