@@ -53,6 +53,7 @@ export const envSchema = z
     MCP_ENABLED: z.string().optional().transform((v) => v === "true" || v === "1"),
     MCP_CLAUDE_ENABLED: z.string().optional().transform((v) => v === "true" || v === "1"),
     MCP_CHATGPT_ENABLED: z.string().optional().transform((v) => v === "true" || v === "1"),
+    MCP_GROK_BOT_ENABLED: z.string().optional().transform((v) => v === "true" || v === "1"),
     MCP_READ_SCOPES: z.string().transform((value) => value.split(",").map((scope) => scope.trim()))
       .pipe(z.array(z.enum(MCP_READ_SCOPE_NAMES)).min(1).max(3).refine((scopes) => new Set(scopes).size === scopes.length, "Duplicate MCP read scope")).optional(),
     /** Only on a separate deployment populated exclusively with synthetic data. */
@@ -188,6 +189,9 @@ export const envSchema = z
     STRIPE_PRICE_STARTER_ANNUAL: z.string().optional(),
   })
   .superRefine((data, ctx) => {
+    if (data.MCP_GROK_BOT_ENABLED && (!data.MCP_ENABLED || data.DEMO_MODE || !data.MCP_READ_SCOPES || data.MCP_READ_SCOPES.includes("notes:read"))) {
+      ctx.addIssue({ code: "custom", path: ["MCP_GROK_BOT_ENABLED"], message: "Grok Bot requires MCP, a non-demo deployment and an explicit shopping/chores-only read ceiling" });
+    }
     if (data.MCP_ENABLED) {
       const url = new URL(data.PUBLIC_APP_URL);
       const devLoopback = data.NODE_ENV !== "production" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) && url.protocol === "http:";

@@ -7,8 +7,9 @@ import type { Env } from "@domi-ops/config";
 import { mcpClientProfiles, oauthClient, withMcpProviderContext, type Database } from "@domi-ops/db";
 
 export type PublishedClientPolicy = {
-  clientId: string; callback: string; provider: "claude" | "chatgpt"; version: string;
+  clientId: string; callback: string; provider: "claude" | "chatgpt" | "grok-bot"; version: string;
   displayName: string; authMethod: "none" | "private_key_jwt"; jwksUri?: string;
+  metadataRedirectUris?: readonly string[]; allowedScopes?: readonly string[];
 };
 type Client = {
   clientId: string; clientDiscoveryId?: string | null; tokenEndpointAuthMethod?: string | null;
@@ -16,9 +17,11 @@ type Client = {
   jwksUri?: string | null; jwks?: unknown;
 };
 export function isPublishedClient(client: Client, policy: PublishedClientPolicy) {
+  const redirects = policy.metadataRedirectUris ?? [policy.callback];
   return client.clientId === policy.clientId && client.clientDiscoveryId === "cimd" &&
     client.tokenEndpointAuthMethod === policy.authMethod && client.requirePKCE && !client.skipConsent &&
-    client.redirectUris?.length === 1 && client.redirectUris[0] === policy.callback &&
+    redirects.includes(policy.callback) && client.redirectUris?.length === redirects.length &&
+    new Set(client.redirectUris).size === redirects.length && client.redirectUris.every(uri => redirects.includes(uri)) &&
     (policy.authMethod === "none" || (client.jwksUri === policy.jwksUri && !client.jwks));
 }
 

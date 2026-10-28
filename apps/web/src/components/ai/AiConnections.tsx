@@ -7,6 +7,7 @@ import { AccountSettingsNav } from "../AccountSettingsNav";
 import { ContentSkeleton } from "../ContentSkeleton";
 import { ClaudeConnectionSetup } from "./ClaudeConnectionSetup";
 import { ChatGptConnectionSetup } from "./ChatGptConnectionSetup";
+import { GrokBotConnectionSetup } from "./GrokBotConnectionSetup";
 import { Button, Card, CardBody, Checkbox, ConfirmDialog, LocalDateTime } from "../ui";
 
 function Connection({ connection, refresh, report, busy, setBusy }: {
@@ -120,6 +121,7 @@ export function AiConnections() {
         </CardBody></Card>
         {data.claude && <ClaudeConnectionSetup enabled={data.enabled} {...data.claude} />}
         {data.chatgpt && <ChatGptConnectionSetup enabled={data.enabled} {...data.chatgpt} />}
+        {data.grokBot && <GrokBotConnectionSetup enabled={data.enabled} {...data.grokBot} />}
         <p className="text-sm">Start a connection in an operator-approved assistant, then return here to review or disconnect it. Adding permissions or notes requires a new approval. Disconnect stops future access; it cannot erase information already copied into an assistant conversation.</p>
         {!data.connections.length && <Card><CardBody>No AI connections yet.</CardBody></Card>}
         {data.connections.map((connection) => <Connection key={connection.id + JSON.stringify(connection.scopes) + connection.noteIds.join()} connection={connection} refresh={refresh} report={setMessage} busy={busy} setBusy={setBusy} />)}

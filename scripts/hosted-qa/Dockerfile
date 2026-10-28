@@ -29,6 +29,7 @@ COPY scripts/hosted-qa ./scripts/hosted-qa
 COPY scripts/mcp-chatgpt ./scripts/mcp-chatgpt
 COPY scripts/mcp-claude ./scripts/mcp-claude
 COPY scripts/mcp-gemini ./scripts/mcp-gemini
+COPY scripts/mcp-grok-bot ./scripts/mcp-grok-bot
 COPY docs/fixtures ./docs/fixtures
 COPY skills ./skills
 COPY scripts/household-archive.mts ./scripts/

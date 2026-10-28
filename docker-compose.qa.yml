@@ -117,6 +117,8 @@ services:
       NODE_ENV: ${DOMI_QA_API_NODE_ENV:-production}
       MCP_ENABLED: ${DOMI_QA_MCP:-false}
       MCP_SYNTHETIC_DEPLOYMENT: ${DOMI_QA_MCP:-false}
+      MCP_GROK_BOT_ENABLED: ${DOMI_QA_MCP_GROK_BOT:-false}
+      MCP_READ_SCOPES: ${DOMI_QA_MCP_READ_SCOPES:-shopping:read,chores:read,notes:read}
       QA_ADMIN_PASSWORD: ${DOMI_QA_ADMIN_PASSWORD}
       DOMI_OPS_APP_PASSWORD: ${DOMI_QA_APP_PASSWORD}
       QA_ENCRYPTION_KEY: ${DOMI_QA_ENCRYPTION_KEY}
@@ -132,6 +134,8 @@ services:
       NODE_ENV: ${DOMI_QA_API_NODE_ENV:-production}
       MCP_ENABLED: ${DOMI_QA_MCP:-false}
       MCP_SYNTHETIC_DEPLOYMENT: ${DOMI_QA_MCP:-false}
+      MCP_GROK_BOT_ENABLED: ${DOMI_QA_MCP_GROK_BOT:-false}
+      MCP_READ_SCOPES: ${DOMI_QA_MCP_READ_SCOPES:-shopping:read,chores:read,notes:read}
   worker:
     <<: *qa
     command: [node, apps/worker/dist/index.js]
