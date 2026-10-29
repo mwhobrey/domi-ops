@@ -8,6 +8,13 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+- Add the disabled reviewed-write foundation: encrypted proposals, signed-in
+  member review, exact-change confirmation, expiry and safe retry receipts for
+  hosted and self-hosted servers. Shopping/chore revisions detect concurrent edits.
+  No production write actions are registered; existing assistant grants stay read-only.
+- Migration: `0105_mcp_reviewed_writes` adds proposal/activity tables and revision
+  counters/triggers. Run migrations as the migration role and re-grant the restricted
+  app role before deploying this build; keep reviewed-write flags disabled.
 - Add default-disabled Grok Bot read-only onboarding groundwork, a pinned shared
   Cursor cloud OAuth profile, account-wide privacy guidance and credential-free
   portable briefing package generation. Installed-client acceptance and directory

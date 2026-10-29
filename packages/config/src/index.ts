@@ -2,6 +2,7 @@ import { z } from "zod";
 import { validateDevPublicAppUrl, oauthRedirectUris, inferDevWebProfile } from "./dev-url.js";
 import { loadRootDotenv, resetRootDotenvFlag } from "./load-dotenv.js";
 export const MCP_READ_SCOPE_NAMES = ["shopping:read", "chores:read", "notes:read"] as const;
+export const MCP_WRITE_SCOPE_NAMES = ["shopping:write", "chores:write"] as const;
 export { subscriptionAllowsWork, type SubscriptionAccessState } from "./subscription-access.js";
 
 export { loadRootDotenv, resetRootDotenvFlag } from "./load-dotenv.js";
@@ -53,6 +54,9 @@ export const envSchema = z
     MCP_ENABLED: z.string().optional().transform((v) => v === "true" || v === "1"),
     MCP_CLAUDE_ENABLED: z.string().optional().transform((v) => v === "true" || v === "1"),
     MCP_CHATGPT_ENABLED: z.string().optional().transform((v) => v === "true" || v === "1"),
+    MCP_WRITES_ENABLED: z.string().optional().transform((v) => v === "true" || v === "1"),
+    MCP_WRITE_SCOPES: z.string().transform((value) => value.split(",").map((scope) => scope.trim()))
+      .pipe(z.array(z.enum(MCP_WRITE_SCOPE_NAMES)).min(1).max(2).refine((scopes) => new Set(scopes).size === scopes.length, "Duplicate MCP write scope")).optional(),
     MCP_GROK_BOT_ENABLED: z.string().optional().transform((v) => v === "true" || v === "1"),
     MCP_READ_SCOPES: z.string().transform((value) => value.split(",").map((scope) => scope.trim()))
       .pipe(z.array(z.enum(MCP_READ_SCOPE_NAMES)).min(1).max(3).refine((scopes) => new Set(scopes).size === scopes.length, "Duplicate MCP read scope")).optional(),
@@ -189,6 +193,9 @@ export const envSchema = z
     STRIPE_PRICE_STARTER_ANNUAL: z.string().optional(),
   })
   .superRefine((data, ctx) => {
+    if (data.MCP_WRITES_ENABLED && (!data.MCP_ENABLED || data.DEMO_MODE || !data.ENCRYPTION_KEY || !data.MCP_WRITE_SCOPES?.length)) {
+      ctx.addIssue({ code: "custom", path: ["MCP_WRITES_ENABLED"], message: "Reviewed writes require MCP, encryption, an explicit write-scope ceiling and a non-demo deployment" });
+    }
     if (data.MCP_GROK_BOT_ENABLED && (!data.MCP_ENABLED || data.DEMO_MODE || !data.MCP_READ_SCOPES || data.MCP_READ_SCOPES.includes("notes:read"))) {
       ctx.addIssue({ code: "custom", path: ["MCP_GROK_BOT_ENABLED"], message: "Grok Bot requires MCP, a non-demo deployment and an explicit shopping/chores-only read ceiling" });
     }
@@ -251,8 +258,8 @@ export const envSchema = z
 
 export type Env = z.infer<typeof envSchema>;
 
-export function mcpSupportedScopes(env: Pick<Env, "MCP_READ_SCOPES">) {
-  return [...(env.MCP_READ_SCOPES ?? MCP_READ_SCOPE_NAMES), "offline_access" as const];
+export function mcpSupportedScopes(env: Pick<Env, "MCP_READ_SCOPES"> & Partial<Pick<Env, "MCP_WRITES_ENABLED" | "MCP_WRITE_SCOPES">>) {
+  return [...(env.MCP_READ_SCOPES ?? MCP_READ_SCOPE_NAMES), ...(env.MCP_WRITES_ENABLED ? env.MCP_WRITE_SCOPES ?? [] : []), "offline_access" as const];
 }
 
 export const KNOWN_HOUSEHOLD_MODULES = [

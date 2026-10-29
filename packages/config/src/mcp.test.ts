@@ -3,6 +3,13 @@ import { envSchema, mcpSupportedScopes } from "./index.js";
 
 const base = { NODE_ENV: "test", PUBLIC_APP_URL: "https://selfhost.example.test", API_URL: "http://api:4000", DATABASE_URL: "postgres://fixture:fixture@localhost/fixture" };
 describe("MCP deployment configuration", () => {
+  it("keeps write scopes off until explicitly configured with encryption", () => {
+    expect(envSchema.parse(base).MCP_WRITES_ENABLED).toBe(false);
+    const candidate={...base,MCP_ENABLED:"true",MCP_WRITES_ENABLED:"true",MCP_WRITE_SCOPES:"shopping:write",ENCRYPTION_KEY:"synthetic-encryption-key-only"};
+    expect(mcpSupportedScopes(envSchema.parse(candidate))).toContain("shopping:write");
+    expect(mcpSupportedScopes(envSchema.parse({...candidate,MCP_WRITES_ENABLED:"false"}))).not.toContain("shopping:write");
+    for(const change of [{MCP_ENABLED:"false"},{ENCRYPTION_KEY:undefined},{MCP_WRITE_SCOPES:undefined},{MCP_WRITE_SCOPES:"notes:write"},{DEMO_MODE:"true"}])expect(envSchema.safeParse({...candidate,...change}).success).toBe(false);
+  });
   it.each(["single", "shared", "dedicated"])("is opt-in and has no hosted license requirement in %s", (mode) => {
     const off = envSchema.parse({ ...base, DEPLOYMENT_MODE: mode });
     expect(off.MCP_ENABLED).toBe(false); expect(off.MCP_SYNTHETIC_DEPLOYMENT).toBe(false);

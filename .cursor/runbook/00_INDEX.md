@@ -37,6 +37,7 @@
 
 ## Supplementary docs (outside runbook)
 
+- `docs/MCP_REVIEWED_WRITES.md` — WHO-479 server-owned review/idempotency foundation, migration and disabled release boundary; original contract in `MCP_WRITE_CONFIRMATION_PLAN.md`
 - `docs/MCP_GROK_BOT.md` — WHO-489 read-only cloud identity, setup/privacy, draft packaging and pending installed-client acceptance
 - `docs/MCP_GROK_BOT_SUBMISSION.md` — Grok Bot listing draft, reviewer checklist and final submission gates
 - `docs/MCP_SETUP.md` / `docs/MCP_PILOT.md` — WHO-478 hosted/self-host setup, provisioning gates, disconnect/rollback and bounded self-host pilot; hosted acceptance pending

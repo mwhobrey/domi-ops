@@ -1,5 +1,31 @@
 # Current state
 
+## Reviewed write foundation (WHO-479, 2026-10-27)
+
+- The owner requested resuming WHO-479 after hosted read-only acceptance and
+  provider submissions. This authorizes implementation of the disabled foundation,
+  not live write enablement or widening existing read-only grants. Normal-use
+  usefulness/repeat-use/cost measurements remain incomplete; do not invent them.
+- [Foundation](../../docs/MCP_REVIEWED_WRITES.md) implements encrypted intents,
+  strict same-origin member/session review, exact digest/nonce confirmation, live
+  locked authority checks, target revision invalidation and atomic retry receipts.
+  Migration 0105 adds owner-only RLS metadata and revision triggers; no live DDL
+  or deployment was performed. No new dependency, paid gate or inference service.
+- Production adapters/MCP write tools remain absent. WHO-480 owns that allowlist,
+  updated profiles/skills and cross-client acceptance. The write flag and an
+  explicit write-scope ceiling are needed; existing read grants stay unchanged.
+- Verified locally: disposable single/shared Postgres matrix (191 checks), focused
+  configuration/discovery/onboarding tests (24), all 17 workspace typechecks and
+  targeted web lint passed. Actual review UI passed fictional desktop/mobile,
+  deliberate-confirmation, approval-reset, decline, expiry and lost-response checks.
+  These results do not claim production adapters or live provider write acceptance.
+- Operator client planning keeps a read-only default even though the known scope
+  catalog now includes writes. A write plan needs the deployment's explicit
+  enabled scope ceiling; registration still rechecks the live configuration.
+  After the CI-discovered planner fix, the full regular suite passed (1,540 tests;
+  998 environment-dependent skips), all 17 typechecks passed again, and the
+  focused provisioning/configuration regression run passed 25 tests.
+
 ## Grok Bot read-only integration (WHO-489, 2026-10-28)
 
 - Owner selected this client before WHO-480. Local flag defaults off; hosted and

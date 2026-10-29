@@ -10,15 +10,15 @@ import { CHATGPT_POLICY } from "./mcp-chatgpt.js";
 import { GROK_BOT_POLICY } from "./mcp-grok-bot.js";
 import { isPublishedClient, publishedClientDiscovery } from "./mcp-client-discovery.js";
 import type { betterAuth, BetterAuthOptions } from "better-auth";
-import { isModuleEnabled, parseHouseholdModulesJson, mcpSupportedScopes, MCP_READ_SCOPE_NAMES, type Env } from "@domi-ops/config";
+import { isHostedDeployment, isModuleEnabled, parseHouseholdModulesJson, subscriptionAllowsWork, mcpSupportedScopes, MCP_READ_SCOPE_NAMES, MCP_WRITE_SCOPE_NAMES, type Env } from "@domi-ops/config";
 import {
-  householdMembers, households, mcpAccessEvents, mcpClientProfiles, mcpConnections, mcpHouseholdSettings,
+  baSessions, householdMembers, households, householdSubscriptions, mcpAccessEvents, mcpClientProfiles, mcpConnections, mcpHouseholdSettings,
   mcpNoteSelections, mcpPendingConsents, notes, noteShares, oauthClient, oauthConsent,
   oauthRefreshToken, oauthAccessToken, withHouseholdContext, withMcpConnectionContext,
   withMcpProviderContext, withUserLookupContext, type Database,
 } from "@domi-ops/db";
 
-export const MCP_SCOPES = [...MCP_READ_SCOPE_NAMES, "offline_access"] as const;
+export const MCP_SCOPES = [...MCP_READ_SCOPE_NAMES, ...MCP_WRITE_SCOPE_NAMES, "offline_access"] as const;
 export const MCP_POLICY_VERSION = "2026-10-23.v3";
 const settingsReviewRequired = (provider: string) => ["chatgpt", "claude", "gemini", "grok-bot"].includes(provider);
 const TTL = 30 * 86400_000;
@@ -58,8 +58,12 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string, m
   const approval = new AsyncLocalStorage<Binding>();
   const operatorRegistration = new AsyncLocalStorage<boolean>();
 
-  async function clientProfile(clientId: string) {
-    const row = await withMcpProviderContext(db, async (tx) => {
+  async function clientProfile(clientId: string, source = db, lock = false) {
+    const row = await withMcpProviderContext(source, async (tx) => {
+      if (lock) {
+        await tx.select({ id: oauthClient.id }).from(oauthClient).where(eq(oauthClient.clientId, clientId)).for("share");
+        await tx.select({ id: mcpClientProfiles.clientId }).from(mcpClientProfiles).where(eq(mcpClientProfiles.clientId, clientId)).for("share");
+      }
       const [row] = await tx.select({ profile: mcpClientProfiles, client: oauthClient })
         .from(mcpClientProfiles).innerJoin(oauthClient, eq(oauthClient.clientId, mcpClientProfiles.clientId))
         .where(and(eq(mcpClientProfiles.clientId, clientId), eq(mcpClientProfiles.enabled, true))).limit(1);
@@ -169,9 +173,58 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string, m
       if (!profile.client.redirectUris.includes(p.get("redirect_uri")!) || scopes.some((s) => !profile.client.scopes?.includes(s))) deny("invalid_consent_query", 400);
       return { scopes, profile, queryHash: hash(query) };
     }
+    async function writeContext<T>(userId: string, connectionId: string, requiredScopes: readonly string[], fn: (tx: Database, identity: McpWriteIdentity) => Promise<T>, bearer?: McpIdentity, sessionId?: string) {
+      if (!env.MCP_WRITES_ENABLED || !env.ENCRYPTION_KEY) deny("writes_not_enabled");
+      uuid(userId); uuid(connectionId);
+      const initial = await liveConnection(userId, connectionId, requiredScopes, bearer?.clientId);
+      return withUserLookupContext(db, userId, (lookup) => withHouseholdContext(lookup, initial.householdId, async (tx) => {
+        await tx.execute(sql`select set_config('statement_timeout','1500ms',true), set_config('lock_timeout','1000ms',true), set_config('idle_in_transaction_session_timeout','8000ms',true)`);
+        // All authority locks survive until commit. Every path uses this order,
+        // then locks the intent and sorted targets; competing updates must wait.
+        const [household] = await tx.select({ id: households.id, name: households.name }).from(households).where(eq(households.id, initial.householdId)).for("share");
+        if (!household) deny("mcp_disabled");
+        let sessionExpiresAt = Number.POSITIVE_INFINITY;
+        if (sessionId) {
+          const [browser] = await tx.select().from(baSessions).where(and(eq(baSessions.id, sessionId), eq(baSessions.userId, userId))).for("share");
+          if (!browser || browser.expiresAt.getTime() <= Date.now()) deny("unauthorized", 401);
+          sessionExpiresAt = browser.expiresAt.getTime();
+        }
+        const [current] = await tx.select().from(householdMembers).where(and(eq(householdMembers.id, initial.memberId), eq(householdMembers.userId, userId), eq(householdMembers.householdId, initial.householdId))).for("share");
+        if (!current || current.accessRevokedAt || !["owner", "admin", "member"].includes(current.role)) deny("member_not_eligible");
+        await tx.select().from(mcpHouseholdSettings).where(eq(mcpHouseholdSettings.householdId, initial.householdId)).for("share");
+        const [subscription] = isHostedDeployment(env) ? await tx.select().from(householdSubscriptions).where(eq(householdSubscriptions.householdId, initial.householdId)).for("share") : [];
+        if (isHostedDeployment(env) && !subscriptionAllowsWork(subscription ?? null)) deny("subscription_read_only");
+        const profile = await clientProfile(initial.clientId, tx, true);
+        const [grant] = await tx.select().from(mcpConnections).where(and(eq(mcpConnections.id, connectionId), eq(mcpConnections.userId, userId))).for("share");
+        if (!grant || grant.status !== "active" || grant.revokedAt || grant.expiresAt.getTime() <= Date.now() ||
+          grant.memberId !== current.id || grant.grantedRole !== current.role || grant.clientId !== initial.clientId ||
+          grant.policyVersion !== MCP_POLICY_VERSION || grant.clientProfileVersion !== profile.profile.version || grant.issuer !== urls.issuer || grant.resource !== urls.resource) deny("inactive_grant", 401);
+        const effectiveScopes = bearer?.scopes ?? grant.scopes;
+        if (!effectiveScopes.some((scope) => MCP_WRITE_SCOPE_NAMES.includes(scope as typeof MCP_WRITE_SCOPE_NAMES[number])) ||
+          effectiveScopes.some((scope) => !grant.scopes.includes(scope) || !profile.client.scopes?.includes(scope)) ||
+          requiredScopes.some((scope) => !effectiveScopes.includes(scope))) deny("insufficient_scope");
+        await householdAccess(tx, initial.householdId, effectiveScopes);
+        const result = await fn(tx, { userId, memberId: current.id, householdId: initial.householdId, connectionId, clientId: grant.clientId,
+          scopes: effectiveScopes, role: current.role, expiresAt: grant.expiresAt, policyVersion: grant.policyVersion, profileVersion: grant.clientProfileVersion, sessionId,
+          clientName: profile.client.name ?? "AI assistant", householdName: household.name, memberName: current.name });
+        if (sessionExpiresAt <= Date.now() || grant.expiresAt.getTime() <= Date.now() || (isHostedDeployment(env) && !subscriptionAllowsWork(subscription ?? null))) deny("inactive_grant", 401);
+        return result;
+      }));
+    }
     return {
       urls,
       metadata: oauthProviderAuthServerMetadata(auth),
+      async withWriteGrantContext<T>(request: Request, requiredScopes: readonly string[], fn: (tx: Database, identity: McpWriteIdentity) => Promise<T>) {
+        request.signal.throwIfAborted();
+        const identity = await this.authorize(request, requiredScopes);
+        return writeContext(identity.userId, identity.connectionId, requiredScopes, async (tx, current) => {
+          request.signal.throwIfAborted(); const result = await fn(tx, current); request.signal.throwIfAborted(); return result;
+        }, identity);
+      },
+      async withWriteReviewContext<T>(headers: Headers, connectionId: string, fn: (tx: Database, identity: McpWriteIdentity) => Promise<T>) {
+        const browser = await session(headers);
+        return writeContext(browser.user.id, connectionId, [], fn, undefined, browser.session.id);
+      },
       async overview(headers: Headers, householdId: string) {
         uuid(householdId);
         const current = await session(headers);
@@ -194,7 +247,7 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string, m
           return { householdId, householdName: household?.name ?? "Household", memberName: current.user.name,
             claude: env.MCP_CLAUDE_ENABLED && !env.DEMO_MODE ? { connectUrl: claudeConnectUrl(urls.origin), serverUrl: urls.resource } : null,
             chatgpt: env.MCP_CHATGPT_ENABLED && !env.DEMO_MODE ? { serverUrl: urls.resource, setupUrl: "https://chatgpt.com/plugins" } : null,
-            grokBot: env.MCP_GROK_BOT_ENABLED && !env.DEMO_MODE ? { serverUrl: urls.resource, scopes: mcpSupportedScopes(env) } : null,
+            grokBot: env.MCP_GROK_BOT_ENABLED && !env.DEMO_MODE ? { serverUrl: urls.resource, scopes: mcpSupportedScopes({ ...env, MCP_WRITES_ENABLED: false }) } : null,
             canManage: ["owner", "admin"].includes(owner.role), enabled: settings?.enabled ?? false,
             connections: connections.map((c) => ({ ...c, expired: c.expiresAt.getTime() <= Date.now(), noteIds: selections.filter((s) => s.connectionId === c.id).map((s) => s.noteId),
               selectedNotes: selections.filter((s) => s.connectionId === c.id).map((s) => ({ id: s.noteId, title: s.title })),
@@ -463,3 +516,4 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string, m
 
 export type McpAuthorization = ReturnType<ReturnType<typeof createMcpAuthorization>["attach"]>;
 export type McpIdentity = { userId: string; memberId: string; householdId: string; connectionId: string; clientId: string; scopes: string[] };
+export type McpWriteIdentity = McpIdentity & { role: string; expiresAt: Date; policyVersion: string; profileVersion: string; sessionId?: string; clientName: string; householdName: string; memberName: string | null };

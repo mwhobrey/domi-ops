@@ -1,4 +1,5 @@
 import {
+  bigint,
   boolean,
   date,
   integer,
@@ -168,6 +169,7 @@ export const shoppingTripItems = pgTable("shopping_trip_items", {
 
 export const shoppingItems = pgTable("shopping_items", {
   id: uuid("id").primaryKey().defaultRandom(),
+  revision: bigint("revision", { mode: "number" }).notNull().default(1),
   householdId: uuid("household_id")
     .notNull()
     .references(() => households.id, { onDelete: "cascade" }),
@@ -202,6 +204,7 @@ export const choresRecurring = pgTable("chores_recurring", {
 
 export const chores = pgTable("chores", {
   id: uuid("id").primaryKey().defaultRandom(),
+  revision: bigint("revision", { mode: "number" }).notNull().default(1),
   householdId: uuid("household_id")
     .notNull()
     .references(() => households.id, { onDelete: "cascade" }),

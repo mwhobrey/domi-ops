@@ -66,6 +66,7 @@ import {
 import { getCookie } from "hono/cookie";
 import { isInvalidInputError } from "./lib/db-errors.js";
 import { mcpAuthorizationRoutes } from "./routes/mcp-authorization.js";
+import { mcpWriteRoutes } from "./routes/mcp-writes.js";
 import { mcpGateway } from "./mcp/gateway.js";
 
 export function createApplication(env: Env, options: { stripeFactory?: Parameters<typeof billingRoutes>[2]; authCookiePrefix?: string } = {}) {
@@ -128,6 +129,7 @@ export function createApplication(env: Env, options: { stripeFactory?: Parameter
   // Session → auth context must run before calendar OAuth (reads c.get("auth") on /start).
   app.use("*", createDemoProtectionMiddleware(env));
   if (env.MCP_ENABLED) app.route("/api/mcp-auth", mcpAuthorizationRoutes(betterAuth.mcp, env));
+  if (env.MCP_ENABLED && env.MCP_WRITES_ENABLED) app.route("/api/mcp-writes", mcpWriteRoutes(betterAuth.mcp, env));
   app.get("/.well-known/oauth-authorization-server/auth", (c) => {
     if (!env.MCP_ENABLED || env.DEMO_MODE) return c.json({ error: "not_found" }, 404);
     return betterAuth.mcp.metadata(c.req.raw);
