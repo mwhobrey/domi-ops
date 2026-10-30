@@ -13,8 +13,8 @@
     "@domi-ops/calendar-sync": "*",
     "@domi-ops/config": "*",
     "@domi-ops/db": "*",
-    "@sentry/node": "^11.8.0",
-    "bullmq": "^6.4.0",
+    "@sentry/node": "^11.9.0",
+    "bullmq": "^6.5.0",
     "ioredis": "^5.6.1"
   },
   "devDependencies": {

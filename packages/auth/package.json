@@ -22,13 +22,13 @@
     "mcp:client": "node dist/mcp-client-cli.js"
   },
   "dependencies": {
-    "@better-auth/cimd": "1.7.12",
-    "@better-auth/core": "1.7.12",
-    "@better-auth/oauth-provider": "1.7.12",
+    "@better-auth/cimd": "1.7.14",
+    "@better-auth/core": "1.7.14",
+    "@better-auth/oauth-provider": "1.7.14",
     "@domi-ops/config": "*",
     "@domi-ops/crypto": "*",
     "@domi-ops/db": "*",
-    "better-auth": "1.7.12",
+    "better-auth": "1.7.14",
     "better-call": "1.4.4",
     "drizzle-orm": "^0.45.4",
     "nodemailer": "^10.2.0"
