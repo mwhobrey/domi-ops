@@ -41,9 +41,10 @@
     "qa:hosted:providers": "node scripts/hosted-qa/run.mjs providers"
   },
   "devDependencies": {
-    "playwright": "^1.64.0",
+    "@aws-sdk/client-s3": "3.1155.0",
     "node-gyp": "^13.1.0",
-    "turbo": "^2.11.7",
+    "playwright": "^1.64.0",
+    "turbo": "^2.11.10",
     "typescript": "^5.8.3",
     "vitest": "^5.0.5"
   },

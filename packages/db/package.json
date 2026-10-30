@@ -28,7 +28,7 @@
   "dependencies": {
     "@domi-ops/config": "*",
     "@domi-ops/crypto": "*",
-    "better-auth": "^1.7.10",
+    "better-auth": "^1.7.12",
     "drizzle-orm": "^0.45.4",
     "postgres": "^3.4.7"
   },

@@ -12,6 +12,10 @@ updates:
       # cannot tell. Patch and minor updates still come through.
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
+      # Capacitor Firebase Authentication 8 requires firebase ^12.6.0.
+      # Revisit the major upgrade together with that plugin's peer support.
+      - dependency-name: "firebase"
+        versions: [">=13.0.0 <14.0.0"]
     groups:
       # Next.js/React ecosystem moves together often enough that separate PRs just churn CI —
       # bundle them, including Next's matching lint configuration.
@@ -64,3 +68,7 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      actions:
+        patterns:
+          - "*"

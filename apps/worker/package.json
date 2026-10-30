@@ -14,7 +14,7 @@
     "@domi-ops/config": "*",
     "@domi-ops/db": "*",
     "@sentry/node": "^11.8.0",
-    "bullmq": "^6.3.15",
+    "bullmq": "^6.4.0",
     "ioredis": "^5.6.1"
   },
   "devDependencies": {

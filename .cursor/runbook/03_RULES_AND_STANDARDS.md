@@ -176,6 +176,15 @@ This repo often uses hand-written numbered migrations (`0007_home_status_presenc
 
 ## Gotchas & technical debt
 
+- **Dependabot grouping:** npm minor/patch updates share the maintenance group;
+  framework/editor groups still take precedence and GitHub Actions share one group.
+  Firebase 13 is deferred while `@capacitor-firebase/authentication` 8 requires
+  `firebase ^12.6.0`; revisit both together. Validate lockfile updates with Node 22
+  and the Node 24 Docker builds, including their partial workspace manifest layout.
+  Regenerating with the Node 24 image's npm repairs stale nested resolutions left
+  by npm 10. Root QA scripts declare their S3 SDK dependency explicitly rather
+  than relying on workspace hoisting.
+
 1. **Auth proxy vs rewrite** — `/auth` must stay on Route Handler; rewrites break `Set-Cookie` domain for Docker `:3001`. Proxy must forward each `Set-Cookie` via `getSetCookie()` (comma-joined cookies break OAuth state).
 2. **localhost vs 127.0.0.1** — `PUBLIC_APP_URL` / Google redirect URIs use one loopback host (usually `localhost`). Cookies set on `127.0.0.1` are not sent on `localhost` callbacks → Better Auth `state_security_mismatch`. Middleware + auth proxy redirect `127.0.0.1` → canonical host using the **`Host` header** (Next.js may normalize `request.nextUrl.hostname` to `localhost` while cookies stay on `127.0.0.1`). Browse `http://localhost:3000` (or `:3001` docker).
 2b. **GHCR web image + OAuth** — CI builds the web image without your droplet `PUBLIC_APP_URL`. Do **not** pass `baseURL` to `createAuthClient` — better-auth defaults to `window.location.origin` in the browser. API/worker still read runtime `PUBLIC_APP_URL` from `.env` for Better Auth `baseURL` and Google redirect URIs.
