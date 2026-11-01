@@ -69,6 +69,10 @@ const MESSAGES: Record<string, string> = {
   pharmacy_archived: "That pharmacy is archived. Restore it first, or pick another.",
   version_conflict: "This medication was changed by someone else. Reload and try again.",
   medication_not_found: "That medication no longer exists.",
+  interval_every_minutes_invalid: "Interval must be between 5 minutes and 365 days.",
+  interval_max_doses_invalid: "Max doses per day must be a whole number from 1 to 24.",
+  interval_fixed_start_required: "Pick a start time.",
+  interval_end_time_required: "Pick an end time.",
 };
 
 /** A sentence for the person, never a raw code. */

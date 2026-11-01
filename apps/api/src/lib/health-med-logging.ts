@@ -1,6 +1,7 @@
 import type { Env } from "@domi-ops/config";
 import type { Database } from "@domi-ops/db";
 import { healthEvents, healthMedicationLogs, healthMedications } from "@domi-ops/db";
+import { parseIntervalSchedule } from "@domi-ops/calendar-sync";
 import { and, eq, gte, inArray, isNotNull } from "drizzle-orm";
 import { decryptHealthFieldOrPassthrough, encryptHealthField } from "./health-crypto.js";
 import { loadHealthMedicationShareMap, replaceHealthEventShares } from "./health-access.js";
@@ -18,10 +19,24 @@ export interface DoseLogEntry {
 export const GLANCE_DOSE_LOG_LOOKBACK_DAYS = 60;
 
 /**
+ * Dose-log lookback is always at least the glance floor (60 days), and widens when interval
+ * schedules need more history so "last taken" stays accurate for long cadences.
+ */
+export function doseLogLookbackDays(scheduleJsons: (string | null | undefined)[]): number {
+  let maxEveryMinutes = 0;
+  for (const scheduleJson of scheduleJsons) {
+    const schedule = parseIntervalSchedule(scheduleJson);
+    if (!schedule) continue;
+    maxEveryMinutes = Math.max(maxEveryMinutes, schedule.everyMinutes);
+  }
+  return Math.max(GLANCE_DOSE_LOG_LOOKBACK_DAYS, Math.ceil(maxEveryMinutes / (24 * 60)) + 1);
+}
+
+/**
  * Every dose log for `medicationIds` logged on or after `since`, grouped by medication id.
  * One query in place of the glance builder's per-med / per-time `is-it-logged` lookups
- * (WHO-280). 60 days back covers any real interval schedule — a longer cadence than that is a
- * monthly `scheduled` med, not `interval`.
+ * (WHO-280). Use `doseLogLookbackDays()` for interval-aware callers; fixed schedules keep the
+ * 60-day floor.
  */
 export async function loadDoseLogMap(
   db: Database,
