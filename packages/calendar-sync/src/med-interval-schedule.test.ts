@@ -227,6 +227,41 @@ describe("nextIntervalPending", () => {
       }),
     ).toBeNull();
   });
+
+  it("uses interval history for long-cadence first_taken schedules", () => {
+    const schedule = normalizeIntervalSchedule({
+      everyMinutes: 90 * 24 * 60,
+      anchor: "first_taken",
+      intervalFrom: "last_taken",
+      stop: { mode: "max_doses", maxDoses: 1 },
+    });
+    const now = zonedLocalToUtc(date, "08:00", tz);
+    const taken70DaysAgo = new Date(now.getTime() - 70 * 24 * 60 * 60 * 1000);
+    const taken91DaysAgo = new Date(now.getTime() - 91 * 24 * 60 * 60 * 1000);
+
+    expect(
+      nextIntervalPending({
+        schedule,
+        tz,
+        date,
+        now,
+        logs: [{ scheduledAt: taken70DaysAgo, loggedAt: taken70DaysAgo, status: "taken" }],
+      }),
+    ).toBeNull();
+
+    const awaitingFirst = nextIntervalPending({ schedule, tz, date, now, logs: [] });
+    expect(awaitingFirst?.awaitingFirst).toBe(true);
+
+    const due = nextIntervalPending({
+      schedule,
+      tz,
+      date,
+      now,
+      logs: [{ scheduledAt: taken91DaysAgo, loggedAt: taken91DaysAgo, status: "taken" }],
+    });
+    expect(due).not.toBeNull();
+    expect(due?.awaitingFirst).toBe(false);
+  });
 });
 
 describe("intervalSlotShiftsForEdit", () => {

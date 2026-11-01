@@ -44,7 +44,7 @@ import {
   loadHealthMedicationGroupMembershipMap,
 } from "./health-access.js";
 import {
-  GLANCE_DOSE_LOG_LOOKBACK_DAYS,
+  doseLogLookbackDays,
   isInstantLogged,
   loadDoseLogMap,
   type DoseLogEntry,
@@ -720,9 +720,15 @@ export async function buildMedicationDoseOverlays(
   const doseMedIds = [
     ...new Set([...meds.map((m) => m.id), ...[...groupMemberMedsMap.values()].flat().map((m) => m.id)]),
   ];
+  const lookbackDays = doseLogLookbackDays([
+    ...meds.filter((m) => m.scheduleKind === "interval").map((m) => m.scheduleJson),
+    ...groupRows
+      .filter((g) => g.scheduleKind === "interval" && (groupMemberMedsMap.get(g.id)?.length ?? 0) > 0)
+      .map((g) => g.scheduleJson),
+  ]);
   const lookbackStart = new Date(
     zonedLocalToUtc(from, "00:00", timeZone).getTime() -
-      GLANCE_DOSE_LOG_LOOKBACK_DAYS * 24 * 60 * 60 * 1000,
+      lookbackDays * 24 * 60 * 60 * 1000,
   );
   const doseLogMap = await loadDoseLogMap(db, doseMedIds, lookbackStart);
 

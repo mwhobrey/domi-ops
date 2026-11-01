@@ -85,7 +85,7 @@ import { decryptHealthFieldOrPassthrough, encryptHealthField } from "../lib/heal
 import { householdTimezone } from "../lib/household-time.js";
 import { listHouseholdMembersWithAuth, memberShownLabel } from "@domi-ops/auth";
 import {
-  GLANCE_DOSE_LOG_LOOKBACK_DAYS,
+  doseLogLookbackDays,
   isInstantLogged,
   loadDoseLogMap,
   recordDose,
@@ -588,8 +588,14 @@ export function householdHealthRoutes(db: Database, env: Env) {
         ...[...groupMemberMedsMap.values()].flat().map((m) => m.id),
       ]),
     ];
+    const lookbackDays = doseLogLookbackDays([
+      ...intervalMeds.map((m) => m.scheduleJson),
+      ...groupRows
+        .filter((g) => g.scheduleKind === "interval" && (groupMemberMedsMap.get(g.id)?.length ?? 0) > 0)
+        .map((g) => g.scheduleJson),
+    ]);
     const doseLogLookbackStart = new Date(
-      dayStart.getTime() - GLANCE_DOSE_LOG_LOOKBACK_DAYS * 24 * 60 * 60 * 1000,
+      dayStart.getTime() - lookbackDays * 24 * 60 * 60 * 1000,
     );
     const doseLogMap = await loadDoseLogMap(db, glanceMedIds, doseLogLookbackStart);
 
@@ -1874,7 +1880,8 @@ export function householdHealthRoutes(db: Database, env: Env) {
       }
       const schedule = parseIntervalSchedule(scheduleJson);
       if (schedule) {
-        const since = new Date(Date.now() - GLANCE_DOSE_LOG_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+        const lookbackDays = doseLogLookbackDays([scheduleJson]);
+        const since = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000);
         const clockLogs = await db
           .select({
             id: healthMedicationLogs.id,
