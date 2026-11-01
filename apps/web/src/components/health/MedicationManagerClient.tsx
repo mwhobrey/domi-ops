@@ -13,6 +13,7 @@ import { HealthMedicationSheet } from "./HealthMedicationSheet";
 import { PharmaciesSection } from "./PharmaciesSection";
 import { OrganizerSection } from "./OrganizerSection";
 import { SuppliesSection } from "./SuppliesSection";
+import { pharmacyErrorMessage } from "./pharmacy-helpers";
 import { SECTION_IDS, SECTION_LABELS, countLabel, type SectionId } from "./section-state";
 import { supplyChip } from "./supply-helpers";
 import { useSectionOpen } from "./use-section-open";
@@ -248,7 +249,7 @@ function MedGroupSheet({
 
       onSaved();
     } catch (e) {
-      setErr(e instanceof ApiError ? e.message : "Save failed");
+      setErr(e instanceof ApiError ? pharmacyErrorMessage(e, e.message) : "Save failed");
     } finally {
       setBusy(false);
     }

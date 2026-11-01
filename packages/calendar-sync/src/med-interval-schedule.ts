@@ -37,7 +37,8 @@ export type IntervalPendingDose = {
 };
 
 const MIN_EVERY = 5;
-const MAX_EVERY = 24 * 60 * 7;
+// Keep interval schedules bounded to one year.
+const MAX_EVERY = 24 * 60 * 365;
 const MAX_DOSES_CAP = 24;
 /** Intervals of a full day or longer span calendar days — must not reset each local midnight. */
 const MULTI_DAY_MINUTES = 24 * 60;
@@ -65,8 +66,14 @@ export function parseIntervalSchedule(raw: string | null | undefined): IntervalS
     const fixedStartTime = parseHhmm(parsed.fixedStartTime);
     if (anchor === "fixed_start" && !fixedStartTime) return null;
     const maxDoses = Number(stopRaw.maxDoses);
+    const roundedMaxDoses = Math.round(maxDoses);
     const endTime = parseHhmm(stopRaw.endTime);
-    if (mode === "max_doses" && (!Number.isFinite(maxDoses) || maxDoses < 1)) return null;
+    if (
+      mode === "max_doses" &&
+      (!Number.isFinite(roundedMaxDoses) || roundedMaxDoses < 1 || roundedMaxDoses > MAX_DOSES_CAP)
+    ) {
+      return null;
+    }
     if (mode === "end_time" && !endTime) return null;
     return {
       everyMinutes: Math.round(everyMinutes),
@@ -75,7 +82,7 @@ export function parseIntervalSchedule(raw: string | null | undefined): IntervalS
       intervalFrom,
       stop: {
         mode,
-        maxDoses: Number.isFinite(maxDoses) ? Math.min(MAX_DOSES_CAP, Math.round(maxDoses)) : undefined,
+        maxDoses: Number.isFinite(roundedMaxDoses) ? roundedMaxDoses : undefined,
         endTime,
       },
     };

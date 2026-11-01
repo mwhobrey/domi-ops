@@ -37,6 +37,8 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ### Fixed
 
+- Medication interval schedules now accept up to 365 days (for example, every 14 days), interval schedule save failures show clear messages instead of a generic API 400, and stored max-doses values above 24 are no longer silently clamped.
+
 - Household briefing skill v0.1.1 instructs assistants to distinguish record
   counts from quantities and avoid inferring unseen totals or duplicate records
   from numbered/repeated titles. Claude and ChatGPT packages are versioned 0.1.2.

@@ -25,6 +25,59 @@ describe("normalizeIntervalSchedule", () => {
   });
 });
 
+describe("interval schedule bounds and parsing", () => {
+  it("accepts a 14-day interval in normalize and parse", () => {
+    const input = {
+      everyMinutes: 14 * 24 * 60,
+      anchor: "first_taken",
+      intervalFrom: "last_taken",
+      stop: { mode: "max_doses", maxDoses: 2 },
+    };
+    const normalized = normalizeIntervalSchedule(input);
+    expect(normalized.everyMinutes).toBe(14 * 24 * 60);
+    expect(parseIntervalSchedule(JSON.stringify(input))?.everyMinutes).toBe(14 * 24 * 60);
+  });
+
+  it("accepts exactly 365 days and rejects values above it", () => {
+    const atCap = {
+      everyMinutes: 365 * 24 * 60,
+      anchor: "first_taken",
+      intervalFrom: "last_taken",
+      stop: { mode: "max_doses", maxDoses: 2 },
+    };
+    expect(() => normalizeIntervalSchedule(atCap)).not.toThrow();
+    expect(parseIntervalSchedule(JSON.stringify(atCap))?.everyMinutes).toBe(365 * 24 * 60);
+
+    const aboveCap = {
+      ...atCap,
+      everyMinutes: 365 * 24 * 60 + 1,
+    };
+    expect(() => normalizeIntervalSchedule(aboveCap)).toThrow("interval_every_minutes_invalid");
+    expect(parseIntervalSchedule(JSON.stringify(aboveCap))).toBeNull();
+  });
+
+  it("rejects out-of-range max_doses in parse instead of clamping", () => {
+    const base = {
+      everyMinutes: 180,
+      anchor: "first_taken",
+      intervalFrom: "last_taken",
+      stop: { mode: "max_doses" as const, maxDoses: 2 },
+    };
+
+    expect(parseIntervalSchedule(JSON.stringify({ ...base, stop: { mode: "max_doses", maxDoses: 24 } }))?.stop.maxDoses).toBe(24);
+    expect(parseIntervalSchedule(JSON.stringify({ ...base, stop: { mode: "max_doses", maxDoses: 25 } }))).toBeNull();
+    expect(parseIntervalSchedule(JSON.stringify({ ...base, stop: { mode: "max_doses", maxDoses: 100 } }))).toBeNull();
+    expect(parseIntervalSchedule(JSON.stringify({ ...base, stop: { mode: "max_doses", maxDoses: 0 } }))).toBeNull();
+
+    expect(() =>
+      normalizeIntervalSchedule({ ...base, stop: { mode: "max_doses", maxDoses: 25 } }),
+    ).toThrow("interval_max_doses_invalid");
+    expect(() =>
+      normalizeIntervalSchedule({ ...base, stop: { mode: "max_doses", maxDoses: 0 } }),
+    ).toThrow("interval_max_doses_invalid");
+  });
+});
+
 describe("nextIntervalPending", () => {
   it("awaits first dose when anchor is first_taken", () => {
     const schedule = parseIntervalSchedule(

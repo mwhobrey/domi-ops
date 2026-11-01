@@ -107,4 +107,15 @@ describe("apiErrorCode and pharmacyErrorMessage", () => {
     expect(pharmacyErrorMessage(err(400, JSON.stringify({ error: "something_new" })), "Save failed")).toBe("Save failed");
     expect(pharmacyErrorMessage(new Error("boom"), "Save failed")).toBe("Save failed");
   });
+
+  it("maps every interval schedule code to a friendly message", () => {
+    for (const code of [
+      "interval_every_minutes_invalid",
+      "interval_max_doses_invalid",
+      "interval_fixed_start_required",
+      "interval_end_time_required",
+    ]) {
+      expect(pharmacyErrorMessage(err(400, JSON.stringify({ error: code })), "Save failed")).not.toBe("Save failed");
+    }
+  });
 });
