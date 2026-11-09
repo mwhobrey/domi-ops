@@ -306,7 +306,7 @@ maybeDescribe("filling sessions (integration)", () => {
     it("says where it would start and how long it would be, and picks up after what is already filled", async () => {
       const { plan, medIds } = await setup();
       const d0 = await call("mom", "GET", `/${plan.id}/sessions/defaults`);
-      expect(d0.json).toEqual({ today: today(), coverageStart: today(), fillLengthDays: 31, openSessionId: null });
+      expect(d0.json).toEqual({ today: today(), coverageStart: today(), fillLengthDays: 31, openSessionId: null, catchUp: null });
       const s = await begin(plan);
       expect((await call("mom", "GET", `/${plan.id}/sessions/defaults`)).json.openSessionId).toBe(s.id);
       await fillOk(plan, s, medIds[0]!);
@@ -640,7 +640,7 @@ maybeDescribe("filling sessions (integration)", () => {
         missing: [{ from: plus(20), to: plus(30) }],
       });
       expect(res.supply).toMatchObject({ organizerDays: 20, outsideDays: 0, runsOutOn: plus(20) });
-      expect(res.session.progress).toEqual({ total: 2, filled: 0, partial: 1, pending: 1 });
+      expect(res.session.progress).toEqual({ total: 2, filled: 0, partial: 1, pending: 1, skipped: 0 });
     });
 
     it("tops up in the same session when more arrives, and the estimate follows", async () => {
@@ -1072,6 +1072,144 @@ maybeDescribe("filling sessions (integration)", () => {
       expect(stale.json.error).toBe("version_conflict");
       expect((await call("mom", "POST", `/${plan.id}/sessions/${s.id}/finish`, {})).json.error).toBe("invalid_version");
       expect((await call("mom", "POST", `/${plan.id}/sessions/${s.id}/abandon`, { version: 1 })).status).toBe(409);
+    });
+  });
+
+  describe("skipping a medication", () => {
+    const skip = (as: string, plan: Json, session: Json, medicationId: string, reason = "out_of_stock") =>
+      call(as, "POST", `/${plan.id}/sessions/${session.id}/skips`, { medicationId, reason, version: session.version });
+    const undoSkip = (plan: Json, session: Json, skipId: string) => call("mom", "POST", `/${plan.id}/sessions/${session.id}/skips/${skipId}/undo`, { version: session.version });
+    const defaults = async (plan: Json) => (await call("mom", "GET", `/${plan.id}/sessions/defaults`)).json;
+
+    it("out of stock: nothing counted outside, no days covered, and it cannot be filled until undone", async () => {
+      const { plan, medIds } = await setup();
+      const s = await begin(plan);
+      const res = await skip("mom", plan, s, medIds[0]!);
+      expect(res.status, JSON.stringify(res.json)).toBe(200);
+      expect(med(res.json.session, medIds[0]!)).toMatchObject({ status: "skipped", skip: { reason: "out_of_stock" }, filledDays: 0 });
+      expect(res.json.session.progress).toMatchObject({ total: 2, pending: 1, skipped: 1 });
+      expect(await supplyRow(medIds[0]!)).toMatchObject({ runsOutOn: today(), outsideDays: 0, organizerDaysCounted: 0 });
+      expect(await fillRows(s.id)).toHaveLength(0);
+      const refused = await fill("mom", plan, res.json.session, medIds[0]!);
+      expect(refused.status).toBe(409);
+      expect(refused.json.error).toBe("medication_skipped");
+    });
+
+    it("keeps the days already in the organizer when a medication runs out partway", async () => {
+      const { plan, medIds } = await setup();
+      const s = await begin(plan);
+      const filled = await fillOk(plan, s, medIds[0]!, { coveredTo: plus(9), outsideDays: 5 });
+      const res = await skip("mom", plan, filled.session, medIds[0]!);
+      expect(res.status, JSON.stringify(res.json)).toBe(200);
+      expect(med(res.json.session, medIds[0]!)).toMatchObject({ status: "skipped", filledDays: 10 });
+      expect(await supplyRow(medIds[0]!)).toMatchObject({ runsOutOn: plus(10), outsideDays: 0, organizerDaysCounted: 10 });
+    });
+
+    it("does not count days past a gap in the organizer when a medication runs out", async () => {
+      const { plan, medIds } = await setup();
+      const s = await begin(plan);
+      const filled = await fillOk(plan, s, medIds[0]!, { coveredFrom: plus(10), coveredTo: plus(20), confirmedTotalDays: 11 });
+      const res = await skip("mom", plan, filled.session, medIds[0]!);
+      expect(res.status, JSON.stringify(res.json)).toBe(200);
+      expect(await supplyRow(medIds[0]!)).toMatchObject({ runsOutOn: today(), outsideDays: 0, organizerDaysCounted: 0 });
+    });
+
+    it("left out this time: the supply is not touched", async () => {
+      const { plan, medIds } = await setup();
+      const s = await begin(plan);
+      const res = await skip("mom", plan, s, medIds[0]!, "left_out");
+      expect(res.status, JSON.stringify(res.json)).toBe(200);
+      expect(med(res.json.session, medIds[0]!).skip.reason).toBe("left_out");
+      expect(await supplyRow(medIds[0]!)).toBeUndefined();
+    });
+
+    it("answers a repeat with the skip already there, without saving another estimate", async () => {
+      const { plan, medIds } = await setup();
+      const s = await begin(plan);
+      const first = await skip("mom", plan, s, medIds[0]!);
+      const again = await skip("mom", plan, s, medIds[0]!);
+      expect(again.status).toBe(200);
+      expect(again.json.replayed).toBe(true);
+      expect(again.json.session.version).toBe(first.json.session.version);
+      expect(await revisions(medIds[0]!)).toHaveLength(1);
+    });
+
+    it("undo puts the earlier estimate back and lets it be filled", async () => {
+      const { plan, medIds } = await setup();
+      const s = await begin(plan);
+      const skipped = await skip("mom", plan, s, medIds[0]!);
+      const undone = await undoSkip(plan, skipped.json.session, med(skipped.json.session, medIds[0]!).skip.id);
+      expect(undone.status, JSON.stringify(undone.json)).toBe(200);
+      expect(undone.json.supplyRestored).toBe(true);
+      expect(med(undone.json.session, medIds[0]!)).toMatchObject({ status: "pending", skip: null });
+      expect(await supplyRow(medIds[0]!)).toMatchObject({ runsOutOn: null, outsideDays: null });
+      await fillOk(plan, undone.json.session, medIds[0]!);
+    });
+
+    it("refuses a medication with every day already filled, and a stale version", async () => {
+      const { plan, medIds } = await setup();
+      const s = await begin(plan);
+      const filled = await fillOk(plan, s, medIds[0]!);
+      const nothing = await skip("mom", plan, filled.session, medIds[0]!);
+      expect(nothing.status).toBe(409);
+      expect(nothing.json.error).toBe("nothing_to_skip");
+      const stale = await skip("mom", plan, s, medIds[1]!);
+      expect(stale.status).toBe(409);
+      expect(stale.json.error).toBe("version_conflict");
+    });
+
+    it("can finish a session of nothing but skips", async () => {
+      const { plan, medIds } = await setup();
+      const s = await begin(plan);
+      const one = await skip("mom", plan, s, medIds[0]!);
+      const two = await skip("mom", plan, one.json.session, medIds[1]!, "left_out");
+      const finished = await act("mom", plan, two.json.session, "finish");
+      expect(finished.status, JSON.stringify(finished.json)).toBe(200);
+      expect(finished.json.session.status).toBe("finished");
+    });
+
+    it("offers the days a medication ran out for, until they are filled", async () => {
+      const { plan, medIds } = await setup();
+      const s = await begin(plan);
+      const filled = await fillOk(plan, s, medIds[0]!);
+      const skipped = await skip("mom", plan, filled.session, medIds[1]!);
+      await act("mom", plan, skipped.json.session, "finish");
+
+      const d = await defaults(plan);
+      expect(d.coverageStart).toBe(plus(s.fillLengthDays));
+      expect(d.catchUp).toEqual({ coverageStart: today(), fillLengthDays: s.fillLengthDays, medicationIds: [medIds[1]] });
+
+      const again = await begin(plan, { coverageStart: d.catchUp.coverageStart, fillLengthDays: d.catchUp.fillLengthDays });
+      expect(med(again, medIds[0]!).status).toBe("filled");
+      expect(med(again, medIds[1]!).status).toBe("pending");
+      const done = await fillOk(plan, again, medIds[1]!);
+      await act("mom", plan, done.session, "finish");
+      expect((await defaults(plan)).catchUp).toBeNull();
+    });
+
+    it("offers nothing for a medication left out on purpose", async () => {
+      const { plan, medIds } = await setup();
+      const s = await begin(plan);
+      const filled = await fillOk(plan, s, medIds[0]!);
+      const skipped = await skip("mom", plan, filled.session, medIds[1]!, "left_out");
+      await act("mom", plan, skipped.json.session, "finish");
+      expect((await defaults(plan)).catchUp).toBeNull();
+    });
+
+    it("lets a reader look but not skip", async () => {
+      const { plan, medIds } = await setup();
+      const s = await begin(plan);
+      expect((await skip("reader", plan, s, medIds[0]!)).status).toBe(403);
+    });
+
+    it("starts a session around a pill kept out of the organizer, even with no quantity set", async () => {
+      const { plan, medIds } = await setup([
+        { times: ["08:00"], q: { "08:00": 4 } },
+        { times: ["12:00"], q: {}, over: { organizerExcluded: true } },
+      ]);
+      const s = await begin(plan);
+      expect(s.medications.map((m: Json) => m.medicationId)).toEqual([medIds[0]]);
+      expect(s.notGuided).toContainEqual({ medicationId: medIds[1], reason: "kept_out" });
     });
   });
 

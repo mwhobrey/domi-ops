@@ -12,11 +12,13 @@ import {
   healthMedicationSupply,
   healthMedicationSupplyRevisions,
   healthOrganizerOccurrences,
+  healthMedications,
   healthOrganizerSessionFills,
+  healthOrganizerSessionSkips,
   healthOrganizerSessions,
   type Database,
 } from "@domi-ops/db";
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { filterVisibleMedicationIds } from "./health-access.js";
 import { decryptHealthField, decryptHealthFieldOrPassthrough, encryptHealthField } from "./health-crypto.js";
 import { loadPlacements, type PlanRow } from "./health-organizer-plan.js";
@@ -34,6 +36,8 @@ import { quartersToPills } from "./health-supply-validation.js";
 type Auth = { userId: string; householdId: string; memberId: string; role: string };
 export type SessionRow = typeof healthOrganizerSessions.$inferSelect;
 type FillRow = typeof healthOrganizerSessionFills.$inferSelect;
+type SkipRow = typeof healthOrganizerSessionSkips.$inferSelect;
+export type SkipReason = SkipRow["reason"];
 
 export type Snapshot = {
   v: 1;
@@ -99,7 +103,10 @@ export type SessionMedicationView = {
   name: string;
   dosage: string | null;
   instructions: string | null;
-  status: FillProgress["status"];
+  /** `skipped` wins over how far it got: the person said the rest is not going in. */
+  status: FillProgress["status"] | "skipped";
+  /** Why this medication is not being filled in this session, if it was skipped. */
+  skip: SkipView | null;
   /** Days with a dose, and how many of them are filled. */
   requiredDays: number;
   filledDays: number;
@@ -124,6 +131,8 @@ export type FillView = {
   undoneAt: string | null;
 };
 
+export type SkipView = { id: string; reason: SkipReason; createdAt: string };
+
 export type ReviewChanges = PlacementDiff & { compartments: CompartmentChange[] };
 export type CompartmentChange = { id: string; from: string | null; to: string | null };
 
@@ -146,7 +155,7 @@ export type SessionView = {
   compartments: Snapshot["compartments"];
   medications: SessionMedicationView[];
   notGuided: Snapshot["notGuided"];
-  progress: { total: number; filled: number; partial: number; pending: number };
+  progress: { total: number; filled: number; partial: number; pending: number; skipped: number };
   /** Every fill made in this session, oldest first, undone ones included. */
   fills: FillView[];
 };
@@ -164,6 +173,10 @@ export function fillView(f: FillRow): FillView {
     createdAt: f.createdAt.toISOString(),
     undoneAt: iso(f.undoneAt),
   };
+}
+
+export function skipView(s: SkipRow): SkipView {
+  return { id: s.id, reason: s.reason, createdAt: s.createdAt.toISOString() };
 }
 
 /** The stretches filled for each medication across every session, undone fills left out. */
@@ -234,6 +247,11 @@ export async function loadSessionView(db: Database, env: Env, auth: Auth, plan: 
     .where(eq(healthOrganizerSessionFills.sessionId, session.id))
     .orderBy(asc(healthOrganizerSessionFills.createdAt), asc(healthOrganizerSessionFills.id));
   const visibleFills = sessionFills.filter((f) => visible.has(f.medicationId));
+  const activeSkips = await db
+    .select()
+    .from(healthOrganizerSessionSkips)
+    .where(and(eq(healthOrganizerSessionSkips.sessionId, session.id), isNull(healthOrganizerSessionSkips.undoneAt)));
+  const skipByMedication = new Map(activeSkips.map((s) => [s.medicationId, s]));
 
   const medications: SessionMedicationView[] = [];
   for (const id of snapshotIds.filter((i) => visible.has(i)).sort((a, b) => snapshot.medications[a]!.name.localeCompare(snapshot.medications[b]!.name))) {
@@ -243,12 +261,14 @@ export async function loadSessionView(db: Database, env: Env, auth: Auth, plan: 
     const byCompartment = new Map<string, number>();
     for (const p of mine) byCompartment.set(p.compartmentId, (byCompartment.get(p.compartmentId) ?? 0) + p.quarters);
     const last = [...visibleFills].reverse().find((f) => f.medicationId === id && f.undoneAt === null);
+    const skip = skipByMedication.get(id);
     medications.push({
       medicationId: id,
       name: info.name,
       dosage: info.dosage,
       instructions: info.instructions,
-      status: progress.status,
+      status: skip ? "skipped" : progress.status,
+      skip: skip ? skipView(skip) : null,
       requiredDays: progress.requiredCount,
       filledDays: progress.coveredCount,
       covered: progress.covered,
@@ -272,7 +292,7 @@ export async function loadSessionView(db: Database, env: Env, auth: Auth, plan: 
     occurrenceDate = occ?.date ?? null;
   }
 
-  const count = (status: FillProgress["status"]) => medications.filter((m) => m.status === status).length;
+  const count = (status: SessionMedicationView["status"]) => medications.filter((m) => m.status === status).length;
   return {
     id: session.id,
     planId: session.planId,
@@ -290,7 +310,7 @@ export async function loadSessionView(db: Database, env: Env, auth: Auth, plan: 
     compartments: snapshot.compartments,
     medications,
     notGuided: snapshot.notGuided.filter((n) => visible.has(n.medicationId)),
-    progress: { total: medications.length, filled: count("filled"), partial: count("partial"), pending: count("pending") },
+    progress: { total: medications.length, filled: count("filled"), partial: count("partial"), pending: count("pending"), skipped: count("skipped") },
     fills: visibleFills.map(fillView),
   };
 }
@@ -299,6 +319,70 @@ function addDays(iso: string, n: number): string {
   const d = new Date(`${iso}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
+}
+
+export type CatchUp = { coverageStart: string; fillLengthDays: number; medicationIds: string[] };
+
+const CATCH_UP_SCAN = 100;
+
+/**
+ * The days a medication that ran out still needs, from the latest ended session that has any. The next session normally
+ * starts after the last day anything was filled to, so without this those days would never be offered again. Past days
+ * are gone, medications no longer going in the organizer are left out, and the person decides whether to take it up.
+ */
+export async function loadCatchUp(db: Database, env: Env, auth: Auth, plan: PlanRow, today: string): Promise<CatchUp | null> {
+  const rows = await db
+    .select({
+      sessionId: healthOrganizerSessions.id,
+      medicationId: healthOrganizerSessionSkips.medicationId,
+      coverageStart: healthOrganizerSessions.coverageStart,
+      fillLengthDays: healthOrganizerSessions.fillLengthDays,
+      snapshotJson: healthOrganizerSessions.snapshotJson,
+    })
+    .from(healthOrganizerSessionSkips)
+    .innerJoin(healthOrganizerSessions, eq(healthOrganizerSessions.id, healthOrganizerSessionSkips.sessionId))
+    .where(
+      and(
+        eq(healthOrganizerSessions.planId, plan.id),
+        ne(healthOrganizerSessions.status, "open"),
+        eq(healthOrganizerSessionSkips.reason, "out_of_stock"),
+        isNull(healthOrganizerSessionSkips.undoneAt),
+      ),
+    )
+    .orderBy(desc(healthOrganizerSessions.startedAt))
+    .limit(CATCH_UP_SCAN);
+  if (rows.length === 0) return null;
+
+  const ids = [...new Set(rows.map((r) => r.medicationId))];
+  const visible = await filterVisibleMedicationIds(db, auth, ids);
+  const stillGoingIn = await db
+    .select({ id: healthMedications.id })
+    .from(healthMedications)
+    .where(and(inArray(healthMedications.id, ids), isNull(healthMedications.deletedAt), eq(healthMedications.enabled, true), eq(healthMedications.organizerExcluded, false)));
+  const eligible = new Set(stillGoingIn.map((m) => m.id).filter((id) => visible.has(id)));
+  const coverage = await loadCoverage(db, [...eligible]);
+
+  for (const sessionId of new Set(rows.map((r) => r.sessionId))) {
+    const mine = rows.filter((r) => r.sessionId === sessionId);
+    const end = addDays(mine[0]!.coverageStart, mine[0]!.fillLengthDays - 1);
+    if (end < today) continue;
+    const snapshot = decodeSnapshot(env, mine[0]!.snapshotJson);
+    let first: string | null = null;
+    const medicationIds: string[] = [];
+    for (const { medicationId } of mine) {
+      if (!eligible.has(medicationId)) continue;
+      const dates = snapshot.placements.filter((p) => p[0] === medicationId && p[1] >= today).map((p) => p[1]);
+      const start = fillProgress(dates, coverage.get(medicationId) ?? []).missing[0]?.from;
+      if (!start) continue;
+      medicationIds.push(medicationId);
+      if (first === null || start < first) first = start;
+    }
+    if (first !== null) {
+      const fillLengthDays = Math.round((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${first}T00:00:00Z`)) / 86_400_000) + 1;
+      return { coverageStart: first, fillLengthDays, medicationIds };
+    }
+  }
+  return null;
 }
 
 /**

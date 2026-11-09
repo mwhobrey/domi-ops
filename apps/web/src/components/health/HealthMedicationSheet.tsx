@@ -49,6 +49,7 @@ export function HealthMedicationSheet({
   const [dosage, setDosage] = useState(medication?.dosage ?? "");
   const [instructions, setInstructions] = useState(medication?.instructions ?? "");
   const [form, setForm] = useState<MedicationFormValue>(medication?.form ?? "pill");
+  const [organizerExcluded, setOrganizerExcluded] = useState(medication?.organizerExcluded ?? false);
   const [scheduleDraft, setScheduleDraft] = useState<MedScheduleDraft>(() =>
     medicationToScheduleDraft(medication),
   );
@@ -90,6 +91,7 @@ export function HealthMedicationSheet({
     setDosage(medication?.dosage ?? "");
     setInstructions(medication?.instructions ?? "");
     setForm(medication?.form ?? "pill");
+    setOrganizerExcluded(medication?.organizerExcluded ?? false);
     setScheduleDraft(medicationToScheduleDraft(medication));
     setSelectedGroupIds(new Set(medication?.groupIds ?? []));
     setNewGroupName("");
@@ -150,6 +152,7 @@ export function HealthMedicationSheet({
       dosage: dosage.trim() || undefined,
       instructions: instructions.trim() || undefined,
       form,
+      organizerExcluded,
       scheduleKind: scheduleResult.scheduleKind,
       schedule: scheduleResult.schedule,
       enabled,
@@ -272,6 +275,12 @@ export function HealthMedicationSheet({
           </Select>
           {form !== "pill" ? <span className="block text-xs text-[var(--color-text-muted)]">Not a pill, so it stays out of pill organizers. Reminders and refills still work.</span> : null}
         </label>
+        {form === "pill" && !isAsNeededMedScheduleKind(scheduleDraft.scheduleKind) ? (
+          <div className="space-y-1 text-sm">
+            <Checkbox label="Keep out of the pill organizer" checked={organizerExcluded} onChange={(e) => setOrganizerExcluded(e.target.checked)} />
+            <span className="block text-xs text-[var(--color-text-muted)]">It stays in its bottle. Reminders and refills still work.</span>
+          </div>
+        ) : null}
         <label className="block space-y-1 text-sm">
           <span>Instructions</span>
           <Textarea

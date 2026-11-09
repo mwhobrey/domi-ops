@@ -131,6 +131,7 @@ const REASONS: Record<NotGuidedReason, string> = {
   paused: "paused",
   no_times: "has no fixed times",
   not_a_pill: "not a pill",
+  kept_out: "kept out of the organizer",
 };
 export const notGuidedReasonLabel = (reason: NotGuidedReason): string => REASONS[reason] ?? reason;
 

@@ -490,6 +490,7 @@ export function serializeHealthMedication(
     instructions: decryptHealthFieldOrPassthrough(row.instructions, env),
     scheduleKind: row.scheduleKind,
     form: row.form,
+    organizerExcluded: row.organizerExcluded,
     schedule: parseJsonObject(row.scheduleJson),
     reminderOffsets: parseJsonNumberArray(row.reminderOffsetsJson),
     startDate: row.startDate,

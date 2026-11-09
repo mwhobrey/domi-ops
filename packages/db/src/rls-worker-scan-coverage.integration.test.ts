@@ -50,6 +50,7 @@ const NOT_READ_BY_WORKER_SCANS = new Set([
   "health_organizer_occurrences",
   "health_organizer_plan_caregivers",
   "health_organizer_session_fills",
+  "health_organizer_session_skips",
   "health_organizer_sessions",
   "health_organizer_time_map",
   "health_pharmacies",

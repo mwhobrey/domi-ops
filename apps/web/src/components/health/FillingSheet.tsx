@@ -7,7 +7,7 @@ import { FillingReviewBanner } from "./FillingReviewBanner";
 import { FillingMedicationPanel } from "./FillingMedicationPanel";
 import { FillingMedicationPicker } from "./FillingMedicationPicker";
 import { FillingSummary } from "./FillingSummary";
-import { count, fillErrorMessage, isStaleAnswer, leftBehind, progressLabel, rangeLabel, sessionFromConflict } from "./filling-helpers";
+import { addDays, count, fillErrorMessage, isStaleAnswer, leftBehind, progressLabel, rangeLabel, sessionFromConflict } from "./filling-helpers";
 import type { SessionDefaults, SessionView } from "./filling-types";
 import type { HealthMedication } from "./health-types";
 import { parseDays } from "./supply-helpers";
@@ -258,7 +258,8 @@ export function FillingSheet({
   const anyFilled = session ? session.progress.filled + session.progress.partial > 0 : false;
   // Only once something is filled: with nothing saved, the next session starts on the same days, so nothing is left behind.
   const left = session && anyFilled ? leftBehind(session) : [];
-  const pct = session && session.progress.total > 0 ? Math.round(((session.progress.filled + session.progress.partial / 2) / session.progress.total) * 100) : 0;
+  const canFinish = anyFilled || (session?.progress.skipped ?? 0) > 0;
+  const pct = session && session.progress.total > 0 ? Math.round(((session.progress.filled + session.progress.skipped + session.progress.partial / 2) / session.progress.total) * 100) : 0;
   const isOpen = session?.status === "open";
 
   return (
@@ -296,6 +297,27 @@ export function FillingSheet({
                   A filling session follows you through the bottles: pick a medication, put its pills in, save it, and move on to the next. It keeps
                   your place if you leave and lets someone else carry on from another phone.
                 </p>
+                {defaults?.catchUp ? (
+                  <Alert variant="info">
+                    <span className="break-words">
+                      {defaults.catchUp.medicationIds.map(nameOf).join(", ")} ran out at the last fill and still {defaults.catchUp.medicationIds.length === 1 ? "needs" : "need"}{" "}
+                      {rangeLabel({ from: defaults.catchUp.coverageStart, to: addDays(defaults.catchUp.coverageStart, defaults.catchUp.fillLengthDays - 1) })}.
+                    </span>
+                    <div className="mt-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          setStartText(defaults.catchUp!.coverageStart);
+                          setLengthText(String(defaults.catchUp!.fillLengthDays));
+                        }}
+                      >
+                        Fill those days
+                      </Button>
+                    </div>
+                  </Alert>
+                ) : null}
                 <label className="block space-y-1 text-sm">
                   <span className="font-medium text-[var(--color-text)]">First day to fill</span>
                   <Input type="date" value={startText} onChange={(e) => setStartText(e.target.value)} />
@@ -371,7 +393,7 @@ export function FillingSheet({
                       <Button variant="ghost" onClick={() => setConfirmStop(true)}>
                         Stop this session
                       </Button>
-                      <Button variant={session.progress.pending + session.progress.partial === 0 ? "primary" : "secondary"} disabled={!anyFilled} onClick={() => setConfirmFinish(true)}>
+                      <Button variant={session.progress.pending + session.progress.partial === 0 ? "primary" : "secondary"} disabled={!canFinish} onClick={() => setConfirmFinish(true)}>
                         Finish session
                       </Button>
                     </div>

@@ -1,5 +1,5 @@
 import { Alert } from "../ui";
-import { count, finishSummary, rangeLabel, rangesLabel } from "./filling-helpers";
+import { count, finishSummary, rangeLabel, rangesLabel, skipReasonLabel } from "./filling-helpers";
 import type { SessionView } from "./filling-types";
 
 /**
@@ -7,7 +7,7 @@ import type { SessionView } from "./filling-types";
  * and again afterwards as the record. Finishing creates no dose records: filling is not taking.
  */
 export function FillingSummary({ session }: { session: Pick<SessionView, "medications" | "coverageStart" | "coverageEnd" | "status"> }) {
-  const { filled, partial, pending, nothingToFill } = finishSummary(session);
+  const { filled, partial, pending, nothingToFill, skipped } = finishSummary(session);
   const done = session.status === "finished";
   return (
     <div className="space-y-3 text-sm">
@@ -40,6 +40,19 @@ export function FillingSummary({ session }: { session: Pick<SessionView, "medica
         <section>
           <h4 className="font-medium text-[var(--color-warning)]">Not filled ({pending.length})</h4>
           <p className="break-words text-[var(--color-text-muted)]">{pending.map((m) => m.name).join(", ")}</p>
+        </section>
+      ) : null}
+
+      {skipped.length > 0 ? (
+        <section>
+          <h4 className="font-medium text-[var(--color-text)]">Skipped ({skipped.length})</h4>
+          <ul className="space-y-1 text-[var(--color-text-muted)]">
+            {skipped.map((m) => (
+              <li key={m.medicationId} className="break-words">
+                <span className="text-[var(--color-text)]">{m.name}</span>: {m.skip ? skipReasonLabel(m.skip.reason).toLowerCase() : "skipped"}.
+              </li>
+            ))}
+          </ul>
         </section>
       ) : null}
 

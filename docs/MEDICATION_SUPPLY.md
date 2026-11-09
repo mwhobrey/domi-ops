@@ -2,7 +2,7 @@
 
 How Domi Ops helps a household fill a pill organizer and ask for refills in time. It lives on the Health page's **Medications** tab (the **Pill organizer**, **Supplies** and **Pharmacies** cards) and shows up on the calendar, the dashboard and in reminders. This page is the reference for how it behaves and where the code is. It is modelled on [HEALTH_CHECKS.md](./HEALTH_CHECKS.md).
 
-Linear: WHO-405 to WHO-440 (project "Medication filling and pharmacy management", milestones M0 to M5). Migrations: `0087_health_supply`, `0088_health_organizers`, `0089_health_supply_write_key`, `0090_health_supply_reminders`, `0091_health_supply_least_privilege` (run `npm run db:migrate`; the hosted tag deploy does it).
+Linear: WHO-405 to WHO-440 (project "Medication filling and pharmacy management", milestones M0 to M5). Migrations: `0087_health_supply`, `0088_health_organizers`, `0089_health_supply_write_key`, `0090_health_supply_reminders`, `0091_health_supply_least_privilege`, `0106_health_organizer_skips` (run `npm run db:migrate`; the hosted tag deploy does it).
 
 ## The idea in one paragraph
 
@@ -47,7 +47,8 @@ One **plan per person** (`/api/health/organizers`): how often they fill (every N
 - **Mapping is by dose time**: each dose time of the person's scheduled medications maps to one compartment (`health_organizer_time_map`). A medication taken at several times can land in several compartments. A group named like a compartment maps all its times in one tap.
 - **Quantities** are per medication per time, in **quarters of a pill** (¼ to 100, stored as integer quarters, `health_medication_dose_quantities`). The dosage text ("10 mg") is shown for reference and **never** used to fill a number: milligrams are not pills.
 - **Only pills go in an organizer.** A medication has a **form** (`health_medications.form`: pill, iv, injection, liquid, other; pill by default). The others keep their schedule, reminders and refill tracking, are listed under "left out" as not a pill, and never raise a missing-quantity problem. Set it on the medication's edit screen. The medication editor also opens from the pills step, the filling panel and the supply cards, so a dosage written as one number (600 mg) can be broken out (2 x 300 mg) without leaving the setup; what was typed and not yet saved is kept.
-- **Setup problems** are listed with the step that fixes them: dose times with no compartment, missing quantities, medications left out (as needed, over the counter, interval, paused, no fixed times), doses claimed by two groups (shown once). The plan is **ready** when there are no errors and at least one dose to place.
+- **A pill can be kept out for good.** "Keep out of the pill organizer" on the medication's edit screen (`health_medications.organizer_excluded`) is for a scheduled pill that stays in its bottle. It keeps its reminders and refill tracking, is listed under "left out", and never raises a missing-quantity or compartment problem, so it cannot block a fill.
+- **Setup problems** are listed with the step that fixes them: dose times with no compartment, missing quantities, medications left out (as needed, over the counter, interval, paused, no fixed times, kept out), doses claimed by two groups (shown once). The plan is **ready** when there are no errors and at least one dose to place.
 - Changing the schedule, quantities or mapping while a session is open does not stop the session; it asks for a **review** (below). A plan cannot be archived while a session is open; archiving keeps history and allows a new plan.
 - Plan changes carry the `version` the client saw.
 
@@ -56,10 +57,12 @@ One **plan per person** (`/api/health/organizers`): how often they fill (every N
 `/api/health/organizers/:planId/sessions`. One **open session per plan**; starting another returns the open one. A session starts from a **snapshot** of the instructions (encrypted, with a hash) for `coverageStart` and a fill length (defaults: the day after the organizer is already filled to, the plan's length).
 
 - **Fill** a medication: the days filled (all of them, or fewer when pills run short; the missing days are named and can be filled later or in another session), the days outside the organizers, and an idempotency key. One call records the fill and saves the new supply estimate. A repeat with the same key returns the first result; reusing a key for a different fill is refused. The session `version` must match, so two caregivers filling different medications at once is safe (one retries with what the other left).
-- **Progress** per medication: `pending`, `partial`, `filled`, `nothing_to_fill`, with the covered and missing ranges.
+- **Skip** a medication for this session (`POST .../skips`, `health_organizer_session_skips`), for one of two reasons. **Out of stock** saves an estimate with nothing outside the organizers, so days already in the box still count and it comes up for a refill. **Left out this time** changes no supply. A skip is never coverage: only fills say what is in the box. A skipped medication cannot be filled until the skip is undone; undo puts the previous estimate back unless it was changed since.
+- **Catching up:** the next session starts after the last day anything was filled to, so `GET .../defaults` also returns `catchUp`: the days from today that a medication skipped as out of stock still needs, from the latest ended session that has any. The filling screen offers them; the person decides. Starting a session on those days shows everything already filled as filled.
+- **Progress** per medication: `pending`, `partial`, `filled`, `nothing_to_fill`, `skipped`, with the covered and missing ranges.
 - **Review gate:** if the snapshot's hash no longer matches the instructions, `review_required` (409): filling pauses, the view lists what changed (schedule, quantity, compartment, renames) and the person accepts the new instructions (`POST .../review`). Fills already made stay filled and are not touched.
 - **Undo** takes back a medication's latest fill and puts the previous estimate back as a new revision, unless the estimate was changed since (then it says so and leaves it).
-- **Finish** and **stop** (abandon): both keep every fill and the estimates they made. Finishing requires at least one fill. **Neither creates dose logs**: filling is not taking. When something is filled and some medications are not fully filled, both dialogs name them, say the next session starts after the last day filled so it will not offer those days, and offer **Keep filling**. Nothing is decided for the person (WHO-440, WHO-444).
+- **Finish** and **stop** (abandon): both keep every fill and the estimates they made. Finishing requires at least one fill or skip. **Neither creates dose logs**: filling is not taking. When something is filled and some medications are neither fully filled nor skipped, both dialogs name them, say the next session starts after the last day filled so it will not offer those days, and offer **Keep filling**. Nothing is decided for the person (WHO-440, WHO-444).
 - Every medication is judged by what the **viewer** may see; the session itself is computed from all of the person's medications so every caregiver is told the same thing.
 
 ## Fill appointments
@@ -147,7 +150,8 @@ The per-household caps take a transaction-scoped advisory lock (`lockQuota`) bef
 
 ## Known gaps
 
-- Medications left unfilled when a session ends are not offered in the next one. The person is asked at finish and stop (WHO-444) and chooses; there is no catch-up flow by design (WHO-440).
+- Medications left unfilled without a skip when a session ends are not offered in the next one. The person is asked at finish and stop (WHO-444) and chooses. Only a skip for being out of stock is offered again.
+- Supply is entered in days, not pills. The person does the division.
 - A medication taken only on some weekdays is placed correctly (unit tested) but the QA pass did not click it.
 - Supply is an estimate: nothing reads dose logs, so a person who takes extra or skips doses has to update it.
 - Real push delivery and the BullMQ tick are covered by stubs at the boundary, not end to end in CI.

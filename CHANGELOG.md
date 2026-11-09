@@ -8,6 +8,14 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+- Pill organizer fills can now skip a medication that is out of stock or staying
+  in its bottle this time, and a session of only skips can finish. Out of stock
+  counts nothing left outside the organizers so it comes up for a refill, and the
+  next fill offers those days once more arrives. A scheduled pill can also be kept
+  out of the organizer for good, so it no longer blocks setup.
+- Migration: `0106_health_organizer_skips` adds `health_medications.organizer_excluded`
+  and the `health_organizer_session_skips` table. Run migrations as the migration
+  role and re-grant the restricted app role before deploying this build.
 - Add the disabled reviewed-write foundation: encrypted proposals, signed-in
   member review, exact-change confirmation, expiry and safe retry receipts for
   hosted and self-hosted servers. Shopping/chore revisions detect concurrent edits.

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Badge, Input } from "../ui";
-import { count, filterMedications, rangesLabel, statusView } from "./filling-helpers";
+import { count, filterMedications, rangesLabel, skipReasonLabel, statusView } from "./filling-helpers";
 import type { SessionMedication } from "./filling-types";
 import { formatPills } from "./organizer-helpers";
 
@@ -76,7 +76,7 @@ export function FillingMedicationPicker({
                   <span className="min-w-0">
                     <span className="block break-words font-medium text-[var(--color-text)]">{m.name}</span>
                     <span className="block text-xs text-[var(--color-text-muted)]">
-                      {[m.dosage, `${formatPills(m.totalPills)} pills`, m.status === "partial" ? `${count(m.filledDays, "day")} of ${m.requiredDays} filled` : null]
+                      {[m.dosage, `${formatPills(m.totalPills)} pills`, m.status === "partial" ? `${count(m.filledDays, "day")} of ${m.requiredDays} filled` : null, m.skip ? skipReasonLabel(m.skip.reason) : null]
                         .filter(Boolean)
                         .join(" · ")}
                     </span>

@@ -250,6 +250,8 @@ export const healthMedications = pgTable("health_medications", {
   instructions: text("instructions"),
   scheduleKind: medScheduleKindEnum("schedule_kind").notNull().default("scheduled"),
   form: medFormEnum("form").notNull().default("pill"),
+  /** A scheduled pill that never goes in the organizer, however it is otherwise set up. */
+  organizerExcluded: boolean("organizer_excluded").notNull().default(false),
   scheduleJson: text("schedule_json").default("{}"),
   reminderOffsetsJson: text("reminder_offsets_json").default("[0]"),
   startDate: date("start_date"),
@@ -1281,6 +1283,35 @@ export const healthOrganizerSessionFills = pgTable(
     index("health_organizer_session_fills_med_idx")
       .on(t.medicationId)
       .where(sql`${t.undoneAt} is null`),
+  ],
+);
+
+/**
+ * A medication deliberately not filled in one session: it ran out, or stays in its bottle this time. Never coverage:
+ * only fills say what is in the box. At most one that is not undone, per session and medication.
+ */
+export const healthOrganizerSessionSkips = pgTable(
+  "health_organizer_session_skips",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => healthOrganizerSessions.id, { onDelete: "cascade" }),
+    medicationId: uuid("medication_id")
+      .notNull()
+      .references(() => healthMedications.id, { onDelete: "cascade" }),
+    reason: text("reason").$type<"out_of_stock" | "left_out">().notNull(),
+    /** The supply estimate an out-of-stock skip saved, so undo can put the previous one back. */
+    supplyRevision: integer("supply_revision"),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    undoneAt: timestamp("undone_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("health_organizer_session_skips_active_unique")
+      .on(t.sessionId, t.medicationId)
+      .where(sql`${t.undoneAt} is null`),
+    index("health_organizer_session_skips_med_idx").on(t.medicationId),
   ],
 );
 

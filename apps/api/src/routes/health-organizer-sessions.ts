@@ -7,6 +7,7 @@ import {
   healthOrganizerOccurrences,
   healthOrganizerPlans,
   healthOrganizerSessionFills,
+  healthOrganizerSessionSkips,
   healthOrganizerSessions,
 } from "@domi-ops/db";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
@@ -28,10 +29,12 @@ import {
   decodeSnapshot,
   encodeSnapshot,
   fillView,
+  loadCatchUp,
   loadCoverage,
   loadSessionView,
   restoreEstimateBefore,
   type SessionRow,
+  type SkipReason,
 } from "../lib/health-organizer-session.js";
 
 /**
@@ -45,6 +48,8 @@ import {
  *   GET  /organizers/:planId/sessions/:id                 a session with how far along each medication is
  *   POST /organizers/:planId/sessions/:id/fills           record one medication filled for a stretch of days, and the supply it leaves
  *   POST /organizers/:planId/sessions/:id/fills/:fillId/undo   take back a medication's latest fill
+ *   POST /organizers/:planId/sessions/:id/skips           leave a medication out of this session: it ran out, or stays in its bottle this time
+ *   POST /organizers/:planId/sessions/:id/skips/:skipId/undo   take a skip back
  *   POST /organizers/:planId/sessions/:id/review          accept the instructions as they are now, after they changed
  *   POST /organizers/:planId/sessions/:id/finish          done: creates no dose records
  *   POST /organizers/:planId/sessions/:id/abandon         stop; what was filled stays counted
@@ -109,6 +114,15 @@ function parseFillBody(raw: unknown): FillBody {
     version: b.version,
     dryRun,
   };
+}
+
+function parseSkipBody(raw: unknown): { medicationId: string; reason: SkipReason; version: number } {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new BadInput("invalid_body");
+  const b = raw as Record<string, unknown>;
+  if (!isUuid(b.medicationId)) throw new BadInput("medication_not_found", 404);
+  if (b.reason !== "out_of_stock" && b.reason !== "left_out") throw new BadInput("invalid_skip_reason");
+  if (!isWhole(b.version, 1, 2_000_000_000)) throw new BadInput("invalid_version");
+  return { medicationId: b.medicationId.toLowerCase(), reason: b.reason, version: b.version };
 }
 
 function parseVersionBody(raw: unknown): number {
@@ -178,12 +192,19 @@ export function healthOrganizerSessionRoutes(db: Database, env: Env) {
     if (plan instanceof Response) return plan;
     const today = await householdTodayIsoDate(db, auth.householdId);
     const open = await openSessionOf(plan);
-    return c.json({
-      today,
-      coverageStart: nextUncoveredDay(await planCoverageRanges(plan), today),
-      fillLengthDays: plan.fillLengthDays,
-      openSessionId: open?.id ?? null,
-    });
+    try {
+      return c.json({
+        today,
+        coverageStart: nextUncoveredDay(await planCoverageRanges(plan), today),
+        fillLengthDays: plan.fillLengthDays,
+        openSessionId: open?.id ?? null,
+        catchUp: open ? null : await loadCatchUp(db, env, auth, plan, today),
+      });
+    } catch (e) {
+      const resp = failure(c, e);
+      if (resp) return resp;
+      throw e;
+    }
   });
 
   app.get("/:planId/sessions/current", async (c) => {
@@ -406,6 +427,13 @@ export function healthOrganizerSessionRoutes(db: Database, env: Env) {
       const visible = await filterVisibleMedicationIds(db, auth, [body.medicationId]);
       if (!visible.has(body.medicationId)) throw new BadInput("medication_not_found", 404);
 
+      const [skipped] = await db
+        .select({ id: healthOrganizerSessionSkips.id })
+        .from(healthOrganizerSessionSkips)
+        .where(and(eq(healthOrganizerSessionSkips.sessionId, locked.id), eq(healthOrganizerSessionSkips.medicationId, body.medicationId), isNull(healthOrganizerSessionSkips.undoneAt)))
+        .limit(1);
+      if (skipped) return c.json({ error: "medication_skipped", session: await view(auth, plan, locked) }, 409);
+
       const windowEnd = addDaysUtc(locked.coverageStart, locked.fillLengthDays - 1);
       if (body.coveredFrom < locked.coverageStart || body.coveredTo > windowEnd) throw new BadInput("range_outside_session");
 
@@ -529,6 +557,108 @@ export function healthOrganizerSessionRoutes(db: Database, env: Env) {
     }
   });
 
+  app.post("/:planId/sessions/:id/skips", async (c) => {
+    const auth = c.get("auth")!;
+    const plan = await planFor(c, auth, c.req.param("planId"), "write");
+    if (plan instanceof Response) return plan;
+    try {
+      const body = parseSkipBody(await c.req.json().catch(() => null));
+      const session = await lockOpen(c, plan, auth, c.req.param("id"));
+      if (session instanceof Response) return session;
+
+      const snapshot = decodeSnapshot(env, session.snapshotJson);
+      if (!snapshot.medications[body.medicationId]) throw new BadInput("medication_not_found", 404);
+      const visible = await filterVisibleMedicationIds(db, auth, [body.medicationId]);
+      if (!visible.has(body.medicationId)) throw new BadInput("medication_not_found", 404);
+
+      // Skipping twice (a double tap, a second caregiver) answers with the skip that is already there.
+      const [already] = await db
+        .select({ id: healthOrganizerSessionSkips.id })
+        .from(healthOrganizerSessionSkips)
+        .where(and(eq(healthOrganizerSessionSkips.sessionId, session.id), eq(healthOrganizerSessionSkips.medicationId, body.medicationId), isNull(healthOrganizerSessionSkips.undoneAt)))
+        .limit(1);
+      if (already) return c.json({ session: await view(auth, plan, session), replayed: true });
+
+      const now = await currentHash(db, plan, session);
+      if (now.hash !== session.snapshotHash) return c.json({ error: "review_required", session: await view(auth, plan, session) }, 409);
+      if (session.version !== body.version) return c.json({ error: "version_conflict", session: await view(auth, plan, session) }, 409);
+
+      const coverage = await loadCoverage(db, [body.medicationId]);
+      const dates = snapshot.placements.filter((p) => p[0] === body.medicationId).map((p) => p[1]);
+      if (fillProgress(dates, coverage.get(body.medicationId) ?? []).missing.length === 0) return c.json({ error: "nothing_to_skip", session: await view(auth, plan, session) }, 409);
+
+      // Out of stock means nothing is left outside the organizers, whatever the estimate said; days already in the box still count.
+      // The total is only needed when the organizers have a gap, and then it is the unbroken run of days from today.
+      let supplyRevision: number | null = null;
+      if (body.reason === "out_of_stock") {
+        const today = await householdTodayIsoDate(db, auth.householdId);
+        let outcome = await computeEstimate(db, body.medicationId, today, { outsideDays: 0 });
+        if (outcome.kind === "needs_confirmation") {
+          outcome = await computeEstimate(db, body.medicationId, today, { outsideDays: 0, confirmedTotalDays: outcome.organizerDays });
+        }
+        if (outcome.kind !== "ok") throw new BadInput("supply_too_large");
+        supplyRevision = await applyFillEstimate(db, { medicationId: body.medicationId, estimate: outcome.estimate, today, sessionId: session.id, userId: auth.userId });
+      }
+
+      await db.insert(healthOrganizerSessionSkips).values({
+        sessionId: session.id,
+        medicationId: body.medicationId,
+        reason: body.reason,
+        supplyRevision,
+        createdByUserId: auth.userId,
+      });
+      const [bumped] = await db
+        .update(healthOrganizerSessions)
+        .set({ version: sql`${healthOrganizerSessions.version} + 1`, updatedAt: new Date() })
+        .where(eq(healthOrganizerSessions.id, session.id))
+        .returning();
+      return c.json({ session: await view(auth, plan, bumped!), replayed: false });
+    } catch (e) {
+      const resp = failure(c, e);
+      if (resp) return resp;
+      throw e;
+    }
+  });
+
+  app.post("/:planId/sessions/:id/skips/:skipId/undo", async (c) => {
+    const auth = c.get("auth")!;
+    const plan = await planFor(c, auth, c.req.param("planId"), "write");
+    if (plan instanceof Response) return plan;
+    try {
+      const version = parseVersionBody(await c.req.json().catch(() => null));
+      const session = await lockOpen(c, plan, auth, c.req.param("id"));
+      if (session instanceof Response) return session;
+      const skipId = c.req.param("skipId");
+      if (!isUuid(skipId)) return c.json({ error: "skip_not_found" }, 404);
+      const [skip] = await db
+        .select()
+        .from(healthOrganizerSessionSkips)
+        .where(and(eq(healthOrganizerSessionSkips.id, skipId), eq(healthOrganizerSessionSkips.sessionId, session.id)))
+        .limit(1);
+      if (!skip) return c.json({ error: "skip_not_found" }, 404);
+      const visible = await filterVisibleMedicationIds(db, auth, [skip.medicationId]);
+      if (!visible.has(skip.medicationId)) return c.json({ error: "skip_not_found" }, 404);
+      if (skip.undoneAt) return c.json({ session: await view(auth, plan, session), unchanged: true });
+      if (session.version !== version) return c.json({ error: "version_conflict", session: await view(auth, plan, session) }, 409);
+
+      await db.update(healthOrganizerSessionSkips).set({ undoneAt: new Date() }).where(eq(healthOrganizerSessionSkips.id, skip.id));
+      const supplyRestored =
+        skip.supplyRevision !== null
+          ? await restoreEstimateBefore(db, { medicationId: skip.medicationId, fillRevision: skip.supplyRevision, sessionId: session.id, userId: auth.userId })
+          : false;
+      const [bumped] = await db
+        .update(healthOrganizerSessions)
+        .set({ version: sql`${healthOrganizerSessions.version} + 1`, updatedAt: new Date() })
+        .where(eq(healthOrganizerSessions.id, session.id))
+        .returning();
+      return c.json({ session: await view(auth, plan, bumped!), supplyRestored });
+    } catch (e) {
+      const resp = failure(c, e);
+      if (resp) return resp;
+      throw e;
+    }
+  });
+
   app.post("/:planId/sessions/:id/review", async (c) => {
     const auth = c.get("auth")!;
     const plan = await planFor(c, auth, c.req.param("planId"), "write");
@@ -571,7 +701,12 @@ export function healthOrganizerSessionRoutes(db: Database, env: Env) {
         .from(healthOrganizerSessionFills)
         .where(and(eq(healthOrganizerSessionFills.sessionId, session.id), isNull(healthOrganizerSessionFills.undoneAt)))
         .limit(1);
-      if (!anyFill) return c.json({ error: "nothing_filled", session: await view(auth, plan, session) }, 409);
+      const [anySkip] = await db
+        .select({ id: healthOrganizerSessionSkips.id })
+        .from(healthOrganizerSessionSkips)
+        .where(and(eq(healthOrganizerSessionSkips.sessionId, session.id), isNull(healthOrganizerSessionSkips.undoneAt)))
+        .limit(1);
+      if (!anyFill && !anySkip) return c.json({ error: "nothing_filled", session: await view(auth, plan, session) }, 409);
     }
     const [updated] = await db
       .update(healthOrganizerSessions)

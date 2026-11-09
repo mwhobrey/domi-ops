@@ -28,6 +28,7 @@ const med = (over: Partial<SessionMedication> = {}): SessionMedication => ({
   dosage: "500 mg",
   instructions: null,
   status: "pending",
+  skip: null,
   requiredDays: 31,
   filledDays: 0,
   covered: [],
@@ -168,9 +169,17 @@ describe("runsOfDates", () => {
 
 describe("progress and summary", () => {
   it("says how far along the session is", () => {
-    expect(progressLabel({ total: 11, filled: 3, partial: 0, pending: 8 })).toBe("3 of 11 medications filled");
-    expect(progressLabel({ total: 1, filled: 1, partial: 0, pending: 0 })).toBe("1 of 1 medication filled");
-    expect(progressLabel({ total: 11, filled: 3, partial: 2, pending: 6 })).toBe("3 of 11 medications filled, 2 partly");
+    expect(progressLabel({ total: 11, filled: 3, partial: 0, pending: 8, skipped: 0 })).toBe("3 of 11 medications filled");
+    expect(progressLabel({ total: 1, filled: 1, partial: 0, pending: 0, skipped: 0 })).toBe("1 of 1 medication filled");
+    expect(progressLabel({ total: 11, filled: 3, partial: 2, pending: 6, skipped: 0 })).toBe("3 of 11 medications filled, 2 partly");
+    expect(progressLabel({ total: 11, filled: 3, partial: 2, pending: 5, skipped: 1 })).toBe("3 of 11 medications filled, 2 partly, 1 skipped");
+  });
+  it("keeps a skipped medication out of what is left behind", () => {
+    const skip = { id: "s", reason: "out_of_stock" as const, createdAt: "2026-11-08T00:00:00Z" };
+    const medications = [med({ medicationId: "a", name: "Out", status: "skipped", skip }), med({ medicationId: "b", name: "Forgotten", status: "pending" })];
+    expect(finishSummary({ medications }).skipped.map((m) => m.medicationId)).toEqual(["a"]);
+    expect(finishSummary({ medications }).pending.map((m) => m.medicationId)).toEqual(["b"]);
+    expect(leftBehind({ medications })).toEqual(["Forgotten"]);
   });
   it("sorts medications into what is done and what is left", () => {
     const summary = finishSummary({

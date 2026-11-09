@@ -1288,9 +1288,13 @@ export function householdHealthRoutes(db: Database, env: Env) {
       doseQuantities?: Record<string, number>;
       /** pill (default), iv, injection, liquid, other; only pills go in an organizer (WHO-445). */
       form?: string;
+      organizerExcluded?: boolean;
     }>();
 
     if (!body.memberId || !body.name?.trim()) {
+      return c.json({ error: "invalid_body" }, 400);
+    }
+    if (body.organizerExcluded !== undefined && typeof body.organizerExcluded !== "boolean") {
       return c.json({ error: "invalid_body" }, 400);
     }
     if (body.form !== undefined && !isMedicationForm(body.form)) {
@@ -1351,6 +1355,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
           instructions: enc.instructions ?? null,
           scheduleKind: scheduleMeta.scheduleKind,
           form: body.form as MedicationForm | undefined,
+          organizerExcluded: body.organizerExcluded,
           scheduleJson: scheduleMeta.scheduleJson,
           reminderOffsetsJson: JSON.stringify(offsets),
           startDate: body.startDate ?? null,
@@ -1437,10 +1442,14 @@ export function householdHealthRoutes(db: Database, env: Env) {
       /** Replaces ALL pills-per-dose-time (WHO-417); {} clears them, omitted leaves them alone. */
       doseQuantities?: Record<string, number>;
       form?: string;
+      organizerExcluded?: boolean;
     }>();
 
     if (body.form !== undefined && !isMedicationForm(body.form)) {
       return c.json({ error: "invalid_form" }, 400);
+    }
+    if (body.organizerExcluded !== undefined && typeof body.organizerExcluded !== "boolean") {
+      return c.json({ error: "invalid_body" }, 400);
     }
 
     let doseQuantities: DoseQuantities | undefined;
@@ -1455,6 +1464,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
 
     try {
       const patch: Partial<typeof healthMedications.$inferInsert> = { updatedAt: new Date() };
+      if (body.organizerExcluded !== undefined) patch.organizerExcluded = body.organizerExcluded;
       if (body.name !== undefined) patch.name = encryptHealthField(body.name, env) ?? "";
       if (body.dosage !== undefined) patch.dosage = encryptHealthField(body.dosage, env);
       if (body.form !== undefined) patch.form = body.form as MedicationForm;
