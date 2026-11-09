@@ -8,6 +8,14 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-08
+
+Upgrades from v0.11.3 require migrations `0103_mcp_authorization` through
+`0107_health_supply_pills` and a re-grant of the restricted app role. Use the
+documented deployment scripts; hosted CI deploy uses `deploy-hosted.sh --migrate`.
+Consent policy v3 requires existing assistant connections to reconnect; ordinary
+sessions and Google grants are preserved.
+
 - Medication supply can be entered in pills where a medication has a fixed dose:
   the pill organizer fill, Set supply, first-run setup and Mark received. The count
   is turned into whole days by walking the real schedule, starting when the
