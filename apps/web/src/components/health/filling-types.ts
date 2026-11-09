@@ -7,7 +7,15 @@ export interface DateRange {
   to: string;
 }
 
-export type FillStatus = "pending" | "partial" | "filled" | "nothing_to_fill";
+export type FillStatus = "pending" | "partial" | "filled" | "nothing_to_fill" | "skipped";
+
+export type SkipReason = "out_of_stock" | "left_out";
+
+export interface SkipView {
+  id: string;
+  reason: SkipReason;
+  createdAt: string;
+}
 
 export interface FillView {
   id: string;
@@ -33,6 +41,8 @@ export interface SessionMedication {
   dosage: string | null;
   instructions: string | null;
   status: FillStatus;
+  /** Why it is not being filled in this session, if it was skipped. */
+  skip: SkipView | null;
   /** Days with a dose, and how many of them are filled. */
   requiredDays: number;
   filledDays: number;
@@ -95,7 +105,7 @@ export interface SessionView {
   compartments: SessionCompartment[];
   medications: SessionMedication[];
   notGuided: Array<{ medicationId: string; reason: string }>;
-  progress: { total: number; filled: number; partial: number; pending: number };
+  progress: { total: number; filled: number; partial: number; pending: number; skipped: number };
   fills: FillView[];
 }
 
@@ -104,4 +114,6 @@ export interface SessionDefaults {
   coverageStart: string;
   fillLengthDays: number;
   openSessionId: string | null;
+  /** Days a medication that ran out still needs: the next session would otherwise start after them. */
+  catchUp: { coverageStart: string; fillLengthDays: number; medicationIds: string[] } | null;
 }

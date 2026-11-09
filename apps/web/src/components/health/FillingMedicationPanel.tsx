@@ -17,10 +17,11 @@ import {
   rangeLabel,
   rangesLabel,
   sessionFromConflict,
+  skipReasonLabel,
   splitCovered,
   statusView,
 } from "./filling-helpers";
-import type { SessionMedication, SessionView } from "./filling-types";
+import type { SessionMedication, SessionView, SkipReason } from "./filling-types";
 import { formatPills } from "./organizer-helpers";
 import { formatDay, parseDays, parsePreview, previewLabel, type SupplyPreview } from "./supply-helpers";
 
@@ -69,8 +70,10 @@ export function FillingMedicationPanel({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [confirmUndo, setConfirmUndo] = useState(false);
+  const [askSkip, setAskSkip] = useState(false);
   const keyRef = useRef(newFillKey());
   const supplyRef = useRef<HTMLDivElement>(null);
+  const skipRef = useRef<HTMLDivElement>(null);
   const previewSeq = useRef(0);
 
   const days = parseDays(daysText, maxDays);
@@ -99,6 +102,9 @@ export function FillingMedicationPanel({
   useEffect(() => {
     if (stage === "supply") supplyRef.current?.scrollIntoView({ block: "center" });
   }, [stage]);
+  useEffect(() => {
+    if (askSkip) skipRef.current?.scrollIntoView({ block: "center" });
+  }, [askSkip]);
 
   const gap = needsTotal;
   const estimateReady = outsideDays !== null && (!gap || totalDays !== null);
@@ -170,6 +176,40 @@ export function FillingMedicationPanel({
     } catch (e) {
       if (isStaleAnswer(e)) onStale(sessionFromConflict(e), fillErrorMessage(e, "This session changed. It was reloaded."));
       else setErr(fillErrorMessage(e, "Could not save. Try again."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function skip(reason: SkipReason) {
+    setBusy(true);
+    setErr(null);
+    try {
+      const res = await apiClient.post<{ session: SessionView }>(`/api/health/organizers/${planId}/sessions/${session.id}/skips`, {
+        medicationId: medication.medicationId,
+        reason,
+        version: session.version,
+      });
+      onSaved(res.session, reason === "out_of_stock" ? `${medication.name} skipped: out of stock. Nothing is counted outside the organizers now, so it will come up for a refill.` : `${medication.name} left out of this fill. Its supply was not changed.`);
+    } catch (e) {
+      if (isStaleAnswer(e)) onStale(sessionFromConflict(e), fillErrorMessage(e, "This session changed. It was reloaded."));
+      else setErr(fillErrorMessage(e, "Could not skip it. Try again."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function undoSkip() {
+    if (!medication.skip) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const res = await apiClient.post<{ session: SessionView; supplyRestored?: boolean }>(`/api/health/organizers/${planId}/sessions/${session.id}/skips/${medication.skip.id}/undo`, { version: session.version });
+      const wasOut = medication.skip.reason === "out_of_stock";
+      onSaved(res.session, !wasOut || res.supplyRestored ? `${medication.name} can be filled again.` : `${medication.name} can be filled again. The supply estimate was changed since, so it was left as it is.`);
+    } catch (e) {
+      if (isStaleAnswer(e)) onStale(sessionFromConflict(e), fillErrorMessage(e, "This session changed. It was reloaded."));
+      else setErr(fillErrorMessage(e, "Could not undo the skip. Try again."));
     } finally {
       setBusy(false);
     }
@@ -267,7 +307,17 @@ export function FillingMedicationPanel({
         onCancel={() => setConfirmUndo(false)}
       />
 
-      {!range0 ? (
+      {medication.skip ? (
+        <div className="space-y-3 rounded-lg border border-[var(--color-border)] p-3">
+          {err ? <Alert variant="error">{err}</Alert> : null}
+          <p className="text-sm text-[var(--color-text)]">Skipped for this session: {skipReasonLabel(medication.skip.reason).toLowerCase()}.</p>
+          <div className="flex justify-end">
+            <Button type="button" variant="secondary" loading={busy} disabled={reviewRequired} onClick={() => void undoSkip()}>
+              Undo skip
+            </Button>
+          </div>
+        </div>
+      ) : !range0 ? (
         <Alert variant="success">Every day of this fill is done for {medication.name}.</Alert>
       ) : (
         <div className="space-y-4 rounded-lg border border-[var(--color-border)] p-3">
@@ -298,9 +348,38 @@ export function FillingMedicationPanel({
             </Alert>
           ) : null}
 
+          {stage === "days" && askSkip ? (
+            <div ref={skipRef} className="space-y-3 rounded-lg bg-[var(--color-surface-subtle)] p-3 text-sm">
+              <p className="font-medium text-[var(--color-text)]">Why isn&apos;t {medication.name} going in?</p>
+              <div className="space-y-1">
+                <Button type="button" variant="secondary" className="w-full" disabled={busy} onClick={() => void skip("out_of_stock")}>
+                  Out of stock
+                </Button>
+                <p className="text-xs text-[var(--color-text-muted)]">Counts nothing left outside the organizers, so it comes up for a refill. You can fill these days when more arrives.</p>
+              </div>
+              <div className="space-y-1">
+                <Button type="button" variant="secondary" className="w-full" disabled={busy} onClick={() => void skip("left_out")}>
+                  Leave it out this time
+                </Button>
+                <p className="text-xs text-[var(--color-text-muted)]">Stays in its bottle for this fill. Its supply is not changed.</p>
+              </div>
+              <div className="flex justify-end">
+                <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => setAskSkip(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
           {stage === "days" ? (
             <div className="sticky bottom-0 -mx-3 -mb-3 flex flex-wrap justify-end gap-2 rounded-b-lg border-t border-[var(--color-border)] bg-[var(--color-surface-elevated)] px-3 py-3">
-              {reviewRequired ? <span className="mr-auto self-center text-xs text-[var(--color-text-muted)]">Use the new instructions first.</span> : null}
+              {reviewRequired ? (
+                <span className="mr-auto self-center text-xs text-[var(--color-text-muted)]">Use the new instructions first.</span>
+              ) : (
+                <Button type="button" variant="ghost" className="mr-auto" disabled={busy} onClick={() => setAskSkip(true)}>
+                  Skip this fill
+                </Button>
+              )}
               <Button type="button" disabled={range === null || reviewRequired} onClick={() => setStage("supply")}>
                 Filled. Next
               </Button>

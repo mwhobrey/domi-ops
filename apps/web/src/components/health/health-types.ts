@@ -120,6 +120,8 @@ export interface HealthMedication {
   instructions: string | null;
   /** pill unless said otherwise; only pills go in a pill organizer (WHO-445). */
   form?: MedicationFormValue;
+  /** A scheduled pill that never goes in the pill organizer. */
+  organizerExcluded?: boolean;
   scheduleKind: "scheduled" | "prn" | "otc" | "interval";
   schedule: {
     times?: string[];

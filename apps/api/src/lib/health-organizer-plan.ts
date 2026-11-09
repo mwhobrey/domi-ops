@@ -124,6 +124,7 @@ export async function loadPlacements(
     id: m.id,
     scheduleKind: m.scheduleKind,
     form: m.form,
+    organizerExcluded: m.organizerExcluded,
     scheduleJson: m.scheduleJson,
     startDate: m.startDate,
     endDate: m.endDate,

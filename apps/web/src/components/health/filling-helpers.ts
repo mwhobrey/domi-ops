@@ -1,7 +1,7 @@
 import { ApiError } from "../../lib/client-api";
 import { apiErrorCode } from "./pharmacy-helpers";
 import { formatDay } from "./supply-helpers";
-import type { DateRange, FillStatus, ReviewChanges, SessionCompartment, SessionMedication, SessionPlacement, SessionView } from "./filling-types";
+import type { DateRange, FillStatus, ReviewChanges, SessionCompartment, SessionMedication, SessionPlacement, SessionView, SkipReason } from "./filling-types";
 
 /**
  * Pure helpers for the filling screen (WHO-428): which days a fill covers, how a medication's doses group into
@@ -60,8 +60,11 @@ const STATUS: Record<FillStatus, { label: string; tone: "default" | "success" | 
   partial: { label: "Partly filled", tone: "warning" },
   filled: { label: "Filled", tone: "success" },
   nothing_to_fill: { label: "Nothing to fill", tone: "default" },
+  skipped: { label: "Skipped", tone: "default" },
 };
 export const statusView = (status: FillStatus) => STATUS[status];
+
+export const skipReasonLabel = (reason: SkipReason): string => (reason === "out_of_stock" ? "Out of stock" : "Left out this time");
 
 /** Medications whose name or dosage contains what was typed, in the order given. Blank shows everything. */
 export function filterMedications(medications: readonly SessionMedication[], query: string): SessionMedication[] {
@@ -73,7 +76,8 @@ export function filterMedications(medications: readonly SessionMedication[], que
 /** "3 of 11 medications filled" with any partly filled ones mentioned. */
 export function progressLabel(progress: SessionView["progress"]): string {
   const base = `${progress.filled} of ${count(progress.total, "medication")} filled`;
-  return progress.partial > 0 ? `${base}, ${progress.partial} partly` : base;
+  const partly = progress.partial > 0 ? `${base}, ${progress.partial} partly` : base;
+  return progress.skipped > 0 ? `${partly}, ${progress.skipped} skipped` : partly;
 }
 
 /**
@@ -181,6 +185,8 @@ const CONFLICT: Record<string, string> = {
   review_required: "The instructions changed since this session started, so filling is paused until they are reviewed.",
   session_not_open: "This session has already ended.",
   not_last_fill: "A newer fill exists for that medication.",
+  medication_skipped: "That medication was skipped for this session. Undo the skip to fill it.",
+  nothing_to_skip: "Every day of that medication is already filled.",
 };
 
 const MESSAGES: Record<string, string> = {
@@ -193,7 +199,7 @@ const MESSAGES: Record<string, string> = {
   confirmation_required: "The organizers have a gap, so enter the total days you have in hand.",
   idempotency_key_reused: "That save was already used for different days. Try again.",
   medication_not_found: "That medication is not part of this session, or you cannot see it.",
-  nothing_filled: "Fill at least one medication before finishing.",
+  nothing_filled: "Fill or skip at least one medication before finishing.",
   nothing_to_fill: "There is nothing to put in the organizer for those days.",
   setup_incomplete: "The organizer setup is not finished yet. Open it and check the list.",
   session_not_found: "That session no longer exists.",
@@ -219,13 +225,15 @@ export type FinishSummary = {
   partial: Array<{ medication: SessionMedication; missing: DateRange[] }>;
   pending: SessionMedication[];
   nothingToFill: SessionMedication[];
+  skipped: SessionMedication[];
 };
 
 /** What the session did and what it left: for the confirmation before finishing and the summary after. */
 export function finishSummary(session: Pick<SessionView, "medications">): FinishSummary {
-  const out: FinishSummary = { filled: [], partial: [], pending: [], nothingToFill: [] };
+  const out: FinishSummary = { filled: [], partial: [], pending: [], nothingToFill: [], skipped: [] };
   for (const m of session.medications) {
-    if (m.status === "filled") out.filled.push(m);
+    if (m.status === "skipped") out.skipped.push(m);
+    else if (m.status === "filled") out.filled.push(m);
     else if (m.status === "partial") out.partial.push({ medication: m, missing: m.missing });
     else if (m.status === "pending") out.pending.push(m);
     else out.nothingToFill.push(m);

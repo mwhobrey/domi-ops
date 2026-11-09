@@ -35,6 +35,8 @@ export type OrganizerMedication = {
   scheduleKind: "scheduled" | "prn" | "otc" | "interval";
   /** Only pills go in an organizer (WHO-445); left out means a pill. */
   form?: "pill" | "iv" | "injection" | "liquid" | "other";
+  /** Kept out of the organizer on purpose: not guided, and raises no setup problem. */
+  organizerExcluded?: boolean;
   scheduleJson: string | null;
   startDate: string | null;
   endDate: string | null;
@@ -86,7 +88,7 @@ export type PlacementProblem =
   /** Two groups both run this medication's dose on the same day. The dose is placed once. */
   | { kind: "double_claim"; severity: "warning"; medicationId: string; time: string; groupIds: string[] };
 
-export type NotGuidedReason = "as_needed" | "over_the_counter" | "interval" | "paused" | "no_times" | "not_a_pill";
+export type NotGuidedReason = "as_needed" | "over_the_counter" | "interval" | "paused" | "no_times" | "not_a_pill" | "kept_out";
 
 export type NotGuided = { medicationId: string; reason: NotGuidedReason };
 
@@ -204,6 +206,10 @@ export function computePlacements(input: PlacementInput): PlacementResult {
     if (med.deletedAt) continue;
     if (med.form !== undefined && med.form !== "pill") {
       notGuided.push({ medicationId: med.id, reason: "not_a_pill" });
+      continue;
+    }
+    if (med.organizerExcluded) {
+      notGuided.push({ medicationId: med.id, reason: "kept_out" });
       continue;
     }
     if (med.scheduleKind !== "scheduled") {

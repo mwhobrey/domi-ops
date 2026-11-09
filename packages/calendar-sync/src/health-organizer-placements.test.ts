@@ -403,6 +403,17 @@ describe("computePlacements", () => {
       expect(r.placements.every((pl) => pl.medicationId === "pill" || pl.medicationId === "unset")).toBe(true);
     });
 
+    it("leaves a pill kept out of the organizer alone: no placements, no quantity or compartment problem", () => {
+      const r = run({
+        days: 2,
+        medications: [med("bottle", ["08:00", "03:15"], { organizerExcluded: true }), med("pill", ["08:00"])],
+        quantities: qty({ pill: { "08:00": 4 } }),
+      });
+      expect(r.notGuided).toEqual([{ medicationId: "bottle", reason: "kept_out" }]);
+      expect(r.problems).toEqual([]);
+      expect(r.placements.every((pl) => pl.medicationId === "pill")).toBe(true);
+    });
+
     it("ignores unusable times: bad formats, out of range, seconds are trimmed and repeats collapse", () => {
       const r = run({
         days: 1,
