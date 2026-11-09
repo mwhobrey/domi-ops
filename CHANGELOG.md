@@ -8,6 +8,12 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+- Hosted deploys now use the image tag the caller sets (CI tag deploys, or
+  `DOMI_OPS_IMAGE_TAG=X deploy/deploy-hosted.sh`) even when compose `.env` pins
+  `DOMI_OPS_IMAGE_TAG`. Before, `.env` won, so the v0.12.0 hosted deploy stayed on
+  `fc3e1e4` and skipped migrations 0106 and 0107. An existing `.env` pin is updated
+  to the deployed tag after `compose up`.
+
 ## [0.12.0] - 2026-11-08
 
 Upgrades from v0.11.3 require migrations `0103_mcp_authorization` through

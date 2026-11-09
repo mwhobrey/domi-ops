@@ -130,6 +130,11 @@ site. `.env` and `Caddyfile` are untracked and untouched by `git pull`.
 
 To pin a specific build instead of `latest`: `DOMI_OPS_IMAGE_TAG=<sha> deploy/deploy-hosted.sh`.
 
+A `DOMI_OPS_IMAGE_TAG` set by the caller (CI tag deploys, or the command above) always wins over a
+`DOMI_OPS_IMAGE_TAG=` line in `.env`. If `.env` has such a line, the script rewrites it to the deployed
+tag after `compose up`, so a later run without a tag stays on that build instead of the old pin. It
+never adds the key and leaves the rest of `.env` alone.
+
 **Disk and image retention (WHO-464).** Before pulling, the script removes every `ghcr.io/mwhobrey/domi-ops-*`
 image no container of the stack is running, then aborts (containers untouched) if the Docker root has less
 than 8 GB free (`DOMI_OPS_MIN_FREE_GB` to change it). After the restart it prunes again but keeps the images

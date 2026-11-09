@@ -59,7 +59,9 @@ Usage: deploy/deploy-hosted.sh [OPTIONS]
   -h, --help   Show this help
 
 Environment:
-  DOMI_OPS_IMAGE_TAG   GHCR tag to pull (default: latest)
+  DOMI_OPS_IMAGE_TAG   GHCR tag to pull. A value set by the caller wins over .env (and an
+                       existing DOMI_OPS_IMAGE_TAG= line in .env is updated to it after a
+                       successful compose up); otherwise .env's value, else latest.
 EOF
 }
 
@@ -74,13 +76,23 @@ if [[ "$RUN_MIGRATE" -eq 1 ]]; then
   MIGRATE_ADMIN_URL="${DATABASE_URL_ADMIN:-}"
 fi
 
+# Image tag: capture the caller's DOMI_OPS_IMAGE_TAG (CI exports it on tag deploys) before .env is
+# sourced, and restore it after. Without this, a `DOMI_OPS_IMAGE_TAG=` pin in compose .env silently
+# wins over the caller — the v0.12.0 CI deploy pulled the old .env pin (fc3e1e4) instead of 0.12.0
+# and skipped its migrations. Do not drop this capture/restore.
+CALLER_IMAGE_TAG="${DOMI_OPS_IMAGE_TAG:-}"
+if [[ -n "$CALLER_IMAGE_TAG" && ! "$CALLER_IMAGE_TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
+  echo "ERROR: DOMI_OPS_IMAGE_TAG '$CALLER_IMAGE_TAG' is not a valid image tag." >&2
+  exit 1
+fi
+
 # git pull can change this script's own content — a plain `bash deploy-hosted.sh` invocation may
 # keep executing whatever it had already buffered from the pre-pull version, silently skipping
 # anything the pull just added (confirmed live 2026-08-28: a newly-added step below was skipped
 # entirely on the first deploy that pulled it in). Re-exec once, immediately after the pull and
 # before anything else runs, so the rest of this script always comes from the file actually on
-# disk. $DOMI_OPS_IMAGE_TAG and any other env the caller set survive — exec inherits environment,
-# just not shell variables assigned below this point.
+# disk. Env the caller set survives exec, but `source .env` further down can still overwrite it —
+# see CALLER_IMAGE_TAG above.
 if [[ -z "${DOMI_OPS_REEXECED:-}" ]]; then
   echo "==> git pull"
   git pull --ff-only
@@ -175,6 +187,10 @@ set -a
 source .env
 set +a
 
+# Caller's tag wins over .env (see CALLER_IMAGE_TAG above); .env's value, then latest, otherwise.
+if [[ -n "$CALLER_IMAGE_TAG" ]]; then
+  DOMI_OPS_IMAGE_TAG="$CALLER_IMAGE_TAG"
+fi
 export DOMI_OPS_IMAGE_TAG="${DOMI_OPS_IMAGE_TAG:-latest}"
 
 echo "==> Domi Ops hosted update (tag: ${DOMI_OPS_IMAGE_TAG})"
@@ -233,6 +249,19 @@ fi
 
 echo "==> docker compose up (recreate changed containers only)"
 "${COMPOSE[@]}" up -d --no-build --remove-orphans
+
+# Keep an existing .env pin in step with what is now running, so a later run without a caller tag
+# does not roll hosted back to the old pin. Only rewrites an existing DOMI_OPS_IMAGE_TAG= line (never
+# adds one) and leaves every other line alone. `cat >` keeps .env's owner and mode.
+if [[ -n "$CALLER_IMAGE_TAG" ]] \
+    && grep '^DOMI_OPS_IMAGE_TAG=' .env | grep -qvxF "DOMI_OPS_IMAGE_TAG=${DOMI_OPS_IMAGE_TAG}"; then
+  echo "==> updating DOMI_OPS_IMAGE_TAG in .env to ${DOMI_OPS_IMAGE_TAG}"
+  ENV_TMP="$(mktemp)"
+  awk -v tag="$DOMI_OPS_IMAGE_TAG" \
+    '/^DOMI_OPS_IMAGE_TAG=/ { print "DOMI_OPS_IMAGE_TAG=" tag; next } { print }' .env > "$ENV_TMP"
+  cat "$ENV_TMP" > .env
+  rm -f "$ENV_TMP"
+fi
 
 echo "==> waiting for redis healthy"
 for _ in $(seq 1 30); do
