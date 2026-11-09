@@ -165,6 +165,6 @@ The per-household caps take a transaction-scoped advisory lock (`lockQuota`) bef
 ## Known gaps
 
 - Medications left unfilled without a skip when a session ends are not offered in the next one. The person is asked at finish and stop (WHO-444) and chooses. Only a skip for being out of stock is offered again.
-- Supply is entered in days, not pills. The person does the division.
+- As needed, over the counter, intervals shorter than a day, non-pill medications and any dose with no quantity are still entered in days, so the person does the division.
 - Supply is an estimate: nothing reads dose logs, so a person who takes extra or skips doses has to update it. A pill count is the same: it changes only when someone says so.
 - Real push delivery and the BullMQ tick are covered by stubs at the boundary, not end to end in CI.
