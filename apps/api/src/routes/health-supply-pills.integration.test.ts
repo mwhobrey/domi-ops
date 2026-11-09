@@ -274,6 +274,62 @@ maybeDescribe("medication supply in pills (integration)", () => {
     });
   });
 
+  describe("medications not taken every day", () => {
+    it("fills a weekly pill for a month and counts the pills left on its own weeks", async () => {
+      const ctx = await sessionFor({ days: [todayWeekday()] }, 29, 12); // doses today and on days 7, 14, 21 and 28
+      expect(ctx.session.medications[0]).toMatchObject({ countsPills: true, requiredDays: 5, totalPills: 5 });
+
+      const suggestion = await fill(ctx, ctx.session, { dryRun: true });
+      expect(suggestion.json).toEqual({ dryRun: true, pillsUsed: 5, lastCountPills: 12, suggestedOutsidePills: 7 });
+
+      const saved = await fill(ctx, ctx.session, { outsidePills: 7 });
+      expect(saved.status, JSON.stringify(saved.json)).toBe(200);
+      // Seven more weekly doses on days 35 to 77, so day 84 is the first with nothing to take.
+      expect(saved.json.supply).toMatchObject({ organizerDays: 29, outsideDays: 55, runsOutOn: plus(84) });
+      expect(saved.json.session.medications[0]).toMatchObject({ status: "filled", missing: [] });
+    });
+
+    it("rounds a part of a weekly dose down", async () => {
+      const id = await med({ days: [todayWeekday()], q: { "08:00": 8 } }); // two pills a week
+      expect((await setCount(id, 5)).outsideDays).toBe(14); // today and next week; one pill is not a dose
+    });
+
+    const everyDays = (days: number) => ({
+      over: {
+        scheduleKind: "interval" as const,
+        scheduleJson: JSON.stringify({ everyMinutes: days * 1440, anchor: "first_taken", intervalFrom: "last_taken", stop: { mode: "max_doses", maxDoses: 1 } }),
+      },
+      q: {},
+    });
+
+    it.each([
+      ["every 3 days", 3],
+      ["every 7 days", 7],
+      ["every 14 days", 14],
+    ])("keeps an interval pill taken %s in days", async (_name, days) => {
+      const memberId = await newPerson();
+      const id = await makeMed(memberId, everyDays(days));
+
+      const list = await call("GET", `/medications?memberId=${memberId}`);
+      expect(list.json.medications.find((m: Json) => m.id === id).countsPills).toBe(false);
+
+      const pills = await put(id, { outsidePills: 4 });
+      expect(pills.status).toBe(400);
+      expect(pills.json.error).toBe("pills_need_fixed_dose");
+
+      const entered = await put(id, { outsideDays: days * 4 });
+      expect(entered.status, JSON.stringify(entered.json)).toBe(200);
+      expect(entered.json.supply).toMatchObject({ outsideDays: days * 4, outsidePills: null, runsOutOn: plus(days * 4) });
+    });
+
+    it("does not take a pill quantity for an interval medication", async () => {
+      const id = await med(everyDays(14));
+      const res = await call("PATCH", `/medications/${id}`, { doseQuantities: { "08:00": 1 } });
+      expect(res.status, JSON.stringify(res.json)).toBe(400);
+      expect(res.json.error).toBe("quantities_need_scheduled_medication");
+    });
+  });
+
   describe("receiving a refill", () => {
     it("takes pills, says what they come to, and keeps the count on the receipt", async () => {
       const id = await med();
