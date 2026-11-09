@@ -1187,6 +1187,20 @@ maybeDescribe("filling sessions (integration)", () => {
       expect((await defaults(plan)).catchUp).toBeNull();
     });
 
+    it("stops offering the days once the medication would no longer go in the organizer", async () => {
+      const changes: Array<Partial<typeof healthMedications.$inferInsert>> = [{ form: "liquid" }, { scheduleKind: "prn" }, { organizerExcluded: true }, { enabled: false }];
+      for (const change of changes) {
+        const { plan, medIds } = await setup();
+        const s = await begin(plan);
+        const filled = await fillOk(plan, s, medIds[0]!);
+        const skipped = await skip("mom", plan, filled.session, medIds[1]!);
+        await act("mom", plan, skipped.json.session, "finish");
+        expect((await defaults(plan)).catchUp?.medicationIds).toEqual([medIds[1]]);
+        await inDb((tx) => tx.update(healthMedications).set(change).where(eq(healthMedications.id, medIds[1]!)));
+        expect((await defaults(plan)).catchUp, JSON.stringify(change)).toBeNull();
+      }
+    });
+
     it("offers nothing for a medication left out on purpose", async () => {
       const { plan, medIds } = await setup();
       const s = await begin(plan);

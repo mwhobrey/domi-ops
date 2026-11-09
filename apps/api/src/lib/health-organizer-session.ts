@@ -358,7 +358,16 @@ export async function loadCatchUp(db: Database, env: Env, auth: Auth, plan: Plan
   const stillGoingIn = await db
     .select({ id: healthMedications.id })
     .from(healthMedications)
-    .where(and(inArray(healthMedications.id, ids), isNull(healthMedications.deletedAt), eq(healthMedications.enabled, true), eq(healthMedications.organizerExcluded, false)));
+    .where(
+      and(
+        inArray(healthMedications.id, ids),
+        isNull(healthMedications.deletedAt),
+        eq(healthMedications.enabled, true),
+        eq(healthMedications.organizerExcluded, false),
+        eq(healthMedications.form, "pill"),
+        eq(healthMedications.scheduleKind, "scheduled"),
+      ),
+    );
   const eligible = new Set(stillGoingIn.map((m) => m.id).filter((id) => visible.has(id)));
   const coverage = await loadCoverage(db, [...eligible]);
 

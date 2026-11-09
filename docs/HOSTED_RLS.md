@@ -41,7 +41,7 @@ Every table with RLS also needs a `worker_scan` policy if any cross-tenant worke
 
 Later migrations add their own tables with the same two policies (`household_isolation` + `worker_scan`). `0085_health_checks` adds nine health check tables; see [HOSTED_TENANT_TESTS.md](./HOSTED_TENANT_TESTS.md).
 
-**Pharmacies, supply and organizers (WHO-413, WHO-414, WHO-432, WHO-434).** Sixteen more tables, each with `household_isolation` (a direct `household_id` match, or an `EXISTS` join to the plan or medication that owns the row):
+**Pharmacies, supply and organizers (WHO-413, WHO-414, WHO-432, WHO-434).** Seventeen more tables, each with `household_isolation` (a direct `household_id` match, or an `EXISTS` join to the plan or medication that owns the row):
 
 | Migration | Tables |
 |-----------|--------|
@@ -50,7 +50,7 @@ Later migrations add their own tables with the same two policies (`household_iso
 | `0090_health_supply_reminders` | `health_supply_fill_reminder_sent`, `health_supply_refill_reminder_sent` |
 | `0106_health_organizer_skips` | `health_organizer_session_skips` |
 
-Only **`health_organizer_plans`** and **`health_medication_supply`** keep a `worker_scan` policy. The fill and refill reminder job (`health.supply.reminder.household`) runs per household under `withHouseholdContext`, like the dose and check scans, and reads and writes everything else there. What reads across households is the scheduler's tick (`fanOutSupplyReminderScans`), which only asks which households have a plan or an estimate. Migrations 0087, 0088 and 0090 had given every table a `worker_scan` policy out of habit; `0091_health_supply_least_privilege` dropped it from the other fourteen, and they are on the "never scanned" list in `rls-worker-scan-coverage.integration.test.ts`. Do not add one back: a worker-scan transaction would then see every household's pharmacies, supply history and reminders. Test coverage: [HOSTED_TENANT_TESTS.md](./HOSTED_TENANT_TESTS.md#pharmacies-supply-organizers-and-their-reminders-who-413-to-who-434).
+Only **`health_organizer_plans`** and **`health_medication_supply`** keep a `worker_scan` policy. The fill and refill reminder job (`health.supply.reminder.household`) runs per household under `withHouseholdContext`, like the dose and check scans, and reads and writes everything else there. What reads across households is the scheduler's tick (`fanOutSupplyReminderScans`), which only asks which households have a plan or an estimate. Migrations 0087, 0088 and 0090 had given every table a `worker_scan` policy out of habit; `0091_health_supply_least_privilege` dropped it from the other fourteen. `health_organizer_session_skips` never had one, which makes fifteen on the "never scanned" list in `rls-worker-scan-coverage.integration.test.ts`. Do not add one back: a worker-scan transaction would then see every household's pharmacies, supply history and reminders. Test coverage: [HOSTED_TENANT_TESTS.md](./HOSTED_TENANT_TESTS.md#pharmacies-supply-organizers-and-their-reminders-who-413-to-who-434).
 
 ## Excluded (v1)
 
