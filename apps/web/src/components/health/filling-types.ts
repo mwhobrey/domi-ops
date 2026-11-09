@@ -50,6 +50,8 @@ export interface SessionMedication {
   /** Days with a dose that nothing covers yet. */
   missing: DateRange[];
   totalPills: number;
+  /** Has a fixed pill dose, so what is left outside the organizers is asked for in pills rather than days. */
+  countsPills: boolean;
   byCompartment: Array<{ compartmentId: string; pills: number }>;
   placements: SessionPlacement[];
   lastFill: FillView | null;

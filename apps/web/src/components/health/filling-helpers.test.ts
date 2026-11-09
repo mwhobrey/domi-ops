@@ -34,6 +34,7 @@ const med = (over: Partial<SessionMedication> = {}): SessionMedication => ({
   covered: [],
   missing: [{ from: "2026-10-06", to: "2026-11-05" }],
   totalPills: 62,
+  countsPills: true,
   byCompartment: [],
   placements: [],
   lastFill: null,

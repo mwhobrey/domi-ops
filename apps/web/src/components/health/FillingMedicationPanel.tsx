@@ -23,15 +23,36 @@ import {
 } from "./filling-helpers";
 import type { SessionMedication, SessionView, SkipReason } from "./filling-types";
 import { formatPills } from "./organizer-helpers";
-import { formatDay, parseDays, parsePreview, previewLabel, type SupplyPreview } from "./supply-helpers";
+import {
+  OUTSIDE_PILLS_INVALID,
+  formatDay,
+  parseDays,
+  parseFillSuggestion,
+  parseOutsidePills,
+  parsePreview,
+  pillsLastLabel,
+  previewLabel,
+  type FillSuggestion,
+  type SupplyPreview,
+} from "./supply-helpers";
 
 const MAX_DAYS = 3650;
 
 /**
  * One medication being filled (WHO-428): what goes where, the days it covers (all of them, or fewer when the pills
- * run short), then how many days are left outside the organizers, with the run-out date shown before anything is saved.
- * Saving records the fill straight away; nothing waits for the end of the session.
+ * run short), then what is left outside the organizers, with the run-out date shown before anything is saved. A
+ * medication with a fixed dose is asked for in pills, starting from its last count less what this fill used, so the
+ * person only corrects a number. Saving records the fill straight away; nothing waits for the end of the session.
  */
+/** "Last count 60, less 31 in this fill, leaves 29." */
+function fillSuggestionLabel(s: FillSuggestion): string {
+  const used = formatPills(s.pillsUsed);
+  if (s.lastCountPills === null) return `This fill used ${used} of them. Count what you have now.`;
+  const last = formatPills(s.lastCountPills);
+  if (s.pillsUsed > s.lastCountPills) return `This fill used ${used}, more than the last count of ${last}. Count what you have now.`;
+  return `Last count ${last}, less ${used} in this fill, leaves ${formatPills(s.suggestedOutsidePills ?? 0)}. Change it if your count is different.`;
+}
+
 export function FillingMedicationPanel({
   planId,
   session,
@@ -61,6 +82,9 @@ export function FillingMedicationPanel({
   const [daysText, setDaysText] = useState(String(maxDays));
   const [stage, setStage] = useState<"days" | "supply">("days");
   const [outsideText, setOutsideText] = useState("");
+  const [suggestion, setSuggestion] = useState<FillSuggestion | null>(null);
+  /** The person typed their own count, so a suggestion arriving late must not overwrite it. */
+  const outsideEdited = useRef(false);
   const [totalText, setTotalText] = useState("");
   /** The organizers have a gap: stays on while the total is typed, so the field does not vanish under the person typing. */
   const [needsTotal, setNeedsTotal] = useState(false);
@@ -80,7 +104,9 @@ export function FillingMedicationPanel({
   const range = range0 && days !== null && days >= 1 ? { from: range0.from, to: fillEnd(range0.from, days, session.coverageEnd) } : null;
   const left = range ? daysLeftAfter(range, medication.missing) : 0;
   const leftover = range ? missingAfter(range, medication.missing) : [];
-  const outsideDays = parseDays(outsideText, MAX_DAYS);
+  const countsPills = medication.countsPills;
+  const outsideAmount = countsPills ? parseOutsidePills(outsideText) : parseDays(outsideText, MAX_DAYS);
+  const outsideField = outsideAmount === null ? {} : countsPills ? { outsidePills: outsideAmount } : { outsideDays: outsideAmount };
   const totalDays = parseDays(totalText, MAX_DAYS);
   const status = statusView(medication.status);
 
@@ -91,12 +117,17 @@ export function FillingMedicationPanel({
     setPreview(null);
     setNeedsTotal(false);
     setOnlySome(false);
+    setSuggestion(null);
+    outsideEdited.current = false;
+    if (medication.countsPills) setOutsideText("");
+    // Only for a different stretch: the medication's fields are not triggers.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rangeKey]);
 
-  // A different number of days outside means the gap has to be found out again.
+  // A different amount outside means the gap has to be found out again.
   useEffect(() => {
     setNeedsTotal(false);
-  }, [outsideDays]);
+  }, [outsideAmount]);
 
   // The question appears below the fold on a phone: bring it up so the next tap is on the answer, not a scroll.
   useEffect(() => {
@@ -107,13 +138,44 @@ export function FillingMedicationPanel({
   }, [askSkip]);
 
   const gap = needsTotal;
-  const estimateReady = outsideDays !== null && (!gap || totalDays !== null);
+  const estimateReady = outsideAmount !== null && (!gap || totalDays !== null);
   /** What the preview on screen was worked out for: a preview for other numbers does not count. */
-  const inputsKey = `${rangeKey}|${outsideDays ?? ""}|${gap ? (totalDays ?? "") : ""}`;
+  const inputsKey = `${rangeKey}|${outsideAmount ?? ""}|${gap ? (totalDays ?? "") : ""}`;
   const base = `/api/health/organizers/${planId}/sessions/${session.id}/fills`;
 
+  // Ask what this fill takes out of the last count, and start the field from there.
   useEffect(() => {
-    if (stage !== "supply" || !range || outsideDays === null) {
+    if (stage !== "supply" || !countsPills || !range) return;
+    let cancelled = false;
+    apiClient
+      .post<unknown>(base, {
+        medicationId: medication.medicationId,
+        coveredFrom: range.from,
+        coveredTo: range.to,
+        idempotencyKey: keyRef.current,
+        version: session.version,
+        dryRun: true,
+      })
+      .then((res) => {
+        if (cancelled) return;
+        const parsed = parseFillSuggestion(res);
+        setSuggestion(parsed);
+        if (parsed?.suggestedOutsidePills != null && !outsideEdited.current) setOutsideText(formatPills(parsed.suggestedOutsidePills));
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setSuggestion(null);
+        if (isStaleAnswer(e)) onStale(sessionFromConflict(e), fillErrorMessage(e, "This session changed. It was reloaded."));
+      });
+    return () => {
+      cancelled = true;
+    };
+    // As with the preview below, the session's version is not a trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage, rangeKey, countsPills, medication.medicationId, base]);
+
+  useEffect(() => {
+    if (stage !== "supply" || !range || outsideAmount === null) {
       setPreview(null);
       return;
     }
@@ -125,7 +187,7 @@ export function FillingMedicationPanel({
           medicationId: medication.medicationId,
           coveredFrom: range.from,
           coveredTo: range.to,
-          outsideDays,
+          ...outsideField,
           ...(gap && totalDays !== null ? { confirmedTotalDays: totalDays } : {}),
           idempotencyKey: keyRef.current,
           version: session.version,
@@ -148,16 +210,16 @@ export function FillingMedicationPanel({
     return () => clearTimeout(handle);
     // The session's version is not a trigger: saving elsewhere should not re-run an estimate in progress.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stage, rangeKey, outsideDays, totalDays, gap, medication.medicationId, base]);
+  }, [stage, rangeKey, outsideAmount, totalDays, gap, medication.medicationId, base]);
 
   const daysInvalid = daysText.trim() !== "" && days === null;
-  const outsideInvalid = outsideText.trim() !== "" && outsideDays === null;
+  const outsideInvalid = outsideText.trim() !== "" && outsideAmount === null;
   const incompleteOk = left === 0 || onlySome;
   const shown = preview && preview.key === inputsKey ? preview.result : null;
   const canSave = range !== null && estimateReady && incompleteOk && !busy && shown?.kind === "ok";
 
   async function save() {
-    if (!range || outsideDays === null) return;
+    if (!range || outsideAmount === null) return;
     setBusy(true);
     setErr(null);
     try {
@@ -165,7 +227,7 @@ export function FillingMedicationPanel({
         medicationId: medication.medicationId,
         coveredFrom: range.from,
         coveredTo: range.to,
-        outsideDays,
+        ...outsideField,
         ...(gap && totalDays !== null ? { confirmedTotalDays: totalDays } : {}),
         idempotencyKey: keyRef.current,
         version: session.version,
@@ -387,24 +449,38 @@ export function FillingMedicationPanel({
           ) : (
             <div ref={supplyRef} className="space-y-3 border-t border-[var(--color-border)] pt-3">
               <label className="block space-y-1 text-sm">
-                <span className="font-medium text-[var(--color-text)]">How many days of {medication.name} are left outside the organizers?</span>
+                <span className="font-medium text-[var(--color-text)]">
+                  {countsPills ? `How many pills of ${medication.name} are left outside the organizers?` : `How many days of ${medication.name} are left outside the organizers?`}
+                </span>
                 <div className="flex items-start gap-2">
                   <div className="min-w-0 flex-1">
                     <Input
                       type="text"
-                      inputMode="numeric"
+                      inputMode={countsPills ? "decimal" : "numeric"}
                       value={outsideText}
-                      error={outsideInvalid ? "Enter a whole number of days, from 0 to 3650." : undefined}
-                      onChange={(e) => setOutsideText(e.target.value)}
-                      maxLength={4}
+                      error={outsideInvalid ? (countsPills ? OUTSIDE_PILLS_INVALID : "Enter a whole number of days, from 0 to 3650.") : undefined}
+                      onChange={(e) => {
+                        outsideEdited.current = true;
+                        setOutsideText(e.target.value);
+                      }}
+                      maxLength={countsPills ? 10 : 4}
                       autoFocus
                     />
                   </div>
-                  <Button type="button" variant="secondary" onClick={() => setOutsideText("0")}>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => {
+                      outsideEdited.current = true;
+                      setOutsideText("0");
+                    }}
+                  >
                     None
                   </Button>
                 </div>
-                <span className="block text-xs text-[var(--color-text-muted)]">Bottles, boxes or refills you are keeping aside. Count what you have now.</span>
+                <span className="block text-xs text-[var(--color-text-muted)]">
+                  {countsPills && suggestion ? fillSuggestionLabel(suggestion) : "Bottles, boxes or refills you are keeping aside. Count what you have now."}
+                </span>
               </label>
 
               {gap ? (
@@ -423,6 +499,9 @@ export function FillingMedicationPanel({
 
               <div aria-live="polite" className="min-h-6 text-sm">
                 {shown?.kind === "ok" ? <p className="font-medium text-[var(--color-text)]">{previewLabel(shown)}</p> : null}
+                {shown?.kind === "ok" && countsPills && !gap && outsideAmount !== null ? (
+                  <p className="text-[var(--color-text-muted)]">{pillsLastLabel(formatPills(outsideAmount), outsideAmount, shown.outsideDays)}</p>
+                ) : null}
                 {previewError ? <p className="text-[var(--color-danger)]">{previewError}</p> : null}
               </div>
 

@@ -4,16 +4,16 @@ import { useEffect, useRef, useState } from "react";
 import { apiClient } from "../../lib/client-api";
 import { Alert, Badge, Button, Input, Select, Sheet } from "../ui";
 import type { HealthMedication } from "./health-types";
-import { medsNeedingSetup, planSetupRow, supplyErrorMessage } from "./supply-helpers";
+import { OUTSIDE_PILLS_INVALID, medsNeedingSetup, planSetupRow, supplyErrorMessage } from "./supply-helpers";
 import { apiErrorCode } from "./pharmacy-helpers";
 import type { Pharmacy } from "./supply-types";
 
-type Row = { medication: HealthMedication; daysText: string; pharmacyId: string };
+type Row = { medication: HealthMedication; amountText: string; pharmacyId: string };
 type RowResult = { state: "saved" } | { state: "error"; message: string };
 
 /**
- * First-run setup (WHO-423): the person's medications that have no supply estimate yet, each with a days
- * field and a pharmacy, saved in one pass of ordinary supply updates.
+ * First-run setup (WHO-423): the person's medications that have no supply estimate yet, each with a pills
+ * field (a days field where there is no fixed dose) and a pharmacy, saved in one pass of ordinary supply updates.
  *
  * Safe to stop and come back: every row is its own update, a row that saved now has an estimate and drops
  * out of the list the next time, and a row that failed or was left blank stays for later. Nothing here
@@ -43,7 +43,7 @@ export function SupplySetupSheet({
 
   useEffect(() => {
     if (!open) return;
-    setRows(medsNeedingSetup(medications).map((m) => ({ medication: m, daysText: "", pharmacyId: m.pharmacy?.id ?? "" })));
+    setRows(medsNeedingSetup(medications).map((m) => ({ medication: m, amountText: "", pharmacyId: m.pharmacy?.id ?? "" })));
     setResults({});
     setSummary(null);
     keys.current = new Map();
@@ -67,7 +67,7 @@ export function SupplySetupSheet({
     };
   }, [open]);
 
-  function update(id: string, patch: Partial<Pick<Row, "daysText" | "pharmacyId">>) {
+  function update(id: string, patch: Partial<Pick<Row, "amountText" | "pharmacyId">>) {
     keys.current.delete(id); // a changed row is a new submission
     setRows((prev) => prev.map((r) => (r.medication.id === id ? { ...r, ...patch } : r)));
     setResults((prev) => {
@@ -78,7 +78,7 @@ export function SupplySetupSheet({
   }
 
   const pending = rows.filter((r) => results[r.medication.id]?.state !== "saved");
-  const plans = pending.map((r) => ({ row: r, plan: planSetupRow({ daysText: r.daysText, pharmacyId: r.pharmacyId, originalPharmacyId: r.medication.pharmacy?.id ?? "" }) }));
+  const plans = pending.map((r) => ({ row: r, plan: planSetupRow({ amountText: r.amountText, countsPills: r.medication.countsPills === true, pharmacyId: r.pharmacyId, originalPharmacyId: r.medication.pharmacy?.id ?? "" }) }));
   const toSave = plans.filter((p) => p.plan.kind === "save");
   const hasInvalid = plans.some((p) => p.plan.kind === "invalid");
 
@@ -133,8 +133,8 @@ export function SupplySetupSheet({
     <Sheet open={open} onClose={onClose} title={`Set up supply · ${memberLabelText}`}>
       <div className="space-y-4 px-6 py-4">
         <p className="text-sm text-[var(--color-text-muted)]">
-          For each medication, enter how many days of pills you have on hand right now. This is an estimate you confirm, not a count that
-          follows every dose, and logging a dose never changes it. Leave a row blank to skip it; you can come back to it later.
+          For each medication, enter how much you have on hand right now. This is an estimate you confirm, not a count that follows every
+          dose, and logging a dose never changes it. Leave a row blank to skip it; you can come back to it later.
         </p>
 
         {summary ? <Alert variant={summary.includes("did not save") ? "error" : "success"}>{summary}</Alert> : null}
@@ -163,6 +163,7 @@ export function SupplySetupSheet({
                 const result = results[id];
                 const plan = plans.find((p) => p.row.medication.id === id)?.plan;
                 const saved = result?.state === "saved";
+                const countsPills = row.medication.countsPills === true;
                 return (
                   <li key={id} className="space-y-2 rounded-lg border border-[var(--color-border)] p-3">
                     <div className="flex items-center justify-between gap-2">
@@ -175,16 +176,16 @@ export function SupplySetupSheet({
                     {saved ? null : (
                       <div className="grid gap-2 sm:grid-cols-2">
                         <label className="block space-y-1 text-sm">
-                          <span>Days on hand</span>
+                          <span>{countsPills ? "Pills on hand" : "Days on hand"}</span>
                           <Input
                             type="text"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            value={row.daysText}
-                            onChange={(e) => update(id, { daysText: e.target.value })}
+                            inputMode={countsPills ? "decimal" : "numeric"}
+                            pattern={countsPills ? undefined : "[0-9]*"}
+                            value={row.amountText}
+                            onChange={(e) => update(id, { amountText: e.target.value })}
                             placeholder="Skip"
-                            maxLength={4}
-                            aria-label={`Days of ${row.medication.name} on hand`}
+                            maxLength={countsPills ? 10 : 4}
+                            aria-label={`${countsPills ? "Pills" : "Days"} of ${row.medication.name} on hand`}
                           />
                         </label>
                         <label className="block space-y-1 text-sm">
@@ -211,7 +212,7 @@ export function SupplySetupSheet({
                       </div>
                     )}
                     {plan?.kind === "invalid" && !saved ? (
-                      <p className="text-sm text-[var(--color-danger)]">Enter a whole number of days, from 0 to 3650, or leave it blank.</p>
+                      <p className="text-sm text-[var(--color-danger)]">{countsPills ? `${OUTSIDE_PILLS_INVALID} Or leave it blank.` : "Enter a whole number of days, from 0 to 3650, or leave it blank."}</p>
                     ) : null}
                     {result?.state === "error" ? <p className="text-sm text-[var(--color-danger)]">{result.message}</p> : null}
                   </li>

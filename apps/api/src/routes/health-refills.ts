@@ -22,6 +22,7 @@ import {
 } from "../lib/health-access.js";
 import { householdTodayIsoDate } from "../lib/household-time.js";
 import { computeEstimate, loadSupplyViews, type PharmacySummary, type SupplySummary } from "../lib/health-supply.js";
+import { supplyPillsToQuarters } from "../lib/health-supply-validation.js";
 
 /**
  * The refill workflow (WHO-420): Needs refill -> Requested -> Received.
@@ -44,14 +45,22 @@ const KEY_MAX = 100;
 const isWholeNumber = (v: unknown, max: number): v is number =>
   typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= max;
 
-type ReceiveBody = { outsideDays: number; confirmedTotalDays?: number; version?: number; idempotencyKey?: string; dryRun?: boolean };
+type ReceiveBody = { outsideDays?: number; outsideQuarters?: number; confirmedTotalDays?: number; version?: number; idempotencyKey?: string; dryRun?: boolean };
 
 /** Returns the cleaned request or the code to answer 400 with. */
 function parseReceive(raw: unknown): ReceiveBody | string {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return "invalid_body";
   const b = raw as Record<string, unknown>;
-  if (!isWholeNumber(b.outsideDays, MAX_SUPPLY_DAYS)) return "invalid_outside_days";
-  const out: ReceiveBody = { outsideDays: b.outsideDays };
+  if (b.outsideDays !== undefined && b.outsidePills !== undefined) return "days_or_pills";
+  const out: ReceiveBody = {};
+  if (b.outsidePills !== undefined) {
+    const quarters = supplyPillsToQuarters(b.outsidePills);
+    if (quarters === null) return "invalid_outside_pills";
+    out.outsideQuarters = quarters;
+  } else {
+    if (!isWholeNumber(b.outsideDays, MAX_SUPPLY_DAYS)) return "invalid_outside_days";
+    out.outsideDays = b.outsideDays;
+  }
   if (b.confirmedTotalDays !== undefined) {
     if (!isWholeNumber(b.confirmedTotalDays, MAX_SUPPLY_DAYS)) return "invalid_confirmed_total";
     out.confirmedTotalDays = b.confirmedTotalDays;
@@ -240,7 +249,7 @@ export function healthRefillRoutes(db: Database, env: Env) {
     }
   });
 
-  // The refill arrived. `outsideDays` is the new total in hand outside the organizers; what the
+  // The refill arrived. `outsideDays` or `outsidePills` is the new total in hand outside the organizers; what the
   // organizers still hold is added, the estimate is replaced (a "receipt" revision) and the request closes.
   app.post("/medications/:id/supply/receive", async (c) => {
     const auth = c.get("auth")!;
@@ -259,6 +268,7 @@ export function healthRefillRoutes(db: Database, env: Env) {
       if (body.dryRun) {
         const outcome = await computeEstimate(db, med.id, today, body);
         if (outcome.kind === "too_large") return c.json({ error: "supply_too_large" }, 400);
+        if (outcome.kind === "no_fixed_dose") return c.json({ error: "pills_need_fixed_dose" }, 400);
         if (outcome.kind === "needs_confirmation") {
           return c.json({ dryRun: true, needsConfirmation: true, organizerDays: outcome.organizerDays, organizerEndsOn: outcome.organizerEndsOn });
         }
@@ -284,6 +294,7 @@ export function healthRefillRoutes(db: Database, env: Env) {
 
       const outcome = await computeEstimate(db, med.id, today, body);
       if (outcome.kind === "too_large") return c.json({ error: "supply_too_large" }, 400);
+      if (outcome.kind === "no_fixed_dose") return c.json({ error: "pills_need_fixed_dose" }, 400);
       if (outcome.kind === "needs_confirmation") {
         return c.json({ error: "confirmation_required", organizerDays: outcome.organizerDays, organizerEndsOn: outcome.organizerEndsOn }, 409);
       }
@@ -295,6 +306,7 @@ export function healthRefillRoutes(db: Database, env: Env) {
           runsOutOn: estimate.runsOutOn,
           estimatedOn: today,
           outsideDays: estimate.outsideDays,
+          outsideQuarters: estimate.outsideQuarters,
           organizerDaysCounted: estimate.organizerDays,
           revision: sql`${healthMedicationSupply.revision} + 1`,
           version: sql`${healthMedicationSupply.version} + 1`,
@@ -313,6 +325,7 @@ export function healthRefillRoutes(db: Database, env: Env) {
         runsOutOn: estimate.runsOutOn,
         estimatedOn: today,
         outsideDays: estimate.outsideDays,
+        outsideQuarters: estimate.outsideQuarters,
         organizerDaysCounted: estimate.organizerDays,
         createdByUserId: auth.userId,
       });

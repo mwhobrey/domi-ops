@@ -1,6 +1,6 @@
 import { ApiError } from "../../lib/client-api";
 import { apiErrorCode } from "./pharmacy-helpers";
-import { formatDay } from "./supply-helpers";
+import { OUTSIDE_PILLS_INVALID, formatDay } from "./supply-helpers";
 import type { DateRange, FillStatus, ReviewChanges, SessionCompartment, SessionMedication, SessionPlacement, SessionView, SkipReason } from "./filling-types";
 
 /**
@@ -194,8 +194,10 @@ const MESSAGES: Record<string, string> = {
   invalid_range: "Pick days that fall inside this session.",
   range_outside_session: "Those days are outside this session.",
   invalid_outside_days: "Enter a whole number of days, from 0 to 3650.",
+  invalid_outside_pills: OUTSIDE_PILLS_INVALID,
+  pills_need_fixed_dose: "This medication has no fixed dose to count pills against. Reload and enter days.",
   invalid_confirmed_total: "Enter a whole number of days, from 0 to 3650.",
-  supply_too_large: "That is more than ten years of supply. Check the number of days.",
+  supply_too_large: "That is more than ten years of supply. Check the number.",
   confirmation_required: "The organizers have a gap, so enter the total days you have in hand.",
   idempotency_key_reused: "That save was already used for different days. Try again.",
   medication_not_found: "That medication is not part of this session, or you cannot see it.",

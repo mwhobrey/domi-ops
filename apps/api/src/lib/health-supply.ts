@@ -1,15 +1,25 @@
 import {
+  addDaysUtc,
+  bridgeDoseFreeDays,
   computeSupply,
   effectiveLeadDays,
   estimateNeedsConfirmation,
   daysRemaining,
+  organizerCoverage,
+  pillDoseSchedule,
+  quartersToDays,
   refillStatus,
   type DateRange,
+  type OrganizerGroup,
+  type PillDoseSchedule,
 } from "@domi-ops/calendar-sync";
 import {
+  healthMedicationGroupMembers,
+  healthMedicationGroups,
   healthMedicationPauses,
   healthMedicationSupply,
   healthMedicationSupplyRevisions,
+  healthMedications,
   healthOrganizerSessionFills,
   healthPharmacies,
   healthSupplySettings,
@@ -18,6 +28,8 @@ import {
 import type { Env } from "@domi-ops/config";
 import { and, eq, inArray, isNull, max } from "drizzle-orm";
 import { decryptHealthFieldOrPassthrough } from "./health-crypto.js";
+import { loadDoseQuantities } from "./health-dose-quantities.js";
+import { quartersToPills } from "./health-supply-validation.js";
 import { householdTodayIsoDate } from "./household-time.js";
 
 /**
@@ -32,6 +44,8 @@ export type SupplySummary = {
   estimatedOn: string | null;
   daysRemaining: number | null;
   outsideDays: number | null;
+  /** The pill count the person last gave; null when the estimate was entered in days. */
+  outsidePills: number | null;
   organizerDaysCounted: number | null;
   revision: number;
   /** Send this back when changing the supply; a stale one is refused instead of overwriting. */
@@ -85,6 +99,7 @@ export function buildSupplyView(
       estimatedOn: row.estimatedOn,
       daysRemaining: row.runsOutOn ? daysRemaining(row.runsOutOn, ctx.today) : null,
       outsideDays: row.outsideDays,
+      outsidePills: row.outsideQuarters === null ? null : quartersToPills(row.outsideQuarters),
       organizerDaysCounted: row.organizerDaysCounted,
       revision: row.revision,
       version: row.version,
@@ -167,6 +182,8 @@ export function supplyExtras(view: SupplyView | undefined): { supply?: SupplySum
 export type Estimate = {
   runsOutOn: string;
   outsideDays: number;
+  /** The count behind `outsideDays`, in quarters of a pill, when one was given. */
+  outsideQuarters: number | null;
   organizerDays: number;
   totalDays: number;
   confirmed: boolean;
@@ -176,21 +193,68 @@ export type EstimateOutcome =
   | { kind: "ok"; estimate: Estimate }
   /** A gap in the organizers: the caller must send the total they have in hand. */
   | { kind: "needs_confirmation"; organizerDays: number; organizerEndsOn: string | null }
-  | { kind: "too_large" };
+  | { kind: "too_large" }
+  /** Pills were given for a medication with no fixed dose to turn them into days with. */
+  | { kind: "no_fixed_dose" };
 
-/** What `outsideDays` (plus the organizers' unbroken coverage from `today`) comes to. Writes nothing. */
+/**
+ * The medications that have a fixed pill dose, and what it is on any day, from their own schedule, quantities and groups.
+ * A medication with no entry here keeps its supply in days. Every group counts, seen by the viewer or not, the same as a
+ * filling session: the pills are used whoever can see the group.
+ */
+export async function loadPillSchedules(db: Database, medicationIds: readonly string[]): Promise<Map<string, PillDoseSchedule>> {
+  const out = new Map<string, PillDoseSchedule>();
+  if (medicationIds.length === 0) return out;
+  const ids = [...medicationIds];
+  const [meds, memberships, quantities] = await Promise.all([
+    db.select().from(healthMedications).where(inArray(healthMedications.id, ids)),
+    db.select().from(healthMedicationGroupMembers).where(inArray(healthMedicationGroupMembers.medicationId, ids)),
+    loadDoseQuantities(db, ids),
+  ]);
+  const groupIds = [...new Set(memberships.map((m) => m.groupId))];
+  const groupRows = groupIds.length ? await db.select().from(healthMedicationGroups).where(inArray(healthMedicationGroups.id, groupIds)) : [];
+  const groups: OrganizerGroup[] = groupRows
+    .filter((g) => g.scheduleKind === "scheduled" || g.scheduleKind === "interval")
+    .map((g) => ({
+      id: g.id,
+      scheduleKind: g.scheduleKind as "scheduled" | "interval",
+      scheduleJson: g.scheduleJson,
+      startDate: g.startDate,
+      endDate: g.endDate,
+      enabled: g.enabled,
+      medicationIds: memberships.filter((m) => m.groupId === g.id).map((m) => m.medicationId),
+    }));
+  for (const med of meds) {
+    const schedule = pillDoseSchedule(med, groups, quantities.get(med.id));
+    if (schedule) out.set(med.id, schedule);
+  }
+  return out;
+}
+
+/**
+ * What the outside supply (plus the organizers' unbroken coverage from `today`) comes to. Writes nothing. A pill count is
+ * turned into days here and only here: the pills outside are used once the organizers run out, so the walk starts then.
+ */
 export async function computeEstimate(
   db: Database,
   medicationId: string,
   today: string,
-  input: { outsideDays: number; confirmedTotalDays?: number },
+  input: { outsideDays?: number; outsideQuarters?: number; confirmedTotalDays?: number },
   /** Stretches about to be recorded, counted as if they already were, so a refused change leaves nothing behind. */
   extraRanges: readonly DateRange[] = [],
 ): Promise<EstimateOutcome> {
-  const ranges = [...(await loadOrganizerRanges(db, medicationId)), ...extraRanges];
+  const filled = [...(await loadOrganizerRanges(db, medicationId)), ...extraRanges];
+  const schedule = (await loadPillSchedules(db, [medicationId])).get(medicationId);
+  const ranges = schedule ? bridgeDoseFreeDays(filled, schedule, today) : filled;
   let result;
   try {
-    result = computeSupply({ today, ranges, outsideDays: input.outsideDays, confirmedTotalDays: input.confirmedTotalDays });
+    let outsideDays = input.outsideDays;
+    if (input.outsideQuarters !== undefined) {
+      if (!schedule) return { kind: "no_fixed_dose" };
+      outsideDays = quartersToDays(schedule, addDaysUtc(today, organizerCoverage(ranges, today).days), input.outsideQuarters);
+    }
+    if (outsideDays === undefined) throw new Error("computeEstimate needs outsideDays or outsideQuarters");
+    result = computeSupply({ today, ranges, outsideDays, confirmedTotalDays: input.confirmedTotalDays });
   } catch (e) {
     if (e instanceof RangeError) return { kind: "too_large" };
     throw e;
@@ -203,6 +267,7 @@ export async function computeEstimate(
     estimate: {
       runsOutOn: result.runsOutOn,
       outsideDays: result.outsideDays,
+      outsideQuarters: input.outsideQuarters ?? null,
       organizerDays: result.organizerDays,
       totalDays: result.totalDays,
       confirmed: result.confirmed,

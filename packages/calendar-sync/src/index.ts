@@ -132,6 +132,15 @@ export {
   type PlacementResult,
 } from "./health-organizer-placements.js";
 export {
+  MAX_SUPPLY_QUARTERS,
+  bridgeDoseFreeDays,
+  outsideQuartersAfterFill,
+  pillDoseSchedule,
+  quartersToDays,
+  quartersUsedByFill,
+  type PillDoseSchedule,
+} from "./health-supply-pills.js";
+export {
   DEFAULT_LEAD_DAYS,
   MAX_LEAD_DAYS,
   MAX_SUPPLY_DAYS,

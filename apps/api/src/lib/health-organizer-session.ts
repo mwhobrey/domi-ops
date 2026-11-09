@@ -22,7 +22,7 @@ import { and, asc, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { filterVisibleMedicationIds } from "./health-access.js";
 import { decryptHealthField, decryptHealthFieldOrPassthrough, encryptHealthField } from "./health-crypto.js";
 import { loadPlacements, type PlanRow } from "./health-organizer-plan.js";
-import type { Estimate } from "./health-supply.js";
+import { loadPillSchedules, type Estimate } from "./health-supply.js";
 import { quartersToPills } from "./health-supply-validation.js";
 
 /**
@@ -114,6 +114,8 @@ export type SessionMedicationView = {
   /** Days with a dose that nothing covers yet. */
   missing: DateRange[];
   totalPills: number;
+  /** Has a fixed pill dose, so what is left outside the organizers is asked for in pills rather than days. */
+  countsPills: boolean;
   byCompartment: Array<{ compartmentId: string; pills: number }>;
   placements: Array<{ date: string; time: string; compartmentId: string; pills: number }>;
   /** The latest fill here that has not been undone: the one "undo" would take back. */
@@ -252,6 +254,7 @@ export async function loadSessionView(db: Database, env: Env, auth: Auth, plan: 
     .from(healthOrganizerSessionSkips)
     .where(and(eq(healthOrganizerSessionSkips.sessionId, session.id), isNull(healthOrganizerSessionSkips.undoneAt)));
   const skipByMedication = new Map(activeSkips.map((s) => [s.medicationId, s]));
+  const pillSchedules = await loadPillSchedules(db, snapshotIds.filter((id) => visible.has(id)));
 
   const medications: SessionMedicationView[] = [];
   for (const id of snapshotIds.filter((i) => visible.has(i)).sort((a, b) => snapshot.medications[a]!.name.localeCompare(snapshot.medications[b]!.name))) {
@@ -274,6 +277,7 @@ export async function loadSessionView(db: Database, env: Env, auth: Auth, plan: 
       covered: progress.covered,
       missing: progress.missing,
       totalPills: quartersToPills(mine.reduce((sum, p) => sum + p.quarters, 0)),
+      countsPills: pillSchedules.has(id),
       byCompartment: snapshot.compartments
         .filter((c) => byCompartment.has(c.id))
         .map((c) => ({ compartmentId: c.id, pills: quartersToPills(byCompartment.get(c.id)!) })),
@@ -403,7 +407,7 @@ export async function applyFillEstimate(
   input: { medicationId: string; estimate: Estimate; today: string; sessionId: string; userId: string },
 ): Promise<number> {
   const { medicationId, estimate, today } = input;
-  const values = { runsOutOn: estimate.runsOutOn, estimatedOn: today, outsideDays: estimate.outsideDays, organizerDaysCounted: estimate.organizerDays };
+  const values = { runsOutOn: estimate.runsOutOn, estimatedOn: today, outsideDays: estimate.outsideDays, outsideQuarters: estimate.outsideQuarters, organizerDaysCounted: estimate.organizerDays };
   const [existing] = await db.select({ id: healthMedicationSupply.medicationId }).from(healthMedicationSupply).where(eq(healthMedicationSupply.medicationId, medicationId)).limit(1);
   let revision: number;
   if (!existing) {
@@ -434,7 +438,7 @@ export async function applyFillEstimate(
 async function bumpSupply(
   db: Database,
   medicationId: string,
-  values: { runsOutOn: string; estimatedOn: string; outsideDays: number; organizerDaysCounted: number },
+  values: { runsOutOn: string; estimatedOn: string; outsideDays: number; outsideQuarters: number | null; organizerDaysCounted: number },
 ): Promise<number> {
   const [saved] = await db
     .update(healthMedicationSupply)
@@ -477,11 +481,11 @@ export async function restoreEstimateBefore(
   if (!prior) {
     await db
       .update(healthMedicationSupply)
-      .set({ runsOutOn: null, estimatedOn: null, outsideDays: null, organizerDaysCounted: null, version: sql`${healthMedicationSupply.version} + 1`, updatedAt: new Date() })
+      .set({ runsOutOn: null, estimatedOn: null, outsideDays: null, outsideQuarters: null, organizerDaysCounted: null, version: sql`${healthMedicationSupply.version} + 1`, updatedAt: new Date() })
       .where(eq(healthMedicationSupply.medicationId, input.medicationId));
     return true;
   }
-  const values = { runsOutOn: prior.runsOutOn, estimatedOn: prior.estimatedOn, outsideDays: prior.outsideDays, organizerDaysCounted: prior.organizerDaysCounted };
+  const values = { runsOutOn: prior.runsOutOn, estimatedOn: prior.estimatedOn, outsideDays: prior.outsideDays, outsideQuarters: prior.outsideQuarters, organizerDaysCounted: prior.organizerDaysCounted };
   const revision = await bumpSupply(db, input.medicationId, values);
   await db.insert(healthMedicationSupplyRevisions).values({
     medicationId: input.medicationId,

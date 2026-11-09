@@ -145,18 +145,36 @@ function weekday(iso: string): number {
   return utcDate(iso).getUTCDay();
 }
 
-function within(date: string, start: string | null, end: string | null): boolean {
+export function within(date: string, start: string | null, end: string | null): boolean {
   return (!start || date >= start) && (!end || date <= end);
 }
 
-function usableTimes(raw: string | null): { times: string[]; daysOfWeek: number[] | undefined } {
+export function usableTimes(raw: string | null): { times: string[]; daysOfWeek: number[] | undefined } {
   const parsed = parseFixedTimeSchedule(raw);
   const times = [...new Set((parsed.times ?? []).map(scheduleHhmm).filter((t) => HHMM.test(t)))].sort();
   return { times, daysOfWeek: parsed.daysOfWeek?.length ? parsed.daysOfWeek : undefined };
 }
 
-function runsOn(date: string, daysOfWeek: number[] | undefined): boolean {
+export function runsOn(date: string, daysOfWeek: number[] | undefined): boolean {
   return !daysOfWeek || daysOfWeek.includes(weekday(date));
+}
+
+export type ScheduledGroupTimes = { group: OrganizerGroup; times: string[]; daysOfWeek: number[] | undefined };
+
+/** The enabled fixed-time groups, with the times each one claims. */
+export function scheduledGroupTimes(groups: readonly OrganizerGroup[]): ScheduledGroupTimes[] {
+  return groups.filter((g) => g.enabled && g.scheduleKind === "scheduled").map((g) => ({ group: g, ...usableTimes(g.scheduleJson) }));
+}
+
+/**
+ * The groups running a medication's dose at this time on this day: empty when no group claims the time, null when a
+ * group claims it but none of them runs that day, which means the dose does not exist that day.
+ */
+export function runningClaimers(date: string, time: string, myGroups: readonly ScheduledGroupTimes[]): ScheduledGroupTimes[] | null {
+  const claimers = myGroups.filter((g) => g.times.includes(time));
+  if (claimers.length === 0) return [];
+  const running = claimers.filter((g) => within(date, g.group.startDate, g.group.endDate) && runsOn(date, g.daysOfWeek));
+  return running.length > 0 ? running : null;
 }
 
 const NOT_GUIDED_BY_KIND = {
@@ -195,9 +213,7 @@ export function computePlacements(input: PlacementInput): PlacementResult {
   const summaries: MedicationPlacementSummary[] = [];
   const unmapped = new Map<string, Set<string>>();
 
-  const scheduledGroups = input.groups
-    .filter((g) => g.enabled && g.scheduleKind === "scheduled")
-    .map((g) => ({ group: g, ...usableTimes(g.scheduleJson) }));
+  const scheduledGroups = scheduledGroupTimes(input.groups);
 
   // Id order, so everything gathered below (not guided, medication lists inside problems) comes out in a
   // stable order whatever order the caller loaded them in.
@@ -240,21 +256,18 @@ export function computePlacements(input: PlacementInput): PlacementResult {
       if (!within(date, med.startDate, med.endDate) || !runsOn(date, own.daysOfWeek)) continue;
 
       for (const time of own.times) {
-        const claimers = myGroups.filter((g) => g.times.includes(time));
-        if (claimers.length > 0) {
-          const running = claimers.filter((g) => within(date, g.group.startDate, g.group.endDate) && runsOn(date, g.daysOfWeek));
-          // Claimed by a group that is not running today: the dose does not exist today.
-          if (running.length === 0) continue;
-          if (running.length > 1 && !reportedDouble.has(time)) {
-            reportedDouble.add(time);
-            problems.push({
-              kind: "double_claim",
-              severity: "warning",
-              medicationId: med.id,
-              time,
-              groupIds: running.map((g) => g.group.id).sort(),
-            });
-          }
+        const running = runningClaimers(date, time, myGroups);
+        // Claimed by a group that is not running today: the dose does not exist today.
+        if (running === null) continue;
+        if (running.length > 1 && !reportedDouble.has(time)) {
+          reportedDouble.add(time);
+          problems.push({
+            kind: "double_claim",
+            severity: "warning",
+            medicationId: med.id,
+            time,
+            groupIds: running.map((g) => g.group.id).sort(),
+          });
         }
 
         doseCount += 1;

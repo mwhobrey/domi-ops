@@ -750,6 +750,13 @@
       "when": 1793188800000,
       "tag": "0106_health_organizer_skips",
       "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1793275200000,
+      "tag": "0107_health_supply_pills",
+      "breakpoints": true
     }
   ]
 }

@@ -34,7 +34,7 @@ import {
   managementGrantsForSubject,
 } from "./health-access.js";
 import { doseQuantityView, loadDoseQuantities, type DoseQuantityView } from "./health-dose-quantities.js";
-import { loadSupplyViews, supplyExtras, type SupplyView } from "./health-supply.js";
+import { loadPillSchedules, loadSupplyViews, supplyExtras, type SupplyView } from "./health-supply.js";
 
 type HealthEventRow = typeof healthEvents.$inferSelect;
 type HealthMedicationRow = typeof healthMedications.$inferSelect;
@@ -475,6 +475,8 @@ export function serializeHealthMedication(
     canLog?: boolean;
     /** Groups this medication belongs to (many-to-many — see healthMedicationGroupMembers). */
     groupIds?: string[];
+    /** Has a fixed pill dose, so its supply is entered in pills rather than days. */
+    countsPills?: boolean;
     /** Pills per dose time for the pill organizer, and the gaps in them (WHO-417). Omitted when absent. */
     doseQuantities?: DoseQuantityView;
     /** Supply estimate and pharmacy (WHO-419). Both omitted when nothing about supply was ever set. */
@@ -506,6 +508,7 @@ export function serializeHealthMedication(
     canEdit: extras?.canEdit,
     canLog: extras?.canLog,
     ...(extras?.doseQuantities ?? {}),
+    countsPills: extras?.countsPills ?? false,
     ...supplyExtras(extras?.supplyView),
   };
 }
@@ -588,6 +591,7 @@ export async function enrichHealthMedications(
   const aclBySubject = await loadHealthAclBySubjectForGrantee(db, auth.householdId, auth.memberId);
   const quantitiesByMed = await loadDoseQuantities(db, rows.map((r) => r.id));
   const supplyByMed = await loadSupplyViews(db, env, auth.householdId, rows);
+  const pillSchedules = await loadPillSchedules(db, rows.map((r) => r.id));
   return rows.map((row) => {
     const sharedMemberIds = shareMap.get(row.id) ?? [];
     const isOwnedByMe = row.createdByUserId === auth.userId;
@@ -610,6 +614,7 @@ export async function enrichHealthMedications(
       canLog,
       groupIds: groupMembershipMap.get(row.id) ?? [],
       doseQuantities: doseQuantityView(quantitiesByMed.get(row.id), row.scheduleKind, row.scheduleJson),
+      countsPills: pillSchedules.has(row.id),
       supplyView: supplyByMed.get(row.id),
     });
   });

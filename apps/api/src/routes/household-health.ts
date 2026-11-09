@@ -102,7 +102,7 @@ import {
   type DoseQuantities,
 } from "../lib/health-dose-quantities.js";
 import { SupplyValidationError } from "../lib/health-supply-validation.js";
-import { loadSupplyViews } from "../lib/health-supply.js";
+import { loadPillSchedules, loadSupplyViews } from "../lib/health-supply.js";
 
 function encryptionErrorResponse(c: { json: (body: unknown, status?: number) => Response }, e: unknown) {
   if (e instanceof HealthEncryptionError) {
@@ -1557,6 +1557,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
           canEdit: true,
           groupIds: groupMembershipMap.get(row.id) ?? [],
           doseQuantities: doseQuantityView(quantities, row.scheduleKind, row.scheduleJson),
+          countsPills: (await loadPillSchedules(db, [row.id])).has(row.id),
           supplyView: (await loadSupplyViews(db, env, auth.householdId, [row])).get(row.id),
         }),
       });

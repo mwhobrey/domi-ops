@@ -4,12 +4,16 @@ import { useEffect, useRef, useState } from "react";
 import { apiClient } from "../../lib/client-api";
 import { Alert, Button, Input, Select, Sheet } from "../ui";
 import type { HealthMedication } from "./health-types";
+import { formatPills } from "./organizer-helpers";
 import type { Pharmacy } from "./supply-types";
 import {
+  OUTSIDE_PILLS_INVALID,
   daysLeftLabel,
   formatDay,
   parseDays,
+  parseOutsidePills,
   parsePreview,
+  pillsLastLabel,
   previewLabel,
   supplyErrorMessage,
   type SupplyPreview,
@@ -23,9 +27,10 @@ type Mode = "set" | "receive";
 /**
  * Set a medication's supply, or record that a refill arrived (WHO-422).
  *
- * The person types how many days of pills they have OUTSIDE the organizers; the server adds what the
- * organizers still hold. A dry run shows the run-out date as they type, and when the organizers have a gap
- * it asks for the total days in hand instead. Receiving takes the new total and closes the open request.
+ * The person says what they have OUTSIDE the organizers, in pills where the medication has a fixed dose and in
+ * days where it does not; the server adds what the organizers still hold. A dry run shows the run-out date as they
+ * type, and when the organizers have a gap it asks for the total days in hand instead. Receiving takes the new total
+ * and closes the open request.
  */
 export function SupplySheet({
   open,
@@ -44,6 +49,9 @@ export function SupplySheet({
   onSaved: () => void;
 }) {
   const supply = medication?.supply;
+  const countsPills = medication?.countsPills === true;
+  /** A pill count already on file, shown again when setting supply so it only needs correcting. Not when receiving: that is a new total. */
+  const prefill = mode === "set" && countsPills && supply?.outsidePills != null ? formatPills(supply.outsidePills) : "";
   const [outsideText, setOutsideText] = useState("");
   const [totalText, setTotalText] = useState("");
   const [pharmacyId, setPharmacyId] = useState("");
@@ -59,13 +67,21 @@ export function SupplySheet({
   const keyRef = useRef<string | null>(null);
   const previewSeq = useRef(0);
 
-  const outsideDays = parseDays(outsideText, MAX_DAYS);
+  const outsideAmount = countsPills ? parseOutsidePills(outsideText) : parseDays(outsideText, MAX_DAYS);
   const totalDays = parseDays(totalText, MAX_DAYS);
   const gap = needsTotal;
 
+  const leadParsed = leadText.trim() === "" ? null : parseDays(leadText, MAX_LEAD);
+  const leadChanged = leadParsed !== (supply?.leadDaysOverride ?? null);
+  const pharmacyChanged = pharmacyId !== (medication?.pharmacy?.id ?? "");
+  /** The prefilled count left as it was only counts as a new estimate when nothing else is being changed. */
+  const sendsEstimate = outsideAmount !== null && (mode === "receive" || outsideText.trim() !== prefill || (!leadChanged && !pharmacyChanged));
+  const estimateAmount = sendsEstimate ? outsideAmount : null;
+  const outsideField = estimateAmount === null ? {} : countsPills ? { outsidePills: estimateAmount } : { outsideDays: estimateAmount };
+
   useEffect(() => {
     if (!open) return;
-    setOutsideText("");
+    setOutsideText(prefill);
     setTotalText("");
     setPharmacyId(medication?.pharmacy?.id ?? "");
     setLeadText(supply?.leadDaysOverride !== null && supply?.leadDaysOverride !== undefined ? String(supply.leadDaysOverride) : "");
@@ -74,12 +90,12 @@ export function SupplySheet({
     setPreviewError(null);
     setErr(null);
     keyRef.current = null;
-  }, [open, medication, supply?.leadDaysOverride]);
+  }, [open, medication, supply?.leadDaysOverride, prefill]);
 
-  // A different number of days outside means the gap has to be found out again.
+  // A different amount outside means the gap has to be found out again.
   useEffect(() => {
     setNeedsTotal(false);
-  }, [outsideDays]);
+  }, [outsideAmount]);
 
   // A new key whenever the form changes, so a retried save is only ever "the same submission" when nothing differs.
   useEffect(() => {
@@ -102,9 +118,9 @@ export function SupplySheet({
     };
   }, [open, mode]);
 
-  // The live preview: ask the server (dry run) what these days come to, once the typing settles.
+  // The live preview: ask the server (dry run) what this comes to, once the typing settles.
   useEffect(() => {
-    if (!open || !medication || outsideDays === null) {
+    if (!open || !medication || estimateAmount === null) {
       previewSeq.current += 1;
       setPreview(null);
       setPreviewError(null);
@@ -112,7 +128,7 @@ export function SupplySheet({
     }
     const seq = ++previewSeq.current;
     const handle = setTimeout(() => {
-      const body = { outsideDays, ...(totalDays !== null ? { confirmedTotalDays: totalDays } : {}), dryRun: true };
+      const body = { ...(countsPills ? { outsidePills: estimateAmount } : { outsideDays: estimateAmount }), ...(totalDays !== null ? { confirmedTotalDays: totalDays } : {}), dryRun: true };
       const call =
         mode === "set"
           ? apiClient.put<unknown>(`/api/health/medications/${medication.id}/supply`, body)
@@ -132,19 +148,16 @@ export function SupplySheet({
         });
     }, 350);
     return () => clearTimeout(handle);
-  }, [open, medication, mode, outsideDays, totalDays]);
+  }, [open, medication, mode, countsPills, estimateAmount, totalDays]);
 
-  const leadParsed = leadText.trim() === "" ? null : parseDays(leadText, MAX_LEAD);
   const leadInvalid = leadText.trim() !== "" && leadParsed === null;
-  const leadChanged = leadParsed !== (supply?.leadDaysOverride ?? null);
-  const pharmacyChanged = pharmacyId !== (medication?.pharmacy?.id ?? "");
-  const estimateReady = outsideDays !== null && (!gap || totalDays !== null);
-  const outsideInvalid = outsideText.trim() !== "" && outsideDays === null;
+  const estimateReady = estimateAmount !== null && (!gap || totalDays !== null);
+  const outsideInvalid = outsideText.trim() !== "" && outsideAmount === null;
 
   const canSave =
     mode === "receive"
       ? estimateReady && !previewError
-      : !leadInvalid && !outsideInvalid && (outsideText.trim() === "" || (estimateReady && !previewError)) && (outsideText.trim() !== "" || leadChanged || pharmacyChanged);
+      : !leadInvalid && !outsideInvalid && (!sendsEstimate || (estimateReady && !previewError)) && (sendsEstimate || leadChanged || pharmacyChanged);
 
   async function save() {
     if (!medication || !canSave) return;
@@ -154,14 +167,14 @@ export function SupplySheet({
     try {
       if (mode === "receive") {
         await apiClient.post(`/api/health/medications/${medication.id}/supply/receive`, {
-          outsideDays,
+          ...outsideField,
           ...(gap && totalDays !== null ? { confirmedTotalDays: totalDays } : {}),
           idempotencyKey: keyRef.current,
         });
       } else {
         await apiClient.put(`/api/health/medications/${medication.id}/supply`, {
-          ...(outsideDays !== null ? { outsideDays } : {}),
-          ...(outsideDays !== null && gap && totalDays !== null ? { confirmedTotalDays: totalDays } : {}),
+          ...outsideField,
+          ...(estimateAmount !== null && gap && totalDays !== null ? { confirmedTotalDays: totalDays } : {}),
           ...(leadChanged ? { leadDays: leadParsed } : {}),
           ...(pharmacyChanged ? { pharmacyId: pharmacyId || null } : {}),
           ...(supply ? { version: supply.version } : {}),
@@ -227,24 +240,38 @@ export function SupplySheet({
         ) : null}
 
         <label className="block space-y-1 text-sm">
-          <span>{mode === "receive" ? "Days of pills you now have outside the organizers" : "Days of pills outside the organizers, right now"}</span>
+          <span>
+            {countsPills
+              ? mode === "receive"
+                ? "Pills you now have outside the organizers"
+                : "Pills outside the organizers, right now"
+              : mode === "receive"
+                ? "Days of pills you now have outside the organizers"
+                : "Days of pills outside the organizers, right now"}
+          </span>
           <Input
             type="text"
-            inputMode="numeric"
-            pattern="[0-9]*"
+            inputMode={countsPills ? "decimal" : "numeric"}
+            pattern={countsPills ? undefined : "[0-9]*"}
             value={outsideText}
             onChange={(e) => setOutsideText(e.target.value)}
             placeholder={mode === "receive" ? "e.g. 90" : "Leave blank to keep the current estimate"}
-            maxLength={4}
+            maxLength={countsPills ? 10 : 4}
             autoFocus
           />
+          {mode === "receive" && countsPills && supply?.outsidePills != null ? (
+            <span className="block text-xs text-[var(--color-text-muted)]">Last count: {formatPills(supply.outsidePills)}. Include what you already had.</span>
+          ) : null}
         </label>
-        {outsideInvalid ? <p className="text-sm text-[var(--color-danger)]">Enter a whole number of days, from 0 to {MAX_DAYS}.</p> : null}
+        {outsideInvalid ? <p className="text-sm text-[var(--color-danger)]">{countsPills ? OUTSIDE_PILLS_INVALID : `Enter a whole number of days, from 0 to ${MAX_DAYS}.`}</p> : null}
 
         {preview?.kind === "ok" ? (
-          <p className="rounded-lg bg-[var(--color-surface-secondary)] px-3 py-2 text-sm text-[var(--color-text)]" aria-live="polite">
-            {previewLabel(preview)}
-          </p>
+          <div className="rounded-lg bg-[var(--color-surface-secondary)] px-3 py-2 text-sm text-[var(--color-text)]" aria-live="polite">
+            <p>{previewLabel(preview)}</p>
+            {countsPills && !gap && estimateAmount !== null ? (
+              <p className="text-[var(--color-text-muted)]">{pillsLastLabel(formatPills(estimateAmount), estimateAmount, preview.outsideDays)}</p>
+            ) : null}
+          </div>
         ) : null}
         {previewError ? <p className="text-sm text-[var(--color-danger)]">{previewError}</p> : null}
 
