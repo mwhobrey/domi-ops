@@ -76,6 +76,7 @@ export { scanDriveQuotaWarnings } from "./drive-quota-scan.js";
 export { deliverUserNotification, persistUserNotifications, persistUserNotificationOnce, deliverUserNotificationToSubscriptions } from "./user-notify.js";
 export { isValidTimeZone, resolveAlertTimeZone } from "./alert-timezone.js";
 export {
+  isMultiDayInterval,
   parseIntervalSchedule,
   normalizeIntervalSchedule,
   nextIntervalPending,

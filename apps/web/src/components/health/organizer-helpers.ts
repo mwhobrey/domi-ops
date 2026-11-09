@@ -103,7 +103,7 @@ export function scheduleSummary(plan: Pick<OrganizerPlan, "scheduleKind" | "ever
 const REASONS: Record<NotGuidedReason, string> = {
   as_needed: "taken as needed",
   over_the_counter: "over the counter",
-  interval: "repeats every few hours",
+  interval: "repeats on an interval",
   paused: "paused",
   no_times: "has no fixed times",
   not_a_pill: "not a pill",
@@ -201,6 +201,7 @@ const MESSAGES: Record<string, string> = {
   quantity_time_not_scheduled: "That medication does not take a dose at that time.",
   quantity_out_of_range: "Use between ¼ and 100 pills.",
   quantity_not_quarter_step: "Use whole quarters of a pill.",
+  interval_dose_needs_long_interval: "Pills per dose only applies to a medication repeated every day or longer.",
 };
 
 /**

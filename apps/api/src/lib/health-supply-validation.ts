@@ -18,6 +18,7 @@ export type SupplyValidationCode =
   | "too_many_dose_quantities"
   | "quantities_need_scheduled_medication"
   | "quantity_time_not_scheduled"
+  | "interval_dose_needs_long_interval"
   | "invalid_website"
   | "invalid_phone"
   | "invalid_pharmacy_name"

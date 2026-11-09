@@ -1,6 +1,6 @@
 import { healthMedicationDoseQuantities, type Database } from "@domi-ops/db";
 import { eq, inArray } from "drizzle-orm";
-import { parseFixedTimeSchedule, scheduleHhmm } from "@domi-ops/calendar-sync";
+import { isMultiDayInterval, parseFixedTimeSchedule, parseIntervalSchedule, scheduleHhmm } from "@domi-ops/calendar-sync";
 import {
   SupplyValidationError,
   normalizeDoseTime,
@@ -59,6 +59,18 @@ export function assertQuantitiesFitSchedule(
   if (scheduleKind !== "scheduled") throw new SupplyValidationError("quantities_need_scheduled_medication");
   const times = new Set(scheduledTimes(scheduleKind, scheduleJson));
   for (const time of quantities.keys()) if (!times.has(time)) throw new SupplyValidationError("quantity_time_not_scheduled");
+}
+
+/**
+ * Pills per dose for an interval medication, as quarters: null clears it. Only an interval of a day or longer has one,
+ * because shorter intervals have no steady count of doses to work a supply out from. Throws {@link SupplyValidationError}.
+ */
+export function parseIntervalDose(raw: unknown, scheduleKind: string, scheduleJson: string | null | undefined): number | null {
+  if (raw === null) return null;
+  const quarters = parsePillQuantity(raw);
+  const interval = scheduleKind === "interval" ? parseIntervalSchedule(scheduleJson) : null;
+  if (!interval || !isMultiDayInterval(interval)) throw new SupplyValidationError("interval_dose_needs_long_interval");
+  return quarters;
 }
 
 /** Postgres returns a `time` as "08:00:00". */

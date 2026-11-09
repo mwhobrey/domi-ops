@@ -14,11 +14,14 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
   organizers run out, so weekday-only medications come out right. The run-out
   date stays in days and logging a dose still never changes it. After a fill, the
   field starts from the last count less the pills that fill used, shown before
-  saving. As needed, interval and non-pill medications keep days.
+  saving. As needed, short-interval and non-pill medications keep days.
 - Filling a pill organizer counts the days with a dose, so a medication taken only
   on some weekdays goes in with one save instead of one per week.
+- An interval pill taken every day or longer (weekly, bi-weekly, every X days) can
+  set pills per dose on its edit screen, and its supply is then entered in pills too.
 - Migration: `0107_health_supply_pills` adds `outside_quarters` to
-  `health_medication_supply` and `health_medication_supply_revisions`.
+  `health_medication_supply` and `health_medication_supply_revisions`, and
+  `interval_dose_quarters` to `health_medications`.
 - Pill organizer fills can now skip a medication that is out of stock or staying
   in its bottle this time, and a session of only skips can finish. Out of stock
   counts nothing left outside the organizers so it comes up for a refill, and the

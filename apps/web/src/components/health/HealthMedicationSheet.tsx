@@ -7,11 +7,13 @@ import { NoteSharePicker } from "../NoteSharePicker";
 import { Alert, Button, Checkbox, Input, Select, Sheet, Textarea } from "../ui";
 import {
   MedScheduleEditor,
+  amountUnitToMinutes,
   medicationToScheduleDraft,
   scheduleDraftToRequestBody,
   type MedScheduleDraft,
 } from "./MedScheduleEditor";
 import { isAsNeededMedScheduleKind, resolveDefaultMemberId } from "./health-helpers";
+import { formatPills, parseQuantityInput } from "./organizer-helpers";
 import { MEDICATION_FORMS, type HealthMedication, type MedicationFormValue, type MedicationGroupOption } from "./health-types";
 import { pharmacyErrorMessage } from "./pharmacy-helpers";
 import type { Pharmacy } from "./supply-types";
@@ -50,6 +52,7 @@ export function HealthMedicationSheet({
   const [instructions, setInstructions] = useState(medication?.instructions ?? "");
   const [form, setForm] = useState<MedicationFormValue>(medication?.form ?? "pill");
   const [organizerExcluded, setOrganizerExcluded] = useState(medication?.organizerExcluded ?? false);
+  const [intervalDoseText, setIntervalDoseText] = useState(medication?.intervalDosePills != null ? formatPills(medication.intervalDosePills) : "");
   const [scheduleDraft, setScheduleDraft] = useState<MedScheduleDraft>(() =>
     medicationToScheduleDraft(medication),
   );
@@ -92,6 +95,7 @@ export function HealthMedicationSheet({
     setInstructions(medication?.instructions ?? "");
     setForm(medication?.form ?? "pill");
     setOrganizerExcluded(medication?.organizerExcluded ?? false);
+    setIntervalDoseText(medication?.intervalDosePills != null ? formatPills(medication.intervalDosePills) : "");
     setScheduleDraft(medicationToScheduleDraft(medication));
     setSelectedGroupIds(new Set(medication?.groupIds ?? []));
     setNewGroupName("");
@@ -136,6 +140,10 @@ export function HealthMedicationSheet({
     });
   }, [memberId, groups]);
 
+  /** An interval pill taken every day or longer: its supply can be counted in pills once a dose has a size. */
+  const everyMinutes = scheduleDraft.scheduleKind === "interval" ? amountUnitToMinutes(scheduleDraft.everyAmount, scheduleDraft.everyUnit) : null;
+  const asksIntervalDose = form === "pill" && everyMinutes !== null && everyMinutes >= 24 * 60;
+
   async function save() {
     if (readOnly || !name.trim()) return;
     setBusy(true);
@@ -143,6 +151,12 @@ export function HealthMedicationSheet({
     const scheduleResult = scheduleDraftToRequestBody(scheduleDraft);
     if (!scheduleResult.ok) {
       setErr(scheduleResult.error);
+      setBusy(false);
+      return;
+    }
+    const intervalDose = parseQuantityInput(intervalDoseText);
+    if (asksIntervalDose && !intervalDose.ok && intervalDose.reason !== "empty") {
+      setErr("Enter pills per dose like 1 or ½, between ¼ and 100, or leave it blank.");
       setBusy(false);
       return;
     }
@@ -155,6 +169,7 @@ export function HealthMedicationSheet({
       organizerExcluded,
       scheduleKind: scheduleResult.scheduleKind,
       schedule: scheduleResult.schedule,
+      ...(asksIntervalDose ? { intervalDosePills: intervalDose.ok ? intervalDose.pills : null } : {}),
       enabled,
       visibility,
       sharedMemberIds: visibility === "private" ? sharedMemberIds : undefined,
@@ -290,6 +305,13 @@ export function HealthMedicationSheet({
           />
         </label>
         <MedScheduleEditor draft={scheduleDraft} onChange={setScheduleDraft} />
+        {asksIntervalDose ? (
+          <label className="block space-y-1 text-sm">
+            <span>Pills per dose (optional)</span>
+            <Input type="text" inputMode="decimal" value={intervalDoseText} onChange={(e) => setIntervalDoseText(e.target.value)} placeholder="e.g. 1" maxLength={6} />
+            <span className="block text-xs text-[var(--color-text-muted)]">Lets you enter this medication&apos;s supply in pills instead of days.</span>
+          </label>
+        ) : null}
         {isAsNeededMedScheduleKind(scheduleDraft.scheduleKind) ? null : (
           <div className="space-y-2">
             <span className="text-sm font-medium text-[var(--color-text)]">

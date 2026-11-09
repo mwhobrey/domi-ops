@@ -126,6 +126,71 @@ describe("quartersToDays", () => {
   });
 });
 
+describe("interval pills", () => {
+  const every = (days: number, over: Partial<OrganizerMedication> = {}) =>
+    med({
+      scheduleKind: "interval",
+      scheduleJson: JSON.stringify({ everyMinutes: days * 1440, anchor: "first_taken", intervalFrom: "last_taken", stop: { mode: "max_doses", maxDoses: 1 } }),
+      intervalDoseQuarters: 4,
+      ...over,
+    });
+  const interval = (m: OrganizerMedication, groups: OrganizerGroup[] = []) => {
+    const s = pillDoseSchedule(m, groups, undefined);
+    if (!s) throw new Error("expected a count");
+    return s;
+  };
+
+  it("needs pills per dose and an interval of a day or longer", () => {
+    expect(pillDoseSchedule(every(14, { intervalDoseQuarters: null }), [], undefined)).toBeNull();
+    expect(pillDoseSchedule(every(0.25), [], undefined)).toBeNull();
+    expect(pillDoseSchedule(every(14, { form: "liquid" }), [], undefined)).toBeNull();
+    expect(pillDoseSchedule(every(1), [], undefined)).not.toBeNull();
+  });
+
+  it.each([
+    [14, 4 * 4, 56],
+    [3, 10 * 4, 30],
+    [7, 1 * 4, 7],
+  ])("is whole doses times the interval, every %i days", (days, quarters, expected) => {
+    expect(quartersToDays(interval(every(days)), MONDAY, quarters)).toBe(expected);
+  });
+
+  it("rounds part of a dose down", () => {
+    expect(quartersToDays(interval(every(14, { intervalDoseQuarters: 8 })), MONDAY, 5 * 4)).toBe(28); // two a dose, five pills
+    expect(quartersToDays(interval(every(14)), MONDAY, 3)).toBe(0); // less than one dose
+  });
+
+  it("uses the interval of the group that holds it", () => {
+    const group: OrganizerGroup = {
+      id: "g1",
+      scheduleKind: "interval",
+      scheduleJson: JSON.stringify({ everyMinutes: 10 * 1440, anchor: "first_taken", intervalFrom: "last_taken", stop: { mode: "max_doses", maxDoses: 1 } }),
+      startDate: null,
+      endDate: null,
+      enabled: true,
+      medicationIds: ["m1"],
+    };
+    expect(quartersToDays(interval(every(14), [group]), MONDAY, 2 * 4)).toBe(20);
+    expect(quartersToDays(interval(every(14), [{ ...group, enabled: false }]), MONDAY, 2 * 4)).toBe(28);
+  });
+
+  it("waits for a medication that has not started", () => {
+    expect(quartersToDays(interval(every(14, { startDate: addDaysUtc(MONDAY, 5) })), MONDAY, 1 * 4)).toBe(19);
+  });
+
+  it("stops the day after the medication ends", () => {
+    expect(quartersToDays(interval(every(14, { endDate: addDaysUtc(MONDAY, 9) })), MONDAY, 50 * 4)).toBe(10);
+  });
+
+  it("refuses a count that lasts past the longest supply", () => {
+    expect(() => quartersToDays(interval(every(365)), MONDAY, 11 * 4)).toThrow(RangeError);
+  });
+
+  it("has no days for the organizer to place", () => {
+    expect(interval(every(14)).quartersOn(MONDAY)).toBe(0);
+  });
+});
+
 describe("bridgeDoseFreeDays", () => {
   const plus = (n: number) => addDaysUtc(MONDAY, n);
   const week = () => schedule({ scheduleJson: weekdays });

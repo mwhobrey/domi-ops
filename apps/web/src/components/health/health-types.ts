@@ -148,6 +148,8 @@ export interface HealthMedication {
   doseQuantityIssues?: { missing: string[]; orphaned: string[] };
   /** Has a fixed pill dose, so its supply is entered in pills rather than days. */
   countsPills?: boolean;
+  /** Pills in one dose of an interval medication taken every day or longer. */
+  intervalDosePills?: number | null;
   /** Supply estimate and pharmacy (WHO-419). Both are absent until something about supply is set. */
   supply?: SupplySummary;
   pharmacy?: PharmacySummary | null;

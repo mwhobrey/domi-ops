@@ -306,7 +306,7 @@ maybeDescribe("medication supply in pills (integration)", () => {
       ["every 3 days", 3],
       ["every 7 days", 7],
       ["every 14 days", 14],
-    ])("keeps an interval pill taken %s in days", async (_name, days) => {
+    ])("keeps an interval pill taken %s in days until a dose has a size", async (_name, days) => {
       const memberId = await newPerson();
       const id = await makeMed(memberId, everyDays(days));
 
@@ -320,6 +320,53 @@ maybeDescribe("medication supply in pills (integration)", () => {
       const entered = await put(id, { outsideDays: days * 4 });
       expect(entered.status, JSON.stringify(entered.json)).toBe(200);
       expect(entered.json.supply).toMatchObject({ outsideDays: days * 4, outsidePills: null, runsOutOn: plus(days * 4) });
+    });
+
+    it.each([
+      ["every 3 days", 3, 10, 30],
+      ["every 7 days", 7, 4, 28],
+      ["every 14 days", 14, 4, 56],
+    ])("counts an interval pill taken %s in whole doses once it has pills per dose", async (_name, days, pills, expected) => {
+      const memberId = await newPerson();
+      const id = await makeMed(memberId, everyDays(days));
+      const set = await call("PATCH", `/medications/${id}`, { intervalDosePills: 1 });
+      expect(set.status, JSON.stringify(set.json)).toBe(200);
+      expect(set.json.medication).toMatchObject({ countsPills: true, intervalDosePills: 1 });
+
+      const preview = await put(id, { outsidePills: pills, dryRun: true });
+      expect(preview.json).toMatchObject({ dryRun: true, outsideDays: expected, runsOutOn: plus(expected) });
+      expect(await setCount(id, pills)).toMatchObject({ outsideDays: expected, outsidePills: pills, runsOutOn: plus(expected) });
+      expect((await supplyRow(id))?.outsideQuarters).toBe(pills * 4);
+    });
+
+    it("takes pills on a refill for an interval pill, and rounds part of a dose down", async () => {
+      const id = await med({ ...everyDays(14), over: { ...everyDays(14).over, intervalDoseQuarters: 8 } }); // two pills a dose
+      const res = await call("POST", `/medications/${id}/supply/receive`, { outsidePills: 5 });
+      expect(res.status, JSON.stringify(res.json)).toBe(200);
+      expect(res.json.supply).toMatchObject({ outsideDays: 28, outsidePills: 5, runsOutOn: plus(28) });
+    });
+
+    it("goes back to days when pills per dose is cleared", async () => {
+      const id = await med(everyDays(14));
+      await call("PATCH", `/medications/${id}`, { intervalDosePills: 1 });
+      const cleared = await call("PATCH", `/medications/${id}`, { intervalDosePills: null });
+      expect(cleared.json.medication).toMatchObject({ countsPills: false, intervalDosePills: null });
+      expect((await put(id, { outsidePills: 4 })).json.error).toBe("pills_need_fixed_dose");
+    });
+
+    it.each([
+      ["a medication on a fixed schedule", {}],
+      ["an interval shorter than a day", { over: { scheduleKind: "interval" as const, scheduleJson: JSON.stringify({ everyMinutes: 360, anchor: "first_taken", intervalFrom: "last_taken", stop: { mode: "max_doses", maxDoses: 3 } }) }, q: {} }],
+    ])("refuses pills per dose on %s", async (_name, spec) => {
+      const res = await call("PATCH", `/medications/${await med(spec)}`, { intervalDosePills: 1 });
+      expect(res.status).toBe(400);
+      expect(res.json.error).toBe("interval_dose_needs_long_interval");
+    });
+
+    it("refuses pills per dose that is not a quarter step", async () => {
+      const res = await call("PATCH", `/medications/${await med(everyDays(14))}`, { intervalDosePills: 0.3 });
+      expect(res.status).toBe(400);
+      expect(res.json.error).toBe("quantity_not_quarter_step");
     });
 
     it("does not take a pill quantity for an interval medication", async () => {

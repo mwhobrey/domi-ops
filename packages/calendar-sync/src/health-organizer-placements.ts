@@ -37,6 +37,8 @@ export type OrganizerMedication = {
   form?: "pill" | "iv" | "injection" | "liquid" | "other";
   /** Kept out of the organizer on purpose: not guided, and raises no setup problem. */
   organizerExcluded?: boolean;
+  /** Pills in one dose of an interval medication, in quarters. Only supply reads it: interval doses are never placed. */
+  intervalDoseQuarters?: number | null;
   scheduleJson: string | null;
   startDate: string | null;
   endDate: string | null;

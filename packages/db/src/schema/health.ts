@@ -252,6 +252,8 @@ export const healthMedications = pgTable("health_medications", {
   form: medFormEnum("form").notNull().default("pill"),
   /** A scheduled pill that never goes in the organizer, however it is otherwise set up. */
   organizerExcluded: boolean("organizer_excluded").notNull().default(false),
+  /** Pills in one dose of an interval medication taken every day or longer, in quarters (migration 0107). */
+  intervalDoseQuarters: integer("interval_dose_quarters"),
   scheduleJson: text("schedule_json").default("{}"),
   reminderOffsetsJson: text("reminder_offsets_json").default("[0]"),
   startDate: date("start_date"),

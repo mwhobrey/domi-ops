@@ -1,4 +1,4 @@
-import { MAX_SUPPLY_DAYS, mergeRanges, type DateRange } from "./health-supply-arithmetic.js";
+import { MAX_SUPPLY_DAYS, daysBetween, mergeRanges, type DateRange } from "./health-supply-arithmetic.js";
 import {
   addDaysUtc,
   runningClaimers,
@@ -9,6 +9,7 @@ import {
   type OrganizerGroup,
   type OrganizerMedication,
 } from "./health-organizer-placements.js";
+import { isMultiDayInterval, parseIntervalSchedule } from "./med-interval-schedule.js";
 
 /**
  * Supply entered as a pill count. The estimate stays in days (see health-supply-arithmetic): a count is turned into the
@@ -24,13 +25,33 @@ export const MAX_SUPPLY_QUARTERS = 400_000;
 export type PillDoseSchedule = {
   /** The last day the medication is taken, if it has one. */
   endDate: string | null;
-  /** Quarters of a pill due on this day, in all; 0 on a day with no dose. */
+  /** Quarters of a pill due on this day, in all; 0 on a day with no dose. An interval medication has no fixed days: always 0. */
   quartersOn: (date: string) => number;
+  /** Set for an interval medication: it is counted in doses, not walked day by day. */
+  interval?: { everyMinutes: number; quartersPerDose: number; startDate: string | null };
 };
 
 /**
+ * An interval medication taken every day or longer, with its pills per dose entered. The interval is its group's when an
+ * enabled interval group holds it, the same as its reminders. Shorter intervals have no steady count of doses a day.
+ */
+function intervalPillSchedule(med: OrganizerMedication, groups: readonly OrganizerGroup[]): PillDoseSchedule | null {
+  const quartersPerDose = med.intervalDoseQuarters;
+  if (!quartersPerDose || quartersPerDose < 1) return null;
+  const group = groups.find((g) => g.enabled && g.scheduleKind === "interval" && g.medicationIds.includes(med.id));
+  const schedule = parseIntervalSchedule(group ? group.scheduleJson : med.scheduleJson);
+  if (!schedule || !isMultiDayInterval(schedule)) return null;
+  return {
+    endDate: med.endDate,
+    quartersOn: () => 0,
+    interval: { everyMinutes: schedule.everyMinutes, quartersPerDose, startDate: med.startDate },
+  };
+}
+
+/**
  * The medication's pills per day, or null when it has no fixed daily dose to count against: not a pill, as needed, over
- * the counter, interval, no usable times, or a time with no quantity entered. These keep their supply in days.
+ * the counter, an interval shorter than a day or with no pills per dose entered, no usable times, or a time with no
+ * quantity entered. These keep their supply in days.
  *
  * The rules are the organizer's, so a count and a fill never disagree about which days have a dose: a medication's own
  * weekdays and dates, and a time claimed by a group exists only on the days that group runs. A paused medication or one
@@ -43,6 +64,7 @@ export function pillDoseSchedule(
 ): PillDoseSchedule | null {
   if (med.deletedAt) return null;
   if (med.form !== undefined && med.form !== "pill") return null;
+  if (med.scheduleKind === "interval") return intervalPillSchedule(med, groups);
   if (med.scheduleKind !== "scheduled" || !quantities) return null;
   const own = usableTimes(med.scheduleJson);
   if (own.times.length === 0) return null;
@@ -68,10 +90,15 @@ export function pillDoseSchedule(
  * nothing and count, so five pills of a weekday medication started on a Monday last until the next Monday. A count that
  * outlasts the medication's end date stops the day after it, which is what marks the supply as covering the course.
  *
+ * An interval medication is whole doses times the interval, counted from `from`. Its real next dose depends on when the
+ * last one was logged, and supply never reads dose logs, so this can come out short by up to one interval. That errs
+ * toward refilling early.
+ *
  * @throws RangeError when the pills last past the longest supply there can be.
  */
 export function quartersToDays(schedule: PillDoseSchedule, from: string, quarters: number): number {
   if (!Number.isInteger(quarters) || quarters < 0) throw new RangeError(`Not a whole number of quarters: ${quarters}`);
+  if (schedule.interval) return intervalDays(schedule, schedule.interval, from, quarters);
   let left = quarters;
   for (let day = 0; day <= MAX_SUPPLY_DAYS; day += 1) {
     const date = addDaysUtc(from, day);
@@ -81,6 +108,18 @@ export function quartersToDays(schedule: PillDoseSchedule, from: string, quarter
     left -= due;
   }
   throw new RangeError(`Those pills last longer than ${MAX_SUPPLY_DAYS} days`);
+}
+
+function intervalDays(schedule: PillDoseSchedule, interval: NonNullable<PillDoseSchedule["interval"]>, from: string, quarters: number): number {
+  const doses = Math.floor(quarters / interval.quartersPerDose);
+  const waiting = interval.startDate !== null && interval.startDate > from ? daysBetween(from, interval.startDate) : 0;
+  const days = waiting + Math.floor((doses * interval.everyMinutes) / 1440);
+  if (schedule.endDate !== null) {
+    const throughEnd = Math.max(0, daysBetween(from, schedule.endDate) + 1);
+    if (days >= throughEnd) return throughEnd;
+  }
+  if (days > MAX_SUPPLY_DAYS) throw new RangeError(`Those pills last longer than ${MAX_SUPPLY_DAYS} days`);
+  return days;
 }
 
 /**

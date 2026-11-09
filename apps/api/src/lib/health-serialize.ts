@@ -35,6 +35,7 @@ import {
 } from "./health-access.js";
 import { doseQuantityView, loadDoseQuantities, type DoseQuantityView } from "./health-dose-quantities.js";
 import { loadPillSchedules, loadSupplyViews, supplyExtras, type SupplyView } from "./health-supply.js";
+import { quartersToPills } from "./health-supply-validation.js";
 
 type HealthEventRow = typeof healthEvents.$inferSelect;
 type HealthMedicationRow = typeof healthMedications.$inferSelect;
@@ -508,6 +509,7 @@ export function serializeHealthMedication(
     canEdit: extras?.canEdit,
     canLog: extras?.canLog,
     ...(extras?.doseQuantities ?? {}),
+    intervalDosePills: row.intervalDoseQuarters === null ? null : quartersToPills(row.intervalDoseQuarters),
     countsPills: extras?.countsPills ?? false,
     ...supplyExtras(extras?.supplyView),
   };
