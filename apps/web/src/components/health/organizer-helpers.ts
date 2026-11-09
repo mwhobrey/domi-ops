@@ -1,6 +1,6 @@
 import { ApiError } from "../../lib/client-api";
 import { apiErrorCode } from "./pharmacy-helpers";
-import { formatDay } from "./supply-helpers";
+import { formatDay, parseQuarters } from "./supply-helpers";
 import type { HealthMedication } from "./health-types";
 import type { NotGuidedReason, OrganizerCompartment, OrganizerPlan, OrganizerStep } from "./organizer-types";
 
@@ -12,8 +12,6 @@ import type { NotGuidedReason, OrganizerCompartment, OrganizerPlan, OrganizerSte
 export const MIN_PILLS = 0.25;
 export const MAX_PILLS = 100;
 
-const FRACTION_CHARS: Record<string, string> = { "¼": "1/4", "½": "1/2", "¾": "3/4" };
-
 export type QuantityParse = { ok: true; pills: number } | { ok: false; reason: "empty" | "invalid" | "not_quarter" | "range" };
 
 /**
@@ -21,32 +19,10 @@ export type QuantityParse = { ok: true; pills: number } | { ok: false; reason: "
  * allowed (that is how organizers are filled), between a quarter and a hundred.
  */
 export function parseQuantityInput(text: string): QuantityParse {
-  let t = text.trim();
-  if (t === "") return { ok: false, reason: "empty" };
-  for (const [ch, frac] of Object.entries(FRACTION_CHARS)) t = t.replaceAll(ch, ` ${frac}`);
-  t = t.replace(/\s+/g, " ").trim();
-
-  let quarters: number | null = null;
-  let m: RegExpExecArray | null;
-  if ((m = /^(\d+)?(?:\.(\d+))?$/.exec(t)) && t !== "" && t !== ".") {
-    // a plain or decimal number
-    const value = Number(t);
-    if (!Number.isFinite(value)) return { ok: false, reason: "invalid" };
-    const q = value * 4;
-    if (Math.abs(q - Math.round(q)) > 1e-9) return { ok: false, reason: "not_quarter" };
-    quarters = Math.round(q);
-  } else if ((m = /^(?:(\d+) )?(\d+)\/(\d+)$/.exec(t))) {
-    const whole = m[1] ? Number(m[1]) : 0;
-    const num = Number(m[2]);
-    const den = Number(m[3]);
-    if (den === 0) return { ok: false, reason: "invalid" };
-    const q = ((whole * den + num) * 4) / den;
-    if (Math.abs(q - Math.round(q)) > 1e-9) return { ok: false, reason: "not_quarter" };
-    quarters = Math.round(q);
-  }
-  if (quarters === null) return { ok: false, reason: "invalid" };
-  if (quarters < 1 || quarters > MAX_PILLS * 4) return { ok: false, reason: "range" };
-  return { ok: true, pills: quarters / 4 };
+  const parsed = parseQuarters(text);
+  if (!parsed.ok) return parsed;
+  if (parsed.quarters < 1 || parsed.quarters > MAX_PILLS * 4) return { ok: false, reason: "range" };
+  return { ok: true, pills: parsed.quarters / 4 };
 }
 
 const FRACTION_FOR: Record<number, string> = { 0.25: "¼", 0.5: "½", 0.75: "¾" };
@@ -127,7 +103,7 @@ export function scheduleSummary(plan: Pick<OrganizerPlan, "scheduleKind" | "ever
 const REASONS: Record<NotGuidedReason, string> = {
   as_needed: "taken as needed",
   over_the_counter: "over the counter",
-  interval: "repeats every few hours",
+  interval: "repeats on an interval",
   paused: "paused",
   no_times: "has no fixed times",
   not_a_pill: "not a pill",
@@ -225,6 +201,7 @@ const MESSAGES: Record<string, string> = {
   quantity_time_not_scheduled: "That medication does not take a dose at that time.",
   quantity_out_of_range: "Use between ¼ and 100 pills.",
   quantity_not_quarter_step: "Use whole quarters of a pill.",
+  interval_dose_needs_long_interval: "Pills per dose only applies to a medication repeated every day or longer.",
 };
 
 /**

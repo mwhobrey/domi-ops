@@ -2,11 +2,11 @@
 
 How Domi Ops helps a household fill a pill organizer and ask for refills in time. It lives on the Health page's **Medications** tab (the **Pill organizer**, **Supplies** and **Pharmacies** cards) and shows up on the calendar, the dashboard and in reminders. This page is the reference for how it behaves and where the code is. It is modelled on [HEALTH_CHECKS.md](./HEALTH_CHECKS.md).
 
-Linear: WHO-405 to WHO-440 (project "Medication filling and pharmacy management", milestones M0 to M5). Migrations: `0087_health_supply`, `0088_health_organizers`, `0089_health_supply_write_key`, `0090_health_supply_reminders`, `0091_health_supply_least_privilege`, `0106_health_organizer_skips` (run `npm run db:migrate`; the hosted tag deploy does it).
+Linear: WHO-405 to WHO-440 (project "Medication filling and pharmacy management", milestones M0 to M5). Migrations: `0087_health_supply`, `0088_health_organizers`, `0089_health_supply_write_key`, `0090_health_supply_reminders`, `0091_health_supply_least_privilege`, `0106_health_organizer_skips`, `0107_health_supply_pills` (run `npm run db:migrate`; the hosted tag deploy does it).
 
 ## The idea in one paragraph
 
-Supply is a **user-confirmed estimate, never live inventory**. A person tells Domi Ops how many days of a medication they keep outside the organizer; Domi Ops adds the days the organizer still holds and works out the first date without supply. Logging a dose never changes it. A refill is due a lead time before that date (7 days unless chosen). Filling an organizer happens in a **filling session** that follows the bottle in the person's hand and records, per medication, which days were filled, which updates the estimate as it goes.
+Supply is a **user-confirmed estimate, never live inventory**. A person tells Domi Ops how much of a medication they keep outside the organizer, in pills where it has a fixed dose and in days where it does not; Domi Ops adds the days the organizer still holds and works out the first date without supply. Logging a dose never changes it. A refill is due a lead time before that date (7 days unless chosen). Filling an organizer happens in a **filling session** that follows the bottle in the person's hand and records, per medication, which days were filled, which updates the estimate as it goes.
 
 ## Pharmacies
 
@@ -24,9 +24,22 @@ Who may change it: owners and admins, adult members, and anyone with `medication
 - **A gap** in what the organizers cover (for example a fill that starts after a break) cannot be added up: the API answers `needsConfirmation` and the person enters the **total days in hand** (`confirmedTotalDays`).
 - `dryRun: true` previews the run-out date and writes nothing; the web shows it before every save.
 - More than ten years (3650 days) is refused as a typo.
+- **Pills instead of days.** `PUT /supply`, `/supply/receive` and a session fill also take `outsidePills` (whole quarters, 0 to 100,000), never together with `outsideDays`. See "Counting in pills" below.
 - Every estimate is appended to `health_medication_supply_revisions` (append-only: sources `fill`, `manual`, `receipt`, `confirm`); the supply row carries a `revision` and a `version` (send the version back when changing it; a stale one is a 409 with the current state).
 - Writes carry a `lastWriteKey` (migration 0089) so a retried request returns the saved result instead of a second revision.
 - A medication that was **paused and resumed** after its estimate was made has not been using pills, so the estimate **needs confirming**: it shows a prompt, and **no reminders go** until it is confirmed or replaced.
+
+### Counting in pills
+
+A medication with a **fixed dose** (a pill on a fixed schedule with a quantity set for every dose time, or an interval pill taken every day or longer with **pills per dose** set on its edit screen; `countsPills` on the API) is asked for in pills. As needed, over the counter, shorter interval and non-pill medications, and any with a dose missing its quantity, keep the days field, and `outsidePills` for them is `400 pills_need_fixed_dose`. A paused medication or one kept out of the organizer still counts in pills if it has its quantities.
+
+- **Pills are converted on the way in; the estimate stays in days.** `runsOutOn`, deadlines and reminders never see a pill. `quartersToDays` in `health-supply-pills.ts` walks the real schedule (weekdays, start and end dates, groups, the same rules as organizer placement) from the first day the outside pills are needed: **the day after the organizers run out**.
+- **Whole days only.** A day counts when all of its doses can be met; what is left over is rounded down. Days with no dose cost nothing and count, so five pills of a Monday to Friday medication started on a Monday last until the next Monday. Pills that outlast the end date stop the day after it, which shows as covered (`not_needed`).
+- **The count is kept** in quarters on the supply row and every revision (`outside_quarters`), and shown again as `outsidePills`. Entering days clears it. A gap in the organizers still asks for the total in **days**; the count given alongside it is kept as said.
+- **Interval pills** (`intervalDosePills`, stored as `health_medications.interval_dose_quarters`) are counted in whole doses times the interval, counted from today: 4 pills at 1 every 14 days is 56 days. The real next dose depends on when the last one was logged, and supply never reads dose logs, so the estimate can come out short by up to one interval, erring toward refilling early. They stay out of the organizer.
+- **Days with no dose are not a gap.** For a fixed-dose medication, a weekend between two weekday fills, or a Sunday before a Monday fill, joins up (`bridgeDoseFreeDays`). Only a stretch with a dose in it asks for the total.
+- **A fill subtracts it for you.** A dry run of a fill with no amount answers `pillsUsed`, `lastCountPills` and `suggestedOutsidePills` (the last count less the doses of this fill on days not already in the organizers, stopping at nothing). The screen starts the field from that number and shows the sum, so the person only corrects it; saving is an ordinary fill with the number that is on screen. Undo puts the earlier count back, and skipping as out of stock sets it to none.
+- It is still an estimate. Dose logs never touch the count, so someone taking doses from the bottle, or a count that has drifted, gets corrected by the person at the next fill or refill.
 
 ### Lead time and refill state
 
@@ -37,7 +50,7 @@ Lead time is the medication's own choice, else the person's default (`health_sup
 Needs refill, then **Requested**, then **Received** (`/api/health/refills`, `POST /medications/:id/supply/request`, `/supply/receive`, `DELETE .../supply/request`):
 
 - **Request** records "I contacted the pharmacy". It silences the reminder, keeps the medication visible as Requested until received, and can be cleared if it was a mistake. Asking twice is a no-op that says so.
-- **Receive** takes the new total days in hand (plus the organizers' days, with the same gap rule) and writes a `receipt` revision, closing the request. A repeated receipt with the same key returns the first result.
+- **Receive** takes the new total in hand, in pills or days as above (plus the organizers' days, with the same gap rule) and writes a `receipt` revision, closing the request. A repeated receipt with the same key returns the first result.
 - The list is grouped by pharmacy, soonest deadline first, filtered to what the viewer may see. Paused and deleted medications are left off.
 
 ## Pill organizers
@@ -56,7 +69,7 @@ One **plan per person** (`/api/health/organizers`): how often they fill (every N
 
 `/api/health/organizers/:planId/sessions`. One **open session per plan**; starting another returns the open one. A session starts from a **snapshot** of the instructions (encrypted, with a hash) for `coverageStart` and a fill length (defaults: the day after the organizer is already filled to, the plan's length).
 
-- **Fill** a medication: the days filled (all of them, or fewer when pills run short; the missing days are named and can be filled later or in another session), the days outside the organizers, and an idempotency key. One call records the fill and saves the new supply estimate. A repeat with the same key returns the first result; reusing a key for a different fill is refused. The session `version` must match, so two caregivers filling different medications at once is safe (one retries with what the other left).
+- **Fill** a medication: the days filled, counting days with a dose (all of them, or fewer when pills run short, so a Monday to Friday medication goes in with one save; the missing days are named and can be filled later or in another session), what is left outside the organizers (pills or days, see "Counting in pills"), and an idempotency key. One call records the fill and saves the new supply estimate. A repeat with the same key returns the first result; reusing a key for a different fill is refused. The session `version` must match, so two caregivers filling different medications at once is safe (one retries with what the other left).
 - **Skip** a medication for this session (`POST .../skips`, `health_organizer_session_skips`), for one of two reasons. **Out of stock** saves an estimate with nothing outside the organizers, so days already in the box still count and it comes up for a refill. **Left out this time** changes no supply. A skip is never coverage: only fills say what is in the box. A skipped medication cannot be filled until the skip is undone; undo puts the previous estimate back unless it was changed since.
 - **Catching up:** the next session starts after the last day anything was filled to, so `GET .../defaults` also returns `catchUp`: the days from today that a medication skipped as out of stock still needs, from the latest ended session that has any. The filling screen offers them; the person decides. Starting a session on those days shows everything already filled as filled.
 - **Progress** per medication: `pending`, `partial`, `filled`, `nothing_to_fill`, `skipped`, with the covered and missing ranges.
@@ -114,13 +127,14 @@ Everything follows the health ACL on the person's `medications` segment: `read` 
 | Fill length | 1 to 93 days | 400 |
 | Pill quantity | ¼ to 100 per dose | 400 |
 | Supply | 3650 days | 400 `supply_too_large` |
+| Pills counted outside the organizers | 100,000, in quarter steps | 400 `invalid_outside_pills` |
 | Lead time | 0 to 90 days | 400 |
 
 The per-household caps take a transaction-scoped advisory lock (`lockQuota`) before counting, like the health check caps.
 
 ## Architecture notes
 
-- **Pure logic** lives in `packages/calendar-sync` so the API and the worker share it: `health-organizer-placements` (which dose goes where, on which day), `health-supply-arithmetic`, `health-organizer-occurrences`, `health-organizer-session-logic` (progress, next start day, diffs), `health-supply-reminder-plan`.
+- **Pure logic** lives in `packages/calendar-sync` so the API and the worker share it: `health-organizer-placements` (which dose goes where, on which day), `health-supply-arithmetic`, `health-supply-pills` (a pill count to days, and what a fill uses), `health-organizer-occurrences`, `health-organizer-session-logic` (progress, next start day, diffs), `health-supply-reminder-plan`.
 - **Visibility:** nothing here widens health access; the worker's cross-household reach is limited to the scheduler's tick (`health_organizer_plans`, `health_medication_supply`). See HOSTED_RLS.md.
 - **The tenant middleware wraps each request in one transaction**, so an early 409 does not roll back writes made before it; routes that can fail after writing use `ON CONFLICT DO NOTHING` and re-select instead of relying on an exception.
 
@@ -128,7 +142,7 @@ The per-household caps take a transaction-scoped advisory lock (`lockQuota`) bef
 
 | Area | Files |
 |------|-------|
-| Tables | `packages/db/src/schema/health.ts`, migrations 0087 to 0091 |
+| Tables | `packages/db/src/schema/health.ts`, migrations 0087 to 0091 and 0107 |
 | Routes | `apps/api/src/routes/health-pharmacies.ts`, `health-supply.ts`, `health-refills.ts`, `health-organizers.ts`, `health-organizer-appointments.ts`, `health-organizer-sessions.ts` |
 | API libs | `lib/health-supply.ts`, `health-organizer-plan.ts`, `health-organizer-session.ts`, `health-organizer-appointments.ts`, `health-organizer-validation.ts`, `health-quota.ts`, `health-supply-glance.ts`, `calendar-overlays.ts` (`buildSupplyOverlays`) |
 | Reminders | `packages/calendar-sync/src/health-supply-reminder-scan.ts`, `health-supply-reminder-plan.ts`, `health-reminder-fanout.ts`, `household-scan-fanout.ts`, dispatch in `sync.ts` |
@@ -137,21 +151,20 @@ The per-household caps take a transaction-scoped advisory lock (`lockQuota`) bef
 ## Tests
 
 - Database: `packages/db/src/health-supply-isolation`, `health-organizer-isolation` and `health-supply-reminders-isolation` `.integration.test.ts`, `rls-worker-scan-coverage.integration.test.ts`.
-- API (run as the non-superuser app role): the six `routes/health-*.integration.test.ts` files above, `lib/calendar-supply-overlays.integration.test.ts`.
+- API (run as the non-superuser app role): the six `routes/health-*.integration.test.ts` files above, `routes/health-supply-pills.integration.test.ts` (conversion and subtraction), `lib/calendar-supply-overlays.integration.test.ts`.
 - Worker: `health-supply-reminder-scan.integration.test.ts`, `health-supply-reminder-fanout.integration.test.ts`, `health-supply-reminder-plan.test.ts` (injected clock, several time zones).
 - Unit: the calendar-sync logic modules and the web helper modules each have a `.test.ts` beside them. Mutation testing was used throughout: a test that still passes with the code under test broken proved nothing.
 
 ## Troubleshooting
 
 - **No reminder arrived:** is the estimate waiting to be confirmed after a pause? Was the refill requested? Is the medication paused or past its end date? Is the person a selected caregiver, and do they still have medications read (and see that medication)? Was it already sent (check the sent tables)? Inbox first, push needs their health reminders setting and a device.
-- **Run-out date looks wrong:** it is `today` plus the organizer's unbroken filled days plus the days outside; a gap in what the organizers cover asks for the total in hand instead.
+- **Run-out date looks wrong:** it is `today` plus the organizer's unbroken filled days plus the days outside (for a pill count, the days those pills last on the schedule once the organizers run out); a gap in what the organizers cover asks for the total in hand instead.
 - **"Review required" keeps showing:** something in the instructions changed since the session started (a quantity, the schedule, a compartment name). Take the new instructions.
 - **Typechecking the API or worker:** `npm run build` in `packages/db` and `packages/calendar-sync` first; they resolve from `dist`.
 
 ## Known gaps
 
 - Medications left unfilled without a skip when a session ends are not offered in the next one. The person is asked at finish and stop (WHO-444) and chooses. Only a skip for being out of stock is offered again.
-- Supply is entered in days, not pills. The person does the division.
-- A medication taken only on some weekdays is placed correctly (unit tested) but the QA pass did not click it.
-- Supply is an estimate: nothing reads dose logs, so a person who takes extra or skips doses has to update it.
+- As needed, over the counter, intervals shorter than a day, non-pill medications and any dose with no quantity are still entered in days, so the person does the division.
+- Supply is an estimate: nothing reads dose logs, so a person who takes extra or skips doses has to update it. A pill count is the same: it changes only when someone says so.
 - Real push delivery and the BullMQ tick are covered by stubs at the boundary, not end to end in CI.

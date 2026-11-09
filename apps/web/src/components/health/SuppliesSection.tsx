@@ -261,7 +261,7 @@ export function SuppliesSection({
 
           {medications.length > 0 && !hasAnyEstimate ? (
             <p className="text-sm text-[var(--color-text-muted)]">
-              Supply tracking tells you when to ask for a refill. You enter how many days of pills you have and it works out the run-out date. It is
+              Supply tracking tells you when to ask for a refill. You enter how much you have and it works out the run-out date. It is
               an estimate you confirm, not a live count: logging a dose never changes it.
             </p>
           ) : null}

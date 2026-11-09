@@ -1,6 +1,6 @@
 import { ApiError } from "../../lib/client-api";
 import { apiErrorCode } from "./pharmacy-helpers";
-import { formatDay } from "./supply-helpers";
+import { OUTSIDE_PILLS_INVALID, formatDay } from "./supply-helpers";
 import type { DateRange, FillStatus, ReviewChanges, SessionCompartment, SessionMedication, SessionPlacement, SessionView, SkipReason } from "./filling-types";
 
 /**
@@ -80,19 +80,26 @@ export function progressLabel(progress: SessionView["progress"]): string {
   return progress.skipped > 0 ? `${partly}, ${progress.skipped} skipped` : partly;
 }
 
-/**
- * The stretch to offer when a medication is selected: the first run of days still unfilled, which for a new medication
- * is the whole session and after a short fill is whatever is left. Null when nothing is left.
- */
-export function defaultFillRange(med: Pick<SessionMedication, "missing">): DateRange | null {
-  const first = med.missing[0];
-  return first ? { from: first.from, to: first.to } : null;
+/** How many days with a dose are still to fill: what "all of them" comes to. */
+export function missingDoseDays(missing: readonly DateRange[]): number {
+  return missing.reduce((sum, m) => sum + rangeDays(m), 0);
 }
 
-/** The last day of a fill that starts at `from` and covers `days` days, never past the end of the session. */
-export function fillEnd(from: string, days: number, windowEnd: string): string {
-  const to = addDays(from, Math.max(1, days) - 1);
-  return to > windowEnd ? windowEnd : to;
+/**
+ * The stretch a fill of `days` days covers, counting only days with a dose and starting at the first one still unfilled.
+ * A Monday to Friday medication is several runs of days with weekends between them, and they go in together: asking for
+ * all of its days reaches the end of the last run. Null when nothing is left to fill.
+ */
+export function fillRangeForDays(missing: readonly DateRange[], days: number): DateRange | null {
+  const first = missing[0];
+  if (!first) return null;
+  let left = Math.max(1, days);
+  for (const run of missing) {
+    const inRun = rangeDays(run);
+    if (left <= inRun) return { from: first.from, to: addDays(run.from, left - 1) };
+    left -= inRun;
+  }
+  return { from: first.from, to: missing[missing.length - 1]!.to };
 }
 
 /** Days with a dose in `missing` that a fill of `range` would still leave unfilled. */
@@ -194,8 +201,10 @@ const MESSAGES: Record<string, string> = {
   invalid_range: "Pick days that fall inside this session.",
   range_outside_session: "Those days are outside this session.",
   invalid_outside_days: "Enter a whole number of days, from 0 to 3650.",
+  invalid_outside_pills: OUTSIDE_PILLS_INVALID,
+  pills_need_fixed_dose: "This medication has no fixed dose to count pills against. Reload and enter days.",
   invalid_confirmed_total: "Enter a whole number of days, from 0 to 3650.",
-  supply_too_large: "That is more than ten years of supply. Check the number of days.",
+  supply_too_large: "That is more than ten years of supply. Check the number.",
   confirmation_required: "The organizers have a gap, so enter the total days you have in hand.",
   idempotency_key_reused: "That save was already used for different days. Try again.",
   medication_not_found: "That medication is not part of this session, or you cannot see it.",

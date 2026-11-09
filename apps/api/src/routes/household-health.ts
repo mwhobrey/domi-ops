@@ -98,11 +98,12 @@ import {
   doseQuantityView,
   loadDoseQuantities,
   parseDoseQuantities,
+  parseIntervalDose,
   replaceDoseQuantities,
   type DoseQuantities,
 } from "../lib/health-dose-quantities.js";
 import { SupplyValidationError } from "../lib/health-supply-validation.js";
-import { loadSupplyViews } from "../lib/health-supply.js";
+import { loadPillSchedules, loadSupplyViews } from "../lib/health-supply.js";
 
 function encryptionErrorResponse(c: { json: (body: unknown, status?: number) => Response }, e: unknown) {
   if (e instanceof HealthEncryptionError) {
@@ -1289,6 +1290,8 @@ export function householdHealthRoutes(db: Database, env: Env) {
       /** pill (default), iv, injection, liquid, other; only pills go in an organizer (WHO-445). */
       form?: string;
       organizerExcluded?: boolean;
+      /** Pills in one dose of an interval medication taken every day or longer. */
+      intervalDosePills?: number | null;
     }>();
 
     if (!body.memberId || !body.name?.trim()) {
@@ -1327,13 +1330,13 @@ export function householdHealthRoutes(db: Database, env: Env) {
           400,
         );
       }
-      if (doseQuantities) {
-        try {
-          assertQuantitiesFitSchedule(doseQuantities, scheduleMeta.scheduleKind, scheduleMeta.scheduleJson);
-        } catch (e) {
-          if (e instanceof SupplyValidationError) return c.json({ error: e.code }, 400);
-          throw e;
-        }
+      let intervalDoseQuarters: number | null | undefined;
+      try {
+        if (doseQuantities) assertQuantitiesFitSchedule(doseQuantities, scheduleMeta.scheduleKind, scheduleMeta.scheduleJson);
+        if (body.intervalDosePills !== undefined) intervalDoseQuarters = parseIntervalDose(body.intervalDosePills, scheduleMeta.scheduleKind, scheduleMeta.scheduleJson);
+      } catch (e) {
+        if (e instanceof SupplyValidationError) return c.json({ error: e.code }, 400);
+        throw e;
       }
 
       const enc = encryptHealthTextFields(env, {
@@ -1356,6 +1359,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
           scheduleKind: scheduleMeta.scheduleKind,
           form: body.form as MedicationForm | undefined,
           organizerExcluded: body.organizerExcluded,
+          intervalDoseQuarters,
           scheduleJson: scheduleMeta.scheduleJson,
           reminderOffsetsJson: JSON.stringify(offsets),
           startDate: body.startDate ?? null,
@@ -1443,6 +1447,8 @@ export function householdHealthRoutes(db: Database, env: Env) {
       doseQuantities?: Record<string, number>;
       form?: string;
       organizerExcluded?: boolean;
+      /** Pills in one dose of an interval medication taken every day or longer; null clears it. */
+      intervalDosePills?: number | null;
     }>();
 
     if (body.form !== undefined && !isMedicationForm(body.form)) {
@@ -1504,17 +1510,20 @@ export function householdHealthRoutes(db: Database, env: Env) {
         }
         patch.memberId = body.memberId;
       }
-      if (doseQuantities) {
-        try {
+      try {
+        if (doseQuantities) {
           assertQuantitiesFitSchedule(
             doseQuantities,
             patch.scheduleKind ?? existing.scheduleKind,
             patch.scheduleJson ?? existing.scheduleJson,
           );
-        } catch (e) {
-          if (e instanceof SupplyValidationError) return c.json({ error: e.code }, 400);
-          throw e;
         }
+        if (body.intervalDosePills !== undefined) {
+          patch.intervalDoseQuarters = parseIntervalDose(body.intervalDosePills, patch.scheduleKind ?? existing.scheduleKind, patch.scheduleJson ?? existing.scheduleJson);
+        }
+      } catch (e) {
+        if (e instanceof SupplyValidationError) return c.json({ error: e.code }, 400);
+        throw e;
       }
 
       const [row] = await db
@@ -1557,6 +1566,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
           canEdit: true,
           groupIds: groupMembershipMap.get(row.id) ?? [],
           doseQuantities: doseQuantityView(quantities, row.scheduleKind, row.scheduleJson),
+          countsPills: (await loadPillSchedules(db, [row.id])).has(row.id),
           supplyView: (await loadSupplyViews(db, env, auth.householdId, [row])).get(row.id),
         }),
       });

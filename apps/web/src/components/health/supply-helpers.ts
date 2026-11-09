@@ -133,22 +133,22 @@ export function medsNeedingConfirmation(medications: readonly HealthMedication[]
 export type SetupRowPlan =
   | { kind: "skip" }
   | { kind: "invalid" }
-  | { kind: "save"; body: { outsideDays?: number; pharmacyId?: string | null } };
+  | { kind: "save"; body: { outsideDays?: number; outsidePills?: number; pharmacyId?: string | null } };
 
 /**
  * What to send for one row of the first-run setup: nothing when it was left alone, an error when the
- * days are not a number, otherwise the days and/or the pharmacy if it changed.
+ * number makes no sense, otherwise the days or pills and/or the pharmacy if it changed.
  */
-export function planSetupRow(input: { daysText: string; pharmacyId: string; originalPharmacyId: string }): SetupRowPlan {
-  const hasDays = input.daysText.trim() !== "";
-  const days = hasDays ? parseDays(input.daysText, 3650) : null;
-  if (hasDays && days === null) return { kind: "invalid" };
+export function planSetupRow(input: { amountText: string; countsPills: boolean; pharmacyId: string; originalPharmacyId: string }): SetupRowPlan {
+  const hasAmount = input.amountText.trim() !== "";
+  const amount = hasAmount ? (input.countsPills ? parseOutsidePills(input.amountText) : parseDays(input.amountText, 3650)) : null;
+  if (hasAmount && amount === null) return { kind: "invalid" };
   const pharmacyChanged = input.pharmacyId !== input.originalPharmacyId;
-  if (days === null && !pharmacyChanged) return { kind: "skip" };
+  if (amount === null && !pharmacyChanged) return { kind: "skip" };
   return {
     kind: "save",
     body: {
-      ...(days !== null ? { outsideDays: days } : {}),
+      ...(amount !== null ? (input.countsPills ? { outsidePills: amount } : { outsideDays: amount }) : {}),
       ...(pharmacyChanged ? { pharmacyId: input.pharmacyId || null } : {}),
     },
   };
@@ -168,6 +168,26 @@ export type SupplyPreview =
 export function previewLabel(p: Extract<SupplyPreview, { kind: "ok" }>): string {
   const parts = p.organizerDays > 0 ? ` (${p.organizerDays} in organizers + ${p.outsideDays} outside)` : "";
   return `Runs out ${formatDay(p.runsOutOn)} · ${p.totalDays} day${p.totalDays === 1 ? "" : "s"}${parts}`;
+}
+
+/** "30 pills last 30 days", for the person to check the conversion. */
+export function pillsLastLabel(pillsText: string, pills: number, days: number): string {
+  return `${pillsText} ${pills === 1 ? "pill lasts" : "pills last"} ${days} day${days === 1 ? "" : "s"}.`;
+}
+
+/** What a fill takes out of the last count, as the server worked it out. */
+export type FillSuggestion = { pillsUsed: number; lastCountPills: number | null; suggestedOutsidePills: number | null };
+
+/** Reads the dry-run answer that has no count in it yet; null if it is not one. */
+export function parseFillSuggestion(body: unknown): FillSuggestion | null {
+  if (!body || typeof body !== "object") return null;
+  const b = body as Record<string, unknown>;
+  if (b.dryRun !== true || typeof b.pillsUsed !== "number") return null;
+  return {
+    pillsUsed: b.pillsUsed,
+    lastCountPills: typeof b.lastCountPills === "number" ? b.lastCountPills : null,
+    suggestedOutsidePills: typeof b.suggestedOutsidePills === "number" ? b.suggestedOutsidePills : null,
+  };
 }
 
 /** Reads a dry-run answer from either supply endpoint; null if it is not one. */
@@ -202,11 +222,53 @@ export function parseDays(text: string, max: number): number | null {
   return n <= max ? n : null;
 }
 
+const FRACTION_CHARS: Record<string, string> = { "¼": "1/4", "½": "1/2", "¾": "3/4" };
+
+export type QuartersParse = { ok: true; quarters: number } | { ok: false; reason: "empty" | "invalid" | "not_quarter" };
+
+/** A count of pills as someone types it, in whole quarters: "2", "1.5", ".25", "1/2", "1 1/2", "1½", "¾". */
+export function parseQuarters(text: string): QuartersParse {
+  let t = text.trim();
+  if (t === "") return { ok: false, reason: "empty" };
+  for (const [ch, frac] of Object.entries(FRACTION_CHARS)) t = t.replaceAll(ch, ` ${frac}`);
+  t = t.replace(/\s+/g, " ").trim();
+
+  let q: number | null = null;
+  let m: RegExpExecArray | null;
+  if (/^(\d+)?(?:\.(\d+))?$/.test(t) && t !== "" && t !== ".") {
+    q = Number(t) * 4;
+  } else if ((m = /^(?:(\d+) )?(\d+)\/(\d+)$/.exec(t))) {
+    const whole = m[1] ? Number(m[1]) : 0;
+    const num = Number(m[2]);
+    const den = Number(m[3]);
+    if (den === 0) return { ok: false, reason: "invalid" };
+    q = ((whole * den + num) * 4) / den;
+  }
+  if (q === null || !Number.isFinite(q)) return { ok: false, reason: "invalid" };
+  if (Math.abs(q - Math.round(q)) > 1e-9) return { ok: false, reason: "not_quarter" };
+  return { ok: true, quarters: Math.round(q) };
+}
+
+/** A hundred thousand pills. A bigger number is a typo, and the API refuses it. */
+const MAX_OUTSIDE_PILLS = 100_000;
+
+/** Pills on hand from what was typed, or null when it is blank or not a count. Unlike a dose, none is a real answer. */
+export function parseOutsidePills(text: string): number | null {
+  const parsed = parseQuarters(text);
+  if (!parsed.ok || parsed.quarters > MAX_OUTSIDE_PILLS * 4) return null;
+  return parsed.quarters / 4;
+}
+
+/** What the person is told when a pill count does not read. */
+export const OUTSIDE_PILLS_INVALID = "Enter how many pills, like 30 or 12½. Quarters of a pill are the smallest step.";
+
 const MESSAGES: Record<string, string> = {
+  invalid_outside_pills: OUTSIDE_PILLS_INVALID,
+  pills_need_fixed_dose: "This medication has no fixed dose to count pills against. Reload and enter days.",
   invalid_outside_days: "Enter a whole number of days, from 0 to 3650.",
   invalid_confirmed_total: "Enter a whole number of days, from 0 to 3650.",
   invalid_lead_days: "Enter a whole number of days, from 0 to 90.",
-  supply_too_large: "That is more than ten years of supply. Check the number of days.",
+  supply_too_large: "That is more than ten years of supply. Check the number.",
   confirmation_required: "The organizers have a gap, so enter the total days you have in hand.",
   version_conflict: "Someone else changed this supply. Reload and try again.",
   medication_inactive: "This medication is paused. Resume it first.",

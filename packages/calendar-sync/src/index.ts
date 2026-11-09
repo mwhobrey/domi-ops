@@ -76,6 +76,7 @@ export { scanDriveQuotaWarnings } from "./drive-quota-scan.js";
 export { deliverUserNotification, persistUserNotifications, persistUserNotificationOnce, deliverUserNotificationToSubscriptions } from "./user-notify.js";
 export { isValidTimeZone, resolveAlertTimeZone } from "./alert-timezone.js";
 export {
+  isMultiDayInterval,
   parseIntervalSchedule,
   normalizeIntervalSchedule,
   nextIntervalPending,
@@ -131,6 +132,15 @@ export {
   type PlacementProblem,
   type PlacementResult,
 } from "./health-organizer-placements.js";
+export {
+  MAX_SUPPLY_QUARTERS,
+  bridgeDoseFreeDays,
+  outsideQuartersAfterFill,
+  pillDoseSchedule,
+  quartersToDays,
+  quartersUsedByFill,
+  type PillDoseSchedule,
+} from "./health-supply-pills.js";
 export {
   DEFAULT_LEAD_DAYS,
   MAX_LEAD_DAYS,

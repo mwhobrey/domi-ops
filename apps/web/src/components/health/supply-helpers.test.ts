@@ -9,7 +9,11 @@ import {
   medsNeedingConfirmation,
   medsNeedingSetup,
   parseDays,
+  parseFillSuggestion,
+  parseOutsidePills,
   parsePreview,
+  parseQuarters,
+  pillsLastLabel,
   planSetupRow,
   previewLabel,
   requestAgeLabel,
@@ -25,6 +29,7 @@ const supply = (over: Partial<SupplySummary> = {}): SupplySummary => ({
   estimatedOn: "2026-10-01",
   daysRemaining: 14,
   outsideDays: 14,
+  outsidePills: null,
   organizerDaysCounted: 0,
   revision: 1,
   version: 1,
@@ -248,26 +253,77 @@ describe("medsNeedingSetup and medsNeedingConfirmation", () => {
   });
 });
 
+describe("parseOutsidePills", () => {
+  it.each([
+    ["30", 30],
+    ["0", 0],
+    ["12.5", 12.5],
+    ["12½", 12.5],
+    ["1 3/4", 1.75],
+    [" ¼ ", 0.25],
+  ])("reads %s", (text, pills) => {
+    expect(parseOutsidePills(text)).toBe(pills);
+  });
+
+  it.each(["", "  ", "a lot", "1.3", "1/3", "-2", "100001"])("refuses %j", (text) => {
+    expect(parseOutsidePills(text)).toBeNull();
+  });
+
+  it("gives a reason a dose field can use", () => {
+    expect(parseQuarters("")).toEqual({ ok: false, reason: "empty" });
+    expect(parseQuarters("1.3")).toEqual({ ok: false, reason: "not_quarter" });
+    expect(parseQuarters("x")).toEqual({ ok: false, reason: "invalid" });
+  });
+});
+
+describe("pillsLastLabel", () => {
+  it("reads for one and for many", () => {
+    expect(pillsLastLabel("1", 1, 1)).toBe("1 pill lasts 1 day.");
+    expect(pillsLastLabel("12½", 12.5, 12)).toBe("12½ pills last 12 days.");
+  });
+});
+
+describe("parseFillSuggestion", () => {
+  it("reads what a fill would use and leave", () => {
+    expect(parseFillSuggestion({ dryRun: true, pillsUsed: 7, lastCountPills: 60, suggestedOutsidePills: 53 })).toEqual({ pillsUsed: 7, lastCountPills: 60, suggestedOutsidePills: 53 });
+  });
+
+  it("reads a fill with no count to start from", () => {
+    expect(parseFillSuggestion({ dryRun: true, pillsUsed: 7, lastCountPills: null, suggestedOutsidePills: null })).toEqual({ pillsUsed: 7, lastCountPills: null, suggestedOutsidePills: null });
+  });
+
+  it("is not fooled by an ordinary preview", () => {
+    expect(parseFillSuggestion({ dryRun: true, needsConfirmation: false, runsOutOn: "2026-11-20", totalDays: 3 })).toBeNull();
+    expect(parseFillSuggestion(null)).toBeNull();
+  });
+});
+
 describe("planSetupRow", () => {
+  it("sends pills for a medication counted in pills", () => {
+    expect(planSetupRow({ countsPills: true, amountText: "12½", pharmacyId: "", originalPharmacyId: "" })).toEqual({ kind: "save", body: { outsidePills: 12.5 } });
+    expect(planSetupRow({ countsPills: true, amountText: "1.3", pharmacyId: "", originalPharmacyId: "" })).toEqual({ kind: "invalid" });
+    expect(planSetupRow({ countsPills: true, amountText: "", pharmacyId: "", originalPharmacyId: "" })).toEqual({ kind: "skip" });
+  });
+
   it("leaves an untouched row alone", () => {
-    expect(planSetupRow({ daysText: "", pharmacyId: "", originalPharmacyId: "" })).toEqual({ kind: "skip" });
-    expect(planSetupRow({ daysText: "  ", pharmacyId: "p1", originalPharmacyId: "p1" })).toEqual({ kind: "skip" });
+    expect(planSetupRow({ countsPills: false, amountText: "", pharmacyId: "", originalPharmacyId: "" })).toEqual({ kind: "skip" });
+    expect(planSetupRow({ countsPills: false, amountText: "  ", pharmacyId: "p1", originalPharmacyId: "p1" })).toEqual({ kind: "skip" });
   });
 
   it("saves the days, and the pharmacy only when it changed", () => {
-    expect(planSetupRow({ daysText: "30", pharmacyId: "", originalPharmacyId: "" })).toEqual({ kind: "save", body: { outsideDays: 30 } });
-    expect(planSetupRow({ daysText: "30", pharmacyId: "p2", originalPharmacyId: "p1" })).toEqual({ kind: "save", body: { outsideDays: 30, pharmacyId: "p2" } });
-    expect(planSetupRow({ daysText: "0", pharmacyId: "p1", originalPharmacyId: "p1" })).toEqual({ kind: "save", body: { outsideDays: 0 } });
+    expect(planSetupRow({ countsPills: false, amountText: "30", pharmacyId: "", originalPharmacyId: "" })).toEqual({ kind: "save", body: { outsideDays: 30 } });
+    expect(planSetupRow({ countsPills: false, amountText: "30", pharmacyId: "p2", originalPharmacyId: "p1" })).toEqual({ kind: "save", body: { outsideDays: 30, pharmacyId: "p2" } });
+    expect(planSetupRow({ countsPills: false, amountText: "0", pharmacyId: "p1", originalPharmacyId: "p1" })).toEqual({ kind: "save", body: { outsideDays: 0 } });
   });
 
   it("saves a pharmacy on its own, and clearing one sends null", () => {
-    expect(planSetupRow({ daysText: "", pharmacyId: "p1", originalPharmacyId: "" })).toEqual({ kind: "save", body: { pharmacyId: "p1" } });
-    expect(planSetupRow({ daysText: "", pharmacyId: "", originalPharmacyId: "p1" })).toEqual({ kind: "save", body: { pharmacyId: null } });
+    expect(planSetupRow({ countsPills: false, amountText: "", pharmacyId: "p1", originalPharmacyId: "" })).toEqual({ kind: "save", body: { pharmacyId: "p1" } });
+    expect(planSetupRow({ countsPills: false, amountText: "", pharmacyId: "", originalPharmacyId: "p1" })).toEqual({ kind: "save", body: { pharmacyId: null } });
   });
 
   it("flags days that are not a whole number in range", () => {
     for (const bad of ["abc", "-1", "1.5", "3651", "1e2"]) {
-      expect(planSetupRow({ daysText: bad, pharmacyId: "", originalPharmacyId: "" }), bad).toEqual({ kind: "invalid" });
+      expect(planSetupRow({ countsPills: false, amountText: bad, pharmacyId: "", originalPharmacyId: "" }), bad).toEqual({ kind: "invalid" });
     }
   });
 });

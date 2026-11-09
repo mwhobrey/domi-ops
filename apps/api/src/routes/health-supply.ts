@@ -18,6 +18,7 @@ import { HealthEncryptionError } from "../lib/health-crypto.js";
 import { hasHealthSegmentAccess, healthMedicationVisibleWhere } from "../lib/health-access.js";
 import { householdTodayIsoDate } from "../lib/household-time.js";
 import { computeEstimate, loadSupplyViews, type SupplyView } from "../lib/health-supply.js";
+import { supplyPillsToQuarters } from "../lib/health-supply-validation.js";
 
 /**
  * Medication supply (WHO-419): the estimate of when a medication runs out, which pharmacy fills it,
@@ -28,8 +29,9 @@ import { computeEstimate, loadSupplyViews, type SupplyView } from "../lib/health
  *   PUT /supply-settings/:memberId
  *
  * The estimate is what a person tells us: days of pills kept OUTSIDE the organizers, to which the
- * server adds what the organizers still hold. Dose logs never change it. Permissions follow the
- * medication: `medications` read to see it, write to change it.
+ * server adds what the organizers still hold. A medication with a fixed dose can give a pill count
+ * instead (`outsidePills`), turned into days on the way in. Dose logs never change it. Permissions
+ * follow the medication: `medications` read to see it, write to change it.
  */
 
 type Auth = { userId: string; householdId: string; memberId: string; role: string };
@@ -49,6 +51,7 @@ class BadRequest extends Error {
 
 type SupplyBody = {
   outsideDays?: number;
+  outsideQuarters?: number;
   confirmedTotalDays?: number;
   confirm?: boolean;
   leadDays?: number | null;
@@ -66,6 +69,11 @@ function parseBody(raw: unknown): SupplyBody {
   if (b.outsideDays !== undefined) {
     if (!isWholeNumber(b.outsideDays, MAX_SUPPLY_DAYS)) throw new BadRequest("invalid_outside_days");
     out.outsideDays = b.outsideDays;
+  }
+  if (b.outsidePills !== undefined) {
+    const quarters = supplyPillsToQuarters(b.outsidePills);
+    if (quarters === null) throw new BadRequest("invalid_outside_pills");
+    out.outsideQuarters = quarters;
   }
   if (b.confirmedTotalDays !== undefined) {
     if (!isWholeNumber(b.confirmedTotalDays, MAX_SUPPLY_DAYS)) throw new BadRequest("invalid_confirmed_total");
@@ -100,12 +108,13 @@ function parseBody(raw: unknown): SupplyBody {
     out.dryRun = b.dryRun;
   }
 
-  if (out.confirm && (out.outsideDays !== undefined || out.confirmedTotalDays !== undefined)) throw new BadRequest("confirm_with_estimate");
-  if (out.confirmedTotalDays !== undefined && out.outsideDays === undefined) throw new BadRequest("confirmed_total_needs_outside_days");
-  const changesSomething =
-    out.outsideDays !== undefined || out.confirm === true || out.leadDays !== undefined || out.pharmacyId !== undefined;
+  if (out.outsideDays !== undefined && out.outsideQuarters !== undefined) throw new BadRequest("days_or_pills");
+  const hasOutside = out.outsideDays !== undefined || out.outsideQuarters !== undefined;
+  if (out.confirm && (hasOutside || out.confirmedTotalDays !== undefined)) throw new BadRequest("confirm_with_estimate");
+  if (out.confirmedTotalDays !== undefined && !hasOutside) throw new BadRequest("confirmed_total_needs_outside_days");
+  const changesSomething = hasOutside || out.confirm === true || out.leadDays !== undefined || out.pharmacyId !== undefined;
   if (!changesSomething) throw new BadRequest("nothing_to_change");
-  if (out.dryRun && out.outsideDays === undefined) throw new BadRequest("dry_run_needs_outside_days");
+  if (out.dryRun && !hasOutside) throw new BadRequest("dry_run_needs_outside_days");
   return out;
 }
 
@@ -177,11 +186,12 @@ export function healthSupplyRoutes(db: Database, env: Env) {
 
       // What the new estimate would be, if this request makes one.
       let estimate:
-        | { runsOutOn: string; outsideDays: number; organizerDays: number; totalDays: number; confirmed: boolean; source: "manual" | "confirm" }
+        | { runsOutOn: string; outsideDays: number; outsideQuarters: number | null; organizerDays: number; totalDays: number; confirmed: boolean; source: "manual" | "confirm" }
         | null = null;
-      if (body.outsideDays !== undefined) {
-        const outcome = await computeEstimate(db, med.id, today, { outsideDays: body.outsideDays, confirmedTotalDays: body.confirmedTotalDays });
+      if (body.outsideDays !== undefined || body.outsideQuarters !== undefined) {
+        const outcome = await computeEstimate(db, med.id, today, { outsideDays: body.outsideDays, outsideQuarters: body.outsideQuarters, confirmedTotalDays: body.confirmedTotalDays });
         if (outcome.kind === "too_large") return c.json({ error: "supply_too_large" }, 400);
+        if (outcome.kind === "no_fixed_dose") return c.json({ error: "pills_need_fixed_dose" }, 400);
         if (outcome.kind === "needs_confirmation") {
           const info = { organizerDays: outcome.organizerDays, organizerEndsOn: outcome.organizerEndsOn };
           if (body.dryRun) return c.json({ dryRun: true, needsConfirmation: true, ...info });
@@ -196,6 +206,7 @@ export function healthSupplyRoutes(db: Database, env: Env) {
         estimate = {
           runsOutOn: existing.runsOutOn,
           outsideDays: existing.outsideDays ?? 0,
+          outsideQuarters: existing.outsideQuarters,
           organizerDays: existing.organizerDaysCounted ?? 0,
           totalDays: (existing.outsideDays ?? 0) + (existing.organizerDaysCounted ?? 0),
           confirmed: true,
@@ -226,6 +237,7 @@ export function healthSupplyRoutes(db: Database, env: Env) {
                   runsOutOn: estimate.runsOutOn,
                   estimatedOn: today,
                   outsideDays: estimate.outsideDays,
+                  outsideQuarters: estimate.outsideQuarters,
                   organizerDaysCounted: estimate.organizerDays,
                   revision: 1,
                 }
@@ -247,6 +259,7 @@ export function healthSupplyRoutes(db: Database, env: Env) {
                   runsOutOn: estimate.runsOutOn,
                   estimatedOn: today,
                   outsideDays: estimate.outsideDays,
+                  outsideQuarters: estimate.outsideQuarters,
                   organizerDaysCounted: estimate.organizerDays,
                   revision: sql`${healthMedicationSupply.revision} + 1`,
                 }
@@ -268,6 +281,7 @@ export function healthSupplyRoutes(db: Database, env: Env) {
           runsOutOn: estimate.runsOutOn,
           estimatedOn: today,
           outsideDays: estimate.outsideDays,
+          outsideQuarters: estimate.outsideQuarters,
           organizerDaysCounted: estimate.organizerDays,
           createdByUserId: auth.userId,
         });

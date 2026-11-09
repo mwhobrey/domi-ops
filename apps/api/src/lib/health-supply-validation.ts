@@ -6,6 +6,8 @@
  * the whole request first and write afterwards, because an early error response does not roll back.
  */
 
+import { MAX_SUPPLY_QUARTERS } from "@domi-ops/calendar-sync";
+
 export type SupplyValidationCode =
   | "invalid_quantity"
   | "quantity_not_quarter_step"
@@ -16,6 +18,7 @@ export type SupplyValidationCode =
   | "too_many_dose_quantities"
   | "quantities_need_scheduled_medication"
   | "quantity_time_not_scheduled"
+  | "interval_dose_needs_long_interval"
   | "invalid_website"
   | "invalid_phone"
   | "invalid_pharmacy_name"
@@ -49,6 +52,18 @@ export function parsePillQuantity(value: unknown): number {
 /** Whole quarters back to a number of pills for the API: 6 -> 1.5. */
 export function quartersToPills(quarters: number): number {
   return quarters / 4;
+}
+
+/**
+ * Pills someone has on hand, as whole quarters of a pill, or null when it is not a number of quarters from nothing up to
+ * the limit. Unlike a dose, none is a real answer here.
+ */
+export function supplyPillsToQuarters(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return null;
+  const quarters = value * 4;
+  const whole = Math.round(quarters);
+  if (Math.abs(quarters - whole) > 1e-9 || whole > MAX_SUPPLY_QUARTERS) return null;
+  return whole;
 }
 
 const DOSE_TIME = /^([01]\d|2[0-3]):[0-5]\d(:00)?$/;

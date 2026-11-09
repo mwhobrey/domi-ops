@@ -1,8 +1,17 @@
 import { Hono } from "hono";
 import type { Env } from "@domi-ops/config";
-import { addDaysUtc, daysBetween, fillProgress, isOrganizerOccurrenceDate, nextUncoveredDay } from "@domi-ops/calendar-sync";
+import {
+  addDaysUtc,
+  daysBetween,
+  fillProgress,
+  isOrganizerOccurrenceDate,
+  nextUncoveredDay,
+  outsideQuartersAfterFill,
+  quartersUsedByFill,
+} from "@domi-ops/calendar-sync";
 import type { Database } from "@domi-ops/db";
 import {
+  healthMedicationSupply,
   healthMedications,
   healthOrganizerOccurrences,
   healthOrganizerPlans,
@@ -22,6 +31,7 @@ import { isUuid, parseAnchorDate, parseFillLength } from "../lib/health-organize
 import type { PlanRow } from "../lib/health-organizer-plan.js";
 import { lastSettableDate, planSchedule } from "../lib/health-organizer-appointments.js";
 import { computeEstimate } from "../lib/health-supply.js";
+import { quartersToPills, supplyPillsToQuarters } from "../lib/health-supply-validation.js";
 import {
   applyFillEstimate,
   buildSnapshot,
@@ -55,7 +65,8 @@ import {
  *   POST /organizers/:planId/sessions/:id/abandon         stop; what was filled stays counted
  *
  * Reading needs `medications` read on the person, everything else write. Changes need the session's `version`; a
- * fill also carries a key, so sending it twice records it once.
+ * fill also carries a key, so sending it twice records it once. A fill's supply is `outsideDays` or `outsidePills`;
+ * a dry run with neither answers with the pills that fill would use and what that leaves of the last count.
  */
 
 const KEY_MAX = 100;
@@ -78,7 +89,8 @@ type FillBody = {
   medicationId: string;
   coveredFrom: string;
   coveredTo: string;
-  outsideDays: number;
+  outsideDays?: number;
+  outsideQuarters?: number;
   confirmedTotalDays?: number;
   idempotencyKey: string;
   version: number;
@@ -98,17 +110,26 @@ function parseFillBody(raw: unknown): FillBody {
     throw new BadInput("invalid_range");
   }
   if (coveredTo < coveredFrom) throw new BadInput("invalid_range");
-  if (!isWhole(b.outsideDays, 0, 3650)) throw new BadInput("invalid_outside_days");
-  if (b.confirmedTotalDays !== undefined && !isWhole(b.confirmedTotalDays, 0, 3650)) throw new BadInput("invalid_confirmed_total");
-  if (typeof b.idempotencyKey !== "string" || !b.idempotencyKey.trim() || b.idempotencyKey.length > KEY_MAX) throw new BadInput("invalid_idempotency_key");
   const dryRun = b.dryRun === true;
   if (b.dryRun !== undefined && typeof b.dryRun !== "boolean") throw new BadInput("invalid_body");
+  if (b.outsideDays !== undefined && b.outsidePills !== undefined) throw new BadInput("days_or_pills");
+  let outsideQuarters: number | undefined;
+  if (b.outsidePills !== undefined) {
+    const quarters = supplyPillsToQuarters(b.outsidePills);
+    if (quarters === null) throw new BadInput("invalid_outside_pills");
+    outsideQuarters = quarters;
+  } else if (b.outsideDays !== undefined || !dryRun) {
+    if (!isWhole(b.outsideDays, 0, 3650)) throw new BadInput("invalid_outside_days");
+  }
+  if (b.confirmedTotalDays !== undefined && !isWhole(b.confirmedTotalDays, 0, 3650)) throw new BadInput("invalid_confirmed_total");
+  if (typeof b.idempotencyKey !== "string" || !b.idempotencyKey.trim() || b.idempotencyKey.length > KEY_MAX) throw new BadInput("invalid_idempotency_key");
   if (!isWhole(b.version, 1, 2_000_000_000)) throw new BadInput("invalid_version");
   return {
     medicationId: b.medicationId.toLowerCase(),
     coveredFrom,
     coveredTo,
-    outsideDays: b.outsideDays,
+    outsideDays: b.outsideDays as number | undefined,
+    outsideQuarters,
     confirmedTotalDays: b.confirmedTotalDays as number | undefined,
     idempotencyKey: b.idempotencyKey,
     version: b.version,
@@ -437,15 +458,36 @@ export function healthOrganizerSessionRoutes(db: Database, env: Env) {
       const windowEnd = addDaysUtc(locked.coverageStart, locked.fillLengthDays - 1);
       if (body.coveredFrom < locked.coverageStart || body.coveredTo > windowEnd) throw new BadInput("range_outside_session");
 
+      // Nothing counted yet: say what this fill takes out of the last count, so the person only has to correct it.
+      if (body.dryRun && body.outsideDays === undefined && body.outsideQuarters === undefined) {
+        const covered = await loadCoverage(db, [body.medicationId]);
+        const doses = snapshot.placements.filter((p) => p[0] === body.medicationId).map((p) => ({ date: p[1], quarters: p[4] }));
+        const used = quartersUsedByFill(doses, covered.get(body.medicationId) ?? [], { from: body.coveredFrom, to: body.coveredTo });
+        const [row] = await db
+          .select({ outsideQuarters: healthMedicationSupply.outsideQuarters })
+          .from(healthMedicationSupply)
+          .where(eq(healthMedicationSupply.medicationId, body.medicationId))
+          .limit(1);
+        const lastCount = row?.outsideQuarters ?? null;
+        const after = outsideQuartersAfterFill(lastCount, used);
+        return c.json({
+          dryRun: true,
+          pillsUsed: quartersToPills(used),
+          lastCountPills: lastCount === null ? null : quartersToPills(lastCount),
+          suggestedOutsidePills: after === null ? null : quartersToPills(after),
+        });
+      }
+
       const today = await householdTodayIsoDate(db, auth.householdId);
       const outcome = await computeEstimate(
         db,
         body.medicationId,
         today,
-        { outsideDays: body.outsideDays, confirmedTotalDays: body.confirmedTotalDays },
+        { outsideDays: body.outsideDays, outsideQuarters: body.outsideQuarters, confirmedTotalDays: body.confirmedTotalDays },
         [{ from: body.coveredFrom, to: body.coveredTo }],
       );
       if (outcome.kind === "too_large") throw new BadInput("supply_too_large");
+      if (outcome.kind === "no_fixed_dose") throw new BadInput("pills_need_fixed_dose");
       if (outcome.kind === "needs_confirmation") {
         const info = { organizerDays: outcome.organizerDays, organizerEndsOn: outcome.organizerEndsOn };
         if (body.dryRun) return c.json({ dryRun: true, needsConfirmation: true, ...info });
@@ -597,7 +639,7 @@ export function healthOrganizerSessionRoutes(db: Database, env: Env) {
           outcome = await computeEstimate(db, body.medicationId, today, { outsideDays: 0, confirmedTotalDays: outcome.organizerDays });
         }
         if (outcome.kind !== "ok") throw new BadInput("supply_too_large");
-        supplyRevision = await applyFillEstimate(db, { medicationId: body.medicationId, estimate: outcome.estimate, today, sessionId: session.id, userId: auth.userId });
+        supplyRevision = await applyFillEstimate(db, { medicationId: body.medicationId, estimate: { ...outcome.estimate, outsideQuarters: 0 }, today, sessionId: session.id, userId: auth.userId });
       }
 
       await db.insert(healthOrganizerSessionSkips).values({

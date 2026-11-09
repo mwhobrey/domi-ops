@@ -252,6 +252,8 @@ export const healthMedications = pgTable("health_medications", {
   form: medFormEnum("form").notNull().default("pill"),
   /** A scheduled pill that never goes in the organizer, however it is otherwise set up. */
   organizerExcluded: boolean("organizer_excluded").notNull().default(false),
+  /** Pills in one dose of an interval medication taken every day or longer, in quarters (migration 0107). */
+  intervalDoseQuarters: integer("interval_dose_quarters"),
   scheduleJson: text("schedule_json").default("{}"),
   reminderOffsetsJson: text("reminder_offsets_json").default("[0]"),
   startDate: date("start_date"),
@@ -984,6 +986,8 @@ export const healthMedicationSupply = pgTable(
     runsOutOn: date("runs_out_on"),
     estimatedOn: date("estimated_on"),
     outsideDays: integer("outside_days"),
+    /** The pill count the person last gave, in quarters of a pill; null when the estimate was entered in days (migration 0107). */
+    outsideQuarters: integer("outside_quarters"),
     organizerDaysCounted: integer("organizer_days_counted"),
     revision: integer("revision").notNull().default(0),
     version: integer("version").notNull().default(1),
@@ -1017,6 +1021,7 @@ export const healthMedicationSupplyRevisions = pgTable(
     runsOutOn: date("runs_out_on").notNull(),
     estimatedOn: date("estimated_on").notNull(),
     outsideDays: integer("outside_days").notNull(),
+    outsideQuarters: integer("outside_quarters"),
     organizerDaysCounted: integer("organizer_days_counted").notNull(),
     /** The filling session that produced it (source = fill). The foreign key arrived with migration 0088. */
     sessionId: uuid("session_id").references(() => healthOrganizerSessions.id, { onDelete: "set null" }),

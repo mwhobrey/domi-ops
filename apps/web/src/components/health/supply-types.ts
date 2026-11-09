@@ -43,6 +43,8 @@ export interface SupplySummary {
   estimatedOn: string | null;
   daysRemaining: number | null;
   outsideDays: number | null;
+  /** The pill count the person last gave; null when the estimate was entered in days. */
+  outsidePills: number | null;
   organizerDaysCounted: number | null;
   revision: number;
   /** Send this back when changing the supply, so a stale edit is refused instead of overwriting. */
