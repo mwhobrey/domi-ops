@@ -252,15 +252,24 @@ echo "==> docker compose up (recreate changed containers only)"
 
 # Keep an existing .env pin in step with what is now running, so a later run without a caller tag
 # does not roll hosted back to the old pin. Only rewrites an existing DOMI_OPS_IMAGE_TAG= line (never
-# adds one) and leaves every other line alone. `cat >` keeps .env's owner and mode.
+# adds one) and leaves every other line alone. Write the replacement beside .env, copy owner and
+# mode from the live file, then mv it into place so a failed write cannot truncate .env (which
+# holds DB credentials and secrets). Extend the existing EXIT trap so the temp cannot linger
+# and PREV_IDS is still cleaned up.
 if [[ -n "$CALLER_IMAGE_TAG" ]] \
     && grep '^DOMI_OPS_IMAGE_TAG=' .env | grep -qvxF "DOMI_OPS_IMAGE_TAG=${DOMI_OPS_IMAGE_TAG}"; then
   echo "==> updating DOMI_OPS_IMAGE_TAG in .env to ${DOMI_OPS_IMAGE_TAG}"
-  ENV_TMP="$(mktemp)"
+  ENV_TMP="$(mktemp ./.env.XXXXXX)"
+  trap 'rm -f "$PREV_IDS" "$ENV_TMP"' EXIT
+  chown --reference=.env "$ENV_TMP"
+  chmod --reference=.env "$ENV_TMP"
   awk -v tag="$DOMI_OPS_IMAGE_TAG" \
     '/^DOMI_OPS_IMAGE_TAG=/ { print "DOMI_OPS_IMAGE_TAG=" tag; next } { print }' .env > "$ENV_TMP"
-  cat "$ENV_TMP" > .env
-  rm -f "$ENV_TMP"
+  if [[ ! -s "$ENV_TMP" ]]; then
+    echo "ERROR: failed to write updated .env contents" >&2
+    exit 1
+  fi
+  mv "$ENV_TMP" .env
 fi
 
 echo "==> waiting for redis healthy"
