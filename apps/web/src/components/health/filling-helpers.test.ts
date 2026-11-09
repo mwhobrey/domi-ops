@@ -6,14 +6,14 @@ import {
   count,
   daysBetween,
   daysLeftAfter,
-  defaultFillRange,
-  fillEnd,
+  fillRangeForDays,
   fillErrorMessage,
   filterMedications,
   finishSummary,
   isStaleAnswer,
   leftBehind,
   missingAfter,
+  missingDoseDays,
   progressLabel,
   rangeLabel,
   runsOfDates,
@@ -81,19 +81,29 @@ describe("filterMedications", () => {
 });
 
 describe("fill ranges", () => {
-  it("starts at the first unfilled stretch", () => {
-    expect(defaultFillRange(med({ missing: [{ from: "2026-10-20", to: "2026-10-25" }, { from: "2026-11-01", to: "2026-11-02" }] }))).toEqual({
-      from: "2026-10-20",
-      to: "2026-10-25",
-    });
+  // Monday to Friday, two weeks: ten days with a dose.
+  const weeks = [{ from: "2026-11-09", to: "2026-11-13" }, { from: "2026-11-16", to: "2026-11-20" }];
+  it("counts every day with a dose still to fill", () => {
+    expect(missingDoseDays(weeks)).toBe(10);
+    expect(missingDoseDays([])).toBe(0);
+  });
+  it("reaches the end of the last run when every day is filled", () => {
+    expect(fillRangeForDays(weeks, 10)).toEqual({ from: "2026-11-09", to: "2026-11-20" });
+  });
+  it("counts only days with a dose when fewer are filled", () => {
+    expect(fillRangeForDays(weeks, 3)).toEqual({ from: "2026-11-09", to: "2026-11-11" });
+    expect(fillRangeForDays(weeks, 5)).toEqual({ from: "2026-11-09", to: "2026-11-13" });
+    expect(fillRangeForDays(weeks, 6)).toEqual({ from: "2026-11-09", to: "2026-11-16" });
+  });
+  it("is the plain count of days for a medication taken every day", () => {
+    expect(fillRangeForDays([{ from: "2026-10-06", to: "2026-11-05" }], 10)).toEqual({ from: "2026-10-06", to: "2026-10-15" });
+  });
+  it("never runs past what is missing, and fills at least one day", () => {
+    expect(fillRangeForDays(weeks, 99)).toEqual({ from: "2026-11-09", to: "2026-11-20" });
+    expect(fillRangeForDays(weeks, 0)).toEqual({ from: "2026-11-09", to: "2026-11-09" });
   });
   it("offers nothing when nothing is left", () => {
-    expect(defaultFillRange(med({ missing: [] }))).toBeNull();
-  });
-  it("ends a fill after the days given, never past the session", () => {
-    expect(fillEnd("2026-10-06", 10, "2026-11-05")).toBe("2026-10-15");
-    expect(fillEnd("2026-10-06", 99, "2026-11-05")).toBe("2026-11-05");
-    expect(fillEnd("2026-10-06", 0, "2026-11-05")).toBe("2026-10-06");
+    expect(fillRangeForDays([], 5)).toBeNull();
   });
   it("says how many days a fill leaves", () => {
     const missing = [{ from: "2026-10-06", to: "2026-11-05" }];

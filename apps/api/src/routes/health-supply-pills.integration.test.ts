@@ -337,6 +337,17 @@ maybeDescribe("medication supply in pills (integration)", () => {
       expect(second.json.supply).toMatchObject({ organizerDays: 9, outsideDays: 6, runsOutOn: plus(15) });
     });
 
+    it("takes a whole weekday fill in one save, weekends and all", async () => {
+      const ctx = await sessionFor({ days: [(todayWeekday() + 1) % 7] }, 9, 10); // doses tomorrow and in eight days
+      const suggestion = await fill(ctx, ctx.session, { coveredFrom: plus(1), coveredTo: plus(8), dryRun: true });
+      expect(suggestion.json).toEqual({ dryRun: true, pillsUsed: 2, lastCountPills: 10, suggestedOutsidePills: 8 });
+
+      const saved = await fill(ctx, ctx.session, { coveredFrom: plus(1), coveredTo: plus(8), outsidePills: 8 });
+      expect(saved.status, JSON.stringify(saved.json)).toBe(200);
+      expect(saved.json.supply).toMatchObject({ organizerDays: 9 });
+      expect(saved.json.session.medications[0]).toMatchObject({ status: "filled", missing: [] });
+    });
+
     it("still asks for the total when a day with a dose really is missing", async () => {
       const ctx = await sessionFor({}, 9);
       const res = await fill(ctx, ctx.session, { coveredFrom: plus(3), coveredTo: plus(4), outsidePills: 5, dryRun: true });

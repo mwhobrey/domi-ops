@@ -80,19 +80,26 @@ export function progressLabel(progress: SessionView["progress"]): string {
   return progress.skipped > 0 ? `${partly}, ${progress.skipped} skipped` : partly;
 }
 
-/**
- * The stretch to offer when a medication is selected: the first run of days still unfilled, which for a new medication
- * is the whole session and after a short fill is whatever is left. Null when nothing is left.
- */
-export function defaultFillRange(med: Pick<SessionMedication, "missing">): DateRange | null {
-  const first = med.missing[0];
-  return first ? { from: first.from, to: first.to } : null;
+/** How many days with a dose are still to fill: what "all of them" comes to. */
+export function missingDoseDays(missing: readonly DateRange[]): number {
+  return missing.reduce((sum, m) => sum + rangeDays(m), 0);
 }
 
-/** The last day of a fill that starts at `from` and covers `days` days, never past the end of the session. */
-export function fillEnd(from: string, days: number, windowEnd: string): string {
-  const to = addDays(from, Math.max(1, days) - 1);
-  return to > windowEnd ? windowEnd : to;
+/**
+ * The stretch a fill of `days` days covers, counting only days with a dose and starting at the first one still unfilled.
+ * A Monday to Friday medication is several runs of days with weekends between them, and they go in together: asking for
+ * all of its days reaches the end of the last run. Null when nothing is left to fill.
+ */
+export function fillRangeForDays(missing: readonly DateRange[], days: number): DateRange | null {
+  const first = missing[0];
+  if (!first) return null;
+  let left = Math.max(1, days);
+  for (const run of missing) {
+    const inRun = rangeDays(run);
+    if (left <= inRun) return { from: first.from, to: addDays(run.from, left - 1) };
+    left -= inRun;
+  }
+  return { from: first.from, to: missing[missing.length - 1]!.to };
 }
 
 /** Days with a dose in `missing` that a fill of `range` would still leave unfilled. */

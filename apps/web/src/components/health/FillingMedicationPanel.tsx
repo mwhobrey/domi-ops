@@ -7,13 +7,12 @@ import { CompartmentDiagram } from "./CompartmentDiagram";
 import {
   count,
   daysLeftAfter,
-  defaultFillRange,
-  fillEnd,
   fillErrorMessage,
+  fillRangeForDays,
   isStaleAnswer,
   missingAfter,
+  missingDoseDays,
   newFillKey,
-  rangeDays,
   rangeLabel,
   rangesLabel,
   sessionFromConflict,
@@ -76,9 +75,9 @@ export function FillingMedicationPanel({
   /** Open this medication's editor on top of the screen (WHO-446), e.g. to fix a dosage written as one number. */
   onEdit?: (medicationId: string) => void;
 }) {
-  const range0 = useMemo(() => defaultFillRange(medication), [medication]);
+  const maxDays = useMemo(() => missingDoseDays(medication.missing), [medication.missing]);
+  const range0 = useMemo(() => fillRangeForDays(medication.missing, maxDays), [medication.missing, maxDays]);
   const covered = useMemo(() => splitCovered(medication.covered, { from: session.coverageStart, to: session.coverageEnd }), [medication.covered, session.coverageStart, session.coverageEnd]);
-  const maxDays = range0 ? rangeDays(range0) : 0;
   const [daysText, setDaysText] = useState(String(maxDays));
   const [stage, setStage] = useState<"days" | "supply">("days");
   const [outsideText, setOutsideText] = useState("");
@@ -101,7 +100,7 @@ export function FillingMedicationPanel({
   const previewSeq = useRef(0);
 
   const days = parseDays(daysText, maxDays);
-  const range = range0 && days !== null && days >= 1 ? { from: range0.from, to: fillEnd(range0.from, days, session.coverageEnd) } : null;
+  const range = days !== null && days >= 1 ? fillRangeForDays(medication.missing, days) : null;
   const left = range ? daysLeftAfter(range, medication.missing) : 0;
   const leftover = range ? missingAfter(range, medication.missing) : [];
   const countsPills = medication.countsPills;
