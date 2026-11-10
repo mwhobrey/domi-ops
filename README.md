@@ -1,6 +1,8 @@
 # Domi Ops
 
-**Domi Ops** is an open-source household operations platform: calendar, chores, shopping, notes, expenses, homeschool, and shared files in one place. It's built for families who want a polished experience without running a pile of separate apps, with minimal self-host setup (Docker Compose, one Postgres, sensible defaults). Self-host and Domi Ops hosted (managed cloud) are meant to ship together as open source once the product is stable, security-reviewed, and hosted operations are ready, rather than a staged "OSS first, cloud later" rollout.
+**Domi Ops** is an open-source household operations platform: calendar, chores, shopping, notes, expenses, homeschool, and shared files in one place. It's built for families who want a polished experience without running a pile of separate apps.
+
+Run it yourself with Docker Compose (MIT license, one Postgres, sensible defaults), or use **Domi Ops Cloud**, the live hosted multi-tenant service at [app.domi-ops.com](https://app.domi-ops.com) (currently v0.12.0).
 
 ## What you get
 
@@ -77,6 +79,10 @@ local changes.
 
 **Stuck?** [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
 
+## Domi Ops Cloud
+
+Prefer not to run your own server? [Domi Ops Cloud](https://app.domi-ops.com) is the hosted multi-tenant option (same open-source app). Plans are **$12/month** or **$120/year**, with a **14-day trial** (card required). Start from the [pricing page](https://domi-ops.com/pricing). New Cloud households begin there; household members join by invite after the owner sets things up.
+
 ## Migrating from HomeHub
 
 If you are coming from [HomeHub](https://github.com/surajverma/homehub), Domi Ops includes an import path for SQLite data and uploads. It's **optional**; you can also start fresh.
@@ -97,13 +103,12 @@ npm run test
 
 ## Roadmap
 
-| Phase | Focus |
-|-------|--------|
-| **Now** | Dogfood on self-host; harden security, fix bugs, finish hosted ops |
-| **Public launch** | Open source and Domi Ops hosted together: same codebase, your server or ours |
-| **Ongoing** | Self-host docs, community, and hosted tiers per [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+Self-host and Domi Ops Cloud both ship today from this codebase. Current focus:
 
-Hosted multi-tenant code is not live yet; launch waits until self-host and hosted are both ready to ship.
+| Focus | Notes |
+|-------|--------|
+| **Now** | Fix bugs, harden security, keep self-host and Cloud reliable |
+| **Ongoing** | Self-host docs, community, and product polish per [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 
 ## Get help
 
