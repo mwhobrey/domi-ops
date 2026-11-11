@@ -289,6 +289,19 @@ export function LandingPage() {
                   </li>
                 ))}
               </ul>
+              <p className="text-sm leading-relaxed text-[var(--color-text-muted)]">
+                Domi Ops Cloud households can also install a read-only ChatGPT plugin for shopping
+                and chores. Health, calendar, school, and writes stay outside that listing.
+              </p>
+              <AnchorButton
+                href="https://chatgpt.com/plugins/plugin_asdk_app_6ae0aba26a6481919c67125a963fa4f9"
+                variant="secondary"
+                size="sm"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Available in ChatGPT
+              </AnchorButton>
             </div>
           </div>
         </div>

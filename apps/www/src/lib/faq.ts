@@ -1,4 +1,4 @@
-export type FaqItem = { q: string; a: string };
+export type FaqItem = { q: string; a: string; link?: { href: string; label: string } };
 
 export const FAQ_ITEMS: FaqItem[] = [
   {
@@ -8,6 +8,14 @@ export const FAQ_ITEMS: FaqItem[] = [
   {
     q: "What's the real difference between self-host and Domi Ops Cloud?",
     a: "Same app either way. Self-host means you manage the server, the database, and backups. Cloud means we do, on shared infrastructure, for $12/mo (or $120/yr). Pick based on whether you already run a server, not on features.",
+  },
+  {
+    q: "Can ChatGPT connect to Domi Ops?",
+    a: "Domi Ops Cloud households can install a read-only ChatGPT plugin for household shopping and chores. Health, calendar, school, notes, and writes are outside that listing. Self-hosters are not served by the Cloud listing; they set up their own connection using the MCP setup docs in the GitHub repository.",
+    link: {
+      href: "https://chatgpt.com/plugins/plugin_asdk_app_6ae0aba26a6481919c67125a963fa4f9",
+      label: "Available in ChatGPT",
+    },
   },
   {
     q: "Do you sell or share my data?",
@@ -83,7 +91,10 @@ export function faqJsonLd(items: FaqItem[]) {
     mainEntity: items.map((i) => ({
       "@type": "Question",
       name: i.q,
-      acceptedAnswer: { "@type": "Answer", text: i.a },
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: i.link ? `${i.a} ${i.link.label}: ${i.link.href}` : i.a,
+      },
     })),
   };
 }

@@ -44,9 +44,14 @@ For an adult member:
    to stop future reads; this does not erase provider copies.
 
 See [current connection instructions](https://developers.openai.com/plugins/deploy/connect-chatgpt).
-Account/workspace restrictions still apply. Setup uses the supported custom
-installation flow until a directory listing is approved; no prefilled install
-deep link is assumed. Self-hosters use their own reachable HTTPS origin.
+Account/workspace restrictions still apply. Domi Ops Cloud households can install
+from the approved directory listing
+([Available in ChatGPT](https://chatgpt.com/plugins/plugin_asdk_app_6ae0aba26a6481919c67125a963fa4f9)):
+read-only shopping and chores on Domi Ops Cloud. Health, calendar, school, notes
+(unless a member later selects notes on a custom/self-host connection), and writes
+are outside that listing. Self-hosters are not served by the Cloud listing; they
+still use the custom MCP connection flow with their own reachable HTTPS origin.
+See [MCP_SETUP.md](MCP_SETUP.md).
 
 For an unregistered, credential-free package, the generator now supports:
 

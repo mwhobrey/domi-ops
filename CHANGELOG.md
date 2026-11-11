@@ -8,6 +8,9 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+- README and the marketing site now link the public Domi Ops ChatGPT listing
+  ([Available in ChatGPT](https://chatgpt.com/plugins/plugin_asdk_app_6ae0aba26a6481919c67125a963fa4f9))
+  for the read-only Cloud shopping-and-chores plugin.
 - Hosted deploys now use the image tag the caller sets (CI tag deploys, or
   `DOMI_OPS_IMAGE_TAG=X deploy/deploy-hosted.sh`) even when compose `.env` pins
   `DOMI_OPS_IMAGE_TAG`. Before, `.env` won, so the v0.12.0 hosted deploy stayed on

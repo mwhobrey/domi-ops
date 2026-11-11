@@ -11,7 +11,7 @@ export function ChatGptConnectionSetup({ enabled, serverUrl, setupUrl }: { enabl
         <li>Enter Domi Ops and the server URL below. Choose OAuth and published identity (CIMD), if asked.</li>
         <li>Leave client credentials and request headers empty. Review ChatGPT’s warning, then connect and approve the intended Domi Ops permissions.</li>
       </ol>
-      <p className="text-sm text-[var(--color-text-muted)]">Availability depends on your ChatGPT account and workspace. A directory listing is still pending.</p>
+      <p className="text-sm text-[var(--color-text-muted)]">Domi Ops is available in the ChatGPT plugin directory — <a href="https://chatgpt.com/plugins/plugin_asdk_app_6ae0aba26a6481919c67125a963fa4f9" target="_blank" rel="noopener noreferrer">Available in ChatGPT</a>. The listed plugin is read-only for household shopping and chores on Domi Ops Cloud. Self-hosters are not served by that Cloud listing; use the custom MCP server steps above.</p>
     </> : <p className="text-sm">Enable AI connections for this household first, then continue here.</p>}
     <p className="break-all text-sm text-[var(--color-text-muted)]">Your server: {serverUrl}</p>
   </CardBody></Card>;

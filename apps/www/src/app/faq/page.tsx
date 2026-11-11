@@ -49,6 +49,18 @@ export default function FaqPage() {
               <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--color-text-muted)]">
                 {item.a}
               </p>
+              {item.link ? (
+                <p className="mt-2 max-w-2xl text-sm">
+                  <a
+                    href={item.link.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline hover:text-[var(--color-text)]"
+                  >
+                    {item.link.label}
+                  </a>
+                </p>
+              ) : null}
             </details>
           ))}
         </div>
