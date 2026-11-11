@@ -83,6 +83,8 @@ local changes.
 
 Prefer not to run your own server? [Domi Ops Cloud](https://app.domi-ops.com) is the hosted multi-tenant option (same open-source app). Plans are **$12/month** or **$120/year**, with a **14-day trial** (card required). Start from the [pricing page](https://domi-ops.com/pricing). New Cloud households begin there; household members join by invite after the owner sets things up.
 
+**[Available in ChatGPT](https://chatgpt.com/plugins/plugin_asdk_app_6ae0aba26a6481919c67125a963fa4f9)** — Domi Ops Cloud households can install a read-only ChatGPT plugin for household shopping and chores. Health, calendar, school, notes, and writes are outside this listing. Self-hosters are not served by the Cloud listing; set up your own connection with [docs/MCP_SETUP.md](docs/MCP_SETUP.md) and [docs/MCP_CHATGPT.md](docs/MCP_CHATGPT.md).
+
 ## Migrating from HomeHub
 
 If you are coming from [HomeHub](https://github.com/surajverma/homehub), Domi Ops includes an import path for SQLite data and uploads. It's **optional**; you can also start fresh.

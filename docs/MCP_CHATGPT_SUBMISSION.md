@@ -1,9 +1,14 @@
 # OpenAI plugin submission preparation (WHO-478)
 
-Materials are local drafts, not uploaded, submitted, approved or deployed.
-The approved self-host pilot verified published-identity connection and actual
-reads; the installed Work briefing response hit model capacity. Hosted reviewer
-acceptance and completion of the pilot remain release gates. Earlier WHO-475
+The Domi Ops Cloud ChatGPT plugin is listed
+([Available in ChatGPT](https://chatgpt.com/plugins/plugin_asdk_app_6ae0aba26a6481919c67125a963fa4f9)):
+read-only household shopping and chores on Domi Ops Cloud. Materials below remain
+local preparation drafts for packaging, reviewer fixtures and self-host custom
+connections; do not treat every historical pilot or reviewer gate as complete
+unless this guide already establishes it. The approved self-host pilot verified
+published-identity connection and actual reads; the installed Work briefing
+response hit model capacity. Hosted reviewer acceptance and completion of the
+pilot remain separate release gates where still open. Earlier WHO-475
 manual-registration synthetic acceptance is separate evidence.
 
 ## Reproducible draft

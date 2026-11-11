@@ -28,7 +28,7 @@ promise of availability on every account. Recheck the exact account before use.
 
 | Surface | Verified evidence | Real-data disposition |
 | --- | --- | --- |
-| ChatGPT Plus web / Work | Private MCP connection, combined plugin, installed briefing, reads, refresh, reconnect and disconnect | Candidate for adult pilot after exact account/privacy review; [setup and evidence](MCP_CHATGPT.md) |
+| ChatGPT Plus web / Work | Private MCP connection, combined plugin, installed briefing, reads, refresh, reconnect and disconnect; Cloud directory listing approved for read-only shopping and chores | Cloud users: [Available in ChatGPT](https://chatgpt.com/plugins/plugin_asdk_app_6ae0aba26a6481919c67125a963fa4f9). Self-hosters use their own origin and the custom connection steps in [setup and evidence](MCP_CHATGPT.md) |
 | Claude Pro web | Private connector and combined plugin briefing, reads, refresh, reduced access and disconnect | Candidate for adult pilot after exact account/privacy review; [setup and evidence](MCP_CLAUDE.md) |
 | Consumer Gemini web | Custom MCP app plus installed skill, five reads, refresh and reduced access; disconnect has the documented evidence limit | Candidate for informed adult native-data pilot after explicit risk disclosure; [setup and limits](MCP_GEMINI.md) |
 | Mobile, other plans, business/API/local clients | No real-household acceptance established by these tests | Separate exact-profile evaluation required |
@@ -157,10 +157,13 @@ scope is automatically added and no schema migration is needed.
 1. The owner/admin enables the household at `/settings/ai-connections` after
    discussing the sharing boundary with participating adults. Each eligible
    adult grants their own connection; owner approval does not consent for others.
-2. Use the provider guide above to add the approved MCP endpoint/client and
-   optionally install the unchanged shared briefing skill. A skill and a live
-   connection are separate requirements. Do not upload household records as setup
-   material. Recheck provider privacy settings before continuing.
+2. For ChatGPT on Domi Ops Cloud, prefer the approved directory listing
+   ([Available in ChatGPT](https://chatgpt.com/plugins/plugin_asdk_app_6ae0aba26a6481919c67125a963fa4f9));
+   that listing is read-only shopping and chores. Self-hosters and other
+   assistants use the provider guide above to add the approved MCP endpoint/client
+   for their own origin. Optionally install the unchanged shared briefing skill.
+   A skill and a live connection are separate requirements. Do not upload household
+   records as setup material. Recheck provider privacy settings before continuing.
 3. Start Connect from the assistant, sign in to Domi Ops and verify the displayed
    provider profile, household, member and exact scopes. Leave notes empty at
    first, or explicitly choose a minimal reviewed native note. Never select

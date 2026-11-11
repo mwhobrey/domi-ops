@@ -87,6 +87,14 @@ export function MarketingShell({
             <Link href="/about" className="min-h-11 inline-flex items-center hover:text-[var(--color-text)]">
               Our story
             </Link>
+            <a
+              href="https://chatgpt.com/plugins/plugin_asdk_app_6ae0aba26a6481919c67125a963fa4f9"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="min-h-11 inline-flex items-center hover:text-[var(--color-text)]"
+            >
+              Available in ChatGPT
+            </a>
             <Link href="/privacy" className="min-h-11 inline-flex items-center hover:text-[var(--color-text)]">
               Privacy
             </Link>
