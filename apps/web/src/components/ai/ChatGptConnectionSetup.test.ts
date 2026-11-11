@@ -17,4 +17,13 @@ describe("ChatGPT onboarding", () => {
     expect(html).toContain("Leave client credentials and request headers empty");
     expect(html).toContain('rel="noopener noreferrer"');
   });
+  it("links the published ChatGPT directory listing for Domi Ops Cloud", () => {
+    const html = renderToStaticMarkup(createElement(ChatGptConnectionSetup, { ...options, enabled: true }));
+    expect(html).toContain("https://chatgpt.com/plugins/plugin_asdk_app_6ae0aba26a6481919c67125a963fa4f9");
+    expect(html).toContain('target="_blank"');
+    expect(html).toContain('rel="noopener noreferrer"');
+    expect(html).toContain("available in the ChatGPT plugin directory");
+    expect(html).toContain("read-only for household shopping and chores on Domi Ops Cloud");
+    expect(html).not.toContain("directory listing is still pending");
+  });
 });
