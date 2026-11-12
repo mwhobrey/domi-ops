@@ -16,12 +16,9 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
   imported from Google Calendar are left out and the assistant is told so. Inert unless
   an operator lists `calendar:read` in `MCP_READ_SCOPES` and the member switches it on
   and picks calendars. Migration 0110.
-- ChatGPT and Grok Bot packages are version 0.2.0 and include a household actions skill,
-  and the Claude generator is unchanged for now. Listing drafts, review cases and the
-  privacy policy's assistant section describe the new abilities. The Claude plugin source
-  in `integrations/claude/domi-ops-household` stays at 0.1.2 on `main`, because the
-  Claude portal reads it from there; 0.2.0 follows in a separate change once the hosted
-  server offers the new scopes. Nothing is submitted; see
+- Provider packages are version 0.2.0 and include a household actions skill. Listing
+  drafts, review cases and the privacy policy's assistant section describe the new
+  abilities. Nothing is submitted; see
   [the acceptance guide](docs/MCP_ASSISTANT_ACTIONS_ACCEPTANCE.md).
 - A connection approved through an older server build during a rolling deploy keeps the
   reads it approved instead of arriving with nothing switched on.

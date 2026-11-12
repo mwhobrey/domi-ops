@@ -1,7 +1,7 @@
 {
   "name": "domi-ops-household",
-  "version": "0.1.2",
-  "description": "Read-only shared household chores and shopping.",
+  "version": "0.2.0",
+  "description": "Shared household chores and shopping, plus optional actions each member switches on.",
   "author": {
     "name": "Domi Ops"
   },

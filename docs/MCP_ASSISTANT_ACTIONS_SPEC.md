@@ -672,8 +672,6 @@ Also in this stage:
   unchanged briefing skill.
 - Claude: `scripts/mcp-claude/package.mjs` and the committed portal source in
   `integrations/claude/domi-ops-household`. Claude takes its scopes from the server.
-  The 0.2.0 source is held back in the follow-up branch `who-512/claude-package-0-2-0`
-  so the portal keeps validating 0.1.2 until the hosted server offers the new scopes.
 - ChatGPT: `scripts/mcp-chatgpt/package.mjs` accepts the action scopes. A package
   requests exactly the scopes it is given, and the deployment must offer the same set.
 - Grok Bot: `scripts/mcp-grok-bot/package.mjs` accepts `shopping:write` on top of the

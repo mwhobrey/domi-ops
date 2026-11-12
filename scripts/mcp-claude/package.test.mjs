@@ -20,8 +20,10 @@ test("cloud packages reject local, credential-bearing and noncanonical resources
 test("submission preparation retains release gates and refuses to replace review materials", async () => {
   const root = await mkdtemp(join(tmpdir(), "domi-claude-submission-")), output = join(root, "draft");
   try {
-    const options = { origin: "https://hosted.example.test", output };
+    // The read-only profile is still available by naming its scopes.
+    const options = { origin: "https://hosted.example.test", output, scopes: ["shopping:read", "chores:read"] };
     const draft = await prepareSubmission(options);
+    assert.deepEqual(draft.dataHandling, { apiOwnership: "first-party", reads: true, writes: false, healthData: false, sponsoredContent: false });
     assert.equal(draft.readyToSubmit, false);
     assert.equal(draft.status, "draft-not-submitted");
     assert.equal(draft.serverUrl, options.origin + "/api/mcp");
@@ -31,6 +33,7 @@ test("submission preparation retains release gates and refuses to replace review
     const readme = await readFile(join(output, "plugin/README.md"), "utf8");
     assert.ok(readme.includes("shared household chores and shopping items"));
     assert.ok(readme.includes("no planning-note"));
+    assert.ok(readme.includes("Every other ability starts off"));
     const review = JSON.parse(await readFile(join(output, "review-plan.draft.json"), "utf8"));
     assert.deepEqual(review.scopes, ["shopping:read", "chores:read", "offline_access"]);
     assert.equal(review.execution.status, "not-run");
@@ -62,9 +65,17 @@ test("Claude package preserves the shared skill and license and never replaces a
     const readme = await readFile(join(output, "README.md"), "utf8");
     assert.ok(readme.replace(/```[\s\S]*?```/g, "").split(/\s+/).filter(Boolean).length >= 40);
     assert.ok(readme.includes(options.origin + "/api/mcp"));
-    assert.ok(readme.includes("It runs no local commands"));
+    assert.ok(readme.replace(/\s+/g, " ").includes("It runs no local commands"));
     assert.ok(readme.includes("Disconnect in"));
-    for (const name of ["SKILL.md", "LICENSE.txt"]) assert.deepEqual(await readFile(join(output, "skills/domi-ops-household-briefing", name)), await readFile(new URL("../../skills/domi-ops-household-briefing/" + name, import.meta.url)));
+    assert.deepEqual((await readdir(join(output, "skills"))).sort(), ["domi-ops-household-actions", "domi-ops-household-briefing"]);
+    for (const skill of ["domi-ops-household-briefing", "domi-ops-household-actions"]) for (const name of ["SKILL.md", "LICENSE.txt"]) {
+      assert.deepEqual(await readFile(join(output, "skills", skill, name)), await readFile(new URL(`../../skills/${skill}/${name}`, import.meta.url)));
+    }
+    assert.equal(manifest.version, "0.2.0");
+    assert.doesNotMatch(manifest.description, /read-only/i);
+    // The README names every limit a reviewer or member needs before switching an action on.
+    for (const phrase of ["Medication names, strengths, instructions and history are never sent", "Event titles, locations, people and calendar names are never sent",
+      "cannot edit, check off, remove,", "switch it on for this connection", "events imported from Google Calendar are left out"]) assert.ok(readme.includes(phrase), phrase);
     await assert.rejects(writePlugin(options), { code: "EEXIST" });
   } finally {
     assert.equal(dirname(root), resolve(tmpdir())); assert.match(basename(root), /^domi-claude-package-/);
@@ -76,11 +87,42 @@ test("prepared portal source stays in sync with the credential-free hosted packa
   const root = await mkdtemp(join(tmpdir(), "domi-claude-package-")), output = join(root, "plugin");
   try {
     await writePlugin({ origin: "https://app.domi-ops.com", output });
-    for (const file of [".claude-plugin/plugin.json", ".mcp.json", "README.md", "assets/icon.png", "skills/domi-ops-household-briefing/SKILL.md", "skills/domi-ops-household-briefing/LICENSE.txt"]) {
+    for (const file of [".claude-plugin/plugin.json", ".mcp.json", "README.md", "assets/icon.png", "skills/domi-ops-household-briefing/SKILL.md", "skills/domi-ops-household-briefing/LICENSE.txt",
+      "skills/domi-ops-household-actions/SKILL.md", "skills/domi-ops-household-actions/LICENSE.txt"]) {
       assert.deepEqual(await readFile(join(output, file)), await readFile(new URL("../../integrations/claude/domi-ops-household/" + file, import.meta.url)), `Prepared source drift: ${file}`);
     }
   } finally {
     assert.equal(dirname(root), resolve(tmpdir())); assert.match(basename(root), /^domi-claude-package-/);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("the default submission is the assistant-actions update and says what it shares", async () => {
+  const root = await mkdtemp(join(tmpdir(), "domi-claude-submission-")), output = join(root, "draft");
+  try {
+    const draft = await prepareSubmission({ origin: "https://hosted.example.test", output });
+    assert.equal(draft.readyToSubmit, false);
+    assert.deepEqual(draft.scopes, ["shopping:read", "chores:read", "shopping:write", "health:read", "health:write", "calendar:read", "offline_access"]);
+    assert.deepEqual(draft.dataHandling, { apiOwnership: "first-party", reads: true, writes: true, healthData: true, sponsoredContent: false });
+    assert.doesNotMatch(draft.oneLiner + " " + draft.description, /read-only|notes/i);
+    assert.match(draft.description, /never receives medication names or event details/);
+    for (const gate of ["MCP_READ_SCOPES and MCP_DIRECT_ACTIONS", "privacy disclosure covering assistant actions, medication timing and calendar availability", "provider-side confirmation prompt"]) {
+      assert.ok(draft.requiredBeforeSubmit.some(entry => entry.includes(gate)), gate);
+    }
+    const review = JSON.parse(await readFile(join(output, "review-plan.draft.json"), "utf8"));
+    assert.equal(review.packageVersion, "0.2.0");
+    assert.equal(review.review.test_cases.positive.length, 5);
+    assert.equal(review.review.test_cases.negative.length, 3);
+    const tools = review.review.test_cases.positive.map(c => c.tools_triggered).join(",");
+    for (const tool of ["add_shopping_item", "get_medication_group_schedule", "log_medication_group", "get_calendar_availability", "list_shopping_items", "list_chores"]) assert.ok(tools.includes(tool), tool);
+    assert.equal(tools.includes("get_selected_note"), false);
+    assert.equal(review.execution.status, "not-run");
+    assert.match(await readFile(join(output, "release-notes.draft.md"), "utf8"), /Two tools are not read-only/);
+    for (const scopes of [[], ["health:write"], ["shopping:write"], ["shopping:read", "drive:read"], ["shopping:read", "shopping:read"]]) {
+      await assert.rejects(prepareSubmission({ origin: "https://hosted.example.test", output: join(root, "bad" + scopes.length + scopes.join("")), scopes }));
+    }
+  } finally {
+    assert.equal(dirname(root), resolve(tmpdir())); assert.match(basename(root), /^domi-claude-submission-/);
     await rm(root, { recursive: true, force: true });
   }
 });

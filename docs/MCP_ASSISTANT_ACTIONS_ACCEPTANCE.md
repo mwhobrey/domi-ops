@@ -250,10 +250,8 @@ change is the owner's call at the time.
 
 **Claude** ([guide](MCP_CLAUDE_SUBMISSION.md))
 
-1. `integrations/claude/domi-ops-household` is still package 0.1.2 on `main` on
-   purpose: the portal reads `main`. The 0.2.0 source, with both skills and the updated
-   generator and test, is the stacked follow-up branch `who-512/claude-package-0-2-0`.
-   Open that PR only after the steps below. To regenerate it, build into a new directory and copy over:
+1. `integrations/claude/domi-ops-household` already holds package 0.2.0 with both
+   skills. To regenerate it, build into a new directory and copy over:
    `mise exec -- node scripts/mcp-claude/package.mjs https://app.domi-ops.com .qa/NEW-CLAUDE-SOURCE`
 2. Merge it through a release PR. The portal reads `main`, so merging changes what the
    portal validates. Do not merge before the hosted endpoint offers the new scopes, or
