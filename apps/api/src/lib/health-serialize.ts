@@ -525,6 +525,7 @@ export function serializeHealthLog(row: HealthLogRow, env: Env) {
     loggedByUserId: row.loggedByUserId,
     notes: decryptHealthFieldOrPassthrough(row.notes, env),
     healthEventId: row.healthEventId,
+    recordedByAssistant: row.loggedViaConnectionId != null,
   };
 }
 

@@ -1,5 +1,67 @@
 # Current state
 
+## Assistant capabilities and direct actions (stage 0 backend, 2026-11-11)
+
+- [Spec](../../docs/MCP_ASSISTANT_ACTIONS_SPEC.md) is owner-accepted; its section 12
+  is the source of truth for what is built. Not deployed, nothing enabled.
+- A granted scope is now only the outer bound of a connection. Tools also require a
+  row in `mcp_connection_capabilities` (migration 0108), checked in the call's
+  transaction. Existing grants are backfilled with the reads they already hold.
+- `MCP_DIRECT_ACTIONS_ENABLED` / `MCP_DIRECT_ACTIONS` are separate from
+  `MCP_WRITES_ENABLED`; neither enables the other. The gateway has a direct execution
+  mode but the default registry registers no action. `add_shopping_item` is a
+  reserved name only.
+- Do not bump `MCP_POLICY_VERSION` for capability changes: `liveConnection` denies
+  every grant on an older version. Use `MCP_CAPABILITY_CONSENT_VERSION`.
+- All MCP integration suites share one database and one JWKS signing key, so every
+  suite must use the same `SESSION_SECRET` fixture value or the others fail to
+  decrypt the key.
+- The consent screen and AI connection settings now show capabilities, not scopes.
+  `POST /api/mcp-auth/capabilities/preview` returns the real read-tool output for the
+  signed-in member so the screen shows the exact payload.
+- Stage 1: `add_shopping_item` is registered by default but inert unless the operator
+  lists `shopping.add`, the grant holds `shopping:write` and the member switched it
+  on. It dedupes against unchecked items by normalized name, so retries are safe with
+  no idempotency key. Published provider packages are unchanged and still read-only.
+- Shopping items now serialize `createdByDisplayName`, shown as "Added by ..." in the
+  list.
+- Stage 2: assistants can read medication group times/status and record a group as
+  taken, through `apps/api/src/mcp/med-groups.ts`. Migration 0109. Inert unless the
+  operator lists `health:read` in `MCP_READ_SCOPES` and `health.groups.log` in
+  `MCP_DIRECT_ACTIONS`, and the member picks groups. Never reuse
+  `POST /medication-groups/:id/log-all` for this: it trusts a caller-supplied instant
+  and logs members that are not due then.
+- `householdAccess` in `packages/auth/src/mcp.ts` no longer requires a module for
+  `health:*` scopes; the health module is enforced per capability and per tool, so a
+  household turning health off does not break the rest of a connection.
+- On Windows, `docker run -p 127.0.0.1:<fixed>:5432` sometimes starts without the port
+  mapping after a recent stop. Use `-p 127.0.0.1::5432` and read the port with
+  `docker port`.
+- A direct tool may return `afterCommit`; the gateway runs it unawaited in a fresh
+  metadata transaction once the action has committed. Use it for push, never for
+  anything the action's result depends on. A failure there is logged by
+  `reportAfterCommitFailure` with the tool, connection id and error class only; never
+  add the error message, since a provider's text can quote what was sent.
+- `skills/domi-ops-household-actions/` is a draft skill, not packaged. The published
+  packages and `skills/domi-ops-household-briefing/` are still read-only 0.1.x.
+- Stage 4 (2026-11-12, tests unrun): `get_calendar_availability` in
+  `apps/api/src/mcp/calendar-availability.ts`, capability `calendar.availability`, scope
+  `calendar:read`, module `calendar_sync`, migration 0110. Local events only; Google
+  events are excluded in code. Do not add a field to its output without a spec change.
+- Migration 0110 also adds `mcp_connections.capability_consent_version` and a trigger
+  that gives a grant inserted without it legacy read capabilities. Any code or test
+  that inserts a grant and wants no capabilities must set that column.
+- Provider packages are 0.2.0. `integrations/claude/domi-ops-household` must stay
+  byte-identical to `scripts/mcp-claude/package.mjs` output for app.domi-ops.com; merging
+  it changes what Claude's portal validates. Scope vocabulary for all three packagers is
+  in `scripts/mcp-review/scopes.mjs`.
+- Every automated test, the per-provider checks and the store steps are in
+  `docs/MCP_ASSISTANT_ACTIONS_ACCEPTANCE.md`.
+- To click through consent locally you need a registered client and a real authorize
+  request; `/ai/consent` rejects an unsigned query. Single mode joins a second sign-up
+  to the first household as a plain member, so a fixture user must be made owner
+  before it can enable AI connections.
+
 ## Reviewed write foundation (WHO-479, 2026-10-27)
 
 - The owner requested resuming WHO-479 after hosted read-only acceptance and

@@ -41,12 +41,13 @@ test("review cases stay within enabled tools and keep real acceptance pending", 
 test("submission draft includes portable source, public listing assets and explicit launch gates", async () => {
   const root = await mkdtemp(join(tmpdir(), "domi-mcp-package-")), output = join(root, "draft");
   try {
-    const draft = await prepareSubmission({ origin: "https://hosted.example.test", output });
+    const draft = await prepareSubmission({ origin: "https://hosted.example.test", output, readScopes: ["shopping:read", "chores:read"] });
     assert.equal(draft.readyToSubmit, false);
     assert.equal(draft.status, "draft-not-uploaded");
+    assert.deepEqual(draft.dataHandling, { reads: true, writes: false, healthData: false });
     const review = JSON.parse(await readFile(join(output, "review-plan.draft.json"), "utf8"));
     assert.equal(review.execution.status, "not-run");
-    assert.equal(review.packageVersion, "0.1.2");
+    assert.equal(review.packageVersion, "0.2.0");
     assert.equal(review.recording.url, null);
     assert.equal(review.review.test_cases.positive.length, 5);
     assert.equal(review.review.test_cases.negative.length, 3);
@@ -111,7 +112,8 @@ test("published-identity packages use canonical public origins and default to th
   }
   for (const origin of ["http://localhost:17180", "https://localhost", "https://10.0.0.1", "https://[::1]"]) assert.throws(() => pluginConfiguration({ origin, clientMode: "cimd" }));
   assert.throws(() => pluginConfiguration({ origin: "https://home.example.test", clientMode: "cimd", clientId: "manual" }));
-  for (const readScopes of [[], ["notes:read", "notes:read"], ["health:read"], "chores:read"]) assert.throws(() => pluginConfiguration({ origin: "https://home.example.test", clientMode: "cimd", readScopes }));
+  // An action is never requested without the read it builds on, and nothing outside the vocabulary is accepted.
+  for (const readScopes of [[], ["notes:read", "notes:read"], ["health:write"], ["shopping:write"], ["shopping:read", "health:write"], ["drive:read"], ["offline_access"], "chores:read"]) assert.throws(() => pluginConfiguration({ origin: "https://home.example.test", clientMode: "cimd", readScopes }));
 });
 
 test("each deployment uses its own resource and pre-registered public client without secrets or automatic registration", () => {
@@ -158,6 +160,70 @@ test("copies the shared skill byte-for-byte and refuses to replace an existing p
     assert.deepEqual(await readFile(join(output, "skills/domi-ops-household-briefing/SKILL.md")), await readFile(source));
     assert.deepEqual((await readdir(output)).sort(), ["mcp.json", "plugin.json", "skills"]);
     await assert.rejects(writePlugin(options), { code: "EEXIST" });
+  } finally {
+    assert.equal(dirname(root), resolve(tmpdir())); assert.match(basename(root), /^domi-mcp-package-/);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("the default submission is the assistant-actions update with both skills and exact scopes", async () => {
+  const root = await mkdtemp(join(tmpdir(), "domi-mcp-package-")), output = join(root, "draft");
+  try {
+    const draft = await prepareSubmission({ origin: "https://hosted.example.test", output });
+    const expected = ["shopping:read", "chores:read", "shopping:write", "health:read", "health:write", "calendar:read", "offline_access"];
+    assert.deepEqual(draft.scopes, expected);
+    assert.deepEqual(draft.dataHandling, { reads: true, writes: true, healthData: true });
+    const mcp = JSON.parse(await readFile(join(output, "plugin/mcp.json"), "utf8"));
+    assert.deepEqual(mcp.mcpServers["domi-ops"].extensions["com.openai"].auth.defaultScopes, expected);
+    assert.deepEqual(mcp.mcpServers["domi-ops"].extensions["com.openai"].auth.baseScopes, ["offline_access"]);
+    const manifest = JSON.parse(await readFile(join(output, "plugin/plugin.json"), "utf8"));
+    const listing = manifest.extensions["com.openai"].interface;
+    assert.equal(manifest.version, "0.2.0");
+    assert.ok(listing.shortDescription.length <= 30);
+    assert.doesNotMatch(manifest.description + listing.longDescription, /read-only|No saved changes/i);
+    assert.match(listing.longDescription, /every action starts off/);
+    assert.match(listing.defaultPrompt[0], /approved and switched on/);
+    assert.deepEqual((await readdir(join(output, "plugin/skills"))).sort(), ["domi-ops-household-actions", "domi-ops-household-briefing"]);
+    for (const skill of ["domi-ops-household-briefing", "domi-ops-household-actions"]) for (const name of ["SKILL.md", "LICENSE.txt"]) {
+      assert.deepEqual(await readFile(join(output, "plugin/skills", skill, name)), await readFile(new URL(`../../skills/${skill}/${name}`, import.meta.url)));
+    }
+    const readme = await readFile(join(output, "plugin/README.md"), "utf8");
+    for (const phrase of ["Medication names, strengths, instructions and history are never sent", "Event titles, locations, people and calendar names are never sent", "everything else starts off"]) assert.ok(readme.includes(phrase), phrase);
+    const review = JSON.parse(await readFile(join(output, "review-plan.draft.json"), "utf8"));
+    assert.equal(review.review.test_cases.positive.length, 5);
+    assert.equal(review.review.test_cases.negative.length, 3);
+    assert.ok(review.review.test_cases.positive.every(c => c.prompt && c.tools_triggered && c.expected_behavior));
+    assert.ok(review.review.test_cases.negative.every(c => c.prompt && c.expected_behavior));
+    for (const gate of ["MCP_READ_SCOPES and MCP_DIRECT_ACTIONS", "five positive test cases", "three negative test cases", "confirmation ChatGPT shows"]) {
+      assert.ok(draft.requiredBeforeSubmit.some(entry => entry.includes(gate)), gate);
+    }
+  } finally {
+    assert.equal(dirname(root), resolve(tmpdir())); assert.match(basename(root), /^domi-mcp-package-/);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("action review plans always have five positive and three negative cases within the requested tools", async () => {
+  const root = await mkdtemp(join(tmpdir(), "domi-mcp-package-"));
+  try {
+    const sets = [
+      ["shopping:read", "shopping:write"], ["shopping:read", "chores:read", "shopping:write"], ["shopping:read", "health:read"],
+      ["chores:read", "health:read", "health:write"], ["shopping:read", "calendar:read"], ["shopping:read", "chores:read", "notes:read", "shopping:write", "health:read", "health:write", "calendar:read"],
+    ];
+    for (const selected of sets) {
+      const plan = await writeReviewMaterials({ output: root, scopes: [...selected, "offline_access"], packageVersion: "0.2.0" });
+      assert.equal(plan.review.test_cases.positive.length, 5, selected.join());
+      assert.equal(plan.review.test_cases.negative.length, 3, selected.join());
+      const tools = plan.review.test_cases.positive.map(c => c.tools_triggered).join(",");
+      assert.equal(tools.includes("add_shopping_item"), selected.includes("shopping:write"), selected.join());
+      assert.equal(tools.includes("log_medication_group"), selected.includes("health:write"), selected.join());
+      if (!selected.includes("health:read")) assert.equal(tools.includes("get_medication_group_schedule"), false, selected.join());
+      if (!selected.includes("calendar:read")) assert.equal(tools.includes("get_calendar_availability"), false, selected.join());
+      assert.equal(plan.fixtureRequirements.some(f => f.includes("medication group labelled Morning")), selected.includes("health:read"));
+      assert.equal(plan.fixtureRequirements.some(f => f.includes("fictional native calendar")), selected.includes("calendar:read"));
+      assert.ok(plan.fixtureRequirements.some(f => f.includes("title is an instruction")));
+      assert.deepEqual(plan.execution.results, []);
+    }
   } finally {
     assert.equal(dirname(root), resolve(tmpdir())); assert.match(basename(root), /^domi-mcp-package-/);
     await rm(root, { recursive: true, force: true });

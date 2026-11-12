@@ -61,3 +61,35 @@ test("packages only the remote connection and byte-identical shared skill; refus
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("requests shopping add only on top of the shopping read, and ships the actions skill with it", async () => {
+  for (const scopes of [["chores:read", "shopping:write"], ["shopping:read", "health:read"], ["shopping:read", "calendar:read"], ["shopping:read", "health:write"]]) {
+    assert.throws(() => pluginConfiguration("https://selfhost.example.test", scopes));
+  }
+  const root = await mkdtemp(join(tmpdir(), "domi-grok-scopes-"));
+  try {
+    const output = join(root, "add");
+    await writePlugin({ origin: "https://selfhost.example.test", output, readScopes: ["shopping:read", "chores:read", "shopping:write"] });
+    const mcp = JSON.parse(await readFile(join(output, "mcp.json"), "utf8"));
+    assert.deepEqual(mcp.mcpServers["domi-ops"].auth.scopes, ["shopping:read", "chores:read", "shopping:write", "offline_access"]);
+    const manifest = JSON.parse(await readFile(join(output, ".cursor-plugin/plugin.json"), "utf8"));
+    assert.equal(manifest.version, "0.2.0");
+    assert.doesNotMatch(manifest.description, /read-only/i);
+    assert.deepEqual((await readdir(join(output, "skills"))).sort(), ["domi-ops-household-actions", "domi-ops-household-briefing"]);
+    for (const name of ["SKILL.md", "LICENSE.txt"]) {
+      assert.deepEqual(await readFile(join(output, "skills/domi-ops-household-actions", name)), await readFile(new URL("../../skills/domi-ops-household-actions/" + name, import.meta.url)));
+    }
+    const readme = await readFile(join(output, "README.md"), "utf8");
+    assert.match(readme, /it starts off/);
+    assert.match(readme, /cannot edit, check off or remove an item/);
+    assert.match(readme, /notes, medication, calendar or any other change/);
+    // A read-only package still carries the briefing skill alone and makes no action claim.
+    const plain = join(root, "plain");
+    await writePlugin({ origin: "https://selfhost.example.test", output: plain });
+    assert.deepEqual(await readdir(join(plain, "skills")), ["domi-ops-household-briefing"]);
+    assert.match(await readFile(join(plain, "README.md"), "utf8"), /It does not permit notes or domain writes\./);
+  } finally {
+    assert.equal(dirname(root), resolve(tmpdir())); assert.match(basename(root), /^domi-grok-scopes-/);
+    await rm(root, { recursive: true, force: true });
+  }
+});

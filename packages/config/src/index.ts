@@ -1,8 +1,33 @@
 import { z } from "zod";
 import { validateDevPublicAppUrl, oauthRedirectUris, inferDevWebProfile } from "./dev-url.js";
 import { loadRootDotenv, resetRootDotenvFlag } from "./load-dotenv.js";
-export const MCP_READ_SCOPE_NAMES = ["shopping:read", "chores:read", "notes:read"] as const;
-export const MCP_WRITE_SCOPE_NAMES = ["shopping:write", "chores:write"] as const;
+/** Reads a deployment offers when MCP_READ_SCOPES is not set. Health and calendar are never a default. */
+export const MCP_DEFAULT_READ_SCOPE_NAMES = ["shopping:read", "chores:read", "notes:read"] as const;
+export const MCP_READ_SCOPE_NAMES = [...MCP_DEFAULT_READ_SCOPE_NAMES, "health:read", "calendar:read"] as const;
+/** Scopes the browser-reviewed write foundation may be configured with. */
+export const MCP_REVIEWED_WRITE_SCOPE_NAMES = ["shopping:write", "chores:write"] as const;
+export const MCP_WRITE_SCOPE_NAMES = [...MCP_REVIEWED_WRITE_SCOPE_NAMES, "health:write"] as const;
+/**
+ * What a member can switch on for one assistant connection. The OAuth scope is the outer
+ * bound a connection holds; a scope with no enabled capability authorizes nothing.
+ */
+export const MCP_CAPABILITIES = {
+  "shopping.read": { scope: "shopping:read", module: "core", access: "read" },
+  "chores.read": { scope: "chores:read", module: "core", access: "read" },
+  "notes.read": { scope: "notes:read", module: "core", access: "read" },
+  "shopping.add": { scope: "shopping:write", module: "core", access: "write" },
+  // Group label, times and logging status only. Never a medication name, strength or history.
+  "health.groups.read": { scope: "health:read", module: "health", access: "read" },
+  "health.groups.log": { scope: "health:write", module: "health", access: "write", requires: "health.groups.read" },
+  // Merged busy intervals on chosen calendars only. Never a title, location, attendee or calendar name.
+  "calendar.availability": { scope: "calendar:read", module: "calendar_sync", access: "read" },
+} as const satisfies Record<string, { scope: string; module: "core" | "health" | "calendar_sync"; access: "read" | "write"; requires?: string }>;
+export type McpModule = typeof MCP_CAPABILITIES[keyof typeof MCP_CAPABILITIES]["module"];
+export type McpCapability = keyof typeof MCP_CAPABILITIES;
+export const MCP_CAPABILITY_NAMES = Object.keys(MCP_CAPABILITIES) as McpCapability[];
+/** Capabilities that complete in chat without a browser review. A separate ceiling from reviewed writes. */
+export const MCP_DIRECT_ACTION_NAMES = ["shopping.add", "health.groups.log"] as const satisfies readonly McpCapability[];
+export type McpDirectAction = typeof MCP_DIRECT_ACTION_NAMES[number];
 export { subscriptionAllowsWork, type SubscriptionAccessState } from "./subscription-access.js";
 
 export { loadRootDotenv, resetRootDotenvFlag } from "./load-dotenv.js";
@@ -56,10 +81,14 @@ export const envSchema = z
     MCP_CHATGPT_ENABLED: z.string().optional().transform((v) => v === "true" || v === "1"),
     MCP_WRITES_ENABLED: z.string().optional().transform((v) => v === "true" || v === "1"),
     MCP_WRITE_SCOPES: z.string().transform((value) => value.split(",").map((scope) => scope.trim()))
-      .pipe(z.array(z.enum(MCP_WRITE_SCOPE_NAMES)).min(1).max(2).refine((scopes) => new Set(scopes).size === scopes.length, "Duplicate MCP write scope")).optional(),
+      .pipe(z.array(z.enum(MCP_REVIEWED_WRITE_SCOPE_NAMES)).min(1).max(2).refine((scopes) => new Set(scopes).size === scopes.length, "Duplicate MCP write scope")).optional(),
+    /** Direct assistant actions; independent of MCP_WRITES_ENABLED, which never turns these on. */
+    MCP_DIRECT_ACTIONS_ENABLED: z.string().optional().transform((v) => v === "true" || v === "1"),
+    MCP_DIRECT_ACTIONS: z.string().transform((value) => value.split(",").map((action) => action.trim()))
+      .pipe(z.array(z.enum(MCP_DIRECT_ACTION_NAMES)).min(1).max(MCP_DIRECT_ACTION_NAMES.length).refine((actions) => new Set(actions).size === actions.length, "Duplicate MCP direct action")).optional(),
     MCP_GROK_BOT_ENABLED: z.string().optional().transform((v) => v === "true" || v === "1"),
     MCP_READ_SCOPES: z.string().transform((value) => value.split(",").map((scope) => scope.trim()))
-      .pipe(z.array(z.enum(MCP_READ_SCOPE_NAMES)).min(1).max(3).refine((scopes) => new Set(scopes).size === scopes.length, "Duplicate MCP read scope")).optional(),
+      .pipe(z.array(z.enum(MCP_READ_SCOPE_NAMES)).min(1).max(MCP_READ_SCOPE_NAMES.length).refine((scopes) => new Set(scopes).size === scopes.length, "Duplicate MCP read scope")).optional(),
     /** Only on a separate deployment populated exclusively with synthetic data. */
     MCP_SYNTHETIC_DEPLOYMENT: z.string().optional().transform((v) => v === "true" || v === "1"),
     DEPLOYMENT_MODE: deploymentMode.default("single"),
@@ -196,6 +225,9 @@ export const envSchema = z
     if (data.MCP_WRITES_ENABLED && (!data.MCP_ENABLED || data.DEMO_MODE || !data.ENCRYPTION_KEY || !data.MCP_WRITE_SCOPES?.length)) {
       ctx.addIssue({ code: "custom", path: ["MCP_WRITES_ENABLED"], message: "Reviewed writes require MCP, encryption, an explicit write-scope ceiling and a non-demo deployment" });
     }
+    if (data.MCP_DIRECT_ACTIONS_ENABLED && (!data.MCP_ENABLED || data.DEMO_MODE || !data.MCP_DIRECT_ACTIONS?.length)) {
+      ctx.addIssue({ code: "custom", path: ["MCP_DIRECT_ACTIONS_ENABLED"], message: "Direct assistant actions require MCP, an explicit action ceiling and a non-demo deployment" });
+    }
     if (data.MCP_GROK_BOT_ENABLED && (!data.MCP_ENABLED || data.DEMO_MODE || !data.MCP_READ_SCOPES || data.MCP_READ_SCOPES.includes("notes:read"))) {
       ctx.addIssue({ code: "custom", path: ["MCP_GROK_BOT_ENABLED"], message: "Grok Bot requires MCP, a non-demo deployment and an explicit shopping/chores-only read ceiling" });
     }
@@ -258,8 +290,17 @@ export const envSchema = z
 
 export type Env = z.infer<typeof envSchema>;
 
-export function mcpSupportedScopes(env: Pick<Env, "MCP_READ_SCOPES"> & Partial<Pick<Env, "MCP_WRITES_ENABLED" | "MCP_WRITE_SCOPES">>) {
-  return [...(env.MCP_READ_SCOPES ?? MCP_READ_SCOPE_NAMES), ...(env.MCP_WRITES_ENABLED ? env.MCP_WRITE_SCOPES ?? [] : []), "offline_access" as const];
+/** Direct actions an operator has switched on for this deployment. */
+export function mcpDirectActions(env: Partial<Pick<Env, "MCP_DIRECT_ACTIONS_ENABLED" | "MCP_DIRECT_ACTIONS">>): readonly McpDirectAction[] {
+  return env.MCP_DIRECT_ACTIONS_ENABLED ? env.MCP_DIRECT_ACTIONS ?? [] : [];
+}
+
+export function mcpSupportedScopes(env: Pick<Env, "MCP_READ_SCOPES"> & Partial<Pick<Env, "MCP_WRITES_ENABLED" | "MCP_WRITE_SCOPES" | "MCP_DIRECT_ACTIONS_ENABLED" | "MCP_DIRECT_ACTIONS">>) {
+  const write = new Set<typeof MCP_WRITE_SCOPE_NAMES[number]>([
+    ...(env.MCP_WRITES_ENABLED ? env.MCP_WRITE_SCOPES ?? [] : []),
+    ...mcpDirectActions(env).map((action) => MCP_CAPABILITIES[action].scope),
+  ]);
+  return [...(env.MCP_READ_SCOPES ?? MCP_DEFAULT_READ_SCOPE_NAMES), ...MCP_WRITE_SCOPE_NAMES.filter((scope) => write.has(scope)), "offline_access" as const];
 }
 
 export const KNOWN_HOUSEHOLD_MODULES = [

@@ -3,7 +3,7 @@ import { Card, CardBody } from "../ui/Card";
 export function ChatGptConnectionSetup({ enabled, serverUrl, setupUrl }: { enabled: boolean; serverUrl: string; setupUrl: string }) {
   return <Card><CardBody className="space-y-3">
     <h2 className="font-semibold">Connect ChatGPT</h2>
-    <p className="text-sm">Connect your ChatGPT account to the household information you approve. You will sign in to Domi Ops and review permissions before any information is shared.</p>
+    <p className="text-sm">Connect your ChatGPT account to the household information you approve. You will sign in to Domi Ops and choose what it can read and do before any information is shared.</p>
     {enabled ? <>
       <a href={setupUrl} target="_blank" rel="noopener noreferrer" className="inline-flex rounded-xl bg-[var(--color-accent)] px-4 py-2 font-medium text-white">Open ChatGPT plugins</a>
       <ol className="list-decimal space-y-1 pl-5 text-sm">

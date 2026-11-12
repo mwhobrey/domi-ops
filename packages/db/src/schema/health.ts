@@ -409,6 +409,8 @@ export const healthMedicationLogs = pgTable(
     healthEventId: uuid("health_event_id").references(() => healthEvents.id, {
       onDelete: "set null",
     }),
+    /** Set when an assistant connection recorded this entry (migration 0109). The FK lives in SQL. */
+    loggedViaConnectionId: uuid("logged_via_connection_id"),
   },
   (t) => [
     // One log per medication per scheduled instant — the DB backstop behind recordDose()

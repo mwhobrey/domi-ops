@@ -11,6 +11,41 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 - README and the marketing site now link the public Domi Ops ChatGPT listing
   ([Available in ChatGPT](https://chatgpt.com/plugins/plugin_asdk_app_6ae0aba26a6481919c67125a963fa4f9))
   for the read-only Cloud shopping-and-chores plugin.
+- Assistants can report when a member is busy on calendars that member chooses, as
+  merged busy blocks with no event titles, locations, people or calendar names. Events
+  imported from Google Calendar are left out and the assistant is told so. Inert unless
+  an operator lists `calendar:read` in `MCP_READ_SCOPES` and the member switches it on
+  and picks calendars. Migration 0110.
+- ChatGPT and Grok Bot packages are version 0.2.0 and include a household actions skill,
+  and the Claude generator is unchanged for now. Listing drafts, review cases and the
+  privacy policy's assistant section describe the new abilities. The Claude plugin source
+  in `integrations/claude/domi-ops-household` stays at 0.1.2 on `main`, because the
+  Claude portal reads it from there; 0.2.0 follows in a separate change once the hosted
+  server offers the new scopes. Nothing is submitted; see
+  [the acceptance guide](docs/MCP_ASSISTANT_ACTIONS_ACCEPTANCE.md).
+- A connection approved through an older server build during a rolling deploy keeps the
+  reads it approved instead of arriving with nothing switched on.
+- Fixed: "Remove permissions" failed for an assistant connection holding more than four
+  permissions.
+
+- Assistant connections now have per-connection capabilities. A member can leave a
+  requested read (shopping, chores or notes) switched off when connecting, and review
+  or turn off capabilities later. Existing connections keep exactly the reads they
+  already had. The consent screen can show the exact data an assistant would receive
+  before anything is shared. Adds the foundation for direct assistant actions, which
+  stay off:
+  `MCP_DIRECT_ACTIONS_ENABLED` defaults to false and no action is registered.
+  See [the pilot spec](docs/MCP_ASSISTANT_ACTIONS_SPEC.md).
+  The first action, adding an item to the shared shopping list, exists but is inert
+  until an operator lists `shopping.add` in `MCP_DIRECT_ACTIONS` and a member switches
+  it on for a connection. Items added this way show "Added by ..." in the shopping list.
+  A member can also share chosen medication groups with an assistant as a label,
+  times and logging status, and let it record a group as taken. Medication names,
+  strengths and history are never sent. This too is off until an operator lists
+  `health:read` in `MCP_READ_SCOPES` and `health.groups.log` in `MCP_DIRECT_ACTIONS`.
+  **Migration:** `0109_mcp_med_group_selections` adds two tables and one column.
+  **Migration:** `0108_mcp_capabilities` adds two tables and backfills capability rows
+  for existing connections. Re-grant the restricted app role after migrating.
 - Hosted deploys now use the image tag the caller sets (CI tag deploys, or
   `DOMI_OPS_IMAGE_TAG=X deploy/deploy-hosted.sh`) even when compose `.env` pins
   `DOMI_OPS_IMAGE_TAG`. Before, `.env` won, so the v0.12.0 hosted deploy stayed on

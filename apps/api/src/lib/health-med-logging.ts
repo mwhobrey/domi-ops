@@ -105,6 +105,8 @@ export interface RecordDoseInput {
   source: DoseLogSource;
   /** Create a "Took <med>" health event alongside the log. Only fires when a row is inserted. */
   alsoCreateEvent?: boolean;
+  /** The assistant connection that recorded this for the member. Only set on rows this call inserts. */
+  loggedViaConnectionId?: string | null;
 }
 
 async function createTakenEvent(db: Database, env: Env, input: RecordDoseInput): Promise<string> {
@@ -175,7 +177,8 @@ export async function recordDose(
     }
     const [row] = await db
       .update(healthMedicationLogs)
-      .set({ status, loggedAt, loggedByUserId, notes: notesEnc })
+      // A person changing an entry makes it theirs, whoever recorded it first.
+      .set({ status, loggedAt, loggedByUserId, notes: notesEnc, loggedViaConnectionId: input.loggedViaConnectionId ?? null })
       .where(eq(healthMedicationLogs.id, existing.id))
       .returning();
     return { log: serializeHealthLog(row, env), healthEventId: row.healthEventId, outcome: "updated" };
@@ -184,7 +187,7 @@ export async function recordDose(
   if (source === "bulk") {
     const inserted = await db
       .insert(healthMedicationLogs)
-      .values({ medicationId: med.id, scheduledAt, status, loggedAt, loggedByUserId, notes: notesEnc })
+      .values({ medicationId: med.id, scheduledAt, status, loggedAt, loggedByUserId, notes: notesEnc, loggedViaConnectionId: input.loggedViaConnectionId ?? null })
       .onConflictDoNothing({
         target: [healthMedicationLogs.medicationId, healthMedicationLogs.scheduledAt],
         where: isNotNull(healthMedicationLogs.scheduledAt),
@@ -217,7 +220,7 @@ export async function recordDose(
     .onConflictDoUpdate({
       target: [healthMedicationLogs.medicationId, healthMedicationLogs.scheduledAt],
       targetWhere: isNotNull(healthMedicationLogs.scheduledAt),
-      set: { status, loggedAt, loggedByUserId, notes: notesEnc },
+      set: { status, loggedAt, loggedByUserId, notes: notesEnc, loggedViaConnectionId: input.loggedViaConnectionId ?? null },
     })
     .returning();
   return { log: serializeHealthLog(row, env), healthEventId: row.healthEventId, outcome: "inserted" };

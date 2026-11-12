@@ -158,3 +158,13 @@ real household briefing to the old synthetic connector.
 - [OpenAI submission and review metadata](https://developers.openai.com/plugins/deploy/submission)
 - [Claude plugin manifest fields](https://code.claude.com/docs/en/plugins-reference)
 - [Claude plugin portal checks](https://claude.com/docs/plugins/pre-submission-checklist)
+
+## Update 0.2.0: assistant actions (prepared 2026-11-12)
+
+The checkpoints above describe the read-only 0.1.x listings. Package 0.2.0 adds
+assistant actions. `scripts/mcp-review/materials.mjs` writes a different review plan
+when a scope set includes an action: still five positive and three negative cases, now
+covering the action tools, withheld details and an instruction hidden in record text.
+The fictional reviewer household needs a medication group and a calendar as well; the
+generated `fixtureRequirements` list them. None of the 0.2.0 cases has been run.
+See [the acceptance guide](MCP_ASSISTANT_ACTIONS_ACCEPTANCE.md).

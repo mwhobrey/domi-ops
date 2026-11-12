@@ -186,3 +186,31 @@ blocks future access; provider copies remain subject to its own terms/settings.
 
 The live metadata response is primary evidence for the identity/redirect set;
 Cursor editor documentation alone does not prove the installed Bot's behavior.
+
+## Assistant actions (2026-11, not deployed)
+
+The sections above describe the read-only integration that is live. The
+[assistant actions spec](MCP_ASSISTANT_ACTIONS_SPEC.md) adds per-connection
+capabilities and direct actions. For Grok Bot specifically:
+
+- Its policy now also allows `shopping:write`. That scope is grantable only while an
+  operator lists `shopping.add` in `MCP_DIRECT_ACTIONS`, and it does nothing until the
+  member switches "Add items to the shared shopping list" on for the connection.
+- Its policy does not allow `health:read` or `health:write`. Medication group access is
+  held back for Grok Bot until it has passed acceptance on Claude and ChatGPT.
+- Server side, observed 2026-11-12 (`mcp-authorization.integration.test.ts`, both
+  deployment modes): on a deployment that advertises `health:read`, `calendar:read` and
+  `health:write` as well, a Grok Bot request for exactly its allowed scopes reaches consent
+  with exactly those scopes. A request for everything advertised, or for its allowed scopes
+  plus one more, is refused whole (`invalid_consent_query`); the server never trims it.
+- Still not observed: whether the real Cursor cloud client asks for the scopes the member
+  typed (the card's list) or for everything the server advertises. If the former, the card
+  is enough. If the latter, Grok Bot cannot connect to a deployment advertising health or
+  calendar. Test that with the real client on a fictional lab before listing `health:read`
+  or `calendar:read` in `MCP_READ_SCOPES` on a deployment that has Grok Bot enabled. Until
+  then, do not enable Grok Bot on such a deployment.
+- The AI connections page suggests only scopes this policy accepts.
+
+The Grok Bot packager accepts `shopping:write` as a third scope and then ships the
+household actions skill beside the briefing skill. It refuses health and calendar
+scopes. No listing has been changed and nothing has been submitted.

@@ -2,24 +2,39 @@ import { Hono } from "hono";
 import { createMcpHonoApp } from "@modelcontextprotocol/hono";
 import { McpServer, createMcpHandler } from "@modelcontextprotocol/server";
 import { McpAuthorizationError, mcpUrls, type createMcpAuthorization } from "@domi-ops/auth";
-import type { Database } from "@domi-ops/db";
+import { and, eq, gt, sql } from "drizzle-orm";
+import { mcpActionEvents, type Database } from "@domi-ops/db";
 import { mcpSupportedScopes, type Env } from "@domi-ops/config";
-import { admit, finish, tagTool } from "./activity.js";
+import { admit, finish, metadataContext, tagTool } from "./activity.js";
 import { checkOperation, permittedTools, MCP_LIMITS, McpGatewayError } from "./access.js";
-import { approvedToolNames, toolTitles, contextTool, type McpTool } from "./tools.js";
+import { approvedToolNames, directToolNames, toolTitles, contextTool, type McpTool } from "./tools.js";
 import { readMcpBody } from "./bounds.js";
 import { readTools } from "./read-tools.js";
+import { directTools } from "./direct-tools.js";
+import { medGroupTools } from "./med-group-tools.js";
+import { calendarTools } from "./calendar-availability.js";
 
 type Authorization = ReturnType<ReturnType<typeof createMcpAuthorization>["attach"]>;
 
+/**
+ * After-commit work runs detached from the reply, so a failure is reported here or nowhere.
+ * Only the tool, the connection and the error's class name: a provider's message can quote what was sent.
+ */
+export function reportAfterCommitFailure(tool: string, connectionId: string, error: unknown) {
+  console.error("[mcp] after-commit step failed", { tool, connectionId, error: error instanceof Error ? error.name : "unknown" });
+}
+
 /** Stateless transport. Only code-reviewed tools may be registered here. */
-export function mcpGateway(db: Database, auth: Authorization, env: Env, tools: readonly McpTool[] = [contextTool, ...readTools(env)]) {
+export function mcpGateway(db: Database, auth: Authorization, env: Env, tools: readonly McpTool[] = [contextTool, ...readTools(env), ...directTools(), ...medGroupTools(env), ...calendarTools()]) {
   const app = new Hono();
   const urls = mcpUrls(env), canonical = new URL(urls.origin);
   const resourceScopes = mcpSupportedScopes(env);
   const challenge = `Bearer resource_metadata="${urls.origin}/.well-known/oauth-protected-resource/api/mcp"`;
   const failure = (code: string, status: number, headers?: Record<string, string>) => Response.json({ error: code }, { status, headers: { "Cache-Control": "no-store", ...headers } });
-  if (tools.some((tool) => !approvedToolNames.includes(tool.name) || tool.access !== "read") || new Set(tools.map((t) => t.name)).size !== tools.length) throw new Error("Invalid MCP tool registry");
+  // A reserved action name must be a direct write and nothing else may write.
+  const direct = (tool: McpTool) => (directToolNames as readonly string[]).includes(tool.name);
+  if (tools.some((tool) => !approvedToolNames.includes(tool.name) || (direct(tool) ? tool.execution !== "direct" || tool.access !== "write" : tool.execution === "direct" || tool.access !== "read")) ||
+    new Set(tools.map((t) => t.name)).size !== tools.length) throw new Error("Invalid MCP tool registry");
   for (const path of ["/api/mcp", "/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/api/mcp"]) app.use(path, async (_c, next) => {
     if (!env.MCP_ENABLED || env.DEMO_MODE) return failure("not_found", 404);
     await next();
@@ -63,16 +78,33 @@ export function mcpGateway(db: Database, auth: Authorization, env: Env, tools: r
             const server = new McpServer({ name: "domi-ops", version: "1.0.0" }, { capabilities: { tools: { listChanged: false } } });
             server.server.onerror = () => {}; // Never forward protocol errors/arguments to telemetry.
             for (const tool of available) {
-              server.registerTool(tool.name, { title: toolTitles[tool.name], description: tool.description, inputSchema: tool.input, outputSchema: tool.output, annotations: { title: toolTitles[tool.name], readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } }, async (args) => {
+              server.registerTool(tool.name, { title: toolTitles[tool.name], description: tool.description, inputSchema: tool.input, outputSchema: tool.output, annotations: { title: toolTitles[tool.name], readOnlyHint: tool.access === "read", destructiveHint: false, idempotentHint: true, openWorldHint: false } }, async (args) => {
                 outcome = "tool_denied";
+                let committed = false;
+                let afterCommit: ((tx: Database) => Promise<void>) | undefined;
                 await tagTool(db, identity!, admission!.id, tool.name);
                 try {
-                  const result = await auth.withGrantContext(bearerRequest, tool.scopes, async (tx, current) => {
+                  const result = tool.execution === "direct" ? await auth.withDirectActionContext(bearerRequest, tool.scopes, async (tx, current) => {
+                    // Authority, capability, budget, the write and its activity row share one transaction.
+                    await checkOperation(tx, env, current, tool);
+                    const [recent] = await tx.select({ count: sql<number>`count(*)::int` }).from(mcpActionEvents)
+                      .where(and(eq(mcpActionEvents.connectionId, current.connectionId), gt(mcpActionEvents.createdAt, sql`clock_timestamp() - interval '1 minute'`)));
+                    if (recent.count >= MCP_LIMITS.actionsPerMinute) throw new McpGatewayError("rate_limited", 429);
+                    const done = await tool.run(tx, current, tool.input.parse(args), signal);
+                    afterCommit = done.afterCommit;
+                    const value = tool.output.parse(done.result);
+                    await tx.insert(mcpActionEvents).values({ householdId: current.householdId, userId: current.userId, connectionId: current.connectionId,
+                      action: tool.capability, outcome: done.activity.outcome, counts: done.activity.counts ?? null, targetId: done.activity.targetId ?? null });
+                    return value;
+                  }) : await auth.withGrantContext(bearerRequest, tool.scopes, async (tx, current) => {
                     await checkOperation(tx, env, current, tool);
                     const value = await tool.run(tx, current, tool.input.parse(args), signal);
                     if (tool.name === "get_connection_context") value.tools = (await permittedTools(tx, env, current, tools)).map((entry) => entry.name);
                     return tool.output.parse(value);
                   });
+                  committed = tool.execution === "direct";
+                  // Not awaited: a slow push provider must not hold the assistant's reply or change its outcome.
+                  if (committed && afterCommit) void metadataContext(db, identity!, afterCommit).catch((error) => reportAfterCommitFailure(tool.name, identity!.connectionId, error));
                   signal.throwIfAborted();
                   const text = JSON.stringify(result);
                   if (Buffer.byteLength(text) * 2 > MCP_LIMITS.resultBytes - 1024) throw new McpGatewayError("result_too_large", 413);
@@ -80,7 +112,11 @@ export function mcpGateway(db: Database, auth: Authorization, env: Env, tools: r
                   return { structuredContent: result, content: [{ type: "text" as const, text }] };
                 } catch {
                   if (signal.aborted) outcome = "deadline_exceeded";
-                  return { isError: true, content: [{ type: "text" as const, text: "Tool unavailable or request exceeded its bounds." }] };
+                  // A failure inside the action's transaction rolls everything back, so "not saved" is exact.
+                  const text = tool.execution !== "direct" ? "Tool unavailable or request exceeded its bounds."
+                    : committed ? "The action was saved but its result could not be returned. Read the current state before telling the user what happened."
+                    : "Nothing was saved. The action is unavailable or could not be completed. Repeating the same request is safe.";
+                  return { isError: true, content: [{ type: "text" as const, text }] };
                 }
               });
             }

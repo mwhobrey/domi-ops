@@ -32,6 +32,8 @@ export const mcpConnections = pgTable("mcp_connections", {
   activatedAt: time("activated_at"),
   expiresAt: time("expires_at").notNull(),
   revokedAt: time("revoked_at"),
+  /** Set by every build that writes capability rows at consent. Null means an older build prepared the grant. */
+  capabilityConsentVersion: text("capability_consent_version"),
 }, (t) => [
   uniqueIndex("mcp_connections_household_id_id").on(t.householdId, t.id),
   uniqueIndex("mcp_connections_owner_identity").on(t.householdId, t.id, t.userId),

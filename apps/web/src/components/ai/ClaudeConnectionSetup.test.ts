@@ -13,7 +13,7 @@ describe("Claude connection setup", () => {
   it("shows the actual server, consent boundary and isolated external link", () => {
     const html = renderToStaticMarkup(createElement(ClaudeConnectionSetup, { ...options, enabled: true }));
     expect(html).toContain(options.serverUrl);
-    expect(html).toContain("review permissions before any information is shared");
+    expect(html).toContain("choose what it can read and do before any information is shared");
     expect(html).toContain('rel="noopener noreferrer"');
     expect(html).toContain('target="_blank"');
     expect(html).not.toContain("MCP_CLAUDE_ENABLED");

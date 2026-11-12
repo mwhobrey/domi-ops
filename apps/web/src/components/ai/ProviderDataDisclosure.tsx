@@ -24,7 +24,7 @@ export function ProviderDataDisclosure({ provider }: { provider: string }) {
       <h4 className="font-semibold">Before sharing with Grok Bot</h4>
       <p>Grok Bot uses Cursor’s cloud connector identity and account data settings. Connected apps can be available to every Bot on your account. Sharing a Bot can introduce additional access; review those boundaries before sharing household information.</p>
       <p>Cloud storage is required. Training opt-out follows the applicable Cursor account and privacy settings; do not assume ordinary Grok, API or business terms apply. Domi Ops cannot verify your settings or delete provider copies.</p>
-      <p>This approval is for read-only shopping and chores through MCP. It does not give a Bot a browser login to Domi Ops or permit changes through other tools.</p>
+      <p>This approval covers shopping and chores through MCP, limited to what you switch on above. It does not give a Bot a browser login to Domi Ops or permit changes through other tools.</p>
       <p><a className="underline" href="https://docs.x.ai/grok-bot/approvals-security-and-privacy" target="_blank" rel="noopener noreferrer">Grok Bot privacy and account boundaries</a>{" · "}<a className="underline" href="https://cursor.com/privacy" target="_blank" rel="noopener noreferrer">Cursor privacy policy</a></p>
     </div>}
     <p>Disconnect stops future access. It cannot erase information already copied into an assistant conversation. Reconnecting replaces this assistant’s previous grant for your household.</p>

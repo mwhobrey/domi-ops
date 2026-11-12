@@ -366,6 +366,31 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
       await expect(limited.mcp.authorize(bearer(next.access_token))).rejects.toBeTruthy();
     } finally { auth = originalAuth; }
   });
+  it("Grok Bot on a deployment that also advertises health and calendar: its allowed scopes connect and a request for the rest is refused whole", async () => {
+    const originalAuth = auth, id = GROK_BOT_CLIENT_ID, redirect = GROK_BOT_CALLBACK;
+    const wide: Env = { ...env, MCP_GROK_BOT_ENABLED: true, MCP_READ_SCOPES: ["shopping:read", "chores:read", "health:read", "calendar:read"],
+      MCP_DIRECT_ACTIONS_ENABLED: true, MCP_DIRECT_ACTIONS: ["shopping.add", "health.groups.log"], MODULES_ENABLED: ["core", "health", "calendar_sync"] } as Env;
+    const metadata = { client_id: id, client_name: "Cursor", client_uri: "https://cursor.com", redirect_uris: [...GROK_BOT_METADATA_CALLBACKS],
+      grant_types: ["authorization_code", "refresh_token"], response_types: ["code"], token_endpoint_auth_method: "none" };
+    const transport = vi.fn(async (input: string | Request | URL) => {
+      if (String(input) !== id) throw new Error("Unexpected metadata fetch");
+      return Response.json(metadata, { headers: { "cache-control": "no-store" } });
+    });
+    const limited = createBetterAuth(db, wide, { cookiePrefix, mcpMetadataFetch: transport });
+    auth = limited;
+    clientIds.push(id);
+    try {
+      const issuer = z.object({ scopes_supported: z.array(z.string()) }).parse(await (await limited.mcp.metadata(new Request(origin + "/.well-known/oauth-authorization-server/auth"))).json());
+      expect(issuer.scopes_supported).toEqual(expect.arrayContaining(["health:read", "calendar:read", "health:write"]));
+      // Observed 2026-11-12. A client that asks for only what the policy allows connects. A client that asks for
+      // everything advertised, or for one extra scope, is refused outright; the server never trims the request.
+      // What the real Cursor cloud client requests when more is advertised has not been observed.
+      const preview = async (requested: string[]) => limited.mcp.previewConsent(owner.headers, owner.householdId, await begin(owner, requested, id, redirect));
+      expect((await preview(["shopping:read", "chores:read", "shopping:write", "offline_access"])).scopes).toEqual(["shopping:read", "chores:read", "shopping:write", "offline_access"]);
+      await expect(preview(issuer.scopes_supported)).rejects.toMatchObject({ code: "invalid_consent_query" });
+      await expect(preview(["shopping:read", "chores:read", "health:read", "offline_access"])).rejects.toMatchObject({ code: "invalid_consent_query" });
+    } finally { auth = originalAuth; }
+  });
   it("links a discovery-driven Gemini client without notes and rejects disabled scopes on existing grants", async () => {
     const oldToken = await connect(owner, scopes, [ownNote]);
     const oldQuery = await begin(owner, scopes);

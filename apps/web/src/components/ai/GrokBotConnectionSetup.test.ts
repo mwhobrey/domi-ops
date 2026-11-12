@@ -13,7 +13,7 @@ describe("Grok Bot onboarding boundaries", () => {
     expect(disabled).not.toContain("Authenticate");
     const enabled = renderToStaticMarkup(createElement(GrokBotConnectionSetup, { enabled: true, serverUrl, scopes }));
     expect(enabled).toContain(serverUrl);
-    expect(enabled).toContain("Stop if it asks for notes or write access");
+    expect(enabled).toContain("Stop if it asks for anything not listed in step 2");
     expect(enabled).toContain("Cursor cloud identity");
     expect(enabled).toContain("https://cursor.com/oauth/mcp-client.json");
     expect(enabled).toContain(scopes.join(" "));

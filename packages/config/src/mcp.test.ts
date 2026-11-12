@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { envSchema, mcpSupportedScopes } from "./index.js";
+import { envSchema, mcpDirectActions, mcpSupportedScopes, MCP_CAPABILITIES, MCP_DIRECT_ACTION_NAMES } from "./index.js";
 
 const base = { NODE_ENV: "test", PUBLIC_APP_URL: "https://selfhost.example.test", API_URL: "http://api:4000", DATABASE_URL: "postgres://fixture:fixture@localhost/fixture" };
 describe("MCP deployment configuration", () => {
@@ -9,6 +9,40 @@ describe("MCP deployment configuration", () => {
     expect(mcpSupportedScopes(envSchema.parse(candidate))).toContain("shopping:write");
     expect(mcpSupportedScopes(envSchema.parse({...candidate,MCP_WRITES_ENABLED:"false"}))).not.toContain("shopping:write");
     for(const change of [{MCP_ENABLED:"false"},{ENCRYPTION_KEY:undefined},{MCP_WRITE_SCOPES:undefined},{MCP_WRITE_SCOPES:"notes:write"},{DEMO_MODE:"true"}])expect(envSchema.safeParse({...candidate,...change}).success).toBe(false);
+  });
+  it("keeps direct actions off until explicitly listed, independent of reviewed writes", () => {
+    expect(envSchema.parse(base).MCP_DIRECT_ACTIONS_ENABLED).toBe(false);
+    expect(mcpDirectActions(envSchema.parse(base))).toEqual([]);
+    const candidate = { ...base, MCP_ENABLED: "true", MCP_DIRECT_ACTIONS_ENABLED: "true", MCP_DIRECT_ACTIONS: "shopping.add" };
+    const enabled = envSchema.parse(candidate);
+    expect(enabled.MCP_WRITES_ENABLED).toBe(false);
+    expect(mcpDirectActions(enabled)).toEqual(["shopping.add"]);
+    expect(mcpSupportedScopes(enabled)).toEqual(["shopping:read", "chores:read", "notes:read", "shopping:write", "offline_access"]);
+    // A listed ceiling without the switch enables nothing, and reviewed writes never imply it.
+    expect(mcpDirectActions(envSchema.parse({ ...candidate, MCP_DIRECT_ACTIONS_ENABLED: "false" }))).toEqual([]);
+    expect(mcpDirectActions(envSchema.parse({ ...base, MCP_ENABLED: "true", MCP_WRITES_ENABLED: "true", MCP_WRITE_SCOPES: "shopping:write", ENCRYPTION_KEY: "synthetic-encryption-key-only" }))).toEqual([]);
+    for (const change of [{ MCP_ENABLED: "false" }, { MCP_DIRECT_ACTIONS: undefined }, { MCP_DIRECT_ACTIONS: "" }, { MCP_DIRECT_ACTIONS: "shopping.read" },
+      { MCP_DIRECT_ACTIONS: "shopping.add,shopping.add" }, { MCP_DIRECT_ACTIONS: "health.groups.read" }, { DEMO_MODE: "true" }]) {
+      expect(envSchema.safeParse({ ...candidate, ...change }).success).toBe(false);
+    }
+    for (const name of MCP_DIRECT_ACTION_NAMES) expect(MCP_CAPABILITIES[name].access).toBe("write");
+    // Health scopes are never offered unless an operator lists them, and never by reviewed writes.
+    expect(mcpSupportedScopes(envSchema.parse(base))).not.toContain("health:read");
+    const health = envSchema.parse({ ...base, MCP_ENABLED: "true", MCP_READ_SCOPES: "shopping:read,health:read", MCP_DIRECT_ACTIONS_ENABLED: "true", MCP_DIRECT_ACTIONS: "health.groups.log" });
+    expect(mcpSupportedScopes(health)).toEqual(["shopping:read", "health:read", "health:write", "offline_access"]);
+    expect(envSchema.safeParse({ ...base, MCP_ENABLED: "true", MCP_WRITES_ENABLED: "true", MCP_WRITE_SCOPES: "health:write", ENCRYPTION_KEY: "synthetic-encryption-key-only" }).success).toBe(false);
+  });
+  it("offers calendar availability only when an operator lists it, as a read with its own module", () => {
+    expect(mcpSupportedScopes(envSchema.parse(base))).not.toContain("calendar:read");
+    const calendar = envSchema.parse({ ...base, MCP_ENABLED: "true", MCP_READ_SCOPES: "shopping:read,calendar:read" });
+    expect(mcpSupportedScopes(calendar)).toEqual(["shopping:read", "calendar:read", "offline_access"]);
+    expect(MCP_CAPABILITIES["calendar.availability"]).toEqual({ scope: "calendar:read", module: "calendar_sync", access: "read" });
+    // It is a read, so it can never be listed as a direct action.
+    expect(envSchema.safeParse({ ...base, MCP_ENABLED: "true", MCP_DIRECT_ACTIONS_ENABLED: "true", MCP_DIRECT_ACTIONS: "calendar.availability" }).success).toBe(false);
+    expect(envSchema.safeParse({ ...base, MCP_READ_SCOPES: "calendar:write" }).success).toBe(false);
+    // The full pilot ceiling a hosted update would run with.
+    const pilot = envSchema.parse({ ...base, MCP_ENABLED: "true", MCP_READ_SCOPES: "shopping:read,chores:read,health:read,calendar:read", MCP_DIRECT_ACTIONS_ENABLED: "true", MCP_DIRECT_ACTIONS: "shopping.add,health.groups.log" });
+    expect(mcpSupportedScopes(pilot)).toEqual(["shopping:read", "chores:read", "health:read", "calendar:read", "shopping:write", "health:write", "offline_access"]);
   });
   it.each(["single", "shared", "dedicated"])("is opt-in and has no hosted license requirement in %s", (mode) => {
     const off = envSchema.parse({ ...base, DEPLOYMENT_MODE: mode });
