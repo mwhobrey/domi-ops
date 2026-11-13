@@ -51,10 +51,12 @@
 - Grok Bot's policy (`packages/auth/src/mcp-grok-bot.ts`) allows the full actions set
   since 2026-11-12; only `notes:read` is outside it. Its real client has not yet called
   the medication or calendar tools.
-- `skills/domi-ops-household-actions/` ships in the ChatGPT and Grok Bot 0.2.0 packages
-  beside the unchanged briefing skill. The Claude plugin source in
-  `integrations/claude/domi-ops-household` stays at 0.1.2 on `main`; its 0.2.0 is the
-  stacked branch `who-512/claude-package-0-2-0`. No 0.2.0 package is published yet.
+- `skills/domi-ops-household-actions/` ships in the Claude, ChatGPT and Grok Bot 0.2.0
+  packages beside the unchanged briefing skill. The committed Claude plugin source in
+  `integrations/claude/domi-ops-household` is 0.2.0 and must equal the generator's
+  output byte for byte (`scripts/mcp-claude/package.test.mjs`); regenerate it whenever a
+  skill or `scripts/mcp-review/scopes.mjs` text changes. Claude's portal reads that
+  directory from `main`. No 0.2.0 package is published or submitted yet.
 - Stage 4 (2026-11-12, tests run and passing): `get_calendar_availability` in
   `apps/api/src/mcp/calendar-availability.ts`, capability `calendar.availability`, scope
   `calendar:read`, module `calendar_sync`, migration 0110. Local events only; Google
