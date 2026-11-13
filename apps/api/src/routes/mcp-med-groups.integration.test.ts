@@ -40,7 +40,7 @@ const SECRET = "Fictional-secret-med";
 for (const mode of ["single", "shared"] as const) suite(`MCP medication groups (${mode}, restricted role)`, () => {
   let db: Database, auth: ReturnType<typeof createBetterAuth>, env: Env, server: ReturnType<typeof serve>, origin: string, clientId: string;
   let owner: Person, peer: Person, stranger: Person;
-  let morning: string, night: string, peerGroup: string;
+  let morning: string, night: string, peerGroup: string, cookiePrefix: string;
   const meds: Record<string, string> = {};
   const householdIds: string[] = [], userIds: string[] = [], clientIds: string[] = [];
   const callback = "https://synthetic-assistant.example.test/med-groups", verifier = "m".repeat(64);
@@ -123,7 +123,8 @@ for (const mode of ["single", "shared"] as const) suite(`MCP medication groups (
       SESSION_SECRET: "synthetic-who469-session-secret-for-disposable-fixtures-only", ENCRYPTION_KEY: "synthetic-med-group-encryption-only",
       MCP_ENABLED: "true", MCP_SYNTHETIC_DEPLOYMENT: "true", MCP_READ_SCOPES: "shopping:read,health:read",
       MCP_DIRECT_ACTIONS_ENABLED: "true", MCP_DIRECT_ACTIONS: "health.groups.log", MODULES_ENABLED: "core,health" });
-    auth = createBetterAuth(db, env, { cookiePrefix: "meds" + randomUUID().replaceAll("-", ""), deferHouseholdMembership: async () => true });
+    cookiePrefix = "meds" + randomUUID().replaceAll("-", "");
+    auth = createBetterAuth(db, env, { cookiePrefix, deferHouseholdMembership: async () => true });
     app.all("/auth/*", (c) => auth.handler(c.req.raw));
     app.route("/api/mcp-auth", mcpAuthorizationRoutes(auth.mcp, env));
     for (let i = 0; i < 2; i++) {
@@ -411,6 +412,9 @@ for (const mode of ["single", "shared"] as const) suite(`MCP medication groups (
       // Sharing a group is refused while the module is off; what is stored stays as it was.
       expect((await post(`/api/mcp-auth/connections/${token.connectionId}/health-groups`, { groups: [{ groupId: morning, canLog: true, alias: "Renamed" }], acknowledged: true })).status).not.toBe(200);
       expect((await owned(owner, (tx) => tx.select().from(mcpMedGroupSelections).where(eq(mcpMedGroupSelections.connectionId, token.connectionId)))).map((row) => row.canLog)).toEqual([true]);
+      // Narrowing is still allowed with the module off: here one medication is unticked and nothing else changes.
+      expect((await post(`/api/mcp-auth/connections/${token.connectionId}/health-groups`, { groups: [{ groupId: morning, canLog: true, alias: "Morning", excludedMedicationIds: [meds.a] }] })).status).toBe(200);
+      expect((await owned(owner, (tx) => tx.select().from(mcpMedGroupMemberConsents).where(and(eq(mcpMedGroupMemberConsents.connectionId, token.connectionId), eq(mcpMedGroupMemberConsents.medicationId, meds.a))))).map((row) => row.state)).toEqual(["excluded"]);
     } finally { await owned(owner, (tx) => tx.update(households).set({ modulesEnabled: '["core","health"]' }).where(eq(households.id, owner.householdId))); }
     expect(await doseLogs(Object.values(meds))).toEqual([]);
     // Member switches logging off: the tool goes and stored selections lose it.
@@ -425,6 +429,38 @@ for (const mode of ["single", "shared"] as const) suite(`MCP medication groups (
     expect(await owned(owner, (tx) => tx.select().from(mcpMedGroupSelections).where(eq(mcpMedGroupSelections.connectionId, token.connectionId)))).toEqual([]);
     for (const name of health) expect((await rpc(token.access_token, "tools/call", { name, arguments: name === health[0] ? {} : { occurrenceRef: reference } })).result?.isError ?? true).toBeTruthy();
     expect(await doseLogs(Object.values(meds))).toEqual([]);
+  });
+
+  it("keeps reads working when the operator withdraws an action, through a token refresh, and restores it without a reconnect", async () => {
+    await clearLogs();
+    const token = await connect(["shopping.read", READ, LOG], [{ groupId: morning, canLog: true, alias: "Morning" }]) as Awaited<ReturnType<typeof connect>> & { refresh_token: string };
+    const reference = group((await schedule(token.access_token)).value, "Morning").occurrences[0].occurrenceRef;
+    const reads = ["get_connection_context", "list_shopping_items", "get_medication_group_schedule"];
+    // The whole deployment, not only the gateway, now runs without direct actions: health:write is no longer offered.
+    const offEnv = { ...env, MCP_DIRECT_ACTIONS_ENABLED: false } as Env;
+    const off = createBetterAuth(db, offEnv, { cookiePrefix, deferHouseholdMembership: async () => true });
+    const target = mcpGateway(db, off.mcp, offEnv);
+    const originalAuth = auth;
+    let refreshed: { access_token: string; refresh_token: string };
+    // The loopback server's auth handlers resolve this variable per request.
+    auth = off;
+    try {
+      expect((await (await target.request(origin + "/.well-known/oauth-protected-resource/api/mcp")).json() as { scopes_supported: string[] }).scopes_supported).not.toContain("health:write");
+      // The grant still holds health:write. Its reads carry on; only the action is gone.
+      expect(await names(token.access_token, target)).toEqual(reads);
+      expect(group((await schedule(token.access_token, "today", target)).value, "Morning").occurrences).toHaveLength(1);
+      expect((await log(token.access_token, reference, target)).refused).toBe(true);
+      expect(await doseLogs(Object.values(meds))).toEqual([]);
+      const response = await fetch(origin + "/auth/oauth2/token", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ grant_type: "refresh_token", client_id: clientId, refresh_token: token.refresh_token, resource: origin + "/api/mcp" }) });
+      expect(response.status, await response.clone().text()).toBe(200);
+      refreshed = await response.json() as typeof refreshed;
+      expect(await names(refreshed.access_token, target)).toEqual(reads);
+      expect((await log(refreshed.access_token, reference, target)).refused).toBe(true);
+    } finally { auth = originalAuth; }
+    // Offered again: the same grant logs without the member reconnecting.
+    expect(await names(refreshed!.access_token)).toEqual([...reads, "log_medication_group"]);
+    expect((await log(refreshed!.access_token, reference)).value).toMatchObject({ outcome: "logged" });
   });
 
   it("drops logging when narrowing removes the scope its read depends on", async () => {

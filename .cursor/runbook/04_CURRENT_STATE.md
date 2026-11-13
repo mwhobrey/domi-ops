@@ -42,6 +42,11 @@
   anything the action's result depends on. A failure there is logged by
   `reportAfterCommitFailure` with the tool, connection id and error class only; never
   add the error message, since a provider's text can quote what was sent.
+- A write scope the operator stops offering is dropped from what a token can do
+  (`usableScopes` in `packages/auth/src/mcp.ts`) instead of refusing the grant, so the
+  direct-action switch is a real kill switch that leaves reads working. A withdrawn
+  read scope still refuses the grant, by design. Do not apply `usableScopes` on a write
+  path or to a new consent.
 - Grok Bot's policy (`packages/auth/src/mcp-grok-bot.ts`) allows the full actions set
   since 2026-11-12; only `notes:read` is outside it. Its real client has not yet called
   the medication or calendar tools.

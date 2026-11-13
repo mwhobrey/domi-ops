@@ -215,6 +215,6 @@ capabilities and direct actions. For Grok Bot specifically:
   read-only. The owner chose to ship the full set after Claude and ChatGPT passed.
 - The AI connections page suggests only scopes this policy accepts.
 
-The Grok Bot packager accepts `shopping:write` as a third scope and then ships the
-household actions skill beside the briefing skill. It refuses health and calendar
-scopes. No listing has been changed and nothing has been submitted.
+The Grok Bot packager accepts `shopping:write`, `health:read`, `health:write` and
+`calendar:read` on top of the two reads, and then ships the household actions skill
+beside the briefing skill. It refuses `notes:read`. No listing has been changed and nothing has been submitted.

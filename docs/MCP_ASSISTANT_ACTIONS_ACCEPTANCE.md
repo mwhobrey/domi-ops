@@ -34,7 +34,7 @@ The last command needs Docker. It starts a disposable PostgreSQL 16 container, m
 through `0110`, creates the restricted application role and runs the database-backed
 files in single and shared modes. To run one case, add `-TestNamePattern "<text>"`.
 Last full passes (2026-11-12, everything in this document included): typecheck 17 of 17,
-1,682 unit tests, 24 package tests, 275 database tests in 9 files.
+1,682 unit tests, 24 package tests, 277 database tests in 9 files.
 tests, typecheck 17 of 17. Typecheck still passes 17 of 17 with everything below.
 
 ### Unit tests (`npm run test`)
@@ -144,13 +144,13 @@ MODULES_ENABLED must include core, health and calendar_sync
   server side. The real Grok Bot client has not yet been run with medication or
   calendar access; the owner chose to ship the full set on the strength of the Claude
   and ChatGPT runs.
-- **Withdrawing an action later is not a soft switch.** Turning
+- **Withdrawing an action later leaves reads alone.** Turning
   `MCP_DIRECT_ACTIONS_ENABLED` off, or removing an action from `MCP_DIRECT_ACTIONS`,
-  takes its write scope out of what the deployment supports. A connection whose grant
-  holds that scope is then refused on every call, reads included, until its member
-  reconnects, the same way removing a read scope from `MCP_READ_SCOPES` already works.
-  To stop one action without that, have members switch it off under AI connections, or
-  switch the household module off. A softer operator switch is an open follow-up.
+  stops that action on the next call for every connection. A connection whose grant
+  holds the write scope keeps its reads and keeps refreshing its token; only the action
+  is refused and its tool is no longer listed. Listing the action again restores it
+  without a reconnect. Removing a read scope from `MCP_READ_SCOPES` is different and
+  unchanged: connections that hold it are refused until the member reconnects.
 - Enabling any of this on the hosted production deployment is a separate owner
   decision after acceptance.
 
