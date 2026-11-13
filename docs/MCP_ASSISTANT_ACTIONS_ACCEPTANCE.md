@@ -174,15 +174,13 @@ mise exec -- node scripts/mcp-chatgpt/prepare-submission.mjs https://app.domi-op
 ```
 
 ```powershell
-git switch who-512/claude-package-0-2-0
 mise exec -- node scripts/mcp-claude/prepare-submission.mjs https://app.domi-ops.com .qa/claude-submission/NEW-DRAFT
 ```
 
-Run the Claude command from the stacked branch `who-512/claude-package-0-2-0`. On this
-branch and on `main` the Claude generator is still the read-only 0.1.2 one, and its
-draft requests only `shopping:read`, `chores:read` and `offline_access`, which cannot
-exercise the medication or calendar rows in part 4. Check that the draft's `scopes`
-list the full set before starting the Claude run.
+Check that each draft's `scopes` list the full set before starting a run. A Claude draft
+that lists only `shopping:read`, `chores:read` and `offline_access` came from a checkout
+older than the 0.2.0 generator and cannot exercise the medication or calendar rows in
+part 4.
 
 Both write `review-plan.draft.json`, `recording-outline.md` and `release-notes.draft.md`
 into the new directory. Each refuses to overwrite an existing one.
