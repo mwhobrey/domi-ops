@@ -12,8 +12,10 @@ medication groups and calendar availability. Selected notes stay out.
   update use: "Read shared household shopping lists and chores in Grok Bot, with links
   back to Domi Ops. Once you switch each on in Domi Ops, it can also add a shopping
   item, see the times and logging status of medication groups you choose and record one
-  as taken, and see when you are busy on calendars you choose. It never receives
-  medication names or event details, and it cannot edit, remove, skip or undo anything.
+  as taken, and see when you are busy on calendars you choose. It does not receive
+  the medication name, strength, instruction or history fields, or event details. A
+  group's label is sent as you wrote it, so do not put a medication name in a label.
+  It cannot edit, remove, skip or undo anything.
   School, Drive and planning notes are outside its permissions."
 - Declare writes and health data in the form, as for the other two providers.
 - Not yet observed with the real Grok Bot client: the medication and calendar tools,

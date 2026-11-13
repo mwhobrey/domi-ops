@@ -11,7 +11,7 @@ export function GrokBotConnectionSetup({ enabled, serverUrl, scopes }: { enabled
         <li>Choose Authenticate or Authorize, then sign in to this Domi Ops server.</li>
         <li>Review the household and the permissions listed above, including background access, before approving. Stop if it asks for anything not listed in step 2, such as notes.</li>
         {scopes.includes("shopping:write") && <li>Adding shopping items stays off until you switch it on for the connection here, under Change access.</li>}
-        {scopes.some((scope) => scope.startsWith("health:") || scope.startsWith("calendar:")) && <li>Medication group and calendar access also stay off until you switch them on and choose which groups and calendars to share. Grok Bot never receives medication names or event details.</li>}
+        {scopes.some((scope) => scope.startsWith("health:") || scope.startsWith("calendar:")) && <li>Medication group and calendar access also stay off until you switch them on and choose which groups and calendars to share. Grok Bot does not receive the medication name, strength, instruction or history fields, or event details. A group’s label is sent as you write it, so keep medication names out of labels.</li>}
       </ol>
       <p className="text-sm">This uses the published Cursor cloud identity shared with Grok Bot. Leave client secrets, API keys and request headers empty. App connections can be available to your other Bots.</p>
       <p className="text-sm text-[var(--color-text-muted)]">A fictional-data briefing has been tested in Grok Bot desktop. Directory listing is pending; ordinary Grok chat and Cursor desktop have not been verified.</p>

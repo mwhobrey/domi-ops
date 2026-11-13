@@ -32,7 +32,9 @@ function Connection({ connection, refresh, report, busy, setBusy }: {
   // What is already shared must be on screen before it can be edited: saving replaces the stored selection whole.
   const [groupLoadFailed, setGroupLoadFailed] = useState(false);
   const [calendarLoadFailed, setCalendarLoadFailed] = useState(false);
-  const [reload, setReload] = useState(0);
+  // One counter each: retrying one must not reload the other and discard unsaved edits there.
+  const [groupReload, setGroupReload] = useState(0);
+  const [calendarReload, setCalendarReload] = useState(0);
   const sharesGroups = connection.capabilities.includes("health.groups.read");
   const waiting = unapprovedCount(groupView);
   useEffect(() => {
@@ -45,7 +47,7 @@ function Connection({ connection, refresh, report, busy, setBusy }: {
       } catch { if (!cancelled) setGroupLoadFailed(true); }
     })();
     return () => { cancelled = true; };
-  }, [active, sharesGroups, connection.id, reload]);
+  }, [active, sharesGroups, connection.id, groupReload]);
   const [calendarView, setCalendarView] = useState<CalendarView | null>(null);
   const [calendarIds, setCalendarIds] = useState<string[]>([]);
   const sharesCalendars = connection.capabilities.includes("calendar.availability");
@@ -59,11 +61,11 @@ function Connection({ connection, refresh, report, busy, setBusy }: {
       } catch { if (!cancelled) setCalendarLoadFailed(true); }
     })();
     return () => { cancelled = true; };
-  }, [active, sharesCalendars, connection.id, reload]);
+  }, [active, sharesCalendars, connection.id, calendarReload]);
   const groupsPending = sharesGroups && !groupView && capabilities.includes("health.groups.read");
   const calendarsPending = sharesCalendars && !calendarView && capabilities.includes("calendar.availability");
-  const pendingNotice = (failed: boolean, what: string) => failed
-    ? <div role="alert" className="space-y-2 rounded-xl border border-[var(--color-warning)] p-3 text-sm"><p>The {what} this connection already shares could not be loaded, so they cannot be changed yet. Nothing has been changed.</p><Button type="button" variant="secondary" disabled={busy} onClick={() => setReload((count) => count + 1)}>Try again</Button></div>
+  const pendingNotice = (failed: boolean, what: string, retry: () => void) => failed
+    ? <div role="alert" className="space-y-2 rounded-xl border border-[var(--color-warning)] p-3 text-sm"><p>The {what} this connection already shares could not be loaded, so they cannot be changed yet. Nothing has been changed.</p><Button type="button" variant="secondary" disabled={busy} onClick={retry}>Try again</Button></div>
     : <p role="status" className="text-sm">Loading the {what} this connection shares…</p>;
   const calendarsEdited = capabilities.includes("calendar.availability") && calendarsChanged(calendarView?.calendarIds ?? [], calendarIds);
   const addingCalendars = calendarsEdited && calendarIds.some((id) => !(calendarView?.calendarIds ?? []).includes(id));
@@ -141,11 +143,11 @@ function Connection({ connection, refresh, report, busy, setBusy }: {
     {changing && active && <form onSubmit={saveCapabilities} className="space-y-4 border-t border-[var(--color-border)] pt-4">
       <h3 className="font-medium">Change what {connection.clientName} can do</h3>
       <CapabilityChoices idPrefix={connection.id} householdId={connection.householdId} options={connection.availableCapabilities} selected={capabilities} onChange={(next) => { setCapabilities(next); setAcknowledged(false); }} disabled={busy} />
-      {groupsPending && pendingNotice(groupLoadFailed, "medication groups")}
+      {groupsPending && pendingNotice(groupLoadFailed, "medication groups", () => setGroupReload((count) => count + 1))}
       {capabilities.includes("health.groups.read") && !groupsPending && <MedGroupChoices idPrefix={connection.id} householdId={connection.householdId} allowLog={capabilities.includes("health.groups.log")}
         value={medGroups} onChange={(next) => { setMedGroups(next); setGroupsChanged(true); setAcknowledged(false); }} disabled={busy}
         isNew={(groupId, medicationId) => groupView?.selections.find((selection) => selection.groupId === groupId)?.medications.find((med) => med.id === medicationId)?.state === "new"} />}
-      {calendarsPending && pendingNotice(calendarLoadFailed, "calendars")}
+      {calendarsPending && pendingNotice(calendarLoadFailed, "calendars", () => setCalendarReload((count) => count + 1))}
       {capabilities.includes("calendar.availability") && !calendarsPending && <CalendarChoices idPrefix={connection.id} householdId={connection.householdId} value={calendarIds}
         onChange={(next) => { setCalendarIds(next); setAcknowledged(false); }} disabled={busy} />}
       {needsAck && <Checkbox id={connection.id + "-acknowledge"} checked={acknowledged} onChange={(e) => setAcknowledged(e.target.checked)} required disabled={busy}

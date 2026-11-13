@@ -115,10 +115,13 @@ and `notes:read` are unchanged.
 - **Decided:** Grok Bot's ceiling excludes `health:read` and `health:write` until
   medication groups have passed acceptance on Claude and ChatGPT. It gets shopping add
   at the same time as the others.
-- **Changed 2026-11-12:** with Claude and ChatGPT passed, the owner lifted that hold.
-  Grok Bot's policy now allows the full set, calendar availability included, and still
-  excludes selected notes. Its real client has not yet called the medication or
-  calendar tools.
+- **Changed 2026-11-12:** the owner lifted that hold after reporting successful manual
+  runs on Claude and ChatGPT. Those runs are the owner's report; their per-case results
+  are not recorded in this repository, and the acceptance checklist in
+  `MCP_ASSISTANT_ACTIONS_ACCEPTANCE.md` stays the record to complete before a store
+  submission. Grok Bot's policy now allows the full set, calendar availability included,
+  and still excludes selected notes. Its real client has not yet called the medication
+  or calendar tools.
 
 ## 3. Data model
 

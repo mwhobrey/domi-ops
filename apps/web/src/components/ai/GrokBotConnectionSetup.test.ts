@@ -27,7 +27,8 @@ describe("Grok Bot onboarding boundaries", () => {
     const wide = renderToStaticMarkup(createElement(GrokBotConnectionSetup, { enabled: true, serverUrl, scopes: full }));
     expect(wide).toContain(full.join(" "));
     expect(wide).toContain("Medication group and calendar access also stay off");
-    expect(wide).toContain("never receives medication names or event details");
+    expect(wide).toContain("label is sent as you write it, so keep medication names out of labels");
+    expect(wide).not.toContain("never receives medication names");
     expect(wide).toContain("such as notes.");
     const narrow = renderToStaticMarkup(createElement(GrokBotConnectionSetup, { enabled: true, serverUrl, scopes: ["shopping:read", "chores:read", "shopping:write", "offline_access"] }));
     expect(narrow).toContain("Adding shopping items stays off");
