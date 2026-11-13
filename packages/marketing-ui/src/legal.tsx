@@ -1,5 +1,5 @@
 // WHO-512: set this to the day the revised assistant and Health wording is published, not before.
-export const LEGAL_LAST_UPDATED = "October 23, 2026";
+export const LEGAL_LAST_UPDATED = "November 13, 2026";
 export const LEGAL_CONTACT_EMAIL = "privacy@domi-ops.com";
 
 const bodyClass =

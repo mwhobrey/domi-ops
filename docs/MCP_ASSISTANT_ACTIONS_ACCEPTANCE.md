@@ -255,7 +255,7 @@ change is the owner's call at the time.
 - Deploy the reviewed build to the stable hosted endpoint and set the ceiling from
   part 2 there.
 - Publish the updated privacy policy. Its assistant and Health sections
-  changed in `packages/marketing-ui/src/legal.tsx`; set `LEGAL_LAST_UPDATED` to the publish date at that moment (it is deliberately not bumped yet).
+  changed in `packages/marketing-ui/src/legal.tsx`; v0.13.0 publishes it with `LEGAL_LAST_UPDATED` set to its release date.
 - Scope set decided 2026-11-12: the full set. The default drafts request shopping, chores, shopping add,
   medication groups and calendar availability. A narrower update is one argument:
   append `shopping:read,chores:read,shopping:write` to either prepare command. A
