@@ -115,6 +115,10 @@ and `notes:read` are unchanged.
 - **Decided:** Grok Bot's ceiling excludes `health:read` and `health:write` until
   medication groups have passed acceptance on Claude and ChatGPT. It gets shopping add
   at the same time as the others.
+- **Changed 2026-11-12:** with Claude and ChatGPT passed, the owner lifted that hold.
+  Grok Bot's policy now allows the full set, calendar availability included, and still
+  excludes selected notes. Its real client has not yet called the medication or
+  calendar tools.
 
 ## 3. Data model
 
@@ -407,7 +411,7 @@ before any work starts.
 | 4 | Logging window (5.5) | Today and yesterday, household-local |
 | 5 | Push on assistant-recorded doses (5.5) | On by default, member can turn it off |
 | 6 | Google-sourced availability (5.3) | Availability moves after medication groups. Scope decided after the policy review |
-| 7 | Grok Bot and health (2.3) | Held back until medication groups pass on Claude and ChatGPT |
+| 7 | Grok Bot and health (2.3) | Held back until medication groups pass on Claude and ChatGPT. Lifted 2026-11-12: full set |
 | 8 | WHO-480 | Carry over the tool-type refactor. The `prepare_*` reviewed tools are not continued as part of this work |
 
 Still open, and not blocking stages 0 to 2: the Google data policy review, and each
@@ -571,15 +575,16 @@ Not done in stage 2:
 
 - No published provider package, listing or the briefing skill was changed, and no real
   assistant client has called these tools. A draft actions skill exists (see below).
-- Grok Bot's policy does not allow the health scopes. How its client behaves on a
-  deployment that advertises them has not been observed, and hosted runs Grok Bot today.
-  Check this before listing `health:read` on a deployment that has Grok Bot enabled.
+- At this stage Grok Bot's policy did not allow the health scopes. Since 2026-11-12 it
+  allows the full set, which also removes the open question of what its client does on
+  a deployment that advertises them: every advertised scope except notes is now
+  grantable to it.
 - Interval-schedule groups, standalone doses, skipping and other members' groups.
 
 ### Written 2026-11-12, tests run and passing the same day
 
 At the owner's direction the following was written and compiled, with the test runs
-left for a separate pass. That pass ran later the same day: typecheck 17 of 17, 1,674 unit tests, 22 package tests and 269 database tests in 9 files all pass. After the push notice tests were added: 1,679 unit and 271 database tests.
+left for a separate pass. That pass ran later the same day: typecheck 17 of 17, 1,674 unit tests, 22 package tests and 269 database tests in 9 files all pass. After the push notice tests were added: 1,679 unit and 271 database tests. After Grok Bot was widened: 1,681 unit and 273 database tests.
 
 - Code: the post-commit hook for direct actions in the gateway, `pushDoseNotice`, the
   "recorded by an assistant" label, clearing the mark on a member's own edit, and
@@ -676,8 +681,9 @@ Also in this stage:
   so the portal keeps validating 0.1.2 until the hosted server offers the new scopes.
 - ChatGPT: `scripts/mcp-chatgpt/package.mjs` accepts the action scopes. A package
   requests exactly the scopes it is given, and the deployment must offer the same set.
-- Grok Bot: `scripts/mcp-grok-bot/package.mjs` accepts `shopping:write` on top of the
-  shopping read and refuses health and calendar scopes (decision 7).
+- Grok Bot: `scripts/mcp-grok-bot/package.mjs` accepted `shopping:write` on top of the
+  shopping read and refused health and calendar scopes (decision 7). Since 2026-11-12
+  it accepts the full set and refuses only notes.
 - `scripts/mcp-review/materials.mjs` writes five positive and three negative review
   cases for any scope set, a recording outline and release notes.
 - The submission drafts default to shopping, chores, shopping add, medication groups and

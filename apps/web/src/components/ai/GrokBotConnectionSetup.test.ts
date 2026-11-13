@@ -21,6 +21,18 @@ describe("Grok Bot onboarding boundaries", () => {
     expect(enabled).toContain("Do not use automatic client registration");
     expect(enabled).toContain("Directory listing is pending");
   });
+  it("explains that medication and calendar access start off when the deployment offers them", () => {
+    const serverUrl = "https://selfhost.example.test/api/mcp";
+    const full = ["shopping:read", "chores:read", "shopping:write", "health:read", "health:write", "calendar:read", "offline_access"];
+    const wide = renderToStaticMarkup(createElement(GrokBotConnectionSetup, { enabled: true, serverUrl, scopes: full }));
+    expect(wide).toContain(full.join(" "));
+    expect(wide).toContain("Medication group and calendar access also stay off");
+    expect(wide).toContain("never receives medication names or event details");
+    expect(wide).toContain("such as notes.");
+    const narrow = renderToStaticMarkup(createElement(GrokBotConnectionSetup, { enabled: true, serverUrl, scopes: ["shopping:read", "chores:read", "shopping:write", "offline_access"] }));
+    expect(narrow).toContain("Adding shopping items stays off");
+    expect(narrow).not.toContain("Medication group");
+  });
   it("discloses account-wide availability and distinguishes MCP from browser access", () => {
     const html = renderToStaticMarkup(createElement(ProviderDataDisclosure, { provider: "grok-bot" }));
     expect(html).toContain("every Bot on your account");

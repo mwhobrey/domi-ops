@@ -2,12 +2,15 @@ import { mkdir, copyFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { nonPublicMcpHost } from "../hosted-qa/mcp-origin.mjs";
-import { checkPackageScopes, skillNames } from "../mcp-review/scopes.mjs";
+import { PILOT_SCOPES, checkPackageScopes, privacyParagraph, scopeSummary, skillNames } from "../mcp-review/scopes.mjs";
 
-/** What Grok Bot's policy on the server accepts. Medication and calendar access are held back for this provider. */
-export const GROK_BOT_SCOPES = ["shopping:read", "chores:read", "shopping:write"];
+/** What Grok Bot's policy on the server accepts: everything the other providers may hold except selected notes. */
+export const GROK_BOT_SCOPES = [...PILOT_SCOPES];
 export const PLUGIN_VERSION = "0.2.0";
-const domainNames = (scopes) => scopes.filter(scope => scope.endsWith(":read")).map(scope => scope === "shopping:read" ? "shopping" : "chores").join(" and ");
+const domainNames = (scopes) => scopes.filter(scope => ["shopping:read", "chores:read"].includes(scope)).map(scope => scope === "shopping:read" ? "shopping" : "chores").join(" and ");
+/** Medication or calendar access: the package then describes itself by what the member can switch on. */
+const isWide = (scopes) => scopes.some(scope => scope.startsWith("health:") || scope.startsWith("calendar:"));
+const optional = (scopes) => scopes.filter(scope => !["shopping:read", "chores:read", "offline_access"].includes(scope));
 
 /** `readScopes` names every requested scope besides offline_access; the name predates shopping:write. */
 export function pluginConfiguration(origin, readScopes = ["shopping:read", "chores:read"]) {
@@ -15,11 +18,11 @@ export function pluginConfiguration(origin, readScopes = ["shopping:read", "chor
   if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash ||
     url.pathname !== "/" || nonPublicMcpHost(url.hostname)) throw new Error("Canonical public HTTPS origin required");
   try { checkPackageScopes(readScopes, GROK_BOT_SCOPES); }
-  catch { throw new Error("Deployment scopes required from: " + GROK_BOT_SCOPES.join(",") + " (shopping:write needs shopping:read)"); }
-  const add = readScopes.includes("shopping:write");
+  catch { throw new Error("Deployment scopes required from: " + GROK_BOT_SCOPES.join(",") + " (an action needs its read)"); }
+  const add = readScopes.includes("shopping:write"), wide = isWide(readScopes);
   return {
     plugin: { name: "domi-ops-household", displayName: "Domi Ops", author: { name: "MikeWhob" },
-      version: PLUGIN_VERSION, description: add ? `Shared household ${domainNames(readScopes)} with a source-linked briefing, plus adding shopping items once you switch it on.` : `Read-only shared household ${domainNames(readScopes)} with a source-linked briefing.`,
+      version: PLUGIN_VERSION, description: wide ? `Household access you switch on: ${scopeSummary(readScopes)}.` : add ? `Shared household ${domainNames(readScopes)} with a source-linked briefing, plus adding shopping items once you switch it on.` : `Read-only shared household ${domainNames(readScopes)} with a source-linked briefing.`,
       license: "MIT", homepage: "https://domi-ops.com", logo: "assets/icon.png" },
     mcp: { mcpServers: { "domi-ops": { url: url.origin + "/api/mcp",
       auth: { CLIENT_ID: "https://cursor.com/oauth/mcp-client.json", scopes: [...readScopes, "offline_access"] } } } },
@@ -29,7 +32,7 @@ export function pluginConfiguration(origin, readScopes = ["shopping:read", "chor
 export async function writePlugin({ origin, output, readScopes }) {
   const config = pluginConfiguration(origin, readScopes);
   const requestedScopes = config.mcp.mcpServers["domi-ops"].auth.scopes;
-  const domains = domainNames(requestedScopes), add = requestedScopes.includes("shopping:write");
+  const domains = domainNames(requestedScopes), add = requestedScopes.includes("shopping:write"), wide = isWide(requestedScopes);
   await mkdir(dirname(output), { recursive: true });
   await mkdir(output, { recursive: false });
   const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -44,10 +47,10 @@ export async function writePlugin({ origin, output, readScopes }) {
   await copyFile(join(root, "apps/web/public/icons/icon-512.png"), join(output, "assets/icon.png"));
   await writeFile(join(output, ".cursor-plugin/plugin.json"), JSON.stringify(config.plugin, null, 2) + "\n");
   await writeFile(join(output, "mcp.json"), JSON.stringify(config.mcp, null, 2) + "\n");
-  await writeFile(join(output, "README.md"), `# Domi Ops household ${add ? "briefing and shopping add" : "briefing"} for Grok Bot
+  await writeFile(join(output, "README.md"), `# Domi Ops household ${wide ? "briefing and actions" : add ? "briefing and shopping add" : "briefing"} for Grok Bot
 
 This draft contains one remote MCP endpoint (${config.mcp.mcpServers["domi-ops"].url})
-and ${add ? "the shared briefing skill and the household actions skill, each" : "the unchanged shared briefing skill"} with its MIT license. It contains no
+and ${add || wide ? "the shared briefing skill and the household actions skill, each" : "the unchanged shared briefing skill"} with its MIT license. It contains no
 secrets, local commands, hooks, agents or scheduled routines. Its public OAuth
 client identity is https://cursor.com/oauth/mcp-client.json and its explicit
 requested scopes are ${requestedScopes.join(", ")}. These must match what the
@@ -58,18 +61,25 @@ ID is a public identity URL, not a secret or API key.
 
 Package generation is not proof of Grok Bot import, OAuth or live tool acceptance.
 Grok Bot's observed private workflow does not offer ZIP import: add the remote
-connection and save ${add ? "each skill" : "the shared skill"} separately for private testing. This Cursor
+connection and save ${add || wide ? "each skill" : "the shared skill"} separately for private testing. This Cursor
 format is a marketplace draft, not proof of an installable private ZIP.
 Verify the installed experience before publishing. Ordinary Grok chat, Grok Build/CLI,
 Cursor desktop and the model API are separate surfaces; no support is implied.
 
 ## Connect and review
 
-The operator must explicitly enable the Grok Bot integration and a shopping/chores-only
-deployment read ceiling. A household administrator enables AI connections; each
+The operator must explicitly enable the Grok Bot integration and a deployment
+scope ceiling that matches this package. A household administrator enables AI connections; each
 eligible adult then signs in to Domi Ops and personally reviews their own grant.
 The grant permits shared household ${domains} and refresh access. Chore access
-includes other members' assigned chores. ${add
+includes other members' assigned chores. ${wide
+  ? `It also offers further abilities, each of which starts off until the operator
+offers it and the member switches it on for this connection in Domi Ops AI
+Connections: ${scopeSummary(optional(requestedScopes))}.
+${privacyParagraph(optional(requestedScopes), "Grok Bot")}
+An action finishes in chat with no second confirmation in Domi Ops. The Bot
+cannot edit, remove, skip or undo anything, and the grant does not include notes.`
+  : add
   ? `It also lets the Bot add a shopping item, but only after the operator offers
 that action and the member switches it on for this connection in Domi Ops AI
 Connections; it starts off. Adding finishes in chat with no second confirmation

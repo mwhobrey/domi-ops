@@ -23,6 +23,9 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
   Claude portal reads it from there; 0.2.0 follows in a separate change once the hosted
   server offers the new scopes. Nothing is submitted; see
   [the acceptance guide](docs/MCP_ASSISTANT_ACTIONS_ACCEPTANCE.md).
+- Grok Bot can hold the same assistant abilities as Claude and ChatGPT: shopping add,
+  medication groups and calendar availability. Selected notes stay unavailable to it,
+  and `MCP_GROK_BOT_ENABLED` is still refused when `MCP_READ_SCOPES` lists `notes:read`.
 - A connection approved through an older server build during a rolling deploy keeps the
   reads it approved instead of arriving with nothing switched on.
 - Fixed: "Remove permissions" failed for an assistant connection holding more than four

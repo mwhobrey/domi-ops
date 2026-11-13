@@ -1,20 +1,23 @@
 # Grok Bot marketplace preparation (WHO-489)
 
-## Update 0.2.0: shopping add (prepared 2026-11-12, not submitted)
+## Update 0.2.0: assistant actions (prepared 2026-11-12, not submitted)
 
-Grok Bot's update is narrower than Claude's and ChatGPT's. Its policy accepts
-`shopping:write` and nothing else new; medication and calendar access are held back.
+Grok Bot's update requests the same set as Claude's and ChatGPT's: shopping add,
+medication groups and calendar availability. Selected notes stay out.
 
 - Generate with a third argument:
-  `node scripts/mcp-grok-bot/package.mjs https://app.domi-ops.com NEW_DIRECTORY shopping:read,chores:read,shopping:write`.
+  `node scripts/mcp-grok-bot/package.mjs https://app.domi-ops.com NEW_DIRECTORY shopping:read,chores:read,shopping:write,health:read,health:write,calendar:read`.
   Without it the package is the read-only one, now numbered 0.2.0.
 - The suggested description below says the integration cannot save changes. For this
   update use: "Read shared household shopping lists and chores in Grok Bot, with links
-  back to Domi Ops, and add a shopping item once you switch that on in Domi Ops. It
-  cannot edit, check off or remove items. Calendar, School, Health, Drive and planning
-  notes are outside its permissions."
-- Not yet observed: how the Cursor cloud client behaves when the hosted server also
-  advertises health and calendar scopes. Check on the review deployment first.
+  back to Domi Ops. Once you switch each on in Domi Ops, it can also add a shopping
+  item, see the times and logging status of medication groups you choose and record one
+  as taken, and see when you are busy on calendars you choose. It never receives
+  medication names or event details, and it cannot edit, remove, skip or undo anything.
+  School, Drive and planning notes are outside its permissions."
+- Declare writes and health data in the form, as for the other two providers.
+- Not yet observed with the real Grok Bot client: the medication and calendar tools,
+  and any confirmation it shows before a tool that is not read-only.
 - Tests and acceptance are in [the acceptance guide](MCP_ASSISTANT_ACTIONS_ACCEPTANCE.md).
 
 Status: preparation only, not submitted. [PR #335](https://github.com/mwhobrey/domi-ops/pull/335)

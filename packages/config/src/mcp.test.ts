@@ -63,7 +63,7 @@ describe("MCP deployment configuration", () => {
     expect(envSchema.safeParse({ ...base, MCP_ENABLED: "true", PUBLIC_APP_URL: "http://127.0.0.1:4000" }).success).toBe(true);
     expect(envSchema.safeParse({ ...base, NODE_ENV: "production", MCP_ENABLED: "true", PUBLIC_APP_URL: "http://127.0.0.1:4000", SESSION_SECRET: "x".repeat(32), ENCRYPTION_KEY: "y".repeat(32) }).success).toBe(false);
   });
-  it("requires deliberate shopping/chores-only discovery before Grok Bot enablement", () => {
+  it("requires a deliberate read ceiling without notes before Grok Bot enablement", () => {
     expect(envSchema.parse(base).MCP_GROK_BOT_ENABLED).toBe(false);
     for (const extra of [{}, { MCP_ENABLED: "true" }, { MCP_ENABLED: "true", MCP_READ_SCOPES: "notes:read" },
       { MCP_ENABLED: "true", MCP_READ_SCOPES: "shopping:read", DEMO_MODE: "true" }]) {
@@ -72,5 +72,9 @@ describe("MCP deployment configuration", () => {
     const enabled = envSchema.parse({ ...base, MCP_ENABLED: "true", MCP_GROK_BOT_ENABLED: "true", MCP_READ_SCOPES: "shopping:read,chores:read" });
     expect(enabled.MCP_GROK_BOT_ENABLED).toBe(true);
     expect(mcpSupportedScopes(enabled)).toEqual(["shopping:read", "chores:read", "offline_access"]);
+    // Grok Bot may sit on the full assistant-actions ceiling; only selected notes keep it off.
+    const full = { ...base, MCP_ENABLED: "true", MCP_GROK_BOT_ENABLED: "true", MCP_READ_SCOPES: "shopping:read,chores:read,health:read,calendar:read" };
+    expect(envSchema.safeParse(full).success).toBe(true);
+    expect(envSchema.safeParse({ ...full, MCP_READ_SCOPES: full.MCP_READ_SCOPES + ",notes:read" }).success).toBe(false);
   });
 });
