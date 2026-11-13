@@ -74,7 +74,7 @@ test("Claude package preserves the shared skill and license and never replaces a
     assert.equal(manifest.version, "0.2.0");
     assert.doesNotMatch(manifest.description, /read-only/i);
     // The README names every limit a reviewer or member needs before switching an action on.
-    for (const phrase of ["Medication names, strengths, instructions and history are never sent", "Event titles, locations, people and calendar names are never sent",
+    for (const phrase of ["Medication name, strength, instruction and history fields are never sent, but the label is sent as you wrote it", "Event titles, locations, people and calendar names are never sent",
       "cannot edit, check off, remove,", "switch it on for this connection", "events imported from Google Calendar are left out"]) assert.ok(readme.includes(phrase), phrase);
     await assert.rejects(writePlugin(options), { code: "EEXIST" });
   } finally {
@@ -105,7 +105,7 @@ test("the default submission is the assistant-actions update and says what it sh
     assert.deepEqual(draft.scopes, ["shopping:read", "chores:read", "shopping:write", "health:read", "health:write", "calendar:read", "offline_access"]);
     assert.deepEqual(draft.dataHandling, { apiOwnership: "first-party", reads: true, writes: true, healthData: true, sponsoredContent: false });
     assert.doesNotMatch(draft.oneLiner + " " + draft.description, /read-only|notes/i);
-    assert.match(draft.description, /never receives medication names or event details/);
+    assert.match(draft.description, /a medication group label is sent as you wrote it/);
     for (const gate of ["MCP_READ_SCOPES and MCP_DIRECT_ACTIONS", "privacy disclosure covering assistant actions, medication timing and calendar availability", "provider-side confirmation prompt"]) {
       assert.ok(draft.requiredBeforeSubmit.some(entry => entry.includes(gate)), gate);
     }
