@@ -23,6 +23,14 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 - Grok Bot can hold the same assistant abilities as Claude and ChatGPT: shopping add,
   medication groups and calendar availability. Selected notes stay unavailable to it,
   and `MCP_GROK_BOT_ENABLED` is still refused when `MCP_READ_SCOPES` lists `notes:read`.
+- A medication group's label is sent to the assistant as the member wrote it. The
+  consent screen, setup text, privacy policy and package descriptions now say that the
+  separate medication fields are withheld and that a label naming a medication would
+  share that name. A cleared label is called out before saving, since a blank one falls
+  back to the group's own name.
+- Fixed: changing access could replace a connection's stored medication group or
+  calendar selection when the stored selection had failed to load. The editors now wait
+  for it and offer a retry.
 - A connection approved through an older server build during a rolling deploy keeps the
   reads it approved instead of arriving with nothing switched on.
 - Fixed: "Remove permissions" failed for an assistant connection holding more than four
@@ -34,13 +42,14 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
   already had. The consent screen can show the exact data an assistant would receive
   before anything is shared. Adds the foundation for direct assistant actions, which
   stay off:
-  `MCP_DIRECT_ACTIONS_ENABLED` defaults to false and no action is registered.
+  `MCP_DIRECT_ACTIONS_ENABLED` defaults to false, so the registered actions are unavailable.
   See [the pilot spec](docs/MCP_ASSISTANT_ACTIONS_SPEC.md).
   The first action, adding an item to the shared shopping list, exists but is inert
   until an operator lists `shopping.add` in `MCP_DIRECT_ACTIONS` and a member switches
   it on for a connection. Items added this way show "Added by ..." in the shopping list.
   A member can also share chosen medication groups with an assistant as a label,
-  times and logging status, and let it record a group as taken. Medication names,
+  times and logging status, and let it record a group as taken. The label is sent as
+  written; the separate medication names,
   strengths and history are never sent. This too is off until an operator lists
   `health:read` in `MCP_READ_SCOPES` and `health.groups.log` in `MCP_DIRECT_ACTIONS`.
   **Migration:** `0109_mcp_med_group_selections` adds two tables and one column.

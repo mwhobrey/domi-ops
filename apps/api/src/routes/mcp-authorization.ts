@@ -1,7 +1,8 @@
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
-import { McpAuthorizationError, MCP_POLICY_VERSION, type McpAuthorization } from "@domi-ops/auth";
+import { McpAuthorizationError, MCP_POLICY_VERSION, type McpAuthorization, type McpOwnedConnection } from "@domi-ops/auth";
+import type { Database } from "@domi-ops/db";
 import type { Env } from "@domi-ops/config";
 import { randomUUID } from "node:crypto";
 import { checkOperation, McpGatewayError } from "../mcp/access.js";
@@ -67,6 +68,9 @@ export function mcpAuthorizationRoutes(auth: McpAuthorization, env: Env) {
       if (calendarIds.length) await saveCalendarSelections(tx, connection, calendarIds, true);
     } : undefined));
   });
+  // Sharing something new needs the household module to be on, as a tool call does. Removing a selection never does.
+  const moduleOn = (tx: Database, connection: McpOwnedConnection, module: "health" | "calendar_sync") =>
+    checkOperation(tx, env, { ...connection, clientId: "settings", scopes: [] }, { module, access: "read" });
   // The member's own calendars by name, for their browser only. Names never go to a provider.
   app.post("/calendars", async (c) => {
     const input = await body(c.req.raw, z.object({ householdId: z.string().uuid() }).strict());
@@ -88,7 +92,10 @@ export function mcpAuthorizationRoutes(auth: McpAuthorization, env: Env) {
   app.post("/connections/:id/calendars/view", async (c) => c.json(await auth.withOwnedConnection(c.req.raw.headers, c.req.param("id"), (tx, connection) => viewCalendarSelections(tx, connection))));
   app.post("/connections/:id/calendars", async (c) => {
     const input = await body(c.req.raw, z.object({ calendarIds: calendarChoice, acknowledged: z.boolean().optional() }).strict());
-    return c.json(await auth.withOwnedConnection(c.req.raw.headers, c.req.param("id"), (tx, connection) => saveCalendarSelections(tx, connection, input.calendarIds, input.acknowledged === true)));
+    return c.json(await auth.withOwnedConnection(c.req.raw.headers, c.req.param("id"), async (tx, connection) => {
+      if (input.calendarIds.length) await moduleOn(tx, connection, "calendar_sync");
+      return saveCalendarSelections(tx, connection, input.calendarIds, input.acknowledged === true);
+    }));
   });
   // The member's own groups and medication names, for their browser only. Nothing here goes to a provider.
   app.post("/health-groups", async (c) => {
@@ -112,7 +119,10 @@ export function mcpAuthorizationRoutes(auth: McpAuthorization, env: Env) {
   app.post("/connections/:id/health-groups/view", async (c) => c.json(await auth.withOwnedConnection(c.req.raw.headers, c.req.param("id"), (tx, connection) => viewGroupSelections(tx, env, connection))));
   app.post("/connections/:id/health-groups", async (c) => {
     const input = await body(c.req.raw, z.object({ groups: z.array(groupChoice).max(50), acknowledged: z.boolean().optional() }).strict());
-    return c.json(await auth.withOwnedConnection(c.req.raw.headers, c.req.param("id"), (tx, connection) => saveGroupSelections(tx, env, connection, input.groups, input.acknowledged === true)));
+    return c.json(await auth.withOwnedConnection(c.req.raw.headers, c.req.param("id"), async (tx, connection) => {
+      if (input.groups.length) await moduleOn(tx, connection, "health");
+      return saveGroupSelections(tx, env, connection, input.groups, input.acknowledged === true);
+    }));
   });
   app.post("/overview", async (c) => {
     const input = await body(c.req.raw, z.object({ householdId: z.string().uuid() }).strict());

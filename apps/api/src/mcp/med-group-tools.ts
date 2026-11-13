@@ -6,7 +6,8 @@ import type { McpDirectTool, McpReadTool } from "./tools.js";
 const day = z.enum(["today", "yesterday", "tomorrow"]);
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const time = z.string().regex(/^\d{2}:\d{2}$/);
-const label = z.string().max(40);
+// cleanLabel cuts to 40 characters as a reader counts them; an emoji is two UTF-16 units, so bound by code points.
+const label = z.string().max(80).refine((value) => [...value].length <= 40, "label too long");
 const count = z.number().int().min(0).max(500);
 
 /** The complete field list an assistant can receive about medication. Nothing here names a medication. */

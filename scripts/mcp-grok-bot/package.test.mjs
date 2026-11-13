@@ -110,7 +110,7 @@ test("accepts the full assistant-actions set and says what medication and calend
     const readme = (await readFile(join(output, "README.md"), "utf8")).replace(/\s+/g, " ");
     assert.match(readme, /briefing and actions for Grok Bot/);
     assert.match(readme, /each of which starts off/);
-    assert.match(readme, /Medication names, strengths, instructions and history are never sent/);
+    assert.match(readme, /Medication name, strength, instruction and history fields are never sent, but the label is sent as you wrote it/);
     assert.match(readme, /Event titles, locations, people and calendar names are never sent/);
     assert.match(readme, /cannot edit, remove, skip or undo anything, and the grant does not include notes/);
     assert.doesNotMatch(readme, /medication, calendar or any other change/);

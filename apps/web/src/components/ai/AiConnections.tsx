@@ -29,6 +29,10 @@ function Connection({ connection, refresh, report, busy, setBusy }: {
   const [groupView, setGroupView] = useState<MedGroupView | null>(null);
   const [medGroups, setMedGroups] = useState<MedGroupChoice[]>([]);
   const [groupsChanged, setGroupsChanged] = useState(false);
+  // What is already shared must be on screen before it can be edited: saving replaces the stored selection whole.
+  const [groupLoadFailed, setGroupLoadFailed] = useState(false);
+  const [calendarLoadFailed, setCalendarLoadFailed] = useState(false);
+  const [reload, setReload] = useState(0);
   const sharesGroups = connection.capabilities.includes("health.groups.read");
   const waiting = unapprovedCount(groupView);
   useEffect(() => {
@@ -37,11 +41,11 @@ function Connection({ connection, refresh, report, busy, setBusy }: {
     void (async () => {
       try {
         const view = await apiClient.post<MedGroupView>(`/api/mcp-auth/connections/${connection.id}/health-groups/view`, {});
-        if (!cancelled) { setGroupView(view); setMedGroups(choicesFromView(view)); }
-      } catch { /* The form reports problems when it is used. */ }
+        if (!cancelled) { setGroupView(view); setMedGroups(choicesFromView(view)); setGroupLoadFailed(false); }
+      } catch { if (!cancelled) setGroupLoadFailed(true); }
     })();
     return () => { cancelled = true; };
-  }, [active, sharesGroups, connection.id]);
+  }, [active, sharesGroups, connection.id, reload]);
   const [calendarView, setCalendarView] = useState<CalendarView | null>(null);
   const [calendarIds, setCalendarIds] = useState<string[]>([]);
   const sharesCalendars = connection.capabilities.includes("calendar.availability");
@@ -51,11 +55,16 @@ function Connection({ connection, refresh, report, busy, setBusy }: {
     void (async () => {
       try {
         const view = await apiClient.post<CalendarView>(`/api/mcp-auth/connections/${connection.id}/calendars/view`, {});
-        if (!cancelled) { setCalendarView(view); setCalendarIds(view.calendarIds); }
-      } catch { /* The form reports problems when it is used. */ }
+        if (!cancelled) { setCalendarView(view); setCalendarIds(view.calendarIds); setCalendarLoadFailed(false); }
+      } catch { if (!cancelled) setCalendarLoadFailed(true); }
     })();
     return () => { cancelled = true; };
-  }, [active, sharesCalendars, connection.id]);
+  }, [active, sharesCalendars, connection.id, reload]);
+  const groupsPending = sharesGroups && !groupView && capabilities.includes("health.groups.read");
+  const calendarsPending = sharesCalendars && !calendarView && capabilities.includes("calendar.availability");
+  const pendingNotice = (failed: boolean, what: string) => failed
+    ? <div role="alert" className="space-y-2 rounded-xl border border-[var(--color-warning)] p-3 text-sm"><p>The {what} this connection already shares could not be loaded, so they cannot be changed yet. Nothing has been changed.</p><Button type="button" variant="secondary" disabled={busy} onClick={() => setReload((count) => count + 1)}>Try again</Button></div>
+    : <p role="status" className="text-sm">Loading the {what} this connection shares…</p>;
   const calendarsEdited = capabilities.includes("calendar.availability") && calendarsChanged(calendarView?.calendarIds ?? [], calendarIds);
   const addingCalendars = calendarsEdited && calendarIds.some((id) => !(calendarView?.calendarIds ?? []).includes(id));
   // Anything that could share more than before goes through the acknowledgment.
@@ -76,7 +85,10 @@ function Connection({ connection, refresh, report, busy, setBusy }: {
         setCalendarView((view) => ({ calendars: view?.calendars ?? [], calendarIds }));
       }
       setChanging(false); report("Access updated. It applies the next time the assistant uses this connection."); await refresh();
-    } catch (e) { report(connectionError(e)); }
+    } catch (e) {
+      // An earlier step may already be saved, so show what is stored now.
+      report(connectionError(e)); await refresh().catch(() => {});
+    }
     finally { setBusy(false); }
   }
   async function disconnect() {
@@ -129,15 +141,17 @@ function Connection({ connection, refresh, report, busy, setBusy }: {
     {changing && active && <form onSubmit={saveCapabilities} className="space-y-4 border-t border-[var(--color-border)] pt-4">
       <h3 className="font-medium">Change what {connection.clientName} can do</h3>
       <CapabilityChoices idPrefix={connection.id} householdId={connection.householdId} options={connection.availableCapabilities} selected={capabilities} onChange={(next) => { setCapabilities(next); setAcknowledged(false); }} disabled={busy} />
-      {capabilities.includes("health.groups.read") && <MedGroupChoices idPrefix={connection.id} householdId={connection.householdId} allowLog={capabilities.includes("health.groups.log")}
+      {groupsPending && pendingNotice(groupLoadFailed, "medication groups")}
+      {capabilities.includes("health.groups.read") && !groupsPending && <MedGroupChoices idPrefix={connection.id} householdId={connection.householdId} allowLog={capabilities.includes("health.groups.log")}
         value={medGroups} onChange={(next) => { setMedGroups(next); setGroupsChanged(true); setAcknowledged(false); }} disabled={busy}
         isNew={(groupId, medicationId) => groupView?.selections.find((selection) => selection.groupId === groupId)?.medications.find((med) => med.id === medicationId)?.state === "new"} />}
-      {capabilities.includes("calendar.availability") && <CalendarChoices idPrefix={connection.id} householdId={connection.householdId} value={calendarIds}
+      {calendarsPending && pendingNotice(calendarLoadFailed, "calendars")}
+      {capabilities.includes("calendar.availability") && !calendarsPending && <CalendarChoices idPrefix={connection.id} householdId={connection.householdId} value={calendarIds}
         onChange={(next) => { setCalendarIds(next); setAcknowledged(false); }} disabled={busy} />}
       {needsAck && <Checkbox id={connection.id + "-acknowledge"} checked={acknowledged} onChange={(e) => setAcknowledged(e.target.checked)} required disabled={busy}
         label={`I understand I am giving ${connection.clientName} new access, and that what it receives is kept under its provider’s terms.`} />}
       <p className="text-sm text-[var(--color-text-muted)]">Turning something off takes effect immediately. Access this connection was never approved for needs a new connection from your assistant.</p>
-      <div className="flex flex-wrap gap-2"><Button type="submit" disabled={busy || (needsAck && !acknowledged)}>Save access</Button><Button type="button" variant="secondary" disabled={busy} onClick={() => setChanging(false)}>Cancel</Button></div>
+      <div className="flex flex-wrap gap-2"><Button type="submit" disabled={busy || groupsPending || calendarsPending || (needsAck && !acknowledged)}>Save access</Button><Button type="button" variant="secondary" disabled={busy} onClick={() => setChanging(false)}>Cancel</Button></div>
     </form>}
     {editing && active && <form onSubmit={save} className="space-y-4 border-t border-[var(--color-border)] pt-4">
       <fieldset disabled={busy} className="space-y-3">

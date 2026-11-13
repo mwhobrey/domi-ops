@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiClient } from "../../lib/client-api";
 import { connectionError, type MedGroupChoice, type OwnMedGroup } from "../../lib/mcp";
 import { Button, Checkbox, Input } from "../ui";
@@ -28,18 +28,22 @@ export function MedGroupChoices({ idPrefix, householdId, allowLog, value, onChan
     return () => { cancelled = true; };
   }, [householdId]);
 
-  const update = (groupId: string, change: Partial<MedGroupChoice>) => { setPreview((state) => ({ ...state, open: false })); onChange(value.map((choice) => choice.groupId === groupId ? { ...choice, ...change } : choice)); };
+  // A preview belongs to the choices it was requested for; any change or close drops a response still in flight.
+  const turn = useRef(0);
+  const update = (groupId: string, change: Partial<MedGroupChoice>) => { turn.current++; setPreview((state) => ({ ...state, open: false })); onChange(value.map((choice) => choice.groupId === groupId ? { ...choice, ...change } : choice)); };
   function toggle(groupId: string, shared: boolean) {
+    turn.current++;
     setPreview((state) => ({ ...state, open: false }));
     onChange(shared ? [...value, { groupId, canLog: false, shareCounts: true, alias: null, excludedMedicationIds: [] }] : value.filter((choice) => choice.groupId !== groupId));
   }
   async function togglePreview() {
+    const current = ++turn.current;
     if (preview.open) { setPreview({ ...preview, open: false }); return; }
     setPreview({ open: true, loading: true, text: null, error: null });
     try {
       const result = await apiClient.post<{ payload: unknown }>("/api/mcp-auth/health-groups/preview", { householdId, groups: value });
-      setPreview({ open: true, loading: false, text: JSON.stringify(result.payload, null, 2), error: null });
-    } catch (e) { setPreview({ open: true, loading: false, text: null, error: connectionError(e) }); }
+      if (turn.current === current) setPreview({ open: true, loading: false, text: JSON.stringify(result.payload, null, 2), error: null });
+    } catch (e) { if (turn.current === current) setPreview({ open: true, loading: false, text: null, error: connectionError(e) }); }
   }
 
   if (error) return <p role="alert" className="text-sm text-[var(--color-danger)]">{error}</p>;
@@ -47,7 +51,7 @@ export function MedGroupChoices({ idPrefix, householdId, allowLog, value, onChan
   if (!groups.length) return <p className="text-sm text-[var(--color-text-muted)]">You have no medication groups with set times. Create one in Health, then come back to share it.</p>;
   return <fieldset disabled={disabled} className="min-w-0 space-y-4">
     <legend className="font-medium">Medication groups to share ({value.length})</legend>
-    <p className="text-sm text-[var(--color-text-muted)]">Nothing is shared unless you tick it. The assistant gets each group’s label, its times and whether it has been logged. Medication names, strengths, instructions and history are never sent; the names below are shown only to you.</p>
+    <p className="text-sm text-[var(--color-text-muted)]">Nothing is shared unless you tick it. The assistant gets each group’s label, its times and whether it has been logged. The medication name, strength, instruction and history fields are never sent; the names below are shown only to you. The label is sent as you write it.</p>
     {groups.map((group) => {
       const choice = value.find((entry) => entry.groupId === group.id), id = `${idPrefix}-group-${group.id}`;
       const added = choice && isNew ? group.medications.filter((med) => isNew(group.id, med.id)).length : 0;
@@ -58,7 +62,8 @@ export function MedGroupChoices({ idPrefix, householdId, allowLog, value, onChan
           <div className="space-y-1">
             <label htmlFor={`${id}-label`} className="text-sm">Label the assistant will see</label>
             <Input id={`${id}-label`} maxLength={40} value={choice.alias ?? group.name} onChange={(e) => update(group.id, { alias: e.target.value === group.name ? null : e.target.value })} />
-            <p className="text-xs text-[var(--color-text-muted)]">Change it if the group’s name says more than you want to share. This label is sent to the assistant.</p>
+            <p className="text-xs text-[var(--color-text-muted)]">Change it if the group’s name says more than you want to share, such as a medication name. This label is sent to the assistant.</p>
+            {choice.alias !== null && choice.alias !== undefined && !choice.alias.trim() && <p role="alert" className="rounded-xl border border-[var(--color-warning)] p-3 text-sm">A blank label is not shared as blank: the assistant would see the group’s own name, “{group.name || "Medication group"}”. Type the label you want it to see.</p>}
           </div>
           {allowLog && <Checkbox id={`${id}-log`} checked={choice.canLog} onChange={(e) => update(group.id, { canLog: e.target.checked })} label="Let the assistant record this group as taken when I say I took it" />}
           <Checkbox id={`${id}-counts`} checked={choice.shareCounts} onChange={(e) => update(group.id, { shareCounts: e.target.checked })} label="Share how many medications are in this group" />

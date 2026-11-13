@@ -270,8 +270,9 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
           </li>
           <li>
             Health entries: vitals (such as blood pressure, pulse, weight), exercise, pain (body
-            region, severity, quality tags) and meals (food, quantity, calories, protein, carbs,
-            fat), each with a title, notes and date.
+            region, severity, quality tags), meals (food, quantity, calories, protein, carbs,
+            fat), sickness, injuries, symptoms, appointments, medication taken and other entries
+            you add, each with a title, notes and date.
           </li>
           <li>
             Health checks: the check templates, their schedules, and each logged result and note.
@@ -402,7 +403,9 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
           Adding a shopping item sends the item you ask the assistant to add. Medication group
           access sends a label you choose, the group&rsquo;s scheduled times and whether it has
           been logged, and lets the assistant record a group as taken when you say you took it;
-          it never sends medication names, strengths, instructions or history. Calendar
+          it does not send the separate medication name, strength, instruction or history
+          records. The label is sent as you wrote it, so a label that names a medication
+          shares that name; choose a neutral one. Calendar
           availability sends the times you are busy on calendars you choose, merged into blocks;
           it never sends event titles, descriptions, locations, attendees or calendar names, and
           it leaves out events imported from Google Calendar. The provider receives what these
@@ -423,9 +426,9 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
           Disconnect stops future access; it cannot erase copies already held by the assistant.
           Security activity records tool names, outcomes, timing and response sizes rather than
           returned record content or raw tool arguments, with a 30-day activity retention
-          window. A list of the actions an assistant completed, holding the kind of action, its
-          outcome and counts but no item names or labels, is shown to the member who owns the
-          connection and kept for 90 days. A dose recorded through an assistant is marked as
+          window. A record of the actions an assistant completed, holding the kind of action,
+          its outcome and counts but no item names or labels, is kept for 90 days. The member
+          who owns the connection sees the ten most recent in AI connections settings. A dose recorded through an assistant is marked as
           such in your own health history. Self-hosted operators administer their own
           deployment and retention.
         </p>

@@ -252,7 +252,12 @@ included but no longer blocks the tool. See section 12, stage 4.
 | --- | --- |
 | Input | `day`: `today` (default), `yesterday` or `tomorrow` |
 | Output | Per selected group: `label`, and per occurrence `occurrenceRef`, `localTime`, `status`, and counts if the detail level allows |
-| Never returned | Medication names, strengths, forms, instructions, notes, per-medication status, history, supply, pharmacy, prescriber, standalone doses, other groups, other members |
+| Never returned | The medication name, strength, form, instruction and notes fields, per-medication status, history, supply, pharmacy, prescriber, standalone doses, other groups, other members |
+
+The `label` is the group's name or the alias the member typed, sent as written. If
+either names a medication, that name is shared: the fields above are withheld, the
+label is not screened. The consent screen says so beside the label field and warns
+before a cleared alias falls back to the group's own name.
 
 - `label` is the group name or the member's alias, at most 40 characters.
 - `status` is one of `pending`, `taken`, `partly_taken`, `skipped`, `mixed`.

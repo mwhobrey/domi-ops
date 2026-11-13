@@ -160,7 +160,7 @@ export async function recordDose(
     const healthEventId = wantsEvent ? await createTakenEvent(db, env, input) : null;
     const [row] = await db
       .insert(healthMedicationLogs)
-      .values({ medicationId: med.id, scheduledAt: null, status, loggedAt, loggedByUserId, notes: notesEnc, healthEventId })
+      .values({ medicationId: med.id, scheduledAt: null, status, loggedAt, loggedByUserId, notes: notesEnc, healthEventId, loggedViaConnectionId: input.loggedViaConnectionId ?? null })
       .returning();
     return { log: serializeHealthLog(row, env), healthEventId, outcome: "inserted" };
   }
@@ -216,7 +216,7 @@ export async function recordDose(
   const healthEventId = wantsEvent ? await createTakenEvent(db, env, input) : null;
   const [row] = await db
     .insert(healthMedicationLogs)
-    .values({ medicationId: med.id, scheduledAt, status, loggedAt, loggedByUserId, notes: notesEnc, healthEventId })
+    .values({ medicationId: med.id, scheduledAt, status, loggedAt, loggedByUserId, notes: notesEnc, healthEventId, loggedViaConnectionId: input.loggedViaConnectionId ?? null })
     .onConflictDoUpdate({
       target: [healthMedicationLogs.medicationId, healthMedicationLogs.scheduledAt],
       targetWhere: isNotNull(healthMedicationLogs.scheduledAt),

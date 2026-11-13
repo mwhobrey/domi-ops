@@ -10,7 +10,7 @@ import { envSchema, type Env } from "@domi-ops/config";
 import {
   createDb, closeDb, householdMembers, households, users, householdSubscriptions, oauthClient, userNotifications, pushSubscriptions,
   healthMedications, healthMedicationGroups, healthMedicationGroupMembers, healthMedicationLogs,
-  mcpActionEvents, mcpMedGroupMemberConsents, mcpMedGroupSelections,
+  mcpActionEvents, mcpConnectionCapabilities, mcpMedGroupMemberConsents, mcpMedGroupSelections,
   withSystemContext, withUserLookupContext, withHouseholdContext, withMcpProviderContext, type Database,
 } from "@domi-ops/db";
 import { mcpAuthorizationRoutes } from "./mcp-authorization.js";
@@ -408,6 +408,9 @@ for (const mode of ["single", "shared"] as const) suite(`MCP medication groups (
       expect(await names(token.access_token)).toEqual(["get_connection_context", "list_shopping_items"]);
       expect((await log(token.access_token, reference)).refused).toBe(true);
       expect((await post("/api/mcp-auth/health-groups", { householdId: owner.householdId })).status).toBe(403);
+      // Sharing a group is refused while the module is off; what is stored stays as it was.
+      expect((await post(`/api/mcp-auth/connections/${token.connectionId}/health-groups`, { groups: [{ groupId: morning, canLog: true, alias: "Renamed" }], acknowledged: true })).status).not.toBe(200);
+      expect((await owned(owner, (tx) => tx.select().from(mcpMedGroupSelections).where(eq(mcpMedGroupSelections.connectionId, token.connectionId)))).map((row) => row.canLog)).toEqual([true]);
     } finally { await owned(owner, (tx) => tx.update(households).set({ modulesEnabled: '["core","health"]' }).where(eq(households.id, owner.householdId))); }
     expect(await doseLogs(Object.values(meds))).toEqual([]);
     // Member switches logging off: the tool goes and stored selections lose it.
@@ -422,6 +425,17 @@ for (const mode of ["single", "shared"] as const) suite(`MCP medication groups (
     expect(await owned(owner, (tx) => tx.select().from(mcpMedGroupSelections).where(eq(mcpMedGroupSelections.connectionId, token.connectionId)))).toEqual([]);
     for (const name of health) expect((await rpc(token.access_token, "tools/call", { name, arguments: name === health[0] ? {} : { occurrenceRef: reference } })).result?.isError ?? true).toBeTruthy();
     expect(await doseLogs(Object.values(meds))).toEqual([]);
+  });
+
+  it("drops logging when narrowing removes the scope its read depends on", async () => {
+    const token = await connect(["shopping.read", READ, LOG], [{ groupId: morning, canLog: true, alias: "Morning" }]);
+    const narrowed = await post(`/api/mcp-auth/connections/${token.connectionId}/narrow`, { scopes: ["shopping:read", "health:write", "offline_access"], noteIds: [] });
+    expect(narrowed.status, await narrowed.clone().text()).toBe(200);
+    const kept = await owned(owner, (tx) => tx.select({ capability: mcpConnectionCapabilities.capability }).from(mcpConnectionCapabilities).where(eq(mcpConnectionCapabilities.connectionId, token.connectionId)));
+    // health:write is still granted, but logging has nothing to build on, so it does not linger as an orphan.
+    expect(kept.map((row) => row.capability)).toEqual(["shopping.read"]);
+    expect(await owned(owner, (tx) => tx.select().from(mcpMedGroupSelections).where(eq(mcpMedGroupSelections.connectionId, token.connectionId)))).toEqual([]);
+    expect((await post(`/api/mcp-auth/connections/${token.connectionId}/capabilities`, { capabilities: ["shopping.read"] })).status).toBe(200);
   });
 
   it("previews the exact schedule payload for unsaved choices without naming a medication", async () => {

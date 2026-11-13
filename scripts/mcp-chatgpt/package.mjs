@@ -2,7 +2,7 @@ import { mkdir, copyFile, writeFile } from "node:fs/promises";
 import { resolve, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { nonPublicMcpHost } from "../hosted-qa/mcp-origin.mjs";
-import { checkPackageScopes, hasActions, privacyParagraph, scopeSummary, skillNames } from "../mcp-review/scopes.mjs";
+import { checkPackageScopes, hasActions, privacyParagraph, readsOnSentence, scopeSummary, skillNames } from "../mcp-review/scopes.mjs";
 
 export const PLUGIN_VERSION = "0.2.0";
 /** Kept under its earlier name for callers that describe a read-only package. */
@@ -86,7 +86,7 @@ package contains one remote HTTPS MCP connection and ${actions ? "two skills: th
 It runs no local commands or background programs. ${actions
   ? `Each ability must be offered by the server's operator, approved when you sign
 in and switched on for this connection in Domi Ops under Settings, AI
-Connections. Reads of shopping and chores start on; everything else starts off,
+Connections. ${readsOnSentence(scopes)},
 and you can switch any of it off at any time. Actions finish in chat with no
 second confirmation in Domi Ops, though ChatGPT may ask you to confirm. Nothing
 here can edit, check off, remove, skip, undo or delete a record, or create a

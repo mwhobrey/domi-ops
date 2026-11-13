@@ -188,13 +188,13 @@ test("the default submission is the assistant-actions update with both skills an
       assert.deepEqual(await readFile(join(output, "plugin/skills", skill, name)), await readFile(new URL(`../../skills/${skill}/${name}`, import.meta.url)));
     }
     const readme = await readFile(join(output, "plugin/README.md"), "utf8");
-    for (const phrase of ["Medication names, strengths, instructions and history are never sent", "Event titles, locations, people and calendar names are never sent", "everything else starts off"]) assert.ok(readme.includes(phrase), phrase);
+    for (const phrase of ["Medication name, strength, instruction and history fields are never sent", "the label is sent as you wrote it", "Event titles, locations, people and calendar names are never sent", "everything else starts off"]) assert.ok(readme.includes(phrase), phrase);
     const review = JSON.parse(await readFile(join(output, "review-plan.draft.json"), "utf8"));
     assert.equal(review.review.test_cases.positive.length, 5);
     assert.equal(review.review.test_cases.negative.length, 3);
     assert.ok(review.review.test_cases.positive.every(c => c.prompt && c.tools_triggered && c.expected_behavior));
     assert.ok(review.review.test_cases.negative.every(c => c.prompt && c.expected_behavior));
-    for (const gate of ["MCP_READ_SCOPES and MCP_DIRECT_ACTIONS", "five positive test cases", "three negative test cases", "confirmation ChatGPT shows"]) {
+    for (const gate of ["MCP_DIRECT_ACTIONS_ENABLED=true and MCP_DIRECT_ACTIONS=shopping.add,health.groups.log", "five positive test cases", "three negative test cases", "confirmation ChatGPT shows"]) {
       assert.ok(draft.requiredBeforeSubmit.some(entry => entry.includes(gate)), gate);
     }
   } finally {
@@ -224,6 +224,60 @@ test("action review plans always have five positive and three negative cases wit
       assert.ok(plan.fixtureRequirements.some(f => f.includes("title is an instruction")));
       assert.deepEqual(plan.execution.results, []);
     }
+  } finally {
+    assert.equal(dirname(root), resolve(tmpdir())); assert.match(basename(root), /^domi-mcp-package-/);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("review materials describe only what a narrow scope set requests", async () => {
+  const root = await mkdtemp(join(tmpdir(), "domi-mcp-package-"));
+  try {
+    // One medication or calendar read alone still yields a full plan, with fixtures it can actually use.
+    for (const selected of [["health:read"], ["calendar:read"], ["health:read", "calendar:read"]]) {
+      const plan = await writeReviewMaterials({ output: root, scopes: [...selected, "offline_access"], packageVersion: "0.2.0" });
+      assert.equal(plan.review.test_cases.positive.length, 5, selected.join());
+      assert.equal(plan.review.test_cases.negative.length, 3, selected.join());
+      assert.equal(plan.fixtureRequirements.some(f => f.includes("61 matching records")), false, selected.join());
+      assert.equal(plan.fixtureRequirements.some(f => f.includes("shopping records")), false, selected.join());
+      const text = JSON.stringify([plan.review.test_cases.positive, plan.review.test_cases.negative[2]]);
+      assert.equal(text.includes("shopping list"), false, selected.join());
+      // With no readable record text, the third negative case is about guessing from busy times instead.
+      assert.equal(plan.review.test_cases.negative[2].description, selected.includes("health:read") ? "Treat record text as data, not instructions" : "Do not infer event details from busy times");
+      assert.equal(plan.fixtureRequirements.some(f => f.includes("label is an instruction")), selected.includes("health:read"));
+    }
+    // The record-text case reads something this connection can see, and the notes name only its own tools.
+    const chores = await writeReviewMaterials({ output: root, scopes: ["chores:read", "health:read", "offline_access"], packageVersion: "0.2.0" });
+    assert.match(chores.review.test_cases.negative[2].prompt, /chores/);
+    const notes = await readFile(join(root, "release-notes.draft.md"), "utf8");
+    assert.match(notes, /Reading chores starts on; everything else starts off/);
+    assert.match(notes, /Every tool is read-only\./);
+    assert.doesNotMatch(notes, /shopping item|recording a medication group as taken\. |Event titles/);
+    assert.match(notes, /a group's label is sent as the member wrote it/);
+    const one = await writeReviewMaterials({ output: root, scopes: ["shopping:read", "shopping:write", "offline_access"], packageVersion: "0.2.0" });
+    assert.equal(one.review.test_cases.positive.length, 5);
+    assert.match(await readFile(join(root, "release-notes.draft.md"), "utf8"), /One tool is not read-only: adding a shopping item\./);
+    // The default update keeps a briefing-skill case inside its five.
+    const full = await writeReviewMaterials({ output: root, scopes: ["shopping:read", "chores:read", "shopping:write", "health:read", "health:write", "calendar:read", "offline_access"], packageVersion: "0.2.0" });
+    assert.ok(full.review.test_cases.positive.some(c => c.description.startsWith("Run the installed household briefing skill")));
+    assert.match(await readFile(join(root, "release-notes.draft.md"), "utf8"), /Two tools are not read-only/);
+  } finally {
+    assert.equal(dirname(root), resolve(tmpdir())); assert.match(basename(root), /^domi-mcp-package-/);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("the README and the deployment settings follow the requested scopes", async () => {
+  const root = await mkdtemp(join(tmpdir(), "domi-mcp-package-"));
+  try {
+    const draft = await prepareSubmission({ origin: "https://hosted.example.test", output: join(root, "draft"), readScopes: ["chores:read", "health:read"] });
+    const readme = (await readFile(join(root, "draft/plugin/README.md"), "utf8")).replace(/\s+/g, " ");
+    assert.match(readme, /Reading chores starts on; everything else starts off/);
+    assert.doesNotMatch(readme, /shopping and chores start/);
+    assert.ok(draft.requiredBeforeSubmit.some(entry => entry.includes("MCP_READ_SCOPES=chores:read,health:read;")));
+    assert.equal(draft.requiredBeforeSubmit.some(entry => entry.includes("MCP_DIRECT_ACTIONS")), false);
+    const full = await prepareSubmission({ origin: "https://hosted.example.test", output: join(root, "full") });
+    assert.ok(full.requiredBeforeSubmit.some(entry => entry.includes("MCP_READ_SCOPES=shopping:read,chores:read,health:read,calendar:read, MCP_DIRECT_ACTIONS_ENABLED=true and MCP_DIRECT_ACTIONS=shopping.add,health.groups.log;")));
   } finally {
     assert.equal(dirname(root), resolve(tmpdir())); assert.match(basename(root), /^domi-mcp-package-/);
     await rm(root, { recursive: true, force: true });
