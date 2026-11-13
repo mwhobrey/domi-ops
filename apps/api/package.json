@@ -17,7 +17,7 @@
     "@domi-ops/config": "*",
     "@domi-ops/crypto": "*",
     "@domi-ops/db": "*",
-    "@hono/node-server": "^2.1.5",
+    "@hono/node-server": "^2.1.6",
     "@modelcontextprotocol/hono": "2.0.2",
     "@modelcontextprotocol/server": "2.3.1",
     "@sentry/node": "^11.8.0",
