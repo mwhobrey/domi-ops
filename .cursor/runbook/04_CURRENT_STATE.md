@@ -10,7 +10,8 @@
 - `MCP_DIRECT_ACTIONS_ENABLED` / `MCP_DIRECT_ACTIONS` are separate from
   `MCP_WRITES_ENABLED`; neither enables the other. The default registry registers the
   direct actions `add_shopping_item` and `log_medication_group`; each stays unavailable
-  until the operator lists it in `MCP_DIRECT_ACTIONS` and the member switches it on.
+  until the operator lists its capability in `MCP_DIRECT_ACTIONS` (`shopping.add` and
+  `health.groups.log`, not the tool names) and the member switches it on.
 - Do not bump `MCP_POLICY_VERSION` for capability changes: `liveConnection` denies
   every grant on an older version. Use `MCP_CAPABILITY_CONSENT_VERSION`.
 - All MCP integration suites share one database and one JWKS signing key, so every
