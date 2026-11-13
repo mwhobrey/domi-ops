@@ -105,7 +105,8 @@ test("the default submission is the assistant-actions update and says what it sh
     assert.deepEqual(draft.scopes, ["shopping:read", "chores:read", "shopping:write", "health:read", "health:write", "calendar:read", "offline_access"]);
     assert.deepEqual(draft.dataHandling, { apiOwnership: "first-party", reads: true, writes: true, healthData: true, sponsoredContent: false });
     assert.doesNotMatch(draft.oneLiner + " " + draft.description, /read-only|notes/i);
-    assert.match(draft.description, /a medication group label is sent as you wrote it/);
+    assert.match(draft.description, /a group's label is sent as the member wrote it/);
+    assert.match(draft.description, /Event titles, locations, people and calendar names are never sent/);
     for (const gate of ["MCP_READ_SCOPES and MCP_DIRECT_ACTIONS", "privacy disclosure covering assistant actions, medication timing and calendar availability", "provider-side confirmation prompt"]) {
       assert.ok(draft.requiredBeforeSubmit.some(entry => entry.includes(gate)), gate);
     }
@@ -121,6 +122,25 @@ test("the default submission is the assistant-actions update and says what it sh
     for (const scopes of [[], ["health:write"], ["shopping:write"], ["shopping:read", "drive:read"], ["shopping:read", "shopping:read"]]) {
       await assert.rejects(prepareSubmission({ origin: "https://hosted.example.test", output: join(root, "bad" + scopes.length + scopes.join("")), scopes }));
     }
+  } finally {
+    assert.equal(dirname(root), resolve(tmpdir())); assert.match(basename(root), /^domi-claude-submission-/);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a narrower Claude draft discloses only what it requests, and never requests notes", async () => {
+  const root = await mkdtemp(join(tmpdir(), "domi-claude-submission-"));
+  try {
+    for (const scopes of [["shopping:read", "notes:read"], ["notes:read"], ["shopping:read", "chores:read", "notes:read", "shopping:write"]]) {
+      await assert.rejects(prepareSubmission({ origin: "https://hosted.example.test", output: join(root, "refused"), scopes }));
+    }
+    const draft = await prepareSubmission({ origin: "https://hosted.example.test", output: join(root, "add"), scopes: ["shopping:read", "shopping:write"] });
+    assert.equal(draft.dataHandling.healthData, false);
+    assert.doesNotMatch(draft.description, /medication|label|calendar|Event titles/i);
+    assert.match(draft.description, /Reading shopping starts on; everything else starts off\. It cannot edit/);
+    const calendar = await prepareSubmission({ origin: "https://hosted.example.test", output: join(root, "calendar"), scopes: ["shopping:read", "calendar:read"] });
+    assert.match(calendar.description, /Event titles, locations, people and calendar names are never sent/);
+    assert.doesNotMatch(calendar.description, /medication|label/i);
   } finally {
     assert.equal(dirname(root), resolve(tmpdir())); assert.match(basename(root), /^domi-claude-submission-/);
     await rm(root, { recursive: true, force: true });
