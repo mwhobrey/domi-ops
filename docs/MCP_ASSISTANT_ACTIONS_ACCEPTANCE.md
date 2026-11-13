@@ -81,23 +81,28 @@ row only when the migration role owns the table, is a superuser or has `BYPASSRL
 is true for the documented self-hosted and hosted paths. A role that meets none of them
 would backfill nothing without an error, and existing connections would lose their reads.
 
-Before migrating, as the migration role:
+Straight after migrating, as the migration role, list every live connection from before
+the upgrade that holds a read scope without the matching capability. No rows means the
+backfill reached all of them:
 
 ```sql
-select s as scope, count(*) from mcp_connections c, unnest(c.scopes) s
-where c.status <> 'revoked' and s in ('shopping:read','chores:read','notes:read') group by s;
+select c.id as connection_id, m.capability as missing_capability
+from mcp_connections c
+join (values ('shopping:read','shopping.read'),('chores:read','chores.read'),('notes:read','notes.read'))
+  as m(scope, capability) on m.scope = any(c.scopes)
+left join mcp_connection_capabilities cap
+  on cap.connection_id = c.id and cap.capability = m.capability
+where c.status <> 'revoked'
+  and c.capability_consent_version is null
+  and cap.connection_id is null;
 ```
 
-After migrating:
-
-```sql
-select capability, count(*) from mcp_connection_capabilities
-where consent_version = 'backfill.0108' group by capability;
-```
-
-The counts must match scope for capability (`shopping:read` to `shopping.read`, and so
-on). If the second query returns fewer rows, re-run the `INSERT` statement from
-`0108_mcp_capabilities.sql` as the table owner; it is safe to repeat.
+The check is per connection because equal totals can hide one connection that lost a
+read. A row returned straight after migrating means that connection lost a read; restore
+that row for that connection id. A row that appears later can be a member's own choice,
+since switching a read off deletes its capability row and leaves the scope. For that
+reason do not replay the migration's `INSERT` across the table once members are using
+the new build: it would switch back on every read a member has turned off.
 
 ### Where a first run is most likely to fail
 

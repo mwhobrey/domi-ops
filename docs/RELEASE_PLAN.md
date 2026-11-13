@@ -51,19 +51,42 @@ operator offers them.
 
 ## Check after the hosted deploy
 
-Migration 0108 gives each existing connection the reads it already holds. On
-hosted there was one live connection with `shopping:read` and `chores:read`
-when this was prepared, so expect two rows:
+Migration 0108 gives each existing connection the reads it already holds.
+Run this as the migration role, straight after the deploy. It lists every live
+connection from before the upgrade that holds a read scope without the
+matching capability. No rows means the backfill reached all of them:
 
 ```sql
-select capability, count(*) from mcp_connection_capabilities
-where consent_version = 'backfill.0108' group by capability;
+select c.id as connection_id, m.capability as missing_capability
+from mcp_connections c
+join (values ('shopping:read','shopping.read'),('chores:read','chores.read'),('notes:read','notes.read'))
+  as m(scope, capability) on m.scope = any(c.scopes)
+left join mcp_connection_capabilities cap
+  on cap.connection_id = c.id and cap.capability = m.capability
+where c.status <> 'revoked'
+  and c.capability_consent_version is null
+  and cap.connection_id is null;
 ```
 
-If the counts do not match the live connections' read scopes, existing
-connections have lost their reads; re-run the `INSERT` statement from
-`0108_mcp_capabilities.sql` as the table owner, which is safe to repeat. The
-full check is in part 1 of the acceptance guide.
+It compares connection by connection, because equal totals can hide one
+connection that lost a read. `capability_consent_version is null` selects
+connections approved before this release; later ones choose their own
+capabilities at consent.
+
+Correction, November 13, 2026: an earlier version of this section gave an
+expected count of two rows for hosted. That figure came from a read-only check
+run against a self-hosted instance by mistake, not against hosted production,
+so it says nothing about hosted. The hosted deploy job for v0.13.0 reported
+all 111 migrations applied and the app role re-granted; the row comparison
+above has not been run on the hosted database.
+
+A row returned straight after the deploy means that connection lost a read.
+A row that appears later can be a member's own choice: switching a read off
+under AI connections deletes its capability row and leaves the scope in
+place. So do not replay the migration's `INSERT` across the table to clear a
+mismatch, since it would switch back on every read a member has turned off.
+Restore only the specific rows the query returned straight after the deploy,
+for those connection ids. The same check is in part 1 of the acceptance guide.
 
 ## Release gates
 

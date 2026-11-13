@@ -781,7 +781,10 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
     expect(new Set(seen).size).toBe(all.length); expect(seen.length).toBe(all.length);
     await expect(access.run("list_shopping_items", { checked: "open", cursor: first.nextCursor })).rejects.toThrow();
     await expect(access.run("list_chores", { cursor: first.nextCursor })).rejects.toThrow();
-    await expect(access.run("list_shopping_items", { checked: "all", cursor: first.nextCursor!.slice(0, -2) + "xx" })).rejects.toThrow();
+    // Change one character in the middle. Rewriting the last two could, rarely, decode to the same cursor.
+    const middle = Math.floor(first.nextCursor!.length / 2);
+    const altered = first.nextCursor!.slice(0, middle) + (first.nextCursor![middle] === "A" ? "B" : "A") + first.nextCursor!.slice(middle + 1);
+    await expect(access.run("list_shopping_items", { checked: "all", cursor: altered })).rejects.toThrow();
     const replacement = await toolAccess();
     await expect(replacement.run("list_shopping_items", { checked: "all", cursor: first.nextCursor })).rejects.toThrow();
     await expect(replacement.run("list_shopping_items", { limit: 51 })).rejects.toThrow();
