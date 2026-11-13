@@ -133,6 +133,14 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string, m
     if (scopes.some((s) => s !== "offline_access" && !s.startsWith("health:") && !s.startsWith("calendar:")) && (!isModuleEnabled(env, "core") || !modules.includes("core"))) deny("module_disabled");
   }
 
+  /**
+   * A write scope the operator has since stopped offering. A grant that still holds one keeps its reads:
+   * the scope is dropped from what the token can do instead of refusing the whole connection, so an action
+   * can be switched off without disconnecting anyone. A withdrawn read scope still refuses the grant.
+   */
+  const withdrawnWrite = (scope: string) => (MCP_WRITE_SCOPE_NAMES as readonly string[]).includes(scope) && !(supportedScopes as readonly string[]).includes(scope);
+  const usableScopes = (scopes: readonly string[]) => scopes.filter((scope) => !withdrawnWrite(scope));
+
   async function liveConnection(userId: string, connectionId: string, scopes: readonly string[], clientId?: string) {
     uuid(userId); uuid(connectionId);
     const connection = await withMcpConnectionContext(db, userId, connectionId, async (lookup) => {
@@ -181,7 +189,8 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string, m
     customAccessTokenClaims: async ({ user, referenceId, scopes, resources }) => {
       try {
         if (!user || !referenceId || !resources?.length || resources.some((r) => r !== urls.resource)) deny();
-        const connection = await liveConnection(user.id, referenceId, scopes);
+        // Issuing or refreshing a token for a grant with a withdrawn write scope must still succeed; authorize drops it.
+        const connection = await liveConnection(user.id, referenceId, usableScopes(scopes));
         return { domi_grant_id: connection.id };
       } catch { throw new APIError("FORBIDDEN", { error: "invalid_grant" }); }
     },
@@ -613,7 +622,7 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string, m
         const audiences = typeof payload.aud === "string" ? [payload.aud] : payload.aud;
         if (!audiences || audiences.length !== 1 || audiences[0] !== urls.resource) deny("invalid_token", 401);
         if (typeof payload.exp !== "number" || typeof payload.iat !== "number" || payload.exp - payload.iat > 300) deny("invalid_token", 401);
-        const scopes = payload.scope.split(" ").filter(Boolean);
+        const scopes = usableScopes(payload.scope.split(" ").filter(Boolean));
         const connection = await liveConnection(payload.sub, payload.domi_grant_id, scopes, payload.client_id);
         if (requiredScopes.some((s) => !connection.scopes.includes(s) || !scopes.includes(s))) deny("insufficient_scope");
         return { userId: connection.userId, memberId: connection.memberId, householdId: connection.householdId, connectionId: connection.id, clientId: connection.clientId, scopes };

@@ -34,6 +34,11 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 - Fixed: changing access could replace a connection's stored medication group or
   calendar selection when the stored selection had failed to load. The editors now wait
   for it and offer a retry.
+- An operator can withdraw an assistant action (`MCP_DIRECT_ACTIONS_ENABLED=false`, or
+  dropping it from `MCP_DIRECT_ACTIONS`) without disconnecting anyone. Before, a
+  connection that had been granted the action's scope was refused on every call, reads
+  included, until its member reconnected. Now only the action stops, and it returns
+  when the operator lists it again.
 - A connection approved through an older server build during a rolling deploy keeps the
   reads it approved instead of arriving with nothing switched on.
 - Fixed: "Remove permissions" failed for an assistant connection holding more than four

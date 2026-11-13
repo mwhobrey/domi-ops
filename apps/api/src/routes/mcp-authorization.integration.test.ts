@@ -198,7 +198,7 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
     const plan = planMcpClient(config, origin);
     const root = await mkdtemp(join(tmpdir(), "domi-mcp-operator-fixture-"));
     const cookieFile = join(root, "session.private");
-    const before = await owned(owner, (tx) => tx.select().from(mcpConnections));
+    const before = await owned(owner, (tx) => tx.select().from(mcpConnections).orderBy(mcpConnections.id));
     try {
       await writeFile(cookieFile, "invalid_session=fictional", { mode: 0o600 });
       await expect(provisionMcpClient(plan, { confirmPlan: plan.sha256, cookieFile, receiptFile: join(root, "denied.json"),
@@ -210,7 +210,7 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
       clientIds.push(result.clientId);
       const [profile] = await withMcpProviderContext(db, (tx) => tx.select().from(mcpClientProfiles).where(eq(mcpClientProfiles.clientId, result.clientId)));
       expect(profile).toMatchObject({ provider: "claude", dataMode: "household", enabled: false, version: "pilot.claude.fixture.v1" });
-      expect(await owned(owner, (tx) => tx.select().from(mcpConnections))).toEqual(before);
+      expect(await owned(owner, (tx) => tx.select().from(mcpConnections).orderBy(mcpConnections.id))).toEqual(before);
       expect(await readFile(receiptFile, "utf8")).not.toContain(owner.headers.get("cookie")!);
     } finally {
       expect(dirname(root)).toBe(resolve(tmpdir())); expect(basename(root)).toMatch(/^domi-mcp-operator-fixture-/);
@@ -276,14 +276,14 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
       expect((await originalAuth.mcp.overview(owner.headers, owner.householdId)).claude).toBeNull();
       expect(overview.chatgpt?.serverUrl).toBe(origin + "/api/mcp");
       expect((await originalAuth.mcp.overview(owner.headers, owner.householdId)).chatgpt).toBeNull();
-      const before = await owned(owner, (tx) => tx.select().from(mcpConnections));
+      const before = await owned(owner, (tx) => tx.select().from(mcpConnections).orderBy(mcpConnections.id));
       const deniedQuery = await begin(owner, issuer.scopes_supported, id, redirect);
       const deniedRedirect = new URL((await limited.mcp.rejectConsent(owner.headers, deniedQuery)).redirectUri);
       expect(deniedRedirect.searchParams.get("iss")).toBe(origin + "/auth");
       expect(deniedRedirect.searchParams.get("error")).toBe("access_denied");
       const query = await begin(owner, issuer.scopes_supported, id, redirect);
       expect(transport).toHaveBeenCalled();
-      expect(await owned(owner, (tx) => tx.select().from(mcpConnections))).toEqual(before);
+      expect(await owned(owner, (tx) => tx.select().from(mcpConnections).orderBy(mcpConnections.id))).toEqual(before);
       const preview = await limited.mcp.previewConsent(owner.headers, owner.householdId, query);
       expect(preview).toMatchObject({ provider: providerName, dataMode: "synthetic", settingsReviewRequired: true });
       expect(preview.scopes).toEqual([...readScopes, "offline_access"]);
