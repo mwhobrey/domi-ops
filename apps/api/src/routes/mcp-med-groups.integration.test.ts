@@ -411,6 +411,9 @@ for (const mode of ["single", "shared"] as const) suite(`MCP medication groups (
       // Sharing a group is refused while the module is off; what is stored stays as it was.
       expect((await post(`/api/mcp-auth/connections/${token.connectionId}/health-groups`, { groups: [{ groupId: morning, canLog: true, alias: "Renamed" }], acknowledged: true })).status).not.toBe(200);
       expect((await owned(owner, (tx) => tx.select().from(mcpMedGroupSelections).where(eq(mcpMedGroupSelections.connectionId, token.connectionId)))).map((row) => row.canLog)).toEqual([true]);
+      // Narrowing is still allowed with the module off: here one medication is unticked and nothing else changes.
+      expect((await post(`/api/mcp-auth/connections/${token.connectionId}/health-groups`, { groups: [{ groupId: morning, canLog: true, alias: "Morning", excludedMedicationIds: [meds.a] }] })).status).toBe(200);
+      expect((await owned(owner, (tx) => tx.select().from(mcpMedGroupMemberConsents).where(and(eq(mcpMedGroupMemberConsents.connectionId, token.connectionId), eq(mcpMedGroupMemberConsents.medicationId, meds.a))))).map((row) => row.state)).toEqual(["excluded"]);
     } finally { await owned(owner, (tx) => tx.update(households).set({ modulesEnabled: '["core","health"]' }).where(eq(households.id, owner.householdId))); }
     expect(await doseLogs(Object.values(meds))).toEqual([]);
     // Member switches logging off: the tool goes and stored selections lose it.

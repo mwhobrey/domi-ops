@@ -133,7 +133,7 @@ export async function viewGroupSelections(tx: Database, env: Env, connection: Mc
  * not excluded, which is how newly added medications get approved in one step. Anything that shares
  * more than before needs the member's explicit acknowledgment.
  */
-export async function saveGroupSelections(tx: Database, env: Env, connection: McpOwnedConnection, choices: readonly GroupChoice[], acknowledged: boolean) {
+export async function saveGroupSelections(tx: Database, env: Env, connection: McpOwnedConnection, choices: readonly GroupChoice[], acknowledged: boolean, beforeSharingMore?: () => Promise<void>) {
   const invalid = (): never => { throw new McpAuthorizationError("invalid_group_selection", 400); };
   if (choices.length && !connection.capabilities.includes("health.groups.read")) invalid();
   if (choices.some((choice) => choice.canLog) && !connection.capabilities.includes("health.groups.log")) invalid();
@@ -153,6 +153,8 @@ export async function saveGroupSelections(tx: Database, env: Env, connection: Mc
     return { choice, alias, states };
   });
   if (widened && !acknowledged) throw new McpAuthorizationError("acknowledgment_required", 400);
+  // Only a change that shares more runs the caller's extra check; narrowing always goes through.
+  if (widened) await beforeSharingMore?.();
   // Member consents go with their selection through the cascade.
   await tx.delete(mcpMedGroupSelections).where(eq(mcpMedGroupSelections.connectionId, connection.connectionId));
   const owned = { householdId: connection.householdId, connectionId: connection.connectionId, userId: connection.userId };

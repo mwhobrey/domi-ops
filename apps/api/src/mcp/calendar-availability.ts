@@ -125,13 +125,15 @@ export async function viewCalendarSelections(tx: Database, connection: McpOwnedC
 }
 
 /** Replaces one connection's calendar choices. Adding a calendar shares more than before, so it needs the acknowledgment. */
-export async function saveCalendarSelections(tx: Database, connection: McpOwnedConnection, ids: readonly string[], acknowledged: boolean) {
+export async function saveCalendarSelections(tx: Database, connection: McpOwnedConnection, ids: readonly string[], acknowledged: boolean, beforeSharingMore?: () => Promise<void>) {
   if (!connection.capabilities.includes("calendar.availability")) throw new McpAuthorizationError("invalid_capability", 400);
   const chosen = await proposedCalendarIds(tx, connection, ids);
   const existing = (await tx.select({ calendarId: mcpCalendarSelections.calendarId }).from(mcpCalendarSelections)
     .where(eq(mcpCalendarSelections.connectionId, connection.connectionId))).map((row) => row.calendarId);
   const added = chosen.filter((id) => !existing.includes(id)), removed = existing.filter((id) => !chosen.includes(id));
   if (added.length && !acknowledged) throw new McpAuthorizationError("acknowledgment_required", 400);
+  // Only a change that shares more runs the caller's extra check; removing a calendar always goes through.
+  if (added.length) await beforeSharingMore?.();
   if (removed.length) await tx.delete(mcpCalendarSelections).where(and(eq(mcpCalendarSelections.connectionId, connection.connectionId), inArray(mcpCalendarSelections.calendarId, removed)));
   if (added.length) await tx.insert(mcpCalendarSelections).values(added.map((calendarId) => ({
     householdId: connection.householdId, connectionId: connection.connectionId, userId: connection.userId, calendarId })));
