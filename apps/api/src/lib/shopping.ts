@@ -64,6 +64,7 @@ export function serializeShoppingItem(row: typeof shoppingItemsTable.$inferSelec
     notes: row.notes ?? null,
     cost: row.cost ?? null,
     recurringId: row.recurringId ?? null,
+    createdByDisplayName: row.createdByDisplayName ?? null,
     createdAt: row.createdAt,
   };
 }

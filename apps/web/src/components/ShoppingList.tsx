@@ -32,6 +32,7 @@ export interface ShoppingItem {
   notes: string | null;
   cost: number | null;
   recurringId: string | null;
+  createdByDisplayName?: string | null;
 }
 
 export interface ShoppingRecurring {
@@ -285,6 +286,9 @@ export function ShoppingList({
           ) : null}
           {i.notes ? (
             <p className="text-xs text-[var(--color-text-muted)]">{i.notes}</p>
+          ) : null}
+          {i.createdByDisplayName ? (
+            <p className="text-xs text-[var(--color-text-muted)]">Added by {i.createdByDisplayName}</p>
           ) : null}
           {i.cost != null ? (
             <p className="text-xs text-[var(--color-text-muted)]">{formatMoney(i.cost)}</p>

@@ -198,7 +198,7 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
     const plan = planMcpClient(config, origin);
     const root = await mkdtemp(join(tmpdir(), "domi-mcp-operator-fixture-"));
     const cookieFile = join(root, "session.private");
-    const before = await owned(owner, (tx) => tx.select().from(mcpConnections));
+    const before = await owned(owner, (tx) => tx.select().from(mcpConnections).orderBy(mcpConnections.id));
     try {
       await writeFile(cookieFile, "invalid_session=fictional", { mode: 0o600 });
       await expect(provisionMcpClient(plan, { confirmPlan: plan.sha256, cookieFile, receiptFile: join(root, "denied.json"),
@@ -210,7 +210,7 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
       clientIds.push(result.clientId);
       const [profile] = await withMcpProviderContext(db, (tx) => tx.select().from(mcpClientProfiles).where(eq(mcpClientProfiles.clientId, result.clientId)));
       expect(profile).toMatchObject({ provider: "claude", dataMode: "household", enabled: false, version: "pilot.claude.fixture.v1" });
-      expect(await owned(owner, (tx) => tx.select().from(mcpConnections))).toEqual(before);
+      expect(await owned(owner, (tx) => tx.select().from(mcpConnections).orderBy(mcpConnections.id))).toEqual(before);
       expect(await readFile(receiptFile, "utf8")).not.toContain(owner.headers.get("cookie")!);
     } finally {
       expect(dirname(root)).toBe(resolve(tmpdir())); expect(basename(root)).toMatch(/^domi-mcp-operator-fixture-/);
@@ -276,14 +276,14 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
       expect((await originalAuth.mcp.overview(owner.headers, owner.householdId)).claude).toBeNull();
       expect(overview.chatgpt?.serverUrl).toBe(origin + "/api/mcp");
       expect((await originalAuth.mcp.overview(owner.headers, owner.householdId)).chatgpt).toBeNull();
-      const before = await owned(owner, (tx) => tx.select().from(mcpConnections));
+      const before = await owned(owner, (tx) => tx.select().from(mcpConnections).orderBy(mcpConnections.id));
       const deniedQuery = await begin(owner, issuer.scopes_supported, id, redirect);
       const deniedRedirect = new URL((await limited.mcp.rejectConsent(owner.headers, deniedQuery)).redirectUri);
       expect(deniedRedirect.searchParams.get("iss")).toBe(origin + "/auth");
       expect(deniedRedirect.searchParams.get("error")).toBe("access_denied");
       const query = await begin(owner, issuer.scopes_supported, id, redirect);
       expect(transport).toHaveBeenCalled();
-      expect(await owned(owner, (tx) => tx.select().from(mcpConnections))).toEqual(before);
+      expect(await owned(owner, (tx) => tx.select().from(mcpConnections).orderBy(mcpConnections.id))).toEqual(before);
       const preview = await limited.mcp.previewConsent(owner.headers, owner.householdId, query);
       expect(preview).toMatchObject({ provider: providerName, dataMode: "synthetic", settingsReviewRequired: true });
       expect(preview.scopes).toEqual([...readScopes, "offline_access"]);
@@ -364,6 +364,35 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
       await expect(limited.mcp.authorize(bearer(next.access_token))).rejects.toBeTruthy();
       await limited.mcp.setHouseholdEnabled(owner.headers, owner.householdId, true);
       await expect(limited.mcp.authorize(bearer(next.access_token))).rejects.toBeTruthy();
+    } finally { auth = originalAuth; }
+  });
+  it("Grok Bot on a deployment that offers health and calendar: any part of the offer connects and a scope outside it is refused whole", async () => {
+    const originalAuth = auth, id = GROK_BOT_CLIENT_ID, redirect = GROK_BOT_CALLBACK;
+    const wide: Env = { ...env, MCP_GROK_BOT_ENABLED: true, MCP_READ_SCOPES: ["shopping:read", "chores:read", "health:read", "calendar:read"],
+      MCP_DIRECT_ACTIONS_ENABLED: true, MCP_DIRECT_ACTIONS: ["shopping.add", "health.groups.log"], MODULES_ENABLED: ["core", "health", "calendar_sync"] } as Env;
+    const metadata = { client_id: id, client_name: "Cursor", client_uri: "https://cursor.com", redirect_uris: [...GROK_BOT_METADATA_CALLBACKS],
+      grant_types: ["authorization_code", "refresh_token"], response_types: ["code"], token_endpoint_auth_method: "none" };
+    const transport = vi.fn(async (input: string | Request | URL) => {
+      if (String(input) !== id) throw new Error("Unexpected metadata fetch");
+      return Response.json(metadata, { headers: { "cache-control": "no-store" } });
+    });
+    const limited = createBetterAuth(db, wide, { cookiePrefix, mcpMetadataFetch: transport });
+    auth = limited;
+    clientIds.push(id);
+    try {
+      const issuer = z.object({ scopes_supported: z.array(z.string()) }).parse(await (await limited.mcp.metadata(new Request(origin + "/.well-known/oauth-authorization-server/auth"))).json());
+      expect(issuer.scopes_supported).toEqual(expect.arrayContaining(["health:read", "calendar:read", "health:write"]));
+      // Grok Bot's policy now allows everything this ceiling offers, so the client connects whether it asks for
+      // the narrow set, the scopes a member typed, or everything advertised. Selected notes stay outside the
+      // policy and this ceiling: such a request never reaches consent and goes back to the client's callback as
+      // an error. The server never trims a request.
+      const preview = async (requested: string[]) => limited.mcp.previewConsent(owner.headers, owner.householdId, await begin(owner, requested, id, redirect));
+      const narrow = ["shopping:read", "chores:read", "shopping:write", "offline_access"];
+      const full = ["shopping:read", "chores:read", "shopping:write", "health:read", "health:write", "calendar:read", "offline_access"];
+      expect((await preview(narrow)).scopes).toEqual(narrow);
+      expect((await preview(full)).scopes).toEqual(full);
+      expect([...(await preview(issuer.scopes_supported)).scopes].sort()).toEqual([...issuer.scopes_supported].sort());
+      await expect(begin(owner, [...narrow, "notes:read"], id, redirect)).rejects.toMatchObject({ actual: new URL(redirect).pathname, expected: "/ai/consent" });
     } finally { auth = originalAuth; }
   });
   it("links a discovery-driven Gemini client without notes and rejects disabled scopes on existing grants", async () => {

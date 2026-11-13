@@ -811,6 +811,7 @@ export function householdHealthRoutes(db: Database, env: Env) {
         scheduledTimeLabel: l.scheduledAt ? formatTimeLabelInTz(l.scheduledAt, tz) : null,
         loggedAtLabel: formatTimeLabelInTz(l.loggedAt, tz),
         loggedAt: l.loggedAt.toISOString(),
+        recordedByAssistant: l.loggedViaConnectionId != null,
       };
     });
 

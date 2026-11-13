@@ -1086,6 +1086,7 @@ export function HealthPageClient({
                                         ? `for ${dose.scheduledTimeLabel}`
                                         : null,
                                       `logged ${dose.loggedAtLabel}`,
+                                      dose.recordedByAssistant ? "recorded by an assistant" : null,
                                     ]
                                       .filter(Boolean)
                                       .join(" · ")}

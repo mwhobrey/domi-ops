@@ -1,5 +1,27 @@
 # Claude connector submission preparation (WHO-478)
 
+## Update 0.2.0: assistant actions (prepared 2026-11-12, not submitted)
+
+Package 0.2.0 adds a second skill and describes abilities each member switches on:
+adding a shopping item, medication group times and logging, and calendar availability.
+The sections below were written for the read-only 0.1.x listing; where they say
+"read-only" or "exposed read tool", read this section first.
+
+- `prepare-submission.mjs` now takes an optional third argument, a comma-separated scope
+  list. With none it drafts the full update. `shopping:read,chores:read` reproduces the
+  read-only draft.
+- The draft's `dataHandling` now says `writes: true` and `healthData: true` when those
+  scopes are included. Enter the same in the portal. Two tools are not read-only and
+  their annotations say so.
+- The hosted endpoint must offer exactly the drafted scopes before the source PR merges.
+  Claude asks for whatever the server advertises.
+- `integrations/claude/domi-ops-household` on `main` still holds the read-only 0.1.2.
+  The 0.2.0 source, with both skills and the updated generator, is the stacked branch
+  `who-512/claude-package-0-2-0`. Do not validate the `main` source as the actions
+  update; merge that branch first, in the order the acceptance guide gives.
+- Tests, per-provider acceptance and the order of steps are in
+  [the acceptance guide](MCP_ASSISTANT_ACTIONS_ACCEPTANCE.md).
+
 The directory package is prepared locally. It is **not submitted or approved**.
 Published-identity onboarding and the installed briefing passed in the approved
 self-host pilot. The stable hosted submission endpoint still needs its own

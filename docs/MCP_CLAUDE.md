@@ -169,3 +169,23 @@ real households, hosted production and public directory listing are unverified.
 - [Claude plugin layout and validation](https://claude.com/docs/plugins/build)
 - [Skills installation](https://support.claude.com/en/articles/12512180-use-skills-in-claude)
 - [Cloudflare temporary tunnels and limitations](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/)
+
+## Assistant actions (package 0.2.0, not deployed)
+
+Everything above describes the read-only integration that is live. Package 0.2.0 adds
+abilities a member switches on per connection. The
+[spec](MCP_ASSISTANT_ACTIONS_SPEC.md) defines them and the
+[acceptance guide](MCP_ASSISTANT_ACTIONS_ACCEPTANCE.md) lists the tests and the steps
+to update a listing.
+
+| Ability | Tool | Operator must list | Starts |
+| --- | --- | --- | --- |
+| Read shopping, chores | `list_shopping_items`, `list_chores` | default reads | on |
+| Add a shopping item | `add_shopping_item` | `shopping.add` in `MCP_DIRECT_ACTIONS` | off |
+| Medication group times and status | `get_medication_group_schedule` | `health:read` in `MCP_READ_SCOPES` | off |
+| Record a group as taken | `log_medication_group` | `health.groups.log` in `MCP_DIRECT_ACTIONS` | off |
+| Busy times on chosen calendars | `get_calendar_availability` | `calendar:read` in `MCP_READ_SCOPES` | off |
+
+A member reconnects from the assistant to be offered the new abilities, then changes
+them under Settings, AI connections, Change access. No medication name and no event
+detail is ever sent.

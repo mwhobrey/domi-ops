@@ -97,6 +97,10 @@ integrations, delete/anonymize live database and object records, record permitte
 exceptions, confirm backup expiry and prevent reintroduction during recovery.
 The public 30-day verified-request target requires a working support process.
 No production retention settings or deletion case has been verified here.
+The privacy policy now states that Cloud database backups are managed by DigitalOcean and
+kept for 7 days (WHO-512). Confirm the managed PostgreSQL cluster's backup retention is 7
+days before the policy is published, and that uploaded files in object storage have no
+separate backup the policy would have to describe.
 
 After deployment, use a fresh synthetic demo reseed only under the demo runbook.
 Do not reset a live demo database casually. Check current dates, useful School and

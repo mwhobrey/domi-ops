@@ -37,6 +37,7 @@
 
 ## Supplementary docs (outside runbook)
 
+- `docs/MCP_ASSISTANT_ACTIONS_SPEC.md` — accepted pilot spec for per-connection capabilities and direct assistant actions; section 12 records what is built
 - `docs/MCP_REVIEWED_WRITES.md` — WHO-479 server-owned review/idempotency foundation, migration and disabled release boundary; original contract in `MCP_WRITE_CONFIRMATION_PLAN.md`
 - `docs/MCP_GROK_BOT.md` — WHO-489 read-only cloud identity, setup/privacy, draft packaging and pending installed-client acceptance
 - `docs/MCP_GROK_BOT_SUBMISSION.md` — Grok Bot listing draft, reviewer checklist and final submission gates

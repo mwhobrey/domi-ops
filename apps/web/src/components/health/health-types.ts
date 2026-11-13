@@ -195,6 +195,8 @@ export interface LoggedDose {
   scheduledTimeLabel: string | null;
   loggedAt: string;
   loggedAtLabel: string;
+  /** An assistant connection recorded this entry at the member's request. */
+  recordedByAssistant?: boolean;
 }
 
 export type TodayEntry =

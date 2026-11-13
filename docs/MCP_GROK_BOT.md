@@ -93,9 +93,12 @@ an existing directory is refused. The `.cursor-plugin/plugin.json` manifest,
 remote connection, no secrets, local commands, hooks or routines. The public
 `auth.CLIENT_ID` is the pinned metadata URL; `auth.scopes` explicitly requests
 shopping, chores and refresh, rather than relying on a client registration guess.
-The optional final CSV argument selects one or both read scopes and must match
-the deployment's `MCP_READ_SCOPES`. Omission defaults to both; refresh is added
-automatically. Notes, writes, duplicate scopes and empty selections are refused.
+The optional final CSV argument selects the scopes and must match what the
+deployment offers. Omission defaults to the two reads; refresh is added
+automatically. For the read-only package it selects one or both read scopes. Since
+0.2.0 it also accepts `shopping:write`, `health:read`, `health:write` and
+`calendar:read` (see "Assistant actions" below); an action needs its read. Notes,
+duplicate scopes and empty selections are refused.
 The format is documented by Cursor; actual catalog activation in Grok Bot still
 needs verification.
 
@@ -186,3 +189,32 @@ blocks future access; provider copies remain subject to its own terms/settings.
 
 The live metadata response is primary evidence for the identity/redirect set;
 Cursor editor documentation alone does not prove the installed Bot's behavior.
+
+## Assistant actions (2026-11, not deployed)
+
+The sections above describe the read-only integration that is live. The
+[assistant actions spec](MCP_ASSISTANT_ACTIONS_SPEC.md) adds per-connection
+capabilities and direct actions. For Grok Bot specifically:
+
+- Its policy now also allows `shopping:write`. That scope is grantable only while an
+  operator lists `shopping.add` in `MCP_DIRECT_ACTIONS`, and it does nothing until the
+  member switches "Add items to the shared shopping list" on for the connection.
+- Since 2026-11-12 its policy also allows `health:read`, `health:write` and
+  `calendar:read`: the same set as Claude and ChatGPT. Selected notes stay outside it,
+  and `MCP_GROK_BOT_ENABLED` is still refused on a deployment that lists `notes:read`.
+  Medication group and calendar access each start off and need the member to pick
+  groups and calendars, exactly as on the other providers.
+- Server side (`mcp-authorization.integration.test.ts`, both deployment modes): on a
+  deployment that offers health and calendar, a Grok Bot request for the narrow set, for
+  the full set, or for everything the server advertises reaches consent with exactly the
+  scopes it asked for. A request that adds `notes:read` is refused whole
+  (`invalid_consent_query`); the server never trims a request. So the client connects
+  whether it sends the scopes a member typed or everything advertised.
+- Not yet observed: the real Grok Bot client calling the medication or calendar tools,
+  and whether it shows its own confirmation before the two tools that are not
+  read-only. The owner chose to ship the full set after Claude and ChatGPT passed.
+- The AI connections page suggests only scopes this policy accepts.
+
+The Grok Bot packager accepts `shopping:write`, `health:read`, `health:write` and
+`calendar:read` on top of the two reads, and then ships the household actions skill
+beside the briefing skill. It refuses `notes:read`. No listing has been changed and nothing has been submitted.

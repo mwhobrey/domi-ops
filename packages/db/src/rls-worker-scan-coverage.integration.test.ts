@@ -30,6 +30,8 @@ const NOT_READ_BY_WORKER_SCANS = new Set([
   "mcp_household_windows", "mcp_connection_windows", "mcp_request_leases",
   // WHO-479: member-owned encrypted proposals/receipts; only fixed pruning crosses tenants.
   "mcp_write_intents", "mcp_write_events",
+  // Assistant capabilities and action activity are member-owned; only fixed pruning crosses tenants.
+  "mcp_connection_capabilities", "mcp_action_events", "mcp_med_group_selections", "mcp_med_group_member_consents", "mcp_calendar_selections",
   // Goals and recurring bills are read/materialized by tenant requests only.
   "goals", "goal_rewards", "goal_milestones", "goal_progress_events", "goal_reward_redemptions", "expense_recurring",
   // Upload provenance is used only by tenant requests and explicit tenant-scoped maintenance.

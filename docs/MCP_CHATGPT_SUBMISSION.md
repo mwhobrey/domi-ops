@@ -1,5 +1,25 @@
 # OpenAI plugin submission preparation (WHO-478)
 
+## Update 0.2.0: assistant actions (prepared 2026-11-12, not uploaded)
+
+Package 0.2.0 adds a second skill and can request action scopes. The sections below
+were written for the read-only 0.1.x listing; read this section first.
+
+- `prepare-submission.mjs` now takes an optional third argument, a comma-separated scope
+  list. With none it drafts the full update: shopping, chores, shopping add, medication
+  groups and calendar availability. `shopping:read,chores:read` reproduces the
+  read-only draft.
+- The package's `defaultScopes` must equal what the endpoint advertises, or sign-in is
+  refused. Refresh stays a base scope.
+- The review plan still has exactly five positive test cases and three negative test
+  cases. With action scopes they cover an add, a repeated add, a medication group read
+  and record, calendar availability, refused edits, withheld details and an instruction
+  hidden in a record's text.
+- Two tools are not read-only. Record the confirmation ChatGPT shows for each during
+  the video walkthrough, and say so in the release notes.
+- Tests, per-provider acceptance and the order of steps are in
+  [the acceptance guide](MCP_ASSISTANT_ACTIONS_ACCEPTANCE.md).
+
 The Domi Ops Cloud ChatGPT plugin is listed
 ([Available in ChatGPT](https://chatgpt.com/plugins/plugin_asdk_app_6ae0aba26a6481919c67125a963fa4f9)):
 read-only household shopping and chores on Domi Ops Cloud. Materials below remain

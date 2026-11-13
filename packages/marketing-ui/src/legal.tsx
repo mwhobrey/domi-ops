@@ -1,3 +1,4 @@
+// WHO-512: set this to the day the revised assistant and Health wording is published, not before.
 export const LEGAL_LAST_UPDATED = "October 23, 2026";
 export const LEGAL_CONTACT_EMAIL = "privacy@domi-ops.com";
 
@@ -82,10 +83,10 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
           </li>
           <li>
             <strong className="text-[var(--color-text)]">At rest (health):</strong> When the health
-            module is enabled, sensitive health fields (for example titles, notes, medication names,
-            dosage, instructions, and comparable vitals or log values) are encrypted at rest with
-            the same <code>ENCRYPTION_KEY</code>. Dates, member assignment, and schedule times stay
-            queryable without storing those values in plaintext.
+            module is enabled, the sensitive text and measurement fields listed under Health
+            module below are encrypted at rest with the same <code>ENCRYPTION_KEY</code>. Fields
+            the app must search, sort or schedule by are not field-encrypted; that section lists
+            those too.
           </li>
           <li>
             <strong className="text-[var(--color-text)]">Access controls:</strong> Household members
@@ -193,6 +194,18 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
             . Access tokens are encrypted at rest on the instance.
           </li>
           <li>
+            <strong>DigitalOcean</strong>: Domi Ops Cloud hosting, managed database and object
+            storage. See{" "}
+            <a
+              href="https://www.digitalocean.com/legal/privacy-policy"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              DigitalOcean&apos;s Privacy Policy
+            </a>
+            .
+          </li>
+          <li>
             <strong>Object storage</strong>: S3-compatible storage (MinIO or a cloud bucket) for
             uploads.
           </li>
@@ -228,12 +241,88 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
       <section>
         <h2>Health module</h2>
         <p>
-          Optional. Sensitive fields (titles, notes, medication names, dosage, instructions) are
-          encrypted at rest with the instance <code>ENCRYPTION_KEY</code>. Dates, member assignment,
-          and schedule times remain queryable. Access follows per-record visibility and segment ACL.
-          There is <strong className="text-[var(--color-text)]">no admin override</strong> of
-          private health data. Domi Ops is not a healthcare provider and is{" "}
-          <strong className="text-[var(--color-text)]">not HIPAA-compliant</strong>.
+          Optional. Access follows per-record visibility and segment ACL. Within the app there is{" "}
+          <strong className="text-[var(--color-text)]">no admin override</strong> of private health
+          data; infrastructure access is described under Cloud below. Domi Ops is not a healthcare
+          provider and is <strong className="text-[var(--color-text)]">not HIPAA-compliant</strong>.
+        </p>
+        <p>
+          <strong className="text-[var(--color-text)]">What Health stores.</strong> Only what you
+          or a connected device enter or import:
+        </p>
+        <ul>
+          <li>
+            Medications: name, dose, instructions, form (for example pill or liquid), schedule
+            (times, days or interval), reminder offsets, start and end dates, paused periods, and
+            medication groups.
+          </li>
+          <li>
+            Dose logs: which medication or group, the scheduled time, taken or skipped, when it was
+            logged, who logged it, any note, and whether an assistant connection recorded it.
+          </li>
+          <li>
+            Supply and pill organizers: run-out and refill dates, quantities, lead days, the
+            pharmacy chosen, organizer plans, compartment names, fill sessions and skips, with any
+            notes you add.
+          </li>
+          <li>
+            Pharmacies: name, address, phone, website and notes.
+          </li>
+          <li>
+            Health entries: vitals (such as blood pressure, pulse, weight), exercise, pain (body
+            region, severity, quality tags), meals (food, quantity, calories, protein, carbs,
+            fat), sickness, injuries, symptoms, appointments, medication taken and other entries
+            you add, each with a title, notes and date.
+          </li>
+          <li>
+            Health checks: the check templates, their schedules, and each logged result and note.
+          </li>
+          <li>
+            Withings imports, if you connect a device: the readings, workouts, daily activity and
+            sleep summaries listed below.
+          </li>
+          <li>
+            Sharing settings (who may see which member&apos;s medications, doses, entries and
+            reports) and records of which reminders were sent.
+          </li>
+          <li>
+            Connection credentials for Withings and MyAllyFile (below).
+          </li>
+        </ul>
+        <p>
+          <strong className="text-[var(--color-text)]">Encrypted at the field level.</strong>{" "}
+          These are encrypted before they are written to the database, with the instance{" "}
+          <code>ENCRYPTION_KEY</code>: medication, group, check and pharmacy names; check
+          templates; dose, instructions and notes on medications, doses, checks and entries; pharmacy address,
+          phone and website; health entry titles and notes; vitals values; exercise activity,
+          duration, distance, sets, reps and calories; pain severity and quality tags; meal food
+          names, quantities and nutrition values; Withings workout, activity and sleep figures;
+          the pill organizer fill snapshot and appointment notes; the label you choose for an
+          assistant connection; and the Withings and MyAllyFile credentials and profile name.
+        </p>
+        <p>
+          <strong className="text-[var(--color-text)]">Not field-encrypted.</strong> Fields the
+          app must search, sort or schedule by are stored as ordinary database values: which member
+          a record belongs to, the type of entry, dates and times (scheduled, logged, started,
+          ended), schedule rules, dose quantities, taken or skipped status, medication form, exercise intensity, pain body region,
+          units and metric types, organizer compartment names and plan schedules, supply and refill
+          dates and quantities, which medications belong to which group or check, sharing
+          settings, and reminder records. Someone with direct database access can read these
+          without the key; someone with the database and the key can read everything.
+        </p>
+        <p>
+          <strong className="text-[var(--color-text)]">How Cloud processes it.</strong> On Domi Ops
+          Cloud the app runs on a DigitalOcean server we operate, the database is DigitalOcean
+          Managed PostgreSQL, and uploaded files are in DigitalOcean object storage. Traffic is encrypted with TLS. The <code>ENCRYPTION_KEY</code> is held on the server,
+          so field encryption protects stored copies; it is not end-to-end encryption, and we can
+          technically decrypt hosted data. We access it only to run the service, provide support you
+          ask for, or meet a legal obligation, and we do not sell it or use it for advertising.
+          Health data leaves Domi Ops only to services you turn on: Withings and MyAllyFile if you
+          link them, and an AI assistant provider if you approve a connection. A hosted error
+          report does not include health values, names or notes. Deleting a medication or a health
+          check hides it and keeps it marked as deleted so dose and result history stays
+          consistent; deleting your account or household on request removes the records as
+          described under Retention and deletion, and database backups, managed by DigitalOcean, are kept for 7 days.
         </p>
         <p>
           <strong className="text-[var(--color-text)]">MyAllyFile (optional).</strong> If you link a
@@ -304,10 +393,25 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
           household administrator enable the integration. Each member approves their own
           connection and permissions. Approved reads send connection labels and timezone,
           shopping items, chores, and only explicitly selected planning notes to the chosen
-          assistant provider. Current membership and record permissions still apply. The
-          current integration does not directly access Calendar, School, Health, Drive or
-          attachments, and cannot change household records. Do not select notes containing
-          copied Google-derived, health, child or other excluded information for this workflow.
+          assistant provider. Current membership and record permissions still apply. Do not
+          select notes containing copied Google-derived, health, child or other excluded
+          information for this workflow.
+        </p>
+        <p>
+          Where the instance operator offers them, a member can also switch on further
+          abilities for one connection. Each starts off and can be switched off at any time.
+          Adding a shopping item sends the item you ask the assistant to add. Medication group
+          access sends a label you choose, the group&rsquo;s scheduled times and whether it has
+          been logged, and lets the assistant record a group as taken when you say you took it;
+          it does not send the separate medication name, strength, instruction or history
+          records. The label is sent as you wrote it, so a label that names a medication
+          shares that name; choose a neutral one. Calendar
+          availability sends the times you are busy on calendars you choose, merged into blocks;
+          it never sends event titles, descriptions, locations, attendees or calendar names, and
+          it leaves out events imported from Google Calendar. The provider receives what these
+          abilities return under its own terms. They cannot edit, remove, skip or undo a
+          record. The integration does not access School, Drive or attachments. The Health
+          module section above lists what Health stores and how it is protected.
         </p>
         <p>
           The assistant is a separate service you choose. Its account settings and terms govern
@@ -319,10 +423,14 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
         </p>
         <p>
           AI connections settings lets you review permissions, remove access or disconnect.
-          Disconnect stops future reads; it cannot erase copies already held by the assistant.
+          Disconnect stops future access; it cannot erase copies already held by the assistant.
           Security activity records tool names, outcomes, timing and response sizes rather than
           returned record content or raw tool arguments, with a 30-day activity retention
-          window. Self-hosted operators administer their own deployment and retention.
+          window. A record of the actions an assistant completed, holding the kind of action,
+          its outcome and counts but no item names or labels, is kept for 90 days. The member
+          who owns the connection sees the ten most recent in AI connections settings. A dose recorded through an assistant is marked as
+          such in your own health history. Self-hosted operators administer their own
+          deployment and retention.
         </p>
       </section>
 
@@ -384,9 +492,10 @@ export function PrivacyPolicyContent({ termsHref }: { termsHref: string }) {
           adults&apos; authorization. The archive uses a separate transfer key; hosted service keys,
           payment details, login sessions and external-service credentials are excluded. Report
           exports within your existing permissions remain available in the app.</p>
-        <p>Canceling renewal does not delete records. Backup copies expire through the service&apos;s
-          backup rotation; we confirm the applicable backup and diagnostic retention windows when
-          handling a deletion request. Deleted data must not be reintroduced during disaster recovery.</p>
+        <p>Canceling renewal does not delete records. Cloud database backups are managed by DigitalOcean and kept for 7 days,
+          so data removed from the live database leaves our backups within 7 days after that.
+          Deleted data must not be reintroduced during disaster recovery. Diagnostic retention
+          depends on the Sentry project settings; contact us for the hosted configuration.</p>
       </section>
 
       <section>

@@ -61,3 +61,65 @@ test("packages only the remote connection and byte-identical shared skill; refus
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("requests shopping add only on top of the shopping read, and ships the actions skill with it", async () => {
+  for (const scopes of [["chores:read", "shopping:write"], ["shopping:read", "health:write"], ["shopping:read", "notes:read"], ["health:write"]]) {
+    assert.throws(() => pluginConfiguration("https://selfhost.example.test", scopes));
+  }
+  const root = await mkdtemp(join(tmpdir(), "domi-grok-scopes-"));
+  try {
+    const output = join(root, "add");
+    await writePlugin({ origin: "https://selfhost.example.test", output, readScopes: ["shopping:read", "chores:read", "shopping:write"] });
+    const mcp = JSON.parse(await readFile(join(output, "mcp.json"), "utf8"));
+    assert.deepEqual(mcp.mcpServers["domi-ops"].auth.scopes, ["shopping:read", "chores:read", "shopping:write", "offline_access"]);
+    const manifest = JSON.parse(await readFile(join(output, ".cursor-plugin/plugin.json"), "utf8"));
+    assert.equal(manifest.version, "0.2.0");
+    assert.doesNotMatch(manifest.description, /read-only/i);
+    assert.deepEqual((await readdir(join(output, "skills"))).sort(), ["domi-ops-household-actions", "domi-ops-household-briefing"]);
+    for (const name of ["SKILL.md", "LICENSE.txt"]) {
+      assert.deepEqual(await readFile(join(output, "skills/domi-ops-household-actions", name)), await readFile(new URL("../../skills/domi-ops-household-actions/" + name, import.meta.url)));
+    }
+    const readme = await readFile(join(output, "README.md"), "utf8");
+    assert.match(readme, /it starts off/);
+    assert.match(readme, /cannot edit, check off or remove an item/);
+    assert.match(readme, /notes, medication, calendar or any other change/);
+    // A read-only package still carries the briefing skill alone and makes no action claim.
+    const plain = join(root, "plain");
+    await writePlugin({ origin: "https://selfhost.example.test", output: plain });
+    assert.deepEqual(await readdir(join(plain, "skills")), ["domi-ops-household-briefing"]);
+    assert.match(await readFile(join(plain, "README.md"), "utf8"), /It does not permit notes or domain writes\./);
+  } finally {
+    assert.equal(dirname(root), resolve(tmpdir())); assert.match(basename(root), /^domi-grok-scopes-/);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("accepts the full assistant-actions set and says what medication and calendar access share", async () => {
+  const full = ["shopping:read", "chores:read", "shopping:write", "health:read", "health:write", "calendar:read"];
+  const root = await mkdtemp(join(tmpdir(), "domi-grok-scopes-"));
+  try {
+    const output = join(root, "full");
+    await writePlugin({ origin: "https://selfhost.example.test", output, readScopes: full });
+    const mcp = JSON.parse(await readFile(join(output, "mcp.json"), "utf8"));
+    assert.deepEqual(mcp.mcpServers["domi-ops"].auth.scopes, [...full, "offline_access"]);
+    const manifest = JSON.parse(await readFile(join(output, ".cursor-plugin/plugin.json"), "utf8"));
+    assert.match(manifest.description, /medication group times and logging status/);
+    assert.match(manifest.description, /busy times on chosen calendars/);
+    assert.doesNotMatch(manifest.description, /read-only/i);
+    assert.deepEqual((await readdir(join(output, "skills"))).sort(), ["domi-ops-household-actions", "domi-ops-household-briefing"]);
+    const readme = (await readFile(join(output, "README.md"), "utf8")).replace(/\s+/g, " ");
+    assert.match(readme, /briefing and actions for Grok Bot/);
+    assert.match(readme, /each of which starts off/);
+    assert.match(readme, /Medication name, strength, instruction and history fields are never sent, but the label is sent as you wrote it/);
+    assert.match(readme, /Event titles, locations, people and calendar names are never sent/);
+    assert.match(readme, /cannot edit, remove, skip or undo anything, and the grant does not include notes/);
+    assert.doesNotMatch(readme, /medication, calendar or any other change/);
+    // Calendar alone, without any write, is still an action package.
+    const calendar = join(root, "calendar");
+    await writePlugin({ origin: "https://selfhost.example.test", output: calendar, readScopes: ["shopping:read", "calendar:read"] });
+    assert.deepEqual((await readdir(join(calendar, "skills"))).sort(), ["domi-ops-household-actions", "domi-ops-household-briefing"]);
+  } finally {
+    assert.equal(dirname(root), resolve(tmpdir())); assert.match(basename(root), /^domi-grok-scopes-/);
+    await rm(root, { recursive: true, force: true });
+  }
+});
