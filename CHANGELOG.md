@@ -8,6 +8,14 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-13
+
+Upgrades from v0.12.0 require migrations `0108_mcp_capabilities` through
+`0110_mcp_calendar_availability` and a re-grant of the restricted app role. Use the
+documented deployment scripts; hosted CI deploy uses `deploy-hosted.sh --migrate`.
+Existing assistant connections keep their reads and do not need to reconnect. Every
+new assistant ability stays off until an operator lists it.
+
 - README and the marketing site now link the public Domi Ops ChatGPT listing
   ([Available in ChatGPT](https://chatgpt.com/plugins/plugin_asdk_app_6ae0aba26a6481919c67125a963fa4f9))
   for the read-only Cloud shopping-and-chores plugin.
