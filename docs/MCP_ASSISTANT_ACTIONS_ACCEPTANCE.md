@@ -34,7 +34,7 @@ The last command needs Docker. It starts a disposable PostgreSQL 16 container, m
 through `0110`, creates the restricted application role and runs the database-backed
 files in single and shared modes. To run one case, add `-TestNamePattern "<text>"`.
 Last full passes (2026-11-12, everything in this document included): typecheck 17 of 17,
-1,679 unit tests, 22 package tests, 271 database tests in 9 files.
+1,681 unit tests, 22 package tests, 273 database tests in 9 files.
 tests, typecheck 17 of 17. Typecheck still passes 17 of 17 with everything below.
 
 ### Unit tests (`npm run test`)
@@ -55,7 +55,7 @@ tests, typecheck 17 of 17. Typecheck still passes 17 of 17 with everything below
 | --- | --- | --- |
 | `scripts/mcp-claude/package.test.mjs` | Package 0.2.0 with both skills, README limits, read-only and actions submission drafts, committed portal source in sync | Passed 2026-11-12 |
 | `scripts/mcp-chatgpt/package.test.mjs` | Scope validation, read-only masks, actions draft with exact scopes, five and three review cases for every scope set | Passed 2026-11-12 |
-| `scripts/mcp-grok-bot/package.test.mjs` | Shopping and chores only, optional `shopping:write`, no health or calendar scope accepted | Passed 2026-11-12 |
+| `scripts/mcp-grok-bot/package.test.mjs` | Read-only, shopping add and the full set; notes refused; an action needs its read | Passed 2026-11-12 |
 
 ### Database tests (`scripts/test-mcp-auth.ps1`)
 
@@ -138,10 +138,12 @@ MODULES_ENABLED must include core, health and calendar_sync
   health:write offline_access`.
 - Existing connections keep their reads and gain nothing. Reconnect from the assistant
   to reach the new consent screen.
-- **Grok Bot:** its policy accepts only `shopping:read`, `chores:read` and
-  `shopping:write`. What its client does when the server also advertises health and
-  calendar scopes has not been observed. Test that first, on the review deployment,
-  before changing the ceiling anywhere Grok Bot is enabled.
+- **Grok Bot:** since 2026-11-12 its policy accepts the same set as the other two
+  (everything except selected notes), so it connects on this ceiling whether its client
+  asks for the scopes the member typed or for everything advertised. That is tested
+  server side. The real Grok Bot client has not yet been run with medication or
+  calendar access; the owner chose to ship the full set on the strength of the Claude
+  and ChatGPT runs.
 - Enabling any of this on the hosted production deployment is a separate owner
   decision after acceptance.
 
@@ -173,7 +175,7 @@ into the new directory. Each refuses to overwrite an existing one.
 
 ## 4. Manual acceptance, once per provider
 
-Run on Claude and on ChatGPT. Run the shopping rows on Grok Bot. Record the build,
+Run on Claude, ChatGPT and Grok Bot. Record the build,
 provider, client version, UTC time and result of each row privately. "Finishes in chat"
 may be claimed for a provider only where it was seen.
 
@@ -226,7 +228,7 @@ may be claimed for a provider only where it was seen.
 
 - Whether each provider adds its own confirmation for the two non-read-only tools.
   Record what is seen. Either answer is acceptable; the listing text must match it.
-- Grok Bot with a ceiling that includes scopes its policy refuses (part 2).
+- Grok Bot calling the medication and calendar tools with its real client (part 2).
 - Push delivery to a real device, which needs push credentials and a subscription.
   What is tested stops at the call into the delivery function: who gets one, what the
   notice holds, and that a failure neither undoes the log nor goes unreported.
@@ -267,7 +269,7 @@ change is the owner's call at the time.
 
 **Grok Bot** ([guide](MCP_GROK_BOT_SUBMISSION.md))
 
-1. Shopping add only. Generate with
-   `mise exec -- node scripts/mcp-grok-bot/package.mjs https://app.domi-ops.com .qa/NEW-GROK-DRAFT shopping:read,chores:read,shopping:write`
-2. Update the description in the submission form. Medication and calendar access stay
-   out until Claude and ChatGPT have passed.
+1. Full set, decided 2026-11-12. Generate with
+   `mise exec -- node scripts/mcp-grok-bot/package.mjs https://app.domi-ops.com .qa/NEW-GROK-DRAFT shopping:read,chores:read,shopping:write,health:read,health:write,calendar:read`
+2. Update the description in the submission form and declare writes and health data,
+   as for the other two.

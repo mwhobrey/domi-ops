@@ -196,19 +196,20 @@ capabilities and direct actions. For Grok Bot specifically:
 - Its policy now also allows `shopping:write`. That scope is grantable only while an
   operator lists `shopping.add` in `MCP_DIRECT_ACTIONS`, and it does nothing until the
   member switches "Add items to the shared shopping list" on for the connection.
-- Its policy does not allow `health:read` or `health:write`. Medication group access is
-  held back for Grok Bot until it has passed acceptance on Claude and ChatGPT.
-- Server side, observed 2026-11-12 (`mcp-authorization.integration.test.ts`, both
-  deployment modes): on a deployment that advertises `health:read`, `calendar:read` and
-  `health:write` as well, a Grok Bot request for exactly its allowed scopes reaches consent
-  with exactly those scopes. A request for everything advertised, or for its allowed scopes
-  plus one more, is refused whole (`invalid_consent_query`); the server never trims it.
-- Still not observed: whether the real Cursor cloud client asks for the scopes the member
-  typed (the card's list) or for everything the server advertises. If the former, the card
-  is enough. If the latter, Grok Bot cannot connect to a deployment advertising health or
-  calendar. Test that with the real client on a fictional lab before listing `health:read`
-  or `calendar:read` in `MCP_READ_SCOPES` on a deployment that has Grok Bot enabled. Until
-  then, do not enable Grok Bot on such a deployment.
+- Since 2026-11-12 its policy also allows `health:read`, `health:write` and
+  `calendar:read`: the same set as Claude and ChatGPT. Selected notes stay outside it,
+  and `MCP_GROK_BOT_ENABLED` is still refused on a deployment that lists `notes:read`.
+  Medication group and calendar access each start off and need the member to pick
+  groups and calendars, exactly as on the other providers.
+- Server side (`mcp-authorization.integration.test.ts`, both deployment modes): on a
+  deployment that offers health and calendar, a Grok Bot request for the narrow set, for
+  the full set, or for everything the server advertises reaches consent with exactly the
+  scopes it asked for. A request that adds `notes:read` is refused whole
+  (`invalid_consent_query`); the server never trims a request. So the client connects
+  whether it sends the scopes a member typed or everything advertised.
+- Not yet observed: the real Grok Bot client calling the medication or calendar tools,
+  and whether it shows its own confirmation before the two tools that are not
+  read-only. The owner chose to ship the full set after Claude and ChatGPT passed.
 - The AI connections page suggests only scopes this policy accepts.
 
 The Grok Bot packager accepts `shopping:write` as a third scope and then ships the

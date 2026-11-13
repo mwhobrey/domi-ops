@@ -229,7 +229,7 @@ export const envSchema = z
       ctx.addIssue({ code: "custom", path: ["MCP_DIRECT_ACTIONS_ENABLED"], message: "Direct assistant actions require MCP, an explicit action ceiling and a non-demo deployment" });
     }
     if (data.MCP_GROK_BOT_ENABLED && (!data.MCP_ENABLED || data.DEMO_MODE || !data.MCP_READ_SCOPES || data.MCP_READ_SCOPES.includes("notes:read"))) {
-      ctx.addIssue({ code: "custom", path: ["MCP_GROK_BOT_ENABLED"], message: "Grok Bot requires MCP, a non-demo deployment and an explicit shopping/chores-only read ceiling" });
+      ctx.addIssue({ code: "custom", path: ["MCP_GROK_BOT_ENABLED"], message: "Grok Bot requires MCP, a non-demo deployment and an explicit read ceiling without notes:read" });
     }
     if (data.MCP_ENABLED) {
       const url = new URL(data.PUBLIC_APP_URL);

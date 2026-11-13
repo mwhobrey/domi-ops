@@ -42,6 +42,9 @@
   anything the action's result depends on. A failure there is logged by
   `reportAfterCommitFailure` with the tool, connection id and error class only; never
   add the error message, since a provider's text can quote what was sent.
+- Grok Bot's policy (`packages/auth/src/mcp-grok-bot.ts`) allows the full actions set
+  since 2026-11-12; only `notes:read` is outside it. Its real client has not yet called
+  the medication or calendar tools.
 - `skills/domi-ops-household-actions/` is a draft skill, not packaged. The published
   packages and `skills/domi-ops-household-briefing/` are still read-only 0.1.x.
 - Stage 4 (2026-11-12, tests unrun): `get_calendar_availability` in
