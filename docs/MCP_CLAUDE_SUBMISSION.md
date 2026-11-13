@@ -15,7 +15,10 @@ The sections below were written for the read-only 0.1.x listing; where they say
   their annotations say so.
 - The hosted endpoint must offer exactly the drafted scopes before the source PR merges.
   Claude asks for whatever the server advertises.
-- `integrations/claude/domi-ops-household` already holds 0.2.0.
+- `integrations/claude/domi-ops-household` on `main` still holds the read-only 0.1.2.
+  The 0.2.0 source, with both skills and the updated generator, is the stacked branch
+  `who-512/claude-package-0-2-0`. Do not validate the `main` source as the actions
+  update; merge that branch first, in the order the acceptance guide gives.
 - Tests, per-provider acceptance and the order of steps are in
   [the acceptance guide](MCP_ASSISTANT_ACTIONS_ACCEPTANCE.md).
 

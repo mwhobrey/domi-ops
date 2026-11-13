@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actionSummary, calendarsChanged, capabilityDetails, capabilityLabels, choicesFromView, connectionError, defaultCapabilities, unapprovedCount, type MedGroupView } from "./mcp";
+import { actionSummary, calendarsChanged, capabilityDetails, capabilityLabels, choicesFromView, connectionError, defaultCapabilities, toggleCapability, unapprovedCount, type MedGroupView } from "./mcp";
 import { assistantConsentPath, assistantLoginRedirect } from "./mcp";
 
 const signed = "sig=example&ba_param=state&ba_param=client_id&state=one&client_id=approved";
@@ -52,13 +52,18 @@ describe("medication group sharing", () => {
   });
   it("describes health capabilities and never pre-selects them", () => {
     for (const name of ["health.groups.read", "health.groups.log"]) expect(capabilityDetails[name].detail).toMatch(/medication|group/i);
-    expect(capabilityDetails["health.groups.read"].detail).toMatch(/Never a medication name/);
+    expect(capabilityDetails["health.groups.read"].detail).toMatch(/medication name, strength, instruction and history fields are never sent, but the label is sent as you write it/);
   });
   it("summarizes medication activity from counts alone", () => {
     expect(actionSummary({ action: "health.groups.log", outcome: "logged", counts: { logged: 3, alreadyRecorded: 1, notAccessible: 0 } })).toBe("Recorded a medication group as taken (3 doses)");
     expect(actionSummary({ action: "health.groups.log", outcome: "logged", counts: { logged: 1, notAccessible: 2 } })).toBe("Recorded a medication group as taken (1 dose, 2 not recorded: no access)");
     expect(actionSummary({ action: "health.groups.log", outcome: "logged", counts: null })).toBe("Recorded a medication group as taken (0 doses)");
-    expect(actionSummary({ action: "health.groups.log", outcome: "nothing_to_log" })).toMatch(/already recorded/);
+    expect(actionSummary({ action: "health.groups.log", outcome: "nothing_to_log" })).toMatch(/nothing new to record/);
+    // Logging a group brings its read with it, and losing the read takes logging along.
+    expect(toggleCapability(["shopping.read"], "health.groups.log", true).sort()).toEqual(["health.groups.log", "health.groups.read", "shopping.read"]);
+    expect(toggleCapability(["shopping.read", "health.groups.read", "health.groups.log"], "health.groups.read", false)).toEqual(["shopping.read"]);
+    expect(toggleCapability(["shopping.read", "health.groups.read", "health.groups.log"], "health.groups.log", false)).toEqual(["shopping.read", "health.groups.read"]);
+    expect(toggleCapability(["shopping.read"], "shopping.read", true)).toEqual(["shopping.read"]);
     expect(actionSummary({ action: "health.groups.log", outcome: "not_permitted" })).toMatch(/no access/);
     expect(actionSummary({ action: "health.groups.log", outcome: "target_changed" })).toMatch(/nothing was recorded/);
     expect(actionSummary({ action: "health.groups.log", outcome: "something_new" })).toBe("Completed an action");

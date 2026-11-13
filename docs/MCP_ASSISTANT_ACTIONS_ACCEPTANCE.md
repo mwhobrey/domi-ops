@@ -34,7 +34,7 @@ The last command needs Docker. It starts a disposable PostgreSQL 16 container, m
 through `0110`, creates the restricted application role and runs the database-backed
 files in single and shared modes. To run one case, add `-TestNamePattern "<text>"`.
 Last full passes (2026-11-12, everything in this document included): typecheck 17 of 17,
-1,681 unit tests, 22 package tests, 273 database tests in 9 files.
+1,682 unit tests, 24 package tests, 275 database tests in 9 files.
 tests, typecheck 17 of 17. Typecheck still passes 17 of 17 with everything below.
 
 ### Unit tests (`npm run test`)
@@ -144,6 +144,13 @@ MODULES_ENABLED must include core, health and calendar_sync
   server side. The real Grok Bot client has not yet been run with medication or
   calendar access; the owner chose to ship the full set on the strength of the Claude
   and ChatGPT runs.
+- **Withdrawing an action later is not a soft switch.** Turning
+  `MCP_DIRECT_ACTIONS_ENABLED` off, or removing an action from `MCP_DIRECT_ACTIONS`,
+  takes its write scope out of what the deployment supports. A connection whose grant
+  holds that scope is then refused on every call, reads included, until its member
+  reconnects, the same way removing a read scope from `MCP_READ_SCOPES` already works.
+  To stop one action without that, have members switch it off under AI connections, or
+  switch the household module off. A softer operator switch is an open follow-up.
 - Enabling any of this on the hosted production deployment is a separate owner
   decision after acceptance.
 
@@ -167,8 +174,15 @@ mise exec -- node scripts/mcp-chatgpt/prepare-submission.mjs https://app.domi-op
 ```
 
 ```powershell
+git switch who-512/claude-package-0-2-0
 mise exec -- node scripts/mcp-claude/prepare-submission.mjs https://app.domi-ops.com .qa/claude-submission/NEW-DRAFT
 ```
+
+Run the Claude command from the stacked branch `who-512/claude-package-0-2-0`. On this
+branch and on `main` the Claude generator is still the read-only 0.1.2 one, and its
+draft requests only `shopping:read`, `chores:read` and `offline_access`, which cannot
+exercise the medication or calendar rows in part 4. Check that the draft's `scopes`
+list the full set before starting the Claude run.
 
 Both write `review-plan.draft.json`, `recording-outline.md` and `release-notes.draft.md`
 into the new directory. Each refuses to overwrite an existing one.

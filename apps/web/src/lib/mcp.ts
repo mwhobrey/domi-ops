@@ -17,7 +17,7 @@ export const capabilityDetails: Record<string, { label: string; detail: string }
   "notes.read": { label: "Read only the notes you select", detail: "The title and text of each note you pick below. Notes with links or embeds share their title only." },
   "shopping.add": { label: "Add items to the shared shopping list", detail: "The assistant can add an item when you ask in chat, with no confirmation step in Domi Ops. It cannot edit, check off or remove items. Everyone in your household sees what it adds." },
 };
-capabilityDetails["health.groups.read"] = { label: "See when my medication groups are due", detail: "For the groups you pick below: a label, the times and whether each has been logged. Never a medication name, strength, instruction or history. Timing and logging status are still personal information." };
+capabilityDetails["health.groups.read"] = { label: "See when my medication groups are due", detail: "For the groups you pick below: a label, the times and whether each has been logged. The medication name, strength, instruction and history fields are never sent, but the label is sent as you write it, so pick one that does not name a medication. Timing and logging status are still personal information." };
 capabilityDetails["health.groups.log"] = { label: "Record a medication group as taken", detail: "When you tell the assistant you took a group, it records that for the medications you approved, with no confirmation step in Domi Ops. It cannot skip, undo or change an entry. You get a notice in Domi Ops each time." };
 capabilityDetails["calendar.availability"] = { label: "See when I am busy", detail: "For the calendars you pick below: the times you are busy, merged into blocks. Never an event title, location, person or calendar name. Events imported from Google Calendar are left out. When you are busy is still personal information." };
 export type OwnCalendar = { id: string; name: string; visibility: "household" | "private" };
@@ -38,6 +38,13 @@ export function unapprovedCount(view: MedGroupView | null): number {
   return view ? view.selections.reduce((total, selection) => total + selection.medications.filter((med) => med.state === "new").length, 0) : 0;
 }
 export type CapabilityOption = { name: string; access: "read" | "write" };
+/** An action that builds on a read. The server refuses one without the other, so the form keeps them together. */
+const capabilityRequires: Record<string, string> = { "health.groups.log": "health.groups.read" };
+/** The selection after ticking or unticking one capability, with what it needs added and what needs it removed. */
+export function toggleCapability(selected: readonly string[], name: string, on: boolean): string[] {
+  if (on) return [...new Set([...selected, name, ...(capabilityRequires[name] ? [capabilityRequires[name]] : [])])];
+  return selected.filter((entry) => entry !== name && capabilityRequires[entry] !== name);
+}
 export type AiAction = { action: string; outcome: string; counts: Record<string, number> | null; createdAt: string };
 
 const actionOutcomes: Record<string, Record<string, string>> = {
@@ -49,7 +56,7 @@ export function actionSummary(event: Pick<AiAction, "action" | "outcome"> & { co
     const logged = event.counts?.logged ?? 0, blocked = event.counts?.notAccessible ?? 0;
     const doses = (count: number) => `${count} ${count === 1 ? "dose" : "doses"}`;
     if (event.outcome === "logged") return `Recorded a medication group as taken (${doses(logged)}${blocked ? `, ${blocked} not recorded: no access` : ""})`;
-    if (event.outcome === "nothing_to_log") return "Asked to record a medication group that was already recorded";
+    if (event.outcome === "nothing_to_log") return "Asked to record a medication group; there was nothing new to record";
     if (event.outcome === "not_permitted") return "Asked to record a medication group it has no access to log";
     if (event.outcome === "target_changed") return "Asked to record a medication group using a reference that was no longer valid; nothing was recorded";
   }

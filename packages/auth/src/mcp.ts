@@ -392,7 +392,9 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string, m
             await tx.delete(mcpNoteSelections).where(and(eq(mcpNoteSelections.connectionId, connectionId),
               input.noteIds.length ? notInArray(mcpNoteSelections.noteId, input.noteIds) : undefined));
             // A capability never outlives the scope that bounds it.
-            const kept = MCP_CAPABILITY_NAMES.filter((name) => input.scopes.includes(MCP_CAPABILITIES[name].scope));
+            // Nor does it outlive a capability it builds on: logging a group goes when reading it does.
+            const scoped = MCP_CAPABILITY_NAMES.filter((name) => input.scopes.includes(MCP_CAPABILITIES[name].scope));
+            const kept = scoped.filter((name) => { const needs = (MCP_CAPABILITIES[name] as { requires?: McpCapability }).requires; return !needs || scoped.includes(needs); });
             await tx.delete(mcpConnectionCapabilities).where(and(eq(mcpConnectionCapabilities.connectionId, connectionId),
               kept.length ? notInArray(mcpConnectionCapabilities.capability, kept) : undefined));
             if (!input.scopes.includes("health:read")) await tx.delete(mcpMedGroupSelections).where(eq(mcpMedGroupSelections.connectionId, connectionId));

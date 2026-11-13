@@ -8,6 +8,22 @@ import { McpGatewayError } from "./access.js";
 const secret = "synthetic-unit-test-secret-for-occurrence-references";
 const target = { g: randomUUID(), d: "2026-11-12", t: "08:00", s: "0123456789abcdef" };
 
+describe("medication group label bound", () => {
+  it("accepts every label cleanLabel can produce, counted as a reader counts", () => {
+    const occurrence = { occurrenceRef: "r", localTime: "08:00", status: "pending" as const };
+    const output = (label: string) => groupScheduleOutput.safeParse({ schemaVersion: 1, retrievedAt: new Date().toISOString(), householdTimezone: "UTC", date: "2026-11-12",
+      coverage: "selected_groups_only", contentTrust: "untrusted", data: [{ label, canLog: false, occurrences: [occurrence] }] }).success;
+    // Forty emoji are forty characters and eighty UTF-16 units.
+    const emoji = cleanLabel("\u{1F48A}".repeat(60));
+    expect([...emoji]).toHaveLength(40);
+    expect(emoji.length).toBe(80);
+    expect(output(emoji)).toBe(true);
+    expect(output("Morning vitamins and blood pressure \u{1F48A}\u{1F48A}")).toBe(true);
+    expect(output("x".repeat(41))).toBe(false);
+    expect(output("\u{1F48A}".repeat(41))).toBe(false);
+  });
+});
+
 describe("medication occurrence references", () => {
   afterEach(() => { vi.useRealTimers(); });
 
@@ -23,7 +39,9 @@ describe("medication occurrence references", () => {
     expect(occurrenceReferences(secret + "x").decode(connection, reference)).toBeNull();
     const [payload, signature] = reference.split(".");
     const forged = Buffer.from(JSON.stringify({ ...target, g: randomUUID(), x: Date.now() + 60_000 })).toString("base64url");
-    for (const altered of [forged + "." + signature, payload + "." + signature.slice(0, -2) + "AA", payload, payload + "." + signature + ".extra", "", "not-a-reference", "a.b"]) {
+    // Change one character so the altered signature can never equal the original.
+    const flipped = signature.slice(0, -2) + (signature.at(-2) === "A" ? "B" : "A") + signature.at(-1);
+    for (const altered of [forged + "." + signature, payload + "." + flipped, payload, payload + "." + signature + ".extra", "", "not-a-reference", "a.b"]) {
       expect(references.decode(connection, altered), altered.slice(0, 20)).toBeNull();
     }
   });

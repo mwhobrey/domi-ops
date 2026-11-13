@@ -8,9 +8,9 @@
   row in `mcp_connection_capabilities` (migration 0108), checked in the call's
   transaction. Existing grants are backfilled with the reads they already hold.
 - `MCP_DIRECT_ACTIONS_ENABLED` / `MCP_DIRECT_ACTIONS` are separate from
-  `MCP_WRITES_ENABLED`; neither enables the other. The gateway has a direct execution
-  mode but the default registry registers no action. `add_shopping_item` is a
-  reserved name only.
+  `MCP_WRITES_ENABLED`; neither enables the other. The default registry registers the
+  direct actions `add_shopping_item` and `log_medication_group`; each stays unavailable
+  until the operator lists it in `MCP_DIRECT_ACTIONS` and the member switches it on.
 - Do not bump `MCP_POLICY_VERSION` for capability changes: `liveConnection` denies
   every grant on an older version. Use `MCP_CAPABILITY_CONSENT_VERSION`.
 - All MCP integration suites share one database and one JWKS signing key, so every
@@ -45,9 +45,11 @@
 - Grok Bot's policy (`packages/auth/src/mcp-grok-bot.ts`) allows the full actions set
   since 2026-11-12; only `notes:read` is outside it. Its real client has not yet called
   the medication or calendar tools.
-- `skills/domi-ops-household-actions/` is a draft skill, not packaged. The published
-  packages and `skills/domi-ops-household-briefing/` are still read-only 0.1.x.
-- Stage 4 (2026-11-12, tests unrun): `get_calendar_availability` in
+- `skills/domi-ops-household-actions/` ships in the ChatGPT and Grok Bot 0.2.0 packages
+  beside the unchanged briefing skill. The Claude plugin source in
+  `integrations/claude/domi-ops-household` stays at 0.1.2 on `main`; its 0.2.0 is the
+  stacked branch `who-512/claude-package-0-2-0`. No 0.2.0 package is published yet.
+- Stage 4 (2026-11-12, tests run and passing): `get_calendar_availability` in
   `apps/api/src/mcp/calendar-availability.ts`, capability `calendar.availability`, scope
   `calendar:read`, module `calendar_sync`, migration 0110. Local events only; Google
   events are excluded in code. Do not add a field to its output without a spec change.

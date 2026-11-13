@@ -111,7 +111,9 @@ export function mcpGateway(db: Database, auth: Authorization, env: Env, tools: r
                   outcome = "succeeded";
                   return { structuredContent: result, content: [{ type: "text" as const, text }] };
                 } catch {
-                  if (signal.aborted) outcome = "deadline_exceeded";
+                  // The write stands even though its result could not be returned: never log that as a denial.
+                  if (committed) outcome = "committed_result_failed";
+                  else if (signal.aborted) outcome = "deadline_exceeded";
                   // A failure inside the action's transaction rolls everything back, so "not saved" is exact.
                   const text = tool.execution !== "direct" ? "Tool unavailable or request exceeded its bounds."
                     : committed ? "The action was saved but its result could not be returned. Read the current state before telling the user what happened."

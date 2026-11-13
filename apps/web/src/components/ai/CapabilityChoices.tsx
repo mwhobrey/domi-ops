@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { apiClient } from "../../lib/client-api";
-import { capabilityDetails, connectionError, type CapabilityOption } from "../../lib/mcp";
+import { capabilityDetails, connectionError, toggleCapability, type CapabilityOption } from "../../lib/mcp";
 import { Button, Checkbox } from "../ui";
 
 const previewable = ["shopping.read", "chores.read"];
@@ -10,13 +10,16 @@ const previewable = ["shopping.read", "chores.read"];
 /** Shows the tool's own response for the member's current data, so the description cannot drift from the code. */
 function PayloadPreview({ householdId, capability }: { householdId: string; capability: string }) {
   const [state, setState] = useState<{ open: boolean; loading: boolean; text: string | null; error: string | null }>({ open: false, loading: false, text: null, error: null });
+  // Each open or close starts a new turn; a response from an earlier turn is dropped.
+  const turn = useRef(0);
   async function toggle() {
+    const current = ++turn.current;
     if (state.open) { setState({ ...state, open: false }); return; }
     setState({ open: true, loading: true, text: null, error: null });
     try {
       const result = await apiClient.post<{ payload: unknown }>("/api/mcp-auth/capabilities/preview", { householdId, capability });
-      setState({ open: true, loading: false, text: JSON.stringify(result.payload, null, 2), error: null });
-    } catch (e) { setState({ open: true, loading: false, text: null, error: connectionError(e) }); }
+      if (turn.current === current) setState({ open: true, loading: false, text: JSON.stringify(result.payload, null, 2), error: null });
+    } catch (e) { if (turn.current === current) setState({ open: true, loading: false, text: null, error: connectionError(e) }); }
   }
   return <div className="space-y-2">
     <Button type="button" variant="secondary" aria-expanded={state.open} onClick={() => void toggle()}>{state.open ? "Hide what the assistant receives" : "See what the assistant receives"}</Button>
@@ -38,7 +41,7 @@ export function CapabilityChoices({ idPrefix, householdId, options, selected, on
   const row = (option: CapabilityOption) => <div key={option.name} className="space-y-2">
     <Checkbox id={`${idPrefix}-${option.name}`} disabled={disabled} checked={selected.includes(option.name)}
       label={capabilityDetails[option.name]?.label ?? option.name}
-      onChange={(e) => onChange(e.target.checked ? [...selected, option.name] : selected.filter((name) => name !== option.name))} />
+      onChange={(e) => onChange(toggleCapability(selected, option.name, e.target.checked))} />
     <p className="pl-6 text-sm text-[var(--color-text-muted)]">{capabilityDetails[option.name]?.detail}</p>
     {previewable.includes(option.name) && <div className="pl-6"><PayloadPreview householdId={householdId} capability={option.name} /></div>}
   </div>;

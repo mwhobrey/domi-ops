@@ -93,9 +93,12 @@ an existing directory is refused. The `.cursor-plugin/plugin.json` manifest,
 remote connection, no secrets, local commands, hooks or routines. The public
 `auth.CLIENT_ID` is the pinned metadata URL; `auth.scopes` explicitly requests
 shopping, chores and refresh, rather than relying on a client registration guess.
-The optional final CSV argument selects one or both read scopes and must match
-the deployment's `MCP_READ_SCOPES`. Omission defaults to both; refresh is added
-automatically. Notes, writes, duplicate scopes and empty selections are refused.
+The optional final CSV argument selects the scopes and must match what the
+deployment offers. Omission defaults to the two reads; refresh is added
+automatically. For the read-only package it selects one or both read scopes. Since
+0.2.0 it also accepts `shopping:write`, `health:read`, `health:write` and
+`calendar:read` (see "Assistant actions" below); an action needs its read. Notes,
+duplicate scopes and empty selections are refused.
 The format is documented by Cursor; actual catalog activation in Grok Bot still
 needs verification.
 

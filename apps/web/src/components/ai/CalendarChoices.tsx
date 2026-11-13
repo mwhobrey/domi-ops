@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiClient } from "../../lib/client-api";
 import { connectionError, type OwnCalendar } from "../../lib/mcp";
 import { Button, Checkbox } from "../ui";
@@ -26,17 +26,21 @@ export function CalendarChoices({ idPrefix, householdId, value, onChange, disabl
     return () => { cancelled = true; };
   }, [householdId]);
 
+  // A preview belongs to the selection it was requested for; any change or close drops a response still in flight.
+  const turn = useRef(0);
   function toggle(id: string, shared: boolean) {
+    turn.current++;
     setPreview((state) => ({ ...state, open: false }));
     onChange(shared ? [...value, id] : value.filter((entry) => entry !== id));
   }
   async function togglePreview() {
+    const current = ++turn.current;
     if (preview.open) { setPreview({ ...preview, open: false }); return; }
     setPreview({ open: true, loading: true, text: null, error: null });
     try {
       const result = await apiClient.post<{ payload: unknown }>("/api/mcp-auth/calendars/preview", { householdId, calendarIds: value });
-      setPreview({ open: true, loading: false, text: JSON.stringify(result.payload, null, 2), error: null });
-    } catch (e) { setPreview({ open: true, loading: false, text: null, error: connectionError(e) }); }
+      if (turn.current === current) setPreview({ open: true, loading: false, text: JSON.stringify(result.payload, null, 2), error: null });
+    } catch (e) { if (turn.current === current) setPreview({ open: true, loading: false, text: null, error: connectionError(e) }); }
   }
 
   if (error) return <p role="alert" className="text-sm text-[var(--color-danger)]">{error}</p>;

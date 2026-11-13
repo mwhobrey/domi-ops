@@ -26,7 +26,7 @@ export async function prepareSubmission({ origin, output, readScopes = PILOT_SCO
   plugin.extensions = { "com.openai": { interface: {
     displayName: "Domi Ops", shortDescription: actions ? "Household lists and routines" : "Household briefing",
     longDescription: actions
-      ? `${plugin.description} Each adult signs in to Domi Ops, approves their own access and switches on each ability for that connection; every action starts off. Medication names and event details are never shared. Nothing can edit, remove, skip or undo a record. No School, Drive or attachment access. Standard integration is included in hosted pricing and free for self-hosting; a separate ChatGPT account is required.`
+      ? `${plugin.description} Each adult signs in to Domi Ops, approves their own access and switches on each ability for that connection; every action starts off.${hasHealth(scopes) ? " Medication details are never shared; a medication group's label is shared as you wrote it." : ""}${scopes.includes("calendar:read") ? " Event details are never shared." : ""} Nothing can edit, remove, skip or undo a record. No School, Drive or attachment access. Standard integration is included in hosted pricing and free for self-hosting; a separate ChatGPT account is required.`
       : `${plugin.description} Read persisted records with source links. Each adult signs in to Domi Ops and approves their own access. No saved changes or direct Calendar, School, Health, Drive or attachment access. Standard integration is included in hosted pricing and free for self-hosting; a separate ChatGPT account is required.`,
     developerName: "Domi Ops", category: "Productivity", logo: "./assets/icon.png", composerIcon: "./assets/icon.png",
     websiteURL: "https://domi-ops.com", supportURL: "https://github.com/mwhobrey/domi-ops/issues/new/choose",
@@ -36,13 +36,15 @@ export async function prepareSubmission({ origin, output, readScopes = PILOT_SCO
   await writeFile(join(pluginPath, "plugin.json"), JSON.stringify(plugin, null, 2) + "\n");
   await copyFile(join(root, "docs/MCP_CHATGPT_SUBMISSION.md"), join(output, "submission-guide.md"));
   await writeReviewMaterials({ output, scopes, packageVersion: config.plugin.version });
+  // Settings take read scopes and action names; the draft's scope list is what those settings make the server advertise.
+  const directActions = [scopes.includes("shopping:write") ? "shopping.add" : null, scopes.includes("health:write") ? "health.groups.log" : null].filter(Boolean);
   const draft = { status: "draft-not-uploaded", readyToSubmit: false, serverUrl: config.mcp.mcpServers["domi-ops"].url,
     scopes,
     dataHandling: { reads: true, writes: hasWrites(scopes), healthData: hasHealth(scopes) },
     requiredBeforeSubmit: [
       "Review merged source and authorize exact stable endpoint deployment",
       ...(actions ? [
-        "Set the endpoint's MCP_READ_SCOPES and MCP_DIRECT_ACTIONS to exactly the scopes in this draft; a mismatch refuses sign-in",
+        `Set the endpoint's MCP_READ_SCOPES=${scopes.filter(scope => scope.endsWith(":read")).join(",")}` + (directActions.length ? `, MCP_DIRECT_ACTIONS_ENABLED=true and MCP_DIRECT_ACTIONS=${directActions.join(",")}` : "") + "; then confirm the scopes_supported it advertises equal this draft's scopes (the server adds offline_access). A mismatch refuses sign-in",
         "Publish the updated privacy disclosure covering assistant actions" + (hasHealth(scopes) ? ", medication timing" : "") + (scopes.includes("calendar:read") ? " and calendar availability" : ""),
         "Record the confirmation ChatGPT shows for each tool that is not read-only",
       ] : []),
