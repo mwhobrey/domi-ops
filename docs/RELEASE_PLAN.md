@@ -51,16 +51,26 @@ operator offers them.
 
 ## Check after the hosted deploy
 
-Migration 0108 gives each existing connection the reads it already holds. On
-hosted there was one live connection with `shopping:read` and `chores:read`
-when this was prepared, so expect two rows:
+Migration 0108 gives each existing connection the reads it already holds.
+Compare the two results below; each read scope's count must equal its
+capability's count (`shopping:read` to `shopping.read`, and so on):
 
 ```sql
+select s as scope, count(*) from mcp_connections c, unnest(c.scopes) s
+where c.status <> 'revoked' and s in ('shopping:read','chores:read','notes:read') group by s;
+
 select capability, count(*) from mcp_connection_capabilities
 where consent_version = 'backfill.0108' group by capability;
 ```
 
-If the counts do not match the live connections' read scopes, existing
+Correction, November 13, 2026: an earlier version of this section gave an
+expected count of two rows for hosted. That figure came from a read-only check
+run against a self-hosted instance by mistake, not against hosted production,
+so it says nothing about hosted. The hosted deploy job for v0.13.0 reported
+all 111 migrations applied and the app role re-granted; the row comparison
+above has not been run on the hosted database.
+
+If the counts do not match, existing
 connections have lost their reads; re-run the `INSERT` statement from
 `0108_mcp_capabilities.sql` as the table owner, which is safe to repeat. The
 full check is in part 1 of the acceptance guide.
