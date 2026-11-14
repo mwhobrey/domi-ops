@@ -8,6 +8,11 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+- Calendar availability now tells an assistant how to report each result, in a note sent
+  beside the result as well as in the tool description: say which busy blocks are listed
+  or that none is, never that a time is free or open, and never that the list is
+  complete. The result's fields and schema are unchanged, and no event detail is added.
+
 - Changing an assistant-recorded dose in Health now makes the entry the member's own:
   after a status or time edit it no longer says "recorded by an assistant". Entries
   that were not changed keep the mark, and the assistant's activity history is kept.

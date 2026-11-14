@@ -1,5 +1,17 @@
 # Current state
 
+## Calendar reporting guidance follow-up (WHO-512, 2026-11-14)
+
+- The hosted `0fe1a6c` rerun passed the current Claude/ChatGPT checks; Grok T10 still
+  failed on completeness/free-time wording. The detailed history is in
+  [assistant acceptance, F4](../../docs/MCP_ASSISTANT_ACTIONS_ACCEPTANCE.md).
+- This follow-up leads calendar discovery with bounded reporting guidance and adds
+  fixed, flag-dependent guidance as a second text block on every successful calendar
+  result. Structured output, schemas, consent, scopes and package 0.2.1 are unchanged.
+- Ambiguous flag interpretation remains a hypothesis, not a proven cause. Automated
+  contract tests do not establish a real-client wording pass. A separately deployed
+  revision and one neutral Grok T10 check are required; retain both failed responses.
+
 ## Assistant capabilities and direct actions (stage 0 backend, 2026-11-11)
 
 - [Spec](../../docs/MCP_ASSISTANT_ACTIONS_SPEC.md) is owner-accepted; its section 12

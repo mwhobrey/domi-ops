@@ -189,6 +189,22 @@ export async function availabilityPayload(tx: Database, viewer: Viewer, calendar
     recurringExpanded: true as const, externalCalendarsExcluded: result.externalCalendarsExcluded, truncated: result.truncated, busy: result.busy };
 }
 
+/**
+ * What an assistant may say from one availability result, sent with the result itself. Real clients have
+ * claimed completeness and free time from limited results; their interpretation of the bare flags is unknown.
+ * Chosen by the result's flags only; it never repeats a time or anything else from it.
+ */
+export function availabilityReading(result: Record<string, unknown>) {
+  if (result.coverage === "no_calendars_selected") {
+    return "How to report this result: no calendar is shared with this connection, so nothing was checked. Say that. Do not say the user is free or that the time is clear.";
+  }
+  return "How to report this result: state the busy blocks listed, or that no busy block is listed for the time asked about, on the calendars the user selected for this connection. "
+    + "Do not say or imply that any time is free, open or available, with or without a caveat. "
+    + "Do not call this list complete or say that nothing was left out: calendars that are not selected, and events imported from outside calendars, were not checked."
+    + (result.truncated === true ? " This list was cut short: say so." : "")
+    + (result.externalCalendarsExcluded === true ? " Events from an outside calendar were left out of a selected calendar: say the answer may be missing them." : "");
+}
+
 /** Seven days from the household's today: the window a consent preview shows. */
 export async function previewWindow(tx: Database, householdId: string) {
   const [household] = await tx.select({ timezone: households.timezone }).from(households).where(eq(households.id, householdId));
@@ -199,8 +215,8 @@ export async function previewWindow(tx: Database, householdId: string) {
 export function calendarTools(): [McpReadTool] {
   return [{
     name: "get_calendar_availability", scopes: ["calendar:read"], capability: "calendar.availability", module: "calendar_sync", access: "read",
-    description: "Read when the user is busy between two dates in the household's timezone (at most 14 days), on the calendars they chose to share. Returns merged busy intervals with local start and end times, and nothing else: never a title, location, attendee, calendar name or how many events there are, so do not guess what a block is. The answer covers only those selected calendars, never everything the user has, so time not listed is not guaranteed free and the list must not be called complete. Events imported from an outside calendar such as Google Calendar are never returned. When externalCalendarsExcluded is true, a selected calendar holds such events and they were left out; false does not mean outside calendars are included or covered, so never say they are. When coverage is no_calendars_selected nothing is shared; when truncated is true the list was cut short. Say so in each case. This cannot create or change events.",
-    input: availabilityInput, output: availabilityOutput,
+    description: "Read when the user is busy between two dates in the household's timezone (at most 14 days), on the calendars they chose to share. Report only the busy blocks returned, or that no busy block is listed for the time asked about. Never say or imply that any time is free, open or available, even with a caveat after it: time not listed is not guaranteed free. Returns merged busy intervals with local start and end times, and nothing else: never a title, location, attendee, calendar name or how many events there are, so do not guess what a block is. The answer covers only those selected calendars, never everything the user has, and the list must not be called complete whatever the flags say. Events imported from an outside calendar such as Google Calendar are never returned, and calendars that are not selected are not checked. externalCalendarsExcluded true means a selected calendar holds such events and they were left out, so say the answer may be missing them; false does not mean outside calendars are included or covered. truncated true means the list was cut short, so say so; false does not mean the list is complete. coverage no_calendars_selected means nothing is shared, so say that and not that the time is clear. This cannot create or change events.",
+    input: availabilityInput, output: availabilityOutput, reading: availabilityReading,
     async run(tx, identity, args) {
       const input = availabilityInput.parse(args), to = input.to ?? input.from;
       const [household] = await tx.select({ timezone: households.timezone }).from(households).where(eq(households.id, identity.householdId));

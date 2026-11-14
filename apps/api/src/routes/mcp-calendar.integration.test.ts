@@ -15,6 +15,7 @@ import {
 } from "@domi-ops/db";
 import { mcpAuthorizationRoutes } from "./mcp-authorization.js";
 import { mcpGateway } from "../mcp/gateway.js";
+import { availabilityReading, calendarTools } from "../mcp/calendar-availability.js";
 
 const url = process.env.MCP_TEST_DATABASE_URL ?? process.env.HOSTED_TEST_DATABASE_URL;
 const suite = url ? describe : describe.skip;
@@ -72,7 +73,7 @@ for (const mode of ["single", "shared"] as const) suite(`MCP calendar availabili
     expect(response.status, await response.clone().text()).toBe(200);
     const text = await response.text();
     return { raw: text, ...JSON.parse(response.headers.get("content-type")?.includes("text/event-stream") ? text.split("\n").find((line) => line.startsWith("data: "))!.slice(6) : text) as {
-      error?: unknown; result: { tools?: { name: string; annotations?: Record<string, unknown> }[]; isError?: boolean; structuredContent?: Record<string, unknown> } } };
+      error?: unknown; result: { tools?: { name: string; description?: string; outputSchema?: Record<string, unknown>; annotations?: Record<string, unknown> }[]; isError?: boolean; structuredContent?: Record<string, unknown>; content?: { type: string; text: string }[] } } };
   }
   // An unlisted tool is a protocol error; a listed one that is refused reports isError.
   const refused = (response: Awaited<ReturnType<typeof rpc>>) => response.error !== undefined || response.result?.isError === true;
@@ -202,6 +203,47 @@ for (const mode of ["single", "shared"] as const) suite(`MCP calendar availabili
     expect(stored).toEqual([]);
     // A single day needs no end date.
     expect((await availability(token.access_token, { from: day })).busy).toEqual(familyBusy.slice(0, 2));
+  });
+
+  it("advertises the current description on every discovery and sends the reporting rule beside each result", async () => {
+    const token = await connect(["shopping.read", CAPABILITY], [family]);
+    const [source] = calendarTools();
+    // Discovery is answered from source on each request and marked uncacheable, so a reconnect cannot be served an older description by this server.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const http = await gateway().request(origin + "/api/mcp", { method: "POST",
+        headers: { host: new URL(origin).host, authorization: "Bearer " + token.access_token, "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": "2025-06-18" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 9000 + attempt, method: "tools/list" }) });
+      expect(http.status).toBe(200);
+      expect(http.headers.get("cache-control")).toBe("no-store");
+      const listed = (await rpc(token.access_token, "tools/list")).result.tools!.find((tool) => tool.name === TOOL)!;
+      expect(listed.description).toBe(source.description);
+      expect(listed.description).toContain("Never say or imply that any time is free, open or available, even with a caveat after it");
+      // The advertised result schema is the ten fields and nothing more: a client holding an older copy still validates.
+      const schema = listed.outputSchema as { properties: Record<string, unknown>; additionalProperties?: boolean };
+      expect(Object.keys(schema.properties).sort()).toEqual(["busy", "coverage", "externalCalendarsExcluded", "from", "householdTimezone", "recurringExpanded", "retrievedAt", "schemaVersion", "to", "truncated"]);
+      expect(schema.additionalProperties).toBe(false);
+    }
+    const response = await call(token.access_token, { from: day, to: addDaysIso(day, 3) });
+    const blocks = response.result.content!;
+    expect(blocks.map((block) => block.type)).toEqual(["text", "text"]);
+    // First block: the same JSON as the structured result, as before.
+    expect(JSON.parse(blocks[0].text)).toEqual(response.result.structuredContent);
+    // Second block: the rule for this result's flags. This fixture has a Google event on the shared calendar.
+    expect(blocks[1].text).toBe(availabilityReading(response.result.structuredContent!));
+    expect(blocks[1].text).toContain("Do not say or imply that any time is free, open or available, with or without a caveat.");
+    expect(blocks[1].text).toContain("Do not call this list complete or say that nothing was left out");
+    expect(blocks[1].text).toContain("Events from an outside calendar were left out of a selected calendar");
+    expect(blocks[1].text).not.toMatch(/\d/);
+    for (const leaked of [SECRET, "secretcat", "fictional-google-event", family, mine]) expect(response.raw).not.toContain(leaked);
+    // With nothing shared the rule changes with the result and still promises nothing.
+    expect((await saveCalendars(token.connectionId, { calendarIds: [] })).status).toBe(200);
+    const empty = await call(token.access_token, { from: day });
+    expect(empty.result.structuredContent).toMatchObject({ coverage: "no_calendars_selected", busy: [] });
+    expect(empty.result.content![1].text).toBe("How to report this result: no calendar is shared with this connection, so nothing was checked. Say that. Do not say the user is free or that the time is clear.");
+    // Tools without a rule are untouched: one block, the JSON.
+    const shopping = await rpc(token.access_token, "tools/call", { name: "list_shopping_items", arguments: { checked: "open", limit: 1 } });
+    expect(shopping.result.content).toHaveLength(1);
+    expect(JSON.parse(shopping.result.content![0].text)).toEqual(shopping.result.structuredContent);
   });
 
   it("says so when no calendar is shared, instead of reporting free time", async () => {
