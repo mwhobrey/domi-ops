@@ -127,7 +127,7 @@ Example rendering of the midnight fixture (illustrative wording, not a model run
 > [Milk](https://fixture.invalid/shopping) is unchecked; no quantity was provided.
 > The selected [plan](https://fixture.invalid/notes) mentions reusable shopping
 > bags. You could start with the overdue task and bring bags when shopping.
-> This covers persisted records only; Calendar, School and Health were not checked.
+> This covers persisted records only. This briefing read chores and shopping; nothing else in Domi Ops was read.
 > No changes were saved.
 
 The fixture deliberately validates supplied links without deriving them from IDs;

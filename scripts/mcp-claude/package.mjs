@@ -4,7 +4,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { nonPublicMcpHost } from "../hosted-qa/mcp-origin.mjs";
 import { PILOT_SCOPES, privacyParagraph } from "../mcp-review/scopes.mjs";
 
-export const PLUGIN_VERSION = "0.2.0";
+export const PLUGIN_VERSION = "0.2.1";
 export const PLUGIN_SKILLS = ["domi-ops-household-briefing", "domi-ops-household-actions"];
 
 export function pluginConfiguration(origin) {

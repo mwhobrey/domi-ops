@@ -3,7 +3,7 @@ name: domi-ops-household-actions
 description: Add an item to a Domi Ops household shopping list, check when shared medication groups are due, record a medication group as taken, or check when the user is busy, using an existing Domi Ops MCP connection whose member has switched those abilities on. Use when the user asks to add something to the shopping list, asks about their medication times, says they took a medication group, or asks whether they are free. Editing, removing, skipping, creating events and anything about medication names or event details are outside this workflow.
 license: MIT
 metadata:
-  version: "0.1.0"
+  version: "0.1.1"
 ---
 
 # Household actions
@@ -19,6 +19,11 @@ adds no connection, credentials, consent or permissions.
    is not listed is switched off for this connection: say so and tell the user
    they can change it in Domi Ops under Settings, AI connections. Never work
    around a missing tool with another server, a browser session or a guess.
+   When you say what this connection can do, name only what that `tools` list
+   holds in this conversation. Do not say it has access to School, expenses,
+   notes, files or any other part of Domi Ops that has no listed tool, and do
+   not carry a tool list over from an earlier conversation or from this skill's
+   own text: read it again.
 2. If more than one Domi Ops connection is available and it is unclear which the
    user means, ask before acting.
 3. Never ask for tokens, IDs, passwords or household/member identifiers, and
@@ -105,7 +110,8 @@ Reporting rules:
   the user before trying once more.
 - On an error that says nothing was saved, you may repeat the same call once.
   Repeating is safe: it never records a dose twice and never changes an existing
-  entry.
+  entry. The exception is an error starting `rate_limited`: see "When an action
+  is refused".
 
 This tool cannot skip a dose, mark one missed, undo an entry, record a dose for
 a past day beyond yesterday, record ahead, or record a single medication. If the
@@ -125,19 +131,42 @@ is or how many things are in it.
 
 - Time that is not listed is not guaranteed free. Say "nothing is on the
   calendars shared with me" instead of "you are free".
-- `externalCalendarsExcluded: true` means events from a connected outside
-  calendar are missing. Say the answer may be incomplete for that reason.
 - `coverage: "selected_calendars"` means the busy list covers only the calendars
   the user chose to share, not everything they have. It is the normal case.
+  Keep every statement inside those calendars. Never call the answer complete,
+  and never say it covers all of the user's calendars.
+- Events imported from an outside calendar, such as Google Calendar, are never
+  returned by this tool, whatever the fields say.
+- `externalCalendarsExcluded: true` means a shared calendar holds such events
+  and they were left out. Say the answer may be incomplete for that reason.
+- `externalCalendarsExcluded: false` means only that nothing of that kind was
+  found to leave out on the shared calendars. It does not mean outside calendars
+  are included, connected or covered. Never say outside calendar events are
+  included, and never say none were left out. If the user asks, say this
+  assistant does not receive outside calendar events.
 - `coverage: "no_calendars_selected"` means no calendar is shared with this
   assistant. Do not report that as a free day. Tell the user they can choose
   calendars in Domi Ops under Settings, AI connections.
-- `truncated: true` means the list was cut short. Ask for a shorter range.
+- `truncated: true` means the list was cut short: say so, then ask for a
+  shorter range. `truncated: false` says nothing about calendars that are not
+  shared.
 - An `allDay` block is a day-long entry such as a holiday or a trip. It does not
   by itself mean every hour is taken; say that it is an all-day entry.
 
 This tool cannot create, move or cancel an event. If the user asks for that, say
 they need to do it in Domi Ops.
+
+## When an action is refused
+
+An error whose text starts with `rate_limited` means this connection has used
+its 10 actions for the current minute. Nothing was saved for that call. Tell the
+user the action limit was reached, say exactly which of their requests were
+saved and which were not, and pass on the wait the error gives. Do not repeat
+the call on your own, straight away or later: try again only when the user asks
+after the wait.
+
+Any other error on an action says nothing was saved without saying why. Do not
+guess a reason, and do not describe it as a rate limit.
 
 ## Limits
 

@@ -8,12 +8,15 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { createBetterAuth, MCP_POLICY_VERSION } from "@domi-ops/auth";
 import { envSchema, type Env } from "@domi-ops/config";
 import {
-  createDb, closeDb, householdMembers, households, users, householdSubscriptions, oauthClient, userNotifications, pushSubscriptions,
+  createDb, closeDb, createScopedDb, householdMembers, households, users, householdSubscriptions, oauthClient, userNotifications, pushSubscriptions,
   healthMedications, healthMedicationGroups, healthMedicationGroupMembers, healthMedicationLogs,
   mcpActionEvents, mcpConnectionCapabilities, mcpMedGroupMemberConsents, mcpMedGroupSelections,
   withSystemContext, withUserLookupContext, withHouseholdContext, withMcpProviderContext, type Database,
 } from "@domi-ops/db";
 import { mcpAuthorizationRoutes } from "./mcp-authorization.js";
+import { householdHealthRoutes } from "./household-health.js";
+import type { AppVariables } from "../middleware/auth.js";
+import { createTenantMiddleware } from "../middleware/tenant.js";
 import { mcpGateway } from "../mcp/gateway.js";
 import { encryptHealthField } from "../lib/health-crypto.js";
 import { recordDose } from "../lib/health-med-logging.js";
@@ -41,6 +44,7 @@ for (const mode of ["single", "shared"] as const) suite(`MCP medication groups (
   let db: Database, auth: ReturnType<typeof createBetterAuth>, env: Env, server: ReturnType<typeof serve>, origin: string, clientId: string;
   let owner: Person, peer: Person, stranger: Person;
   let morning: string, night: string, peerGroup: string, cookiePrefix: string;
+  let healthApp: Hono<{ Variables: AppVariables }>;
   const meds: Record<string, string> = {};
   const householdIds: string[] = [], userIds: string[] = [], clientIds: string[] = [];
   const callback = "https://synthetic-assistant.example.test/med-groups", verifier = "m".repeat(64);
@@ -156,6 +160,18 @@ for (const mode of ["single", "shared"] as const) suite(`MCP medication groups (
     morning = await medGroup(owner, `${SECRET} Morning`, ["08:00"], [meds.a, meds.b, meds.c, meds.d, meds.paused, meds.elsewhere]);
     night = await medGroup(owner, `${SECRET} Night`, ["20:00"], [meds.d]);
     peerGroup = await medGroup(peer, `${SECRET} Peer`, ["09:00"], [await medication(peer, "PeerMed", ["09:00"])]);
+    // The member's own Health routes, as the app mounts them: session identity, then the tenant transaction.
+    const people = { owner: { ...owner, role: "owner" as const }, peer: { ...peer, role: "member" as const }, stranger: { ...stranger, role: "owner" as const } };
+    healthApp = new Hono<{ Variables: AppVariables }>();
+    healthApp.use("*", async (c, next) => {
+      const who = people[c.req.header("x-as") as keyof typeof people];
+      c.set("userId", who?.userId ?? null);
+      c.set("auth", who ? { userId: who.userId, householdId: who.householdId, memberId: who.memberId, email: null, username: null, name: null, role: who.role } : null);
+      return next();
+    });
+    const scoped = createScopedDb(db);
+    healthApp.use("*", createTenantMiddleware(scoped, env));
+    healthApp.route("/health", householdHealthRoutes(scoped, env));
   }, 30000);
   afterAll(async () => {
     if (db) {
@@ -311,6 +327,152 @@ for (const mode of ["single", "shared"] as const) suite(`MCP medication groups (
     expect((await doseLogs([meds.a]))[0]).toMatchObject({ loggedViaConnectionId: again.connectionId });
     await auth.mcp.revokeConnection(owner.headers, again.connectionId);
     expect((await doseLogs([meds.a]))[0]).toMatchObject({ status: "taken", loggedViaConnectionId: again.connectionId });
+  });
+
+  describe("a member's edit in Health takes an assistant-recorded entry back", () => {
+    type Entry = { id: string; status: string; loggedAt: string; recordedByAssistant: boolean };
+    const edit = async (as: "owner" | "peer" | "stranger", medicationId: string, logId: string, body: unknown) => {
+      const response = await healthApp.request(`/health/medications/${medicationId}/logs/${logId}`, { method: "PATCH", headers: { "x-as": as, "content-type": "application/json" }, body: JSON.stringify(body) });
+      const text = await response.text();
+      return { status: response.status, json: (text ? JSON.parse(text) : null) as { error?: string; log?: Entry } | null };
+    };
+    const listed = async (medicationId: string) => {
+      const response = await healthApp.request(`/health/medications/${medicationId}/logs`, { headers: { "x-as": "owner" } });
+      expect(response.status).toBe(200);
+      return (await response.json() as { logs: Entry[] }).logs;
+    };
+    const row = async (medicationId: string) => (await doseLogs([medicationId]))[0];
+    const actionRows = (connectionId: string) => owned(owner, (tx) => tx.select().from(mcpActionEvents).where(eq(mcpActionEvents.connectionId, connectionId)));
+    /** The household-local date and time an instant shows as in the edit sheet. */
+    const local = async (instant: Date) => (await owned(owner, (tx) => tx.execute<{ date: string; time: string }>(sql`select to_char(${instant.toISOString()}::timestamptz at time zone (select timezone from households where id = ${owner.householdId}), 'YYYY-MM-DD') as date,
+      to_char(${instant.toISOString()}::timestamptz at time zone (select timezone from households where id = ${owner.householdId}), 'HH24:MI') as time`)))[0];
+    /** Yesterday's Morning occurrence, so an edited time can never land in the future. */
+    async function recordYesterday() {
+      await clearLogs();
+      const token = await connect([READ, LOG], [{ groupId: morning, canLog: true, alias: "Morning" }]);
+      const [occurrence] = group((await schedule(token.access_token, "yesterday")).value, "Morning").occurrences;
+      expect((await log(token.access_token, occurrence.occurrenceRef)).value).toMatchObject({ outcome: "logged", logged: 4 });
+      const rows = await doseLogs([meds.a, meds.b, meds.c, meds.d]);
+      expect(rows).toHaveLength(4);
+      expect(rows.every((entry) => entry.status === "taken" && entry.loggedViaConnectionId === token.connectionId)).toBe(true);
+      return { token, occurrence };
+    }
+
+    it("a status edit clears the mark on that entry only, and keeps the assistant's action history", async () => {
+      const { token } = await recordYesterday();
+      const before = await row(meds.a);
+      expect((await listed(meds.a))[0]).toMatchObject({ id: before.id, status: "taken", recordedByAssistant: true });
+      const history = await actionRows(token.connectionId);
+      expect(history.map((event) => event.outcome)).toEqual(["logged"]);
+
+      const edited = await edit("owner", meds.a, before.id, { status: "skipped" });
+      expect(edited.status).toBe(200);
+      expect(edited.json!.log).toMatchObject({ id: before.id, status: "skipped", recordedByAssistant: false });
+      expect(await row(meds.a)).toMatchObject({ id: before.id, status: "skipped", loggedViaConnectionId: null, loggedByUserId: owner.userId });
+      // What Health shows after a reload.
+      expect((await listed(meds.a))[0]).toMatchObject({ id: before.id, status: "skipped", recordedByAssistant: false });
+      // The three entries the member did not touch still say an assistant recorded them.
+      for (const untouched of [meds.b, meds.c, meds.d]) {
+        expect(await row(untouched), untouched).toMatchObject({ status: "taken", loggedViaConnectionId: token.connectionId });
+        expect((await listed(untouched))[0]).toMatchObject({ recordedByAssistant: true });
+      }
+      // The record of what the assistant did is history, not attribution: it is unchanged.
+      expect(await actionRows(token.connectionId)).toEqual(history);
+    });
+
+    it("a time edit clears the mark and leaves the status alone", async () => {
+      const { token } = await recordYesterday();
+      const before = await row(meds.b);
+      const moved = new Date(before.loggedAt.getTime() - 5 * 60_000);
+      const edited = await edit("owner", meds.b, before.id, await local(moved));
+      expect(edited.status, JSON.stringify(edited.json)).toBe(200);
+      expect(edited.json!.log).toMatchObject({ id: before.id, status: "taken", recordedByAssistant: false });
+      const after = await row(meds.b);
+      expect(after).toMatchObject({ id: before.id, status: "taken", loggedViaConnectionId: null });
+      expect(after.loggedAt.getTime()).not.toBe(before.loggedAt.getTime());
+      expect(await row(meds.a)).toMatchObject({ loggedViaConnectionId: token.connectionId });
+    });
+
+    it("re-saving an entry unchanged is not an edit and keeps the mark", async () => {
+      const { token } = await recordYesterday();
+      const before = await row(meds.c);
+      const same = await edit("owner", meds.c, before.id, { ...await local(before.loggedAt), status: "taken" });
+      expect(same.status, JSON.stringify(same.json)).toBe(200);
+      expect(same.json!.log).toMatchObject({ status: "taken", recordedByAssistant: true });
+      const after = await row(meds.c);
+      expect(after).toMatchObject({ loggedViaConnectionId: token.connectionId });
+      expect(after.loggedAt.getTime()).toBe(before.loggedAt.getTime());
+    });
+
+    it("a refused edit changes nothing: another member, another household, a wrong entry or a bad value", async () => {
+      const { token } = await recordYesterday();
+      const before = await row(meds.a);
+      const other = await row(meds.b);
+      // A plain member of the same household with no access to this member's doses.
+      expect(await edit("peer", meds.a, before.id, { status: "skipped" })).toMatchObject({ status: 403, json: { error: "forbidden" } });
+      // An owner of a different household cannot even learn the medication exists.
+      expect(await edit("stranger", meds.a, before.id, { status: "skipped" })).toMatchObject({ status: 404, json: { error: "not_found" } });
+      // An entry that belongs to a different medication.
+      expect(await edit("owner", meds.a, other.id, { status: "skipped" })).toMatchObject({ status: 404, json: { error: "not_found" } });
+      expect(await edit("owner", meds.a, before.id, { status: "missed" })).toMatchObject({ status: 400, json: { error: "invalid_status" } });
+      expect(await edit("owner", meds.a, before.id, { date: "2026-02-30", time: "08:00" })).toMatchObject({ status: 400, json: { error: "invalid_logged_at" } });
+      const tomorrow = await local(new Date(Date.now() + 26 * 3_600_000));
+      expect(await edit("owner", meds.a, before.id, tomorrow)).toMatchObject({ status: 400, json: { error: "logged_at_in_future" } });
+      const after = await row(meds.a);
+      expect(after).toMatchObject({ id: before.id, status: "taken", loggedViaConnectionId: token.connectionId });
+      expect(after.loggedAt.getTime()).toBe(before.loggedAt.getTime());
+      expect(await row(meds.b)).toMatchObject({ id: other.id, status: "taken", loggedViaConnectionId: token.connectionId });
+    });
+
+    it("an entry the member made themselves never gains the mark, edited or not", async () => {
+      await clearLogs();
+      const token = await connect([READ, LOG], [{ groupId: morning, canLog: true, alias: "Morning" }]);
+      const { value } = await schedule(token.access_token, "yesterday");
+      const [occurrence] = group(value, "Morning").occurrences;
+      // Created through the app's own route before the assistant is asked to do anything.
+      const instant = new Date((await owned(owner, (tx) => tx.execute<{ at: string }>(sql`select (${value.date + " 08:00"}::timestamp at time zone (select timezone from households where id = ${owner.householdId})) as at`)))[0].at);
+      const created = await healthApp.request(`/health/medications/${meds.a}/log`, { method: "POST", headers: { "x-as": "owner", "content-type": "application/json" }, body: JSON.stringify({ status: "skipped", scheduledAt: instant.toISOString() }) });
+      expect(created.status, await created.clone().text()).toBeLessThan(300);
+      const manual = await row(meds.a);
+      expect(manual).toMatchObject({ status: "skipped", loggedViaConnectionId: null, loggedByUserId: owner.userId });
+      expect((await listed(meds.a))[0]).toMatchObject({ id: manual.id, status: "skipped", recordedByAssistant: false });
+
+      // The assistant fills the other three and leaves the member's entry exactly as it was.
+      expect((await log(token.access_token, occurrence.occurrenceRef)).value).toMatchObject({ outcome: "logged", logged: 3, alreadyRecorded: 1, notAccessible: 0 });
+      const kept = await row(meds.a);
+      expect(kept).toMatchObject({ id: manual.id, status: "skipped", loggedViaConnectionId: null, loggedByUserId: owner.userId });
+      expect(kept.loggedAt.getTime()).toBe(manual.loggedAt.getTime());
+      expect(kept.scheduledAt!.getTime()).toBe(manual.scheduledAt!.getTime());
+      expect((await listed(meds.a))[0]).toMatchObject({ id: manual.id, status: "skipped", recordedByAssistant: false });
+
+      // Editing it afterwards keeps it the member's, and a further assistant request still cannot change it.
+      const edited = await edit("owner", meds.a, manual.id, { status: "taken" });
+      expect(edited.json!.log).toMatchObject({ id: manual.id, status: "taken", recordedByAssistant: false });
+      expect((await log(token.access_token, occurrence.occurrenceRef)).value).toMatchObject({ outcome: "nothing_to_log", logged: 0, alreadyRecorded: 4 });
+      expect(await row(meds.a)).toMatchObject({ id: manual.id, status: "taken", loggedViaConnectionId: null });
+    });
+
+    it("repeated assistant logging leaves a Skipped correction as the member left it", async () => {
+      const { token, occurrence } = await recordYesterday();
+      const before = await row(meds.d);
+      expect((await edit("owner", meds.d, before.id, { status: "skipped" })).status).toBe(200);
+      const corrected = await row(meds.d);
+      expect(corrected).toMatchObject({ id: before.id, status: "skipped", loggedViaConnectionId: null });
+      // The same connection, twice, and then a new connection with a fresh reference.
+      for (let attempt = 0; attempt < 2; attempt++) {
+        expect((await log(token.access_token, occurrence.occurrenceRef)).value).toMatchObject({ outcome: "nothing_to_log", logged: 0, alreadyRecorded: 4 });
+      }
+      const second = await connect([READ, LOG], [{ groupId: morning, canLog: true, alias: "Morning" }]);
+      const [fresh] = group((await schedule(second.access_token, "yesterday")).value, "Morning").occurrences;
+      expect(fresh).toMatchObject({ status: "mixed" });
+      expect((await log(second.access_token, fresh.occurrenceRef)).value).toMatchObject({ outcome: "nothing_to_log", logged: 0, alreadyRecorded: 4 });
+      const after = await row(meds.d);
+      expect(after).toMatchObject({ id: before.id, status: "skipped", loggedViaConnectionId: null });
+      expect(after.loggedAt.getTime()).toBe(corrected.loggedAt.getTime());
+      expect(await doseLogs([meds.a, meds.b, meds.c, meds.d])).toHaveLength(4);
+      expect((await listed(meds.d))[0]).toMatchObject({ id: before.id, status: "skipped", recordedByAssistant: false });
+      expect((await actionRows(token.connectionId)).map((event) => event.outcome).sort()).toEqual(["logged", "nothing_to_log", "nothing_to_log"]);
+    });
   });
 
   it("fills gaps only: a deliberate skip and an in-app entry are left alone", async () => {

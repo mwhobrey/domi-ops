@@ -6,7 +6,7 @@ import { and, eq, gt, sql } from "drizzle-orm";
 import { mcpActionEvents, type Database } from "@domi-ops/db";
 import { mcpSupportedScopes, type Env } from "@domi-ops/config";
 import { admit, finish, metadataContext, tagTool } from "./activity.js";
-import { checkOperation, permittedTools, MCP_LIMITS, McpGatewayError } from "./access.js";
+import { actionRateLimitMessage, checkOperation, permittedTools, MCP_LIMITS, McpActionRateLimitError, McpGatewayError } from "./access.js";
 import { approvedToolNames, directToolNames, toolTitles, contextTool, type McpTool } from "./tools.js";
 import { readMcpBody } from "./bounds.js";
 import { readTools } from "./read-tools.js";
@@ -87,9 +87,11 @@ export function mcpGateway(db: Database, auth: Authorization, env: Env, tools: r
                   const result = tool.execution === "direct" ? await auth.withDirectActionContext(bearerRequest, tool.scopes, async (tx, current) => {
                     // Authority, capability, budget, the write and its activity row share one transaction.
                     await checkOperation(tx, env, current, tool);
-                    const [recent] = await tx.select({ count: sql<number>`count(*)::int` }).from(mcpActionEvents)
+                    // The window rolls: the budget frees up when the oldest action in it turns a minute old.
+                    const [recent] = await tx.select({ count: sql<number>`count(*)::int`,
+                      wait: sql<number | null>`ceil(extract(epoch from (min(${mcpActionEvents.createdAt}) + interval '1 minute' - clock_timestamp())))::int` }).from(mcpActionEvents)
                       .where(and(eq(mcpActionEvents.connectionId, current.connectionId), gt(mcpActionEvents.createdAt, sql`clock_timestamp() - interval '1 minute'`)));
-                    if (recent.count >= MCP_LIMITS.actionsPerMinute) throw new McpGatewayError("rate_limited", 429);
+                    if (recent.count >= MCP_LIMITS.actionsPerMinute) throw new McpActionRateLimitError(recent.wait ?? 60);
                     const done = await tool.run(tx, current, tool.input.parse(args), signal);
                     afterCommit = done.afterCommit;
                     const value = tool.output.parse(done.result);
@@ -110,13 +112,18 @@ export function mcpGateway(db: Database, auth: Authorization, env: Env, tools: r
                   if (Buffer.byteLength(text) * 2 > MCP_LIMITS.resultBytes - 1024) throw new McpGatewayError("result_too_large", 413);
                   outcome = "succeeded";
                   return { structuredContent: result, content: [{ type: "text" as const, text }] };
-                } catch {
+                } catch (error) {
+                  // Thrown before the action ran, inside its transaction, so nothing of this request was saved.
+                  const limited = !committed && !signal.aborted && error instanceof McpActionRateLimitError ? error : undefined;
                   // The write stands even though its result could not be returned: never log that as a denial.
                   if (committed) outcome = "committed_result_failed";
                   else if (signal.aborted) outcome = "deadline_exceeded";
+                  else if (limited) outcome = "action_rate_limited";
                   // A failure inside the action's transaction rolls everything back, so "not saved" is exact.
                   const text = tool.execution !== "direct" ? "Tool unavailable or request exceeded its bounds."
                     : committed ? "The action was saved but its result could not be returned. Read the current state before telling the user what happened."
+                    // Every other refusal keeps one wording, so a caller cannot tell a switched-off ability from a bad argument.
+                    : limited ? actionRateLimitMessage(limited.retryAfterSeconds)
                     : "Nothing was saved. The action is unavailable or could not be completed. Repeating the same request is safe.";
                   return { isError: true, content: [{ type: "text" as const, text }] };
                 }

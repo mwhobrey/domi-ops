@@ -6,7 +6,7 @@ import { PILOT_SCOPES, checkPackageScopes, privacyParagraph, scopeSummary, skill
 
 /** What Grok Bot's policy on the server accepts: everything the other providers may hold except selected notes. */
 export const GROK_BOT_SCOPES = [...PILOT_SCOPES];
-export const PLUGIN_VERSION = "0.2.0";
+export const PLUGIN_VERSION = "0.2.1";
 const domainNames = (scopes) => scopes.filter(scope => ["shopping:read", "chores:read"].includes(scope)).map(scope => scope === "shopping:read" ? "shopping" : "chores").join(" and ");
 /** Medication or calendar access: the package then describes itself by what the member can switch on. */
 const isWide = (scopes) => scopes.some(scope => scope.startsWith("health:") || scope.startsWith("calendar:"));

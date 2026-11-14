@@ -73,7 +73,7 @@ test("requests shopping add only on top of the shopping read, and ships the acti
     const mcp = JSON.parse(await readFile(join(output, "mcp.json"), "utf8"));
     assert.deepEqual(mcp.mcpServers["domi-ops"].auth.scopes, ["shopping:read", "chores:read", "shopping:write", "offline_access"]);
     const manifest = JSON.parse(await readFile(join(output, ".cursor-plugin/plugin.json"), "utf8"));
-    assert.equal(manifest.version, "0.2.0");
+    assert.equal(manifest.version, "0.2.1");
     assert.doesNotMatch(manifest.description, /read-only/i);
     assert.deepEqual((await readdir(join(output, "skills"))).sort(), ["domi-ops-household-actions", "domi-ops-household-briefing"]);
     for (const name of ["SKILL.md", "LICENSE.txt"]) {

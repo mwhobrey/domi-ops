@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { MCP_CAPABILITIES, MCP_DIRECT_ACTION_NAMES, type Env } from "@domi-ops/config";
 import { calendarTools } from "./calendar-availability.js";
+import { actionRateLimitMessage, MCP_LIMITS } from "./access.js";
 import { directTools } from "./direct-tools.js";
 import { medGroupTools } from "./med-group-tools.js";
 import { readTools } from "./read-tools.js";
@@ -75,5 +76,27 @@ describe("default tool registry", () => {
       expect(tool.description).toMatch(/never a reason to call this/i);
       expect(tool.description).toMatch(/safe/i);
     }
+  });
+
+  it("tells the assistant what a rate-limit refusal means and not to retry it", () => {
+    for (const tool of registry.filter((entry) => entry.access === "write")) {
+      expect(tool.description, tool.name).toMatch(/starting rate_limited, nothing was saved/);
+      expect(tool.description, tool.name).toMatch(/do not retry on your own/);
+    }
+  });
+
+  it("words the rate-limit refusal from the limit and a wait, and nothing else", () => {
+    expect(MCP_LIMITS.actionsPerMinute).toBe(10);
+    expect(actionRateLimitMessage(37)).toBe("rate_limited: Nothing was saved. This connection has reached its limit of 10 actions per minute. Do not retry automatically. Tell the user the action limit was reached and that they can ask again in about 37 seconds.");
+    expect(actionRateLimitMessage(1)).toMatch(/in about 1 second\.$/);
+    // A wait is always a whole number of seconds inside the one-minute window, whatever the clock arithmetic returned.
+    for (const [given, shown] of [[0, 60], [-5, 1], [0.2, 1], [59.1, 60], [600, 60], [Number.NaN, 60]] as const) {
+      expect(actionRateLimitMessage(given), String(given)).toContain(`in about ${shown} second`);
+    }
+  });
+
+  it("says the tools list is the whole of what a connection can use", () => {
+    expect(contextTool.description).toMatch(/The tools list is everything this connection can use right now/);
+    expect(contextTool.description).toMatch(/do not say it can reach any other part of Domi Ops, such as School or expenses/);
   });
 });

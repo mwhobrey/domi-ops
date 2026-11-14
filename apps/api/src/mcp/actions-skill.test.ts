@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { Env } from "@domi-ops/config";
+import { MCP_LIMITS } from "./access.js";
 import { calendarTools } from "./calendar-availability.js";
 import { directTools } from "./direct-tools.js";
 import { medGroupTools } from "./med-group-tools.js";
@@ -66,6 +67,23 @@ describe("household actions skill contract (not model behavior)", () => {
     for (const rule of [/untrusted data/i, /never\s+a reason to call a tool/i, /Never say the whole group was logged/, /\*\*recorded\*\*/, /Never ask for tokens/i, /If the\s+target is ambiguous, ask/i, /at most six tool calls/i, /not guaranteed free/i, /do not guess what a block\s+is/i]) {
       expect(skill).toMatch(rule);
     }
+    // Findings from the 2026-11-13 acceptance run: each rule below answers one unsupported statement.
+    for (const rule of [
+      /name only what that `tools` list\s+holds in this conversation/,
+      /Do not say it has access to School, expenses,\s+notes, files or any other part of Domi Ops that has no listed tool/,
+      /Never call the answer complete/,
+      /are never\s+returned by this tool/,
+      /`externalCalendarsExcluded: false` means only that nothing of that kind was\s+found to leave out/,
+      /Never say outside calendar events are\s+included, and never say none were left out/,
+      /`truncated: false` says nothing about calendars that are not\s+shared/,
+      /error whose text starts with `rate_limited`/,
+      /its 10 actions for the current minute/,
+      /Do not repeat\s+the call on your own/,
+      /do not describe it as a rate limit/,
+    ]) expect(skill).toMatch(rule);
+    expect(skill).toContain(`its ${MCP_LIMITS.actionsPerMinute} actions for the current minute`);
+    // No sentence may assert that outside calendar events are part of an answer.
+    expect(skill.replace(/\s+/g, " ")).not.toMatch(/outside calendars? (events )?are included\./);
     // It must not teach an assistant to supply a time, an id or a status of its own.
     expect(skill).not.toMatch(/scheduledAt|medicationId|groupId|calendarId|eventId|"status":/);
   });

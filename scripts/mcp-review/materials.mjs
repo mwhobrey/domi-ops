@@ -84,7 +84,7 @@ function actionCases(scopes, available) {
     description: "Check busy times on the shared calendars",
     prompt: "Am I free this Thursday afternoon?",
     tools_triggered: [context, "get_calendar_availability"].join(", "),
-    expected_behavior: "Return merged busy blocks with local start and end times for the fictional calendar, with no title, location, person or calendar name. The assistant says nothing is on the shared calendars for open time instead of promising the user is free, and mentions that outside calendars are not included when externalCalendarsExcluded is true.",
+    expected_behavior: "Return merged busy blocks with local start and end times for the fictional calendar, with no title, location, person or calendar name. The assistant says nothing is on the shared calendars for open time instead of promising the user is free, and mentions that outside calendars are not included when externalCalendarsExcluded is true. It never says outside calendar events are included, never calls the list complete and never speaks for calendars that are not shared.",
   });
   if (available.length) candidates.push({
     description: `Bound pagination of ${available[0].name}`,

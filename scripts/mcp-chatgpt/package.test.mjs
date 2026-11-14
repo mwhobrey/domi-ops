@@ -47,7 +47,7 @@ test("submission draft includes portable source, public listing assets and expli
     assert.deepEqual(draft.dataHandling, { reads: true, writes: false, healthData: false });
     const review = JSON.parse(await readFile(join(output, "review-plan.draft.json"), "utf8"));
     assert.equal(review.execution.status, "not-run");
-    assert.equal(review.packageVersion, "0.2.0");
+    assert.equal(review.packageVersion, "0.2.1");
     assert.equal(review.recording.url, null);
     assert.equal(review.review.test_cases.positive.length, 5);
     assert.equal(review.review.test_cases.negative.length, 3);
@@ -178,7 +178,7 @@ test("the default submission is the assistant-actions update with both skills an
     assert.deepEqual(mcp.mcpServers["domi-ops"].extensions["com.openai"].auth.baseScopes, ["offline_access"]);
     const manifest = JSON.parse(await readFile(join(output, "plugin/plugin.json"), "utf8"));
     const listing = manifest.extensions["com.openai"].interface;
-    assert.equal(manifest.version, "0.2.0");
+    assert.equal(manifest.version, "0.2.1");
     assert.ok(listing.shortDescription.length <= 30);
     assert.doesNotMatch(manifest.description + listing.longDescription, /read-only|No saved changes/i);
     assert.match(listing.longDescription, /every action starts off/);
