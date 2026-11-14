@@ -18,8 +18,11 @@ has been run against them. Package 0.2.1 carries the corrected skills.
 Status on 2026-11-14: those fixes were deployed (main at `0fe1a6c`) and rerun on all three
 real clients. F1, F3 and the stricter T7 held on all three, and the Claude and ChatGPT
 capability and calendar wording held. Grok Bot's T10 failed twice on wording, recorded as
-F4 in part 6. A fix for F4 is written and tested here; it is not deployed and no client
-has run against it. Still **not an acceptance pass**.
+F4 in part 6. The subsequent F4 fix was merged in PR #363 and deployed as `fad61f3`.
+One neutral Grok attempt and brief Claude/ChatGPT calendar checks each passed on that
+build, with zero action events and unchanged fictional domain data. Both earlier
+failures remain recorded. Only T10 was rerun on this build; the provider listing and
+remaining verification gaps are recorded in part 6.
 
 ## 1. Automated tests
 
