@@ -45,7 +45,11 @@ pwsh -NoProfile -File scripts/test-mcp-auth.ps1
 The last command needs Docker. It starts a disposable PostgreSQL 16 container, migrates
 through `0110`, creates the restricted application role and runs the database-backed
 files in single and shared modes. To run one case, add `-TestNamePattern "<text>"`.
-Last full passes (2026-11-13, with the part 6 fixes): typecheck 17 of 17, 1,687 unit
+Latest local pass (2026-11-14, with F4 reporting guidance): typecheck 17 of 17,
+lint 7 of 7, 1,690 unit tests passed (1,162 conditional tests skipped), 26 package
+tests and 293 database tests in 9 files. The focused calendar unit rerun passed
+20 tests on the same date. These are automated checks, not a real-client T10 pass.
+Earlier full passes (2026-11-13, with the part 6 fixes): typecheck 17 of 17, 1,687 unit
 tests, 26 package tests, 291 database tests in 9 files. The pass before that
 (2026-11-12) was 1,682 unit, 24 package and 277 database tests.
 
@@ -56,7 +60,7 @@ tests, 26 package tests, 291 database tests in 9 files. The pass before that
 | `packages/config/src/mcp.test.ts` | Scope ceiling, direct-action ceiling, new case for `calendar:read` and the full pilot ceiling | Passed 2026-11-12 |
 | `apps/api/src/mcp/direct-tools.test.ts` | Shopping input rules; every registered tool has a capability, scope and module; only two tools write; the rate-limit refusal's exact wording and bounds; the context tool says its `tools` list is the whole of what a connection can use | Passed 2026-11-12 |
 | `apps/api/src/mcp/med-groups.test.ts` | Occurrence reference signing and expiry, label cleaning, no field that can hold a medication name | Passed 2026-11-12 |
-| `apps/api/src/mcp/calendar-availability.test.ts` | Merging, drive buffers, all-day entries, clipping, timezones, repeating events, input range, no field that can hold an event detail; the description keeps answers inside the selected calendars, leads with what may be reported and forbids inferring free time; the reporting rule sent beside each result, for every flag combination, quoting nothing from the result; the result schema is unchanged | Passed 2026-11-12 |
+| `apps/api/src/mcp/calendar-availability.test.ts` | Merging, drive buffers, all-day entries, clipping, timezones, repeating events, input range, no field that can hold an event detail; the description keeps answers inside the selected calendars, leads with what may be reported and forbids inferring free time; the reporting rule sent beside each result, for every flag combination, quoting nothing from the result; the result schema is unchanged | Passed 2026-11-14, including 20 focused tests |
 | `apps/api/src/mcp/actions-skill.test.ts` | The actions skill names only real tools, arguments, outcomes and coverage values; it carries the capability, calendar-coverage and rate-limit rules from part 6 | Passed 2026-11-12 |
 | `apps/api/src/mcp/briefing-skill.test.ts` | The briefing skill against its authored cases; it reports what it read and asserts no access to an area it did not check | Passed 2026-11-12 |
 | `apps/web/src/lib/mcp.test.ts` | Capability labels, defaults, medication group choices, calendar choices, activity wording | Passed 2026-11-12 |
@@ -324,9 +328,9 @@ was checked.
 
 | # | Finding | Change | State |
 | --- | --- | --- | --- |
-| F1 | Changing an assistant-recorded dose in Health left "recorded by an assistant" on it. The edit route saved the new status and left `logged_via_connection_id` set | The edit route clears the mark when the status or time actually changes. Untouched entries and `mcp_action_events` are left alone | Fixed, tested here. Needs a hosted rerun |
-| F2 | With package 0.2.0 installed, Claude said the connector had access to School, and said outside calendar events were included. Neither was in a tool result, and no such record was returned | Skills 0.1.2 (briefing) and 0.1.1 (actions), and the context and calendar tool descriptions, now tie every capability statement to the current `tools` list and keep calendar answers inside the selected calendars. Package 0.2.1 | Wording fixed and contract-tested here. Model behavior is not something a test here can show: needs a hosted rerun on each provider |
-| F3 | The eleventh action inside a minute was refused and saved nothing, but every client got the same generic error and could not say why | The refusal now reads `rate_limited: ...` with the limit and a wait, and tells the client not to retry on its own. The limit of 10, the no-save behavior and every other refusal's generic wording are unchanged | Fixed, tested here. Needs a hosted rerun |
+| F1 | Changing an assistant-recorded dose in Health left "recorded by an assistant" on it. The edit route saved the new status and left `logged_via_connection_id` set | The edit route clears the mark when the status or time actually changes. Untouched entries and `mcp_action_events` are left alone | Passed the 2026-11-14 hosted rerun on all three clients for a status edit and reload; time-only variations remain automated coverage |
+| F2 | With package 0.2.0 installed, Claude said the connector had access to School, and said outside calendar events were included. Neither was in a tool result, and no such record was returned | Skills 0.1.2 (briefing) and 0.1.1 (actions), and the context and calendar tool descriptions, now tie every capability statement to the current `tools` list and keep calendar answers inside the selected calendars. Package 0.2.1 | Claude and ChatGPT passed the 2026-11-14 hosted capability/calendar wording checks. Grok's calendar wording still fails, recorded separately as F4 |
+| F3 | The eleventh action inside a minute was refused and saved nothing, but every client got the same generic error and could not say why | The refusal now reads `rate_limited: ...` with the limit and a wait, and tells the client not to retry on its own. The limit of 10, the no-save behavior and every other refusal's generic wording are unchanged | Passed the 2026-11-14 hosted rerun on all three clients; the eleventh item was absent and the client explained the limit without retrying |
 
 In the 2026-11-13 run, Grok Bot's T10 answer said no outside calendars were left out and the list was
 complete. The fixture has one native calendar and the result was
@@ -401,7 +405,7 @@ after a genuine pass. Revoke the grant and reset owned fixtures afterwards.
 
 | # | Gap | State |
 | --- | --- | --- |
-| G1 | T7 on Claude and ChatGPT changed a dose the assistant had made. Neither run started from a dose the member created. Grok Bot passed the stricter row | The server behavior is tested here (an entry created through the app's own route keeps its id, status, time and attribution through repeated assistant logging). Needs a hosted rerun on Claude and ChatGPT using the T7 row as now written |
+| G1 | T7 on Claude and ChatGPT changed a dose the assistant had made. Neither run started from a dose the member created. Grok Bot passed the stricter row | Closed by the 2026-11-14 hosted rerun on all three clients: a Skipped dose created manually before any assistant write retained its id, status, scheduled/logged time and null attribution through initial and repeated group logging |
 | G2 | Error reports were not searched. The window of the 2026-11-14 rerun is **not checked** | Checked 2026-11-13 with an authorized Sentry account: the project recorded one event in the run's window (18:00 UTC 13 November to 04:00 UTC 14 November), with its message replaced by the privacy placeholder and one Node runtime stack frame. No fixture text. This covers events Sentry received; anything the client filter dropped before sending cannot be inspected. Repeat for the rerun's window |
 | G3 | Push | Generation is covered by automated tests and the in-app notice was seen. The fictional member had health pushes off, so no push was generated in the run. Delivery to a physical device is **not verified** and needs a subscribed device |
 | G4 | Scope ceiling | Seven scopes, unchanged by these fixes: `shopping:read chores:read health:read calendar:read shopping:write health:write offline_access`. Grants stay per connection. Recheck discovery and a fresh token on the deployed build |
