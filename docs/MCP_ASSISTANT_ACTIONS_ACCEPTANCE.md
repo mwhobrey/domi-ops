@@ -18,8 +18,11 @@ has been run against them. Package 0.2.1 carries the corrected skills.
 Status on 2026-11-14: those fixes were deployed (main at `0fe1a6c`) and rerun on all three
 real clients. F1, F3 and the stricter T7 held on all three, and the Claude and ChatGPT
 capability and calendar wording held. Grok Bot's T10 failed twice on wording, recorded as
-F4 in part 6. A fix for F4 is written and tested here; it is not deployed and no client
-has run against it. Still **not an acceptance pass**.
+F4 in part 6. The subsequent F4 fix was merged in PR #363 and deployed as `fad61f3`.
+One neutral Grok attempt and brief Claude/ChatGPT calendar checks each passed on that
+build, with zero action events and unchanged fictional domain data. Both earlier
+failures remain recorded. Only T10 was rerun on this build; the provider listing and
+remaining verification gaps are recorded in part 6.
 
 ## 1. Automated tests
 
@@ -329,7 +332,7 @@ was checked.
 | # | Finding | Change | State |
 | --- | --- | --- | --- |
 | F1 | Changing an assistant-recorded dose in Health left "recorded by an assistant" on it. The edit route saved the new status and left `logged_via_connection_id` set | The edit route clears the mark when the status or time actually changes. Untouched entries and `mcp_action_events` are left alone | Passed the 2026-11-14 hosted rerun on all three clients for a status edit and reload; time-only variations remain automated coverage |
-| F2 | With package 0.2.0 installed, Claude said the connector had access to School, and said outside calendar events were included. Neither was in a tool result, and no such record was returned | Skills 0.1.2 (briefing) and 0.1.1 (actions), and the context and calendar tool descriptions, now tie every capability statement to the current `tools` list and keep calendar answers inside the selected calendars. Package 0.2.1 | Claude and ChatGPT passed the 2026-11-14 hosted capability/calendar wording checks. Grok's calendar wording still fails, recorded separately as F4 |
+| F2 | With package 0.2.0 installed, Claude said the connector had access to School, and said outside calendar events were included. Neither was in a tool result, and no such record was returned | Skills 0.1.2 (briefing) and 0.1.1 (actions), and the context and calendar tool descriptions, now tie every capability statement to the current `tools` list and keep calendar answers inside the selected calendars. Package 0.2.1 | Claude and ChatGPT passed the 2026-11-14 hosted capability/calendar wording checks. Grok's earlier failures and later focused calendar pass are recorded separately as F4 |
 | F3 | The eleventh action inside a minute was refused and saved nothing, but every client got the same generic error and could not say why | The refusal now reads `rate_limited: ...` with the limit and a wait, and tells the client not to retry on its own. The limit of 10, the no-save behavior and every other refusal's generic wording are unchanged | Passed the 2026-11-14 hosted rerun on all three clients; the eleventh item was absent and the client explained the limit without retrying |
 
 In the 2026-11-13 run, Grok Bot's T10 answer said no outside calendars were left out and the list was
@@ -374,9 +377,9 @@ statement per flag, and the result carried `truncated: false` and
 `externalCalendarsExcluded: false` as bare values with the rule against inferring free
 time only in the description. The responses do not establish how the model interpreted
 those flags, and no controlled comparison has isolated a cause. This fix tests that
-working hypothesis; a real-client rerun is still required.
+working hypothesis; the later real-client rerun below does not isolate a cause.
 
-Change, tested here and **not deployed**:
+Change, deployed as `fad61f3` after [PR #363](https://github.com/mwhobrey/domi-ops/pull/363):
 
 - The description now leads with what may be reported (the busy blocks, or that none is
   listed) and forbids saying a time is free, open or available "even with a caveat after
@@ -389,17 +392,56 @@ Change, tested here and **not deployed**:
   skills are unchanged. No package is regenerated: 0.2.1 stays as published.
 
 Limits. A client that passes only the structured result to its model, and not the text
-blocks, will not see the second block; whether Grok Bot does is not known. Tests here
-check the wording the server sends. They do not show what Grok Bot will write, and
-nothing here is a T10 pass. The description is part of what each provider's listing
-review reads from the endpoint, so deploying this changes one tool description for
-Claude and ChatGPT as well: decide that before deploying, not after.
+blocks, will not see the second block; whether Grok Bot does is not known. The automated
+tests check the wording the server sends. Actual response evidence is recorded below.
 
-After a separately authorized deployment: reconnect Grok Bot with fresh consent and run
-one neutral T10 prompt on the fixture (recurring morning block, buffered afternoon block,
-all-day entry). Do not word the prompt toward the expected answer and do not retake. If
-it fails, record the exact response and stop. Replace the Grok calendar chapter only
-after a genuine pass. Revoke the grant and reset owned fixtures afterwards.
+#### Authorized deployed rerun, 2026-11-14 23:23–23:39 UTC
+
+The owner authorized merge, deployment, one neutral Grok attempt, brief Claude/ChatGPT
+calendar checks and updated recording evidence. All five hosted applications were
+verified at `fad61f3280ebfb154fd65305fd38f66ba9765de2`; exact-commit CI and image
+publication passed. The seven advertised scopes and unchanged structured schema were
+checked on the running service. No package or skill was regenerated.
+
+Each client was asked whether the fictional reviewer was free on November 19 in the
+morning and afternoon, and on November 20, using only fresh Domi tool results and making
+no changes. Each made exactly one successful `get_calendar_availability` call:
+
+| Real client | Audit time (UTC) | Observed response | Strict T10 |
+| --- | --- | --- | --- |
+| Grok Bot Windows 1.1.0, clean private Bot, fresh seven-scope consent | 23:23:24.282 | Correct 09:00–09:15 and 12:45–15:15 Central blocks on Thursday; all-day and morning blocks on Friday. Limited the answer to selected calendars and explicitly could not confirm the remaining time was free | Passed once; zero retakes |
+| Claude Opus 5.5 Medium, existing fictional reviewer connection | 23:28:38.027 | Correct blocks, limited to shared calendars; explicitly could not say other time was free | Passed once |
+| ChatGPT GPT-6.1 Sol Light, private 0.2.1 review package, fresh consent | 23:38:52.760 | Correct blocks and all-day qualification; explicitly said unlisted time was not guaranteed free | Passed once |
+
+Claude's conversation began before its tool-description refresh, so this check used a
+fresh deployed result with the older conversation description. Its connector tool list
+and directory capture were then refreshed. ChatGPT's old test-account reconnect returned
+“Missing OAuth callback data”; a clean connection through the app's normal connection
+flow succeeded before the sole calendar prompt. Neither connection attempt was a model
+retest.
+
+These are three observed passes, not a reliability guarantee or proof of the wording
+hypothesis. Earlier failures above remain failures. Only T10 was rerun on this build;
+other acceptance cases retain their prior build labels. The Grok recording was retained
+as a separate 1:20 retest clip and appended to a versioned 13:03 video, with the earlier
+failed chapters explicitly marked historical. Original recordings and archive remain
+unchanged. Private recordings, exact transcripts, checksums and audit receipts are kept
+outside Git in the owner's November 14 acceptance delivery.
+
+The final audit found zero action events and zero matches for the fixture privacy
+markers. Shopping, chores, medication groups, calendar events and dose logs matched the
+pre-run domain snapshot after ordering normalization. The temporary Grok grant was
+revoked; restoring the public ChatGPT scanner replaced and revoked its private test
+grant. The Claude review connection remains usable.
+
+Claude's connector directory listing is live with the expanded disclosure and seven
+tool names. Its separate 0.2.1 plugin remains in review. ChatGPT's 0.2.1 metadata and
+skills now show Approved / Ready to publish, while public publication remains 0.1.2.
+The public scanner was reconnected and a rescan requested, but its OAuth request still
+contains only `offline_access shopping:read chores:read`, despite the configured seven
+scopes. Its panel still lists only the three earlier tools. This does not verify the
+four added tools or resolve the limitation disclosed in the submission; no publication
+action was taken in this follow-up. No review was withdrawn or restarted.
 
 ### Gaps
 
@@ -408,7 +450,9 @@ after a genuine pass. Revoke the grant and reset owned fixtures afterwards.
 | G1 | T7 on Claude and ChatGPT changed a dose the assistant had made. Neither run started from a dose the member created. Grok Bot passed the stricter row | Closed by the 2026-11-14 hosted rerun on all three clients: a Skipped dose created manually before any assistant write retained its id, status, scheduled/logged time and null attribution through initial and repeated group logging |
 | G2 | Error reports were not searched. The window of the 2026-11-14 rerun is **not checked** | Checked 2026-11-13 with an authorized Sentry account: the project recorded one event in the run's window (18:00 UTC 13 November to 04:00 UTC 14 November), with its message replaced by the privacy placeholder and one Node runtime stack frame. No fixture text. This covers events Sentry received; anything the client filter dropped before sending cannot be inspected. Repeat for the rerun's window |
 | G3 | Push | Generation is covered by automated tests and the in-app notice was seen. The fictional member had health pushes off, so no push was generated in the run. Delivery to a physical device is **not verified** and needs a subscribed device |
-| G4 | Scope ceiling | Seven scopes, unchanged by these fixes: `shopping:read chores:read health:read calendar:read shopping:write health:write offline_access`. Grants stay per connection. Recheck discovery and a fresh token on the deployed build |
+| G4 | Scope ceiling | Seven scopes, unchanged by these fixes: `shopping:read chores:read health:read calendar:read shopping:write health:write offline_access`. Verified in hosted discovery and fresh real-client grant receipts on `fad61f3`; per-connection choices still restrict actual access. The public ChatGPT scanner limitation is G6 |
+| G5 | Grok-specific consent disclosure | The capability choices show expanded access, but the provider-specific disclosure still says the approval covers shopping and chores. This preexisting copy mismatch was observed during fresh consent; it is not fixed by the calendar reporting patch and needs correction before a Grok submission |
+| G6 | ChatGPT public scanner scope request | The private 0.2.1 app exercised calendar successfully. The public scanner still requests only the earlier three scopes and lists only the earlier three tools. Restore its authorized read-only connection after private tests; do not claim the added tools were publicly scanned or weaken server authorization |
 
 ### Rerun, after the fixes are deployed
 
