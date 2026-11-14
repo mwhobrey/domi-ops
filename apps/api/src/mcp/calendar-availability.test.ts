@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MCP_CAPABILITIES } from "@domi-ops/config";
-import { AVAILABILITY_LIMITS, availabilityInput, availabilityOutput, busyIntervals, calendarTools, pendingOccurrences, type BusySource, type RuleSource } from "./calendar-availability.js";
+import { AVAILABILITY_LIMITS, availabilityInput, availabilityOutput, busyIntervals, calendarTools, pendingOccurrences, type BusySource, type RuleSource, availabilityReading } from "./calendar-availability.js";
 
 const zone = "America/Chicago";
 const timed = (startDate: string, startTime: string, endTime: string | null, extra: Partial<BusySource> = {}): BusySource =>
@@ -121,9 +121,72 @@ describe("get_calendar_availability contract", () => {
     expect(tool.description).toMatch(/must not be called complete/);
     expect(tool.description).toMatch(/outside calendar such as Google Calendar are never returned/);
     expect(tool.description).toMatch(/false does not mean outside calendars are included or covered/);
-    expect(tool.description).toMatch(/when truncated is true the list was cut short/);
+    expect(tool.description).toMatch(/truncated true means the list was cut short, so say so; false does not mean the list is complete/);
     // The description must never itself assert that outside events are part of a result.
     expect(tool.description).not.toMatch(/outside calendars? (events )?are included(?! or covered)/);
+  });
+
+  // Acceptance 2026-11-14, Grok Bot on the 0.2.1 descriptions: one answer said "the list is complete", another
+  // "you're open only after 3:15" ahead of a caveat. These check the wording a client is given, in the description
+  // and beside every result. They say nothing about what a model will write.
+  const affirmsMoreThanTheResult = [
+    /\bopen (only )?(after|until|before|from)\b/i, /\bmostly (open|free|taken)\b/i, /\ball (of )?(the user's|your) calendars\b/i,
+  ];
+  /** Free time, completeness and "nothing left out" may be named only inside a sentence that forbids or denies them. */
+  const onlyEverDenied = (text: string) => {
+    for (const sentence of text.split(/(?<=[.;]) /).filter((part) => /\b(free|open|available|complete|clear|nothing was left out)\b/i.test(part))) {
+      expect(sentence, sentence).toMatch(/\b(Never|Do not|not)\b/);
+    }
+  };
+
+  it("leads the description with what may be reported and forbids inferring free time", () => {
+    const sentences = tool.description.split(/(?<=\.) /);
+    // The reporting rule comes straight after the one-line summary, before any field is explained.
+    expect(sentences[1]).toBe("Report only the busy blocks returned, or that no busy block is listed for the time asked about.");
+    expect(sentences[2]).toBe("Never say or imply that any time is free, open or available, even with a caveat after it: time not listed is not guaranteed free.");
+    expect(tool.description).toContain("calendars that are not selected are not checked");
+    expect(tool.description).toContain("coverage no_calendars_selected means nothing is shared, so say that and not that the time is clear");
+    // Remove ambiguous per-flag guidance; whether it caused the observed claim is a working hypothesis.
+    expect(tool.description).not.toMatch(/in each case/);
+    // Every mention of a false flag is followed by what it does not mean.
+    for (const match of tool.description.matchAll(/false ([^.;]+)/g)) expect(match[1], match[0]).toMatch(/^does not mean /);
+    for (const pattern of affirmsMoreThanTheResult) expect(tool.description, String(pattern)).not.toMatch(pattern); onlyEverDenied(tool.description);
+  });
+
+  it("sends the reporting rule with every result, chosen by flags and never quoting the result", () => {
+    const base = { schemaVersion: 1, retrievedAt: "2026-11-19T15:00:00.000Z", householdTimezone: "America/Chicago", from: "2026-11-19", to: "2026-11-20",
+      coverage: "selected_calendars", recurringExpanded: true, externalCalendarsExcluded: false, truncated: false,
+      busy: [{ start: "2026-11-19T09:00", end: "2026-11-19T09:15", allDay: false }, { start: "2026-11-19T12:45", end: "2026-11-19T15:15", allDay: false }, { start: "2026-11-20T00:00", end: "2026-11-21T00:00", allDay: true }] };
+    expect(tool.reading).toBe(availabilityReading);
+    const usual = availabilityReading(base);
+    expect(usual).toBe("How to report this result: state the busy blocks listed, or that no busy block is listed for the time asked about, on the calendars the user selected for this connection. "
+      + "Do not say or imply that any time is free, open or available, with or without a caveat. "
+      + "Do not call this list complete or say that nothing was left out: calendars that are not selected, and events imported from outside calendars, were not checked.");
+    // The same wording whether or not anything is busy: an empty list is "no busy block listed", never "free".
+    expect(availabilityReading({ ...base, busy: [] })).toBe(usual);
+    expect(availabilityReading({ ...base, truncated: true })).toBe(usual + " This list was cut short: say so.");
+    expect(availabilityReading({ ...base, externalCalendarsExcluded: true })).toBe(usual + " Events from an outside calendar were left out of a selected calendar: say the answer may be missing them.");
+    const none = availabilityReading({ ...base, coverage: "no_calendars_selected", busy: [] });
+    expect(none).toBe("How to report this result: no calendar is shared with this connection, so nothing was checked. Say that. Do not say the user is free or that the time is clear.");
+    for (const text of [usual, none, availabilityReading({ ...base, truncated: true, externalCalendarsExcluded: true })]) {
+      // Nothing from the result is repeated: no date, time, zone or count, so the note cannot carry an event detail.
+      expect(text).not.toMatch(/\d/);
+      for (const value of ["Chicago", "09:00", "12:45", "15:15"]) expect(text).not.toContain(value);
+      for (const pattern of affirmsMoreThanTheResult) expect(text, String(pattern)).not.toMatch(pattern); onlyEverDenied(text);
+      // It only narrows what may be said. It never asks for another call or another source.
+      expect(text).not.toMatch(/\b(call|fetch|read|open|use)\b (the|another|a) (tool|calendar|app|browser)/i);
+    }
+    // A flag that is absent or not a boolean never switches a sentence on.
+    expect(availabilityReading({ ...base, truncated: "true", externalCalendarsExcluded: 1 })).toBe(usual);
+  });
+
+  it("leaves the structured result and its schema exactly as they were", () => {
+    const shape = (availabilityOutput as unknown as { shape: Record<string, unknown> }).shape;
+    expect(Object.keys(shape).sort()).toEqual(["busy", "coverage", "externalCalendarsExcluded", "from", "householdTimezone", "recurringExpanded", "retrievedAt", "schemaVersion", "to", "truncated"]);
+    for (const extra of [{ reading: "x" }, { note: "x" }, { free: [] }, { complete: true }]) {
+      expect(availabilityOutput.safeParse({ schemaVersion: 1, retrievedAt: "2026-11-19T15:00:00.000Z", householdTimezone: "UTC", from: "2026-11-19", to: "2026-11-19",
+        coverage: "selected_calendars", recurringExpanded: true, externalCalendarsExcluded: false, truncated: false, busy: [], ...extra }).success, JSON.stringify(extra)).toBe(false);
+    }
   });
 
   it("accepts one to fourteen real dates and nothing else", () => {

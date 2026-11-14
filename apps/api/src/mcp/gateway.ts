@@ -109,9 +109,11 @@ export function mcpGateway(db: Database, auth: Authorization, env: Env, tools: r
                   if (committed && afterCommit) void metadataContext(db, identity!, afterCommit).catch((error) => reportAfterCommitFailure(tool.name, identity!.connectionId, error));
                   signal.throwIfAborted();
                   const text = JSON.stringify(result);
-                  if (Buffer.byteLength(text) * 2 > MCP_LIMITS.resultBytes - 1024) throw new McpGatewayError("result_too_large", 413);
+                  // The structured result and its schema are unchanged; the note is a second text block beside the JSON.
+                  const reading = tool.access === "read" ? tool.reading?.(result) : undefined;
+                  if ((Buffer.byteLength(text) + Buffer.byteLength(reading ?? "")) * 2 > MCP_LIMITS.resultBytes - 1024) throw new McpGatewayError("result_too_large", 413);
                   outcome = "succeeded";
-                  return { structuredContent: result, content: [{ type: "text" as const, text }] };
+                  return { structuredContent: result, content: [{ type: "text" as const, text }, ...(reading ? [{ type: "text" as const, text: reading }] : [])] };
                 } catch (error) {
                   // Thrown before the action ran, inside its transaction, so nothing of this request was saved.
                   const limited = !committed && !signal.aborted && error instanceof McpActionRateLimitError ? error : undefined;

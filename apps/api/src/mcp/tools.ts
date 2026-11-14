@@ -23,6 +23,12 @@ type ToolBase = {
 export type McpReadTool = ToolBase & {
   access: "read"; execution?: "transaction"; capability?: McpCapability;
   run: (tx: Database, identity: McpIdentity, args: Record<string, unknown>, signal: AbortSignal) => Promise<Record<string, unknown>>;
+  /**
+   * Fixed wording returned beside a result, saying what the result does and does not support. A tool
+   * description is read once at discovery and can be far from the answer; this arrives with every call.
+   * It may choose between reviewed sentences by the result's flags. It must never quote the result's data.
+   */
+  reading?: (result: Record<string, unknown>) => string;
 };
 /** What a direct action leaves for the member's own activity view. Never a label, title or argument. */
 export type McpActionActivity = { outcome: string; counts?: Record<string, number>; targetId?: string };
