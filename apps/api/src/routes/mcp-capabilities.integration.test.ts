@@ -10,7 +10,7 @@ import { createBetterAuth, MCP_POLICY_VERSION } from "@domi-ops/auth";
 import { envSchema, mcpSupportedScopes, type Env } from "@domi-ops/config";
 import {
   createDb, closeDb, householdMembers, households, users, householdSubscriptions, shoppingItems,
-  mcpActionEvents, mcpConnectionCapabilities, oauthClient,
+  mcpAccessEvents, mcpActionEvents, mcpConnectionCapabilities, oauthClient,
   withSystemContext, withUserLookupContext, withHouseholdContext, withMcpProviderContext, type Database,
 } from "@domi-ops/db";
 import { mcpAuthorizationRoutes } from "./mcp-authorization.js";
@@ -256,12 +256,86 @@ for (const mode of ["single", "shared"] as const) suite(`MCP capabilities and di
     expect((await setCapabilities(token.connectionId, { capabilities: ["shopping.read", "shopping.add"], acknowledged: true })).status).toBe(400);
   });
 
-  it("bounds direct actions per connection per minute", async () => {
+  it("saves ten actions inside a minute and refuses the eleventh with an explicit rate-limit outcome", async () => {
+    const token = await connect(owner, scopes, ["shopping.read", "shopping.add"]);
+    const title = (n: number) => `Fictional budget item ${n} ${token.connectionId.slice(0, 8)}`;
+    const actions = () => owned(owner, (tx) => tx.select().from(mcpActionEvents).where(eq(mcpActionEvents.connectionId, token.connectionId)));
+    const seed = (count: number, secondsAgo: number) => owned(owner, (tx) => tx.insert(mcpActionEvents).values(Array.from({ length: count }, () => ({
+      householdId: owner.householdId, userId: owner.userId, connectionId: token.connectionId, action: "shopping.add", outcome: "added", createdAt: new Date(Date.now() - secondsAgo * 1000) }))));
+    // Eight actions twenty seconds ago, and one that is already outside the rolling minute and must not count.
+    await seed(8, 20); await seed(1, 75);
+    for (const n of [9, 10]) {
+      const saved = await call(token.access_token, "add_shopping_item", { title: title(n) });
+      expect(saved.result.isError, JSON.stringify(saved)).not.toBe(true);
+      expect(saved.result.structuredContent).toMatchObject({ outcome: "added" });
+    }
+    expect(await actions()).toHaveLength(11);
+
+    const eleventh = await call(token.access_token, "add_shopping_item", { title: title(11) });
+    expect(eleventh.error).toBeUndefined();
+    expect(eleventh.result.isError).toBe(true);
+    expect(eleventh.result.structuredContent).toBeUndefined();
+    expect(eleventh.result.content).toHaveLength(1);
+    const text = eleventh.result.content![0].text;
+    const match = /^rate_limited: Nothing was saved\. This connection has reached its limit of 10 actions per minute\. Do not retry automatically\. Tell the user the action limit was reached and that they can ask again in about (\d+) seconds?\.$/.exec(text);
+    expect(match, text).not.toBeNull();
+    // The oldest counted action is about twenty seconds old, so the window frees up in about forty.
+    expect(Number(match![1])).toBeGreaterThanOrEqual(30);
+    expect(Number(match![1])).toBeLessThanOrEqual(41);
+    // Nothing about the request, the caller or the server's internals is in the refusal.
+    const raw = JSON.stringify(eleventh);
+    for (const hidden of [title(11), "Fictional budget", token.connectionId, owner.householdId, owner.userId, token.access_token, "McpActionRateLimitError", "429", "mcp_action_events", "stack"]) expect(raw, hidden).not.toContain(hidden);
+    expect(await items(title(11))).toEqual([]);
+    expect(await actions()).toHaveLength(11);
+    const audit = await owned(owner, (tx) => tx.select().from(mcpAccessEvents).where(eq(mcpAccessEvents.connectionId, token.connectionId)));
+    expect(audit.filter((event) => event.outcome === "action_rate_limited").map((event) => event.tool)).toEqual(["add_shopping_item"]);
+    expect(JSON.stringify(audit)).not.toContain("Fictional budget");
+
+    // Asking again straight away is refused again and still saves nothing: the server never retries or queues.
+    const again = await call(token.access_token, "add_shopping_item", { title: title(11) });
+    expect(again.result.content![0].text).toMatch(/^rate_limited: Nothing was saved\./);
+    expect(await items(title(11))).toEqual([]);
+    expect(await actions()).toHaveLength(11);
+    // Only actions are bounded here. Reads on the same connection go on working.
+    expect((await call(token.access_token, "list_shopping_items", { checked: "open", limit: 1 })).result.isError).not.toBe(true);
+    // Every other refusal keeps its generic wording and is never described as a rate limit.
+    const switchedOff = await call(token.access_token, "add_shopping_item", { title: title(14) }, gateway({ MCP_DIRECT_ACTIONS_ENABLED: false }));
+    expect(refused(switchedOff)).toBe(true);
+    expect(JSON.stringify(switchedOff)).not.toContain("rate_limited");
+
+    // Once the counted actions are a minute old the same request goes through.
+    await owned(owner, (tx) => tx.update(mcpActionEvents).set({ createdAt: new Date(Date.now() - 61_000) }).where(eq(mcpActionEvents.connectionId, token.connectionId)));
+    const later = await call(token.access_token, "add_shopping_item", { title: title(11) });
+    expect(later.result.structuredContent, JSON.stringify(later)).toMatchObject({ outcome: "added" });
+    expect(await items(title(11))).toHaveLength(1);
+    failAction = true;
+    try {
+      const failed = await call(token.access_token, "add_shopping_item", { title: title(13) });
+      expect(failed.result.isError).toBe(true);
+      expect(failed.result.content![0].text).toBe("Nothing was saved. The action is unavailable or could not be completed. Repeating the same request is safe.");
+    } finally { failAction = false; }
+
+    // The limit belongs to one connection. With this one's budget spent again, a fresh grant starts with its own.
+    await seed(10, 5);
+    expect((await call(token.access_token, "add_shopping_item", { title: title(12) })).result.content![0].text).toMatch(/^rate_limited: /);
+    const fresh = await connect(owner, scopes, ["shopping.add"]);
+    expect(fresh.connectionId).not.toBe(token.connectionId);
+    expect((await call(fresh.access_token, "add_shopping_item", { title: title(12) })).result.structuredContent).toMatchObject({ outcome: "added" });
+  });
+
+  it("counts exactly ten real actions before refusing", async () => {
     const token = await connect(owner, scopes, ["shopping.add"]);
-    await owned(owner, (tx) => tx.insert(mcpActionEvents).values(Array.from({ length: 10 }, () => ({ householdId: owner.householdId, userId: owner.userId, connectionId: token.connectionId, action: "shopping.add", outcome: "added" }))));
-    const limited = await call(token.access_token, "add_shopping_item", { title: "Fictional budget item" });
-    expect(limited.result.isError).toBe(true);
-    expect(await items("Fictional budget item")).toEqual([]);
+    const title = (n: number) => `Fictional burst item ${n} ${token.connectionId.slice(0, 8)}`;
+    for (let n = 1; n <= 10; n++) {
+      const saved = await call(token.access_token, "add_shopping_item", { title: title(n) });
+      expect(saved.result.structuredContent, `add ${n}: ${JSON.stringify(saved)}`).toMatchObject({ outcome: "added" });
+    }
+    const eleventh = await call(token.access_token, "add_shopping_item", { title: title(11) });
+    expect(eleventh.result.isError).toBe(true);
+    expect(eleventh.result.content![0].text).toMatch(/^rate_limited: Nothing was saved\. This connection has reached its limit of 10 actions per minute\./);
+    for (let n = 1; n <= 10; n++) expect(await items(title(n)), `item ${n}`).toHaveLength(1);
+    expect(await items(title(11))).toEqual([]);
+    expect(await owned(owner, (tx) => tx.select().from(mcpActionEvents).where(eq(mcpActionEvents.connectionId, token.connectionId)))).toHaveLength(10);
   });
 
   it("previews the exact read payload for the member's own data without a grant or side effects", async () => {

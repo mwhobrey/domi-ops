@@ -114,6 +114,18 @@ describe("get_calendar_availability contract", () => {
     expect(tool.description).toMatch(/never a title, location, attendee, calendar name/);
   });
 
+  it("keeps an assistant's answer inside the selected calendars", () => {
+    // Acceptance 2026-11-13: one client read externalCalendarsExcluded:false as "outside calendars are included",
+    // another as "nothing was left out, the list is complete". Neither follows from the result.
+    expect(tool.description).toMatch(/covers only those selected calendars, never everything the user has/);
+    expect(tool.description).toMatch(/must not be called complete/);
+    expect(tool.description).toMatch(/outside calendar such as Google Calendar are never returned/);
+    expect(tool.description).toMatch(/false does not mean outside calendars are included or covered/);
+    expect(tool.description).toMatch(/when truncated is true the list was cut short/);
+    // The description must never itself assert that outside events are part of a result.
+    expect(tool.description).not.toMatch(/outside calendars? (events )?are included(?! or covered)/);
+  });
+
   it("accepts one to fourteen real dates and nothing else", () => {
     expect(availabilityInput.safeParse({ from: "2026-07-01" }).success).toBe(true);
     expect(availabilityInput.safeParse({ from: "2026-07-01", to: "2026-07-14" }).success).toBe(true);

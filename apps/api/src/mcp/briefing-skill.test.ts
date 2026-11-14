@@ -11,6 +11,20 @@ const cases = JSON.parse(readFileSync(new URL("../../../../docs/fixtures/mcp-bri
 const registry = [contextTool, ...readTools({ PUBLIC_APP_URL: "https://fixture.invalid" } as Env)];
 const id = (value: string) => "00000000-0000-4000-8000-" + Buffer.from(value).toString("hex").padEnd(12, "0").slice(0, 12);
 
+describe("briefing skill coverage wording (not model behavior)", () => {
+  const skill = readFileSync(new URL("../../../../skills/domi-ops-household-briefing/SKILL.md", import.meta.url), "utf8").replace(/\r\n/g, "\n").replace(/\s+/g, " ");
+  it("reports what was read and never asserts access to an area it did not check", () => {
+    // Acceptance 2026-11-13: "Calendar, School and Health were not checked" was followed by "the connector has access to them".
+    expect(skill).not.toContain("Calendar, School and Health were not checked");
+    expect(skill).toContain("Name the sources this briefing actually read, out of chores, shopping and selected notes, and say that nothing else in Domi Ops was read");
+    // A shopping-only request reads one source, and a failed tool reads none: neither may be reported as read.
+    expect(skill).toContain("List separately any of those three that was not requested, was unavailable or failed; never name one as read when it was not");
+    expect(skill).toContain("Do not say the connection has, or lacks, access to Calendar, School, Health or any other area");
+    expect(skill).toContain("answer only from the `tools` list in this run's connection context");
+    expect(skill).not.toMatch(/(connector|connection) has access to (them|School|Calendar|Health)/);
+  });
+});
+
 describe("portable briefing example contracts (not model behavior)", () => {
   for (const c of cases) it(c.id, () => {
     const available = [contextTool.name, ...c.tools];

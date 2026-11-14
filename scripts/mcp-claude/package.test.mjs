@@ -71,7 +71,7 @@ test("Claude package preserves the shared skill and license and never replaces a
     for (const skill of ["domi-ops-household-briefing", "domi-ops-household-actions"]) for (const name of ["SKILL.md", "LICENSE.txt"]) {
       assert.deepEqual(await readFile(join(output, "skills", skill, name)), await readFile(new URL(`../../skills/${skill}/${name}`, import.meta.url)));
     }
-    assert.equal(manifest.version, "0.2.0");
+    assert.equal(manifest.version, "0.2.1");
     assert.doesNotMatch(manifest.description, /read-only/i);
     // The README names every limit a reviewer or member needs before switching an action on.
     for (const phrase of ["Medication name, strength, instruction and history fields are never sent, but the label is sent as you wrote it", "Event titles, locations, people and calendar names are never sent",
@@ -111,7 +111,7 @@ test("the default submission is the assistant-actions update and says what it sh
       assert.ok(draft.requiredBeforeSubmit.some(entry => entry.includes(gate)), gate);
     }
     const review = JSON.parse(await readFile(join(output, "review-plan.draft.json"), "utf8"));
-    assert.equal(review.packageVersion, "0.2.0");
+    assert.equal(review.packageVersion, "0.2.1");
     assert.equal(review.review.test_cases.positive.length, 5);
     assert.equal(review.review.test_cases.negative.length, 3);
     const tools = review.review.test_cases.positive.map(c => c.tools_triggered).join(",");

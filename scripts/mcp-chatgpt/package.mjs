@@ -4,7 +4,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { nonPublicMcpHost } from "../hosted-qa/mcp-origin.mjs";
 import { checkPackageScopes, hasActions, privacyParagraph, readsOnSentence, scopeSummary, skillNames } from "../mcp-review/scopes.mjs";
 
-export const PLUGIN_VERSION = "0.2.0";
+export const PLUGIN_VERSION = "0.2.1";
 /** Kept under its earlier name for callers that describe a read-only package. */
 export function readScopeSummary(scopes) { return scopeSummary(scopes); }
 const describe = (scopes) => hasActions(scopes) ? `Household access you switch on: ${scopeSummary(scopes)}.` : `Read-only access to ${scopeSummary(scopes)}.`;

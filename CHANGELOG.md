@@ -8,6 +8,18 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+- Changing an assistant-recorded dose in Health now makes the entry the member's own:
+  after a status or time edit it no longer says "recorded by an assistant". Entries
+  that were not changed keep the mark, and the assistant's activity history is kept.
+- An assistant that reaches its limit of 10 actions a minute is now told so. The
+  refusal reads `rate_limited`, gives the wait, and tells the assistant not to retry
+  on its own. The limit is unchanged and nothing is saved for a refused action.
+- Provider packages are version 0.2.1. The household actions skill (0.1.1), the
+  briefing skill (0.1.2) and the calendar and connection tool descriptions now keep an
+  assistant from claiming access to areas it has no tool for, from saying outside
+  calendar events are included, and from calling a busy list complete. The Claude
+  plugin source in `integrations/claude/domi-ops-household` is 0.2.1.
+
 ## [0.13.0] - 2026-11-13
 
 Upgrades from v0.12.0 require migrations `0108_mcp_capabilities` through

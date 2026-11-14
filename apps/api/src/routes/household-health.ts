@@ -1944,9 +1944,13 @@ export function householdHealthRoutes(db: Database, env: Env) {
               .where(eq(healthMedicationLogs.id, u.id));
           }
         }
+        // A member's own change makes the entry theirs: Health stops saying an assistant recorded
+        // it. Re-saving it unchanged leaves the mark, and so do sibling doses whose slot only
+        // shifted above. The assistant's action row in mcp_action_events is history and stays.
+        const edited = status !== logRow.status || loggedAt.getTime() !== logRow.loggedAt.getTime();
         await tx
           .update(healthMedicationLogs)
-          .set({ loggedAt, status })
+          .set({ loggedAt, status, ...(edited ? { loggedViaConnectionId: null } : {}) })
           .where(eq(healthMedicationLogs.id, logId));
         if (logRow.healthEventId) {
           if (status === "taken") {
