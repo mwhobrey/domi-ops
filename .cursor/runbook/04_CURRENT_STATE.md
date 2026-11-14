@@ -8,9 +8,19 @@
 - This follow-up leads calendar discovery with bounded reporting guidance and adds
   fixed, flag-dependent guidance as a second text block on every successful calendar
   result. Structured output, schemas, consent, scopes and package 0.2.1 are unchanged.
-- Ambiguous flag interpretation remains a hypothesis, not a proven cause. Automated
-  contract tests do not establish a real-client wording pass. A separately deployed
-  revision and one neutral Grok T10 check are required; retain both failed responses.
+- PR #363 merged and hosted build `fad61f3` was deployed on November 14. One neutral
+  Grok T10 attempt passed after fresh consent; brief Claude and ChatGPT calendar checks
+  each passed once. Each made one successful calendar call, with zero action events;
+  the fictional domain snapshot was unchanged. Both earlier failed responses remain.
+- Ambiguous flag interpretation remains a hypothesis, not a proven cause. These three
+  passes are observations, not a reliability guarantee. Only T10 was rerun on this build.
+- Claude's expanded connector listing is live; its separate 0.2.1 plugin remains in
+  review. ChatGPT 0.2.1 metadata/skills are approved, but public publication is still
+  0.1.2 and its scanner still requests the old three scopes. The four added tools have
+  not been publicly scanned. The private 0.2.1 test passed; scanner access was restored.
+- Grok's provider-specific consent disclosure still says shopping and chores despite
+  the expanded choices. Correct that copy before Grok submission. Physical push and
+  the earlier November 14 Sentry window remain unverified. See acceptance F4 and G2–G6.
 
 ## Assistant capabilities and direct actions (stage 0 backend, 2026-11-11)
 
