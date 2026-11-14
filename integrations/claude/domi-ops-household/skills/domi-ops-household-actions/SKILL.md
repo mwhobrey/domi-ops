@@ -165,6 +165,13 @@ saved and which were not, and pass on the wait the error gives. Do not repeat
 the call on your own, straight away or later: try again only when the user asks
 after the wait.
 
+An error that says the action was saved but its result could not be returned
+means the change is in Domi Ops. Do not tell the user it failed and do not
+repeat the call. Read the current state first, with the schedule for a
+medication group, or with the shopping list if this connection lists that tool,
+and report what is there. If you cannot read it, say the action was saved and
+that you could not confirm the details.
+
 Any other error on an action says nothing was saved without saying why. Do not
 guess a reason, and do not describe it as a rate limit.
 

@@ -80,6 +80,9 @@ describe("household actions skill contract (not model behavior)", () => {
       /its 10 actions for the current minute/,
       /Do not repeat\s+the call on your own/,
       /do not describe it as a rate limit/,
+      // The gateway's third refusal: the write stands. The skill must not fold it into "nothing was saved".
+      /action was saved but its result could not be returned\s+means the change is in Domi Ops/,
+      /Do not tell the user it failed and do not\s+repeat the call\. Read the current state first/,
     ]) expect(skill).toMatch(rule);
     expect(skill).toContain(`its ${MCP_LIMITS.actionsPerMinute} actions for the current minute`);
     // No sentence may assert that outside calendar events are part of an answer.
