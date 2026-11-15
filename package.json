@@ -54,6 +54,8 @@
   "overrides": {
     "drizzle-orm": "^0.45.4",
     "esbuild": "^0.28.1",
-    "prisma": "^7.0.0"
+    "prisma": "^7.0.0",
+    "@grpc/grpc-js": "1.13.6",
+    "zod@^4.0.0": "4.6.7"
   }
 }

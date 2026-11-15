@@ -9,10 +9,18 @@
   `1.4.5`. The web workspace declares the provider's core peer explicitly; the DB
   workspace pins Better Auth exactly. A caret peer can otherwise select a newer
   core than the provider/auth cohort, producing incompatible plugin types.
-- Dependabot's original combined lockfile retained invalid nested auth versions
-  even though `npm ci` exited successfully. Reconcile from manifests without the
-  stale auth entries, then check `npm ls better-auth @better-auth/core better-call
-  --all` and run the real OAuth/isolation suites. Do not use force/legacy-peer flags.
+- Dependabot's original combined lockfile retained invalid nested versions even
+  though Node 22 `npm ci` exited successfully. Regenerate in an empty directory
+  containing all final workspace manifests, with no old lock or `node_modules`.
+  Then check `npm ls better-auth @better-auth/core better-call
+  @modelcontextprotocol/server hono @capacitor/core --all` and run the real
+  OAuth/isolation suites plus Node 24's partial Docker install context. Do not use
+  force/legacy-peer flags.
+- The resource-helper auth interface now exposes the existing `baseURL` in its
+  context, as required by the updated provider types. Token options and live grant
+  validation are unchanged. Overrides retain Zod 4 at `4.6.7` and gRPC JS at
+  `1.13.6` to avoid known memory-exhaustion and certificate-validation advisories;
+  they do not force a Firebase major change.
 - No application schema, consent scopes, module defaults or deployment settings
   change in this maintenance bundle.
 

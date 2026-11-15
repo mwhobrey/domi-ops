@@ -2,7 +2,7 @@
   "name": "@domi-ops/mobile",
   "version": "0.1.0",
   "private": true,
-  "description": "Capacitor 8 store shell \u2014 remote WebView of live apps/web (ADR 005 / WHO-287)",
+  "description": "Capacitor 8 store shell — remote WebView of live apps/web (ADR 005 / WHO-287)",
   "scripts": {
     "build": "node ./scripts/verify-www.mjs",
     "build:apk": "powershell -ExecutionPolicy Bypass -File ./scripts/build-debug-apk.ps1",
@@ -17,7 +17,7 @@
     "@capacitor-firebase/authentication": "^8.6.0",
     "@capacitor/android": "^8.6.0",
     "@capacitor/app": "^8.1.2",
-    "@capacitor/core": "^8.5.3",
+    "@capacitor/core": "^8.6.2",
     "@capacitor/ios": "^8.6.0",
     "@capacitor/preferences": "^8.0.0",
     "@capacitor/push-notifications": "^8.1.3",

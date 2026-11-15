@@ -13,6 +13,8 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
   now resolve to a matching version across workspaces, and the combined lockfile
   includes the pending compatible Dependabot updates. No configuration or database
   migration is required.
+- Updated transitive Zod and gRPC JS dependencies to patched versions for their
+  memory-exhaustion and certificate-validation advisories.
 
 - Grok Bot's consent disclosure now describes the MCP abilities and sources chosen
   for that connection, rather than incorrectly limiting the approval to shopping
