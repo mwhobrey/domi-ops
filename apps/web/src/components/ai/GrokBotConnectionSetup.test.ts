@@ -38,6 +38,8 @@ describe("Grok Bot onboarding boundaries", () => {
     const html = renderToStaticMarkup(createElement(ProviderDataDisclosure, { provider: "grok-bot" }));
     expect(html).toContain("every Bot on your account");
     expect(html).toContain("Cloud storage is required");
+    expect(html).toContain("only the MCP abilities and sources you choose for this connection");
+    expect(html).not.toContain("approval covers shopping and chores");
     expect(html).toContain("does not give a Bot a browser login");
     expect(html).toContain('href="https://cursor.com/privacy"');
     expect(html).toContain("cannot erase information already copied");

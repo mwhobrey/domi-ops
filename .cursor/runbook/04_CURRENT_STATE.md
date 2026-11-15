@@ -1,5 +1,16 @@
 # Current state
 
+## Provider publication follow-up (2026-11-14)
+
+- Grok Bot's provider-specific consent disclosure now refers to the MCP abilities
+  and sources chosen for the connection, matching the capability picker for both
+  narrow and expanded grants. The browser-access boundary is unchanged. This is a
+  disclosure correction only; scopes, defaults, consent records and tools are unchanged.
+- ChatGPT's approved 0.2.1 package declares seven scopes, while the existing public
+  scanner still requests the live 0.1.2 three-scope set. Publication/configuration
+  transition is under investigation; do not record the new tools as publicly scanned
+  until a fresh consent and scan actually show them.
+
 ## Calendar reporting guidance follow-up (WHO-512, 2026-11-14)
 
 - The hosted `0fe1a6c` rerun passed the current Claude/ChatGPT checks; Grok T10 still

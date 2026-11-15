@@ -8,6 +8,10 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+- Grok Bot's consent disclosure now describes the MCP abilities and sources chosen
+  for that connection, rather than incorrectly limiting the approval to shopping
+  and chores when medication groups or calendar busy times are also offered.
+
 - Calendar availability now tells an assistant how to report each result, in a note sent
   beside the result as well as in the tool description: say which busy blocks are listed
   or that none is, never that a time is free or open, and never that the list is
