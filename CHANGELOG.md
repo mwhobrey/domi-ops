@@ -8,6 +8,12 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+- Updated application and build dependencies, including Next.js, the editor,
+  authentication, MCP, queue and storage libraries. The authentication packages
+  now resolve to a matching version across workspaces, and the combined lockfile
+  includes the pending compatible Dependabot updates. No configuration or database
+  migration is required.
+
 - Grok Bot's consent disclosure now describes the MCP abilities and sources chosen
   for that connection, rather than incorrectly limiting the approval to shopping
   and chores when medication groups or calendar busy times are also offered.

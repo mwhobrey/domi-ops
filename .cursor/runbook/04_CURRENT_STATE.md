@@ -1,5 +1,21 @@
 # Current state
 
+## Dependency maintenance (2026-11-15)
+
+- Bundled the overlapping Dependabot maintenance, Next.js, Tiptap, Hono, re2js and
+  Docker publication-action updates. The standalone MCP compatibility package
+  retains its historical Better Auth cohort while updating its Hono packages.
+- Keep runtime Better Auth, OAuth provider and core at `1.7.21`, with better-call
+  `1.4.5`. The web workspace declares the provider's core peer explicitly; the DB
+  workspace pins Better Auth exactly. A caret peer can otherwise select a newer
+  core than the provider/auth cohort, producing incompatible plugin types.
+- Dependabot's original combined lockfile retained invalid nested auth versions
+  even though `npm ci` exited successfully. Reconcile from manifests without the
+  stale auth entries, then check `npm ls better-auth @better-auth/core better-call
+  --all` and run the real OAuth/isolation suites. Do not use force/legacy-peer flags.
+- No application schema, consent scopes, module defaults or deployment settings
+  change in this maintenance bundle.
+
 ## Provider publication follow-up (2026-11-14)
 
 - Grok Bot's provider-specific consent disclosure now refers to the MCP abilities
