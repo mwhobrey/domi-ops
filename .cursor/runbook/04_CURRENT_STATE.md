@@ -1,5 +1,32 @@
 # Current state
 
+## Dependency maintenance (2026-11-15)
+
+- Bundled the overlapping Dependabot maintenance, Next.js, Tiptap, Hono, re2js and
+  Docker publication-action updates. The standalone MCP compatibility package
+  retains its historical Better Auth cohort while updating its Hono packages.
+- Keep runtime Better Auth, OAuth provider and core at `1.7.21`, with better-call
+  `1.4.5`. The web workspace declares the provider's core peer explicitly; the DB
+  workspace pins Better Auth exactly. A caret peer can otherwise select a newer
+  core than the provider/auth cohort, producing incompatible plugin types.
+- Dependabot's original combined lockfile retained invalid nested versions even
+  though Node 22 `npm ci` exited successfully. Regenerate in an empty directory
+  containing all final workspace manifests, with no old lock or `node_modules`.
+  Then check `npm ls better-auth @better-auth/core better-call
+  @modelcontextprotocol/server hono @capacitor/core --all` and run the real
+  OAuth/isolation suites plus Node 24's partial Docker install context. Do not use
+  force/legacy-peer flags.
+- The resource-helper auth interface now exposes the existing `baseURL` in its
+  context, as required by the updated provider types. Token options and live grant
+  validation are unchanged. Overrides retain Zod 4 at `4.6.7` and gRPC JS at
+  `1.13.6` to avoid known memory-exhaustion and certificate-validation advisories;
+  they do not force a Firebase major change.
+- No application schema, consent scopes, module defaults or deployment settings
+  change in this maintenance bundle.
+- API and worker builders create their workspace `node_modules` directory after
+  install, even if empty. Keep copying it into runtime images: a deduplicated lock
+  can hoist everything today, but a later compatible lock can nest a dependency.
+
 ## Provider publication follow-up (2026-11-14)
 
 - Grok Bot's provider-specific consent disclosure now refers to the MCP abilities

@@ -29,7 +29,7 @@ type Connection = typeof mcpConnections.$inferSelect;
 type ProviderAuth = ReturnType<typeof betterAuth<{ plugins: [ReturnType<typeof oauthProvider>] }>>;
 type Auth = {
   options: BetterAuthOptions;
-  $context: Promise<unknown>;
+  $context: Promise<{ baseURL: string }>;
   handler: (request: Request) => Promise<Response>;
   api: Pick<ReturnType<typeof betterAuth>["api"], "getSession"> & Pick<ProviderAuth["api"], "adminCreateOAuthClient" | "getOAuthServerConfig">;
 };
