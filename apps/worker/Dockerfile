@@ -14,7 +14,8 @@ COPY packages/import-homehub/package.json packages/import-homehub/
 COPY apps/worker/package.json apps/worker/
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
-RUN npm ci
+# Keep the runtime COPY valid when npm hoists every workspace dependency.
+RUN npm ci && mkdir -p apps/worker/node_modules
 COPY . .
 RUN npx turbo run build --filter=@domi-ops/worker...
 

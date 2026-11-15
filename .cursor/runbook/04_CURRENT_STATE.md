@@ -23,6 +23,9 @@
   they do not force a Firebase major change.
 - No application schema, consent scopes, module defaults or deployment settings
   change in this maintenance bundle.
+- API and worker builders create their workspace `node_modules` directory after
+  install, even if empty. Keep copying it into runtime images: a deduplicated lock
+  can hoist everything today, but a later compatible lock can nest a dependency.
 
 ## Provider publication follow-up (2026-11-14)
 
