@@ -157,7 +157,8 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string, m
         const current = await member(tx, userId, connection.householdId);
         if (current.id !== connection.memberId || current.role !== connection.grantedRole) deny("inactive_grant", 401);
         await householdAccess(tx, connection.householdId, scopes);
-        return connection;
+        return { ...connection, scopeUpgradeScopes: connection.clientId === CHATGPT_POLICY.clientId && env.MCP_CHATGPT_ENABLED
+          ? (profile.client.scopes ?? []).filter(scope => supportedScopes.includes(scope as typeof MCP_SCOPES[number])) : undefined };
       }));
   }
 
@@ -625,7 +626,8 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string, m
         const scopes = usableScopes(payload.scope.split(" ").filter(Boolean));
         const connection = await liveConnection(payload.sub, payload.domi_grant_id, scopes, payload.client_id);
         if (requiredScopes.some((s) => !connection.scopes.includes(s) || !scopes.includes(s))) deny("insufficient_scope");
-        return { userId: connection.userId, memberId: connection.memberId, householdId: connection.householdId, connectionId: connection.id, clientId: connection.clientId, scopes };
+        return { userId: connection.userId, memberId: connection.memberId, householdId: connection.householdId, connectionId: connection.id, clientId: connection.clientId, scopes,
+          scopeUpgradeScopes: connection.scopeUpgradeScopes };
       },
       /** Short tool transaction; recheck live grant after transport admission. */
       async withGrantContext<T>(request: Request, requiredScopes: readonly string[], fn: (tx: Database, identity: McpIdentity) => Promise<T>) {
@@ -680,6 +682,8 @@ export function createMcpAuthorization(db: Database, env: Env, secret: string, m
 }
 
 export type McpAuthorization = ReturnType<ReturnType<typeof createMcpAuthorization>["attach"]>;
-export type McpIdentity = { userId: string; memberId: string; householdId: string; connectionId: string; clientId: string; scopes: string[] };
+export type McpIdentity = { userId: string; memberId: string; householdId: string; connectionId: string; clientId: string; scopes: string[];
+  /** Approved client/operator ceiling for static tool discovery only. Never a grant or execution scope. */
+  scopeUpgradeScopes?: string[] };
 export type McpOwnedConnection = { householdId: string; connectionId: string; userId: string; memberId: string; capabilities: string[] };
 export type McpWriteIdentity = McpIdentity & { role: string; expiresAt: Date; policyVersion: string; profileVersion: string; sessionId?: string; clientName: string; householdName: string; memberName: string | null };

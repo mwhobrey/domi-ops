@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import { households, householdSubscriptions, mcpConnectionCapabilities, type Database } from "@domi-ops/db";
-import { isHostedDeployment, isModuleEnabled, mcpDirectActions, parseHouseholdModulesJson, subscriptionAllowsWork, type Env, type McpCapability, type McpModule } from "@domi-ops/config";
+import { isHostedDeployment, isModuleEnabled, mcpDirectActions, mcpSupportedScopes, MCP_CAPABILITIES, parseHouseholdModulesJson, subscriptionAllowsWork, type Env, type McpCapability, type McpModule } from "@domi-ops/config";
 import type { McpIdentity } from "@domi-ops/auth";
 import type { McpTool } from "./tools.js";
 
@@ -31,7 +31,7 @@ export async function enabledCapabilities(tx: Database, identity: McpIdentity): 
 type Operation = { module?: McpModule; access: "read" | "write"; capability?: McpCapability; execution?: "transaction" | "direct" };
 
 /** Logical operation policy: transport POST is never evidence of a product write. */
-export async function checkOperation(tx: Database, env: Env, identity: McpIdentity, operation: Operation, reviewedWorkflow = false, enabled?: Set<string>) {
+async function checkAvailability(tx: Database, env: Env, identity: McpIdentity, operation: Operation, reviewedWorkflow = false) {
   if (operation.module) {
     const [household] = await tx.select({ modules: households.modulesEnabled }).from(households).where(eq(households.id, identity.householdId));
     if (!household || !isModuleEnabled(env, operation.module) || !parseHouseholdModulesJson(household.modules).includes(operation.module)) throw new McpGatewayError("tool_unavailable");
@@ -41,8 +41,6 @@ export async function checkOperation(tx: Database, env: Env, identity: McpIdenti
       if (subscription && !parseHouseholdModulesJson(subscription.modulesEntitled).includes(operation.module)) throw new McpGatewayError("tool_unavailable");
     }
   }
-  // A granted scope is only the outer bound. The member's own switch decides.
-  if (operation.capability && !(enabled ?? await enabledCapabilities(tx, identity)).has(operation.capability)) throw new McpGatewayError("tool_unavailable");
   if (operation.access === "write") {
     const [subscription] = isHostedDeployment(env) ? await tx.select().from(householdSubscriptions).where(eq(householdSubscriptions.householdId, identity.householdId)) : [];
     if (isHostedDeployment(env) && !subscriptionAllowsWork(subscription ?? null)) throw new McpGatewayError("subscription_read_only", 402);
@@ -52,6 +50,12 @@ export async function checkOperation(tx: Database, env: Env, identity: McpIdenti
     } else if (!reviewedWorkflow || !env.MCP_WRITES_ENABLED) throw new McpGatewayError("writes_not_enabled");
   }
   await tx.execute(sql`select set_config('statement_timeout', '1500ms', true)`);
+}
+
+export async function checkOperation(tx: Database, env: Env, identity: McpIdentity, operation: Operation, reviewedWorkflow = false, enabled?: Set<string>) {
+  await checkAvailability(tx, env, identity, operation, reviewedWorkflow);
+  // A granted scope is only the outer bound. The member's own switch decides.
+  if (operation.capability && !(enabled ?? await enabledCapabilities(tx, identity)).has(operation.capability)) throw new McpGatewayError("tool_unavailable");
 }
 
 const unlisted = ["tool_unavailable", "writes_not_enabled", "subscription_read_only"];
@@ -65,4 +69,29 @@ export async function permittedTools(tx: Database, env: Env, identity: McpIdenti
     catch (error) { if (!(error instanceof McpGatewayError && unlisted.includes(error.code))) throw error; }
   }
   return permitted;
+}
+
+/** Static definitions can request consent; they never confer permission to run the tool. */
+export async function discoverableTools(tx: Database, env: Env, identity: McpIdentity, registry: readonly McpTool[]) {
+  const available = await permittedTools(tx, env, identity, registry);
+  if (!identity.scopeUpgradeScopes?.length) return available;
+  const permitted = new Set(available.map(tool => tool.name));
+  const enabled = await enabledCapabilities(tx, identity);
+  const ceiling: readonly string[] = mcpSupportedScopes(env);
+  const discoverable: McpTool[] = [];
+  for (const tool of registry) {
+    if (permitted.has(tool.name)) { discoverable.push(tool); continue; }
+    // A held scope with its capability switched off is a member refusal, not missing OAuth consent.
+    if (tool.scopes.every(scope => identity.scopes.includes(scope)) ||
+      !tool.scopes.every(scope => ceiling.includes(scope)) ||
+      !tool.scopes.every(scope => identity.scopeUpgradeScopes?.includes(scope))) continue;
+    if (tool.capability) {
+      const capability = MCP_CAPABILITIES[tool.capability];
+      const required = [tool.capability, ...("requires" in capability ? [capability.requires] : [])];
+      if (required.some(name => identity.scopes.includes(MCP_CAPABILITIES[name].scope) && !enabled.has(name))) continue;
+    }
+    try { await checkAvailability(tx, env, identity, tool); discoverable.push(tool); }
+    catch (error) { if (!(error instanceof McpGatewayError && unlisted.includes(error.code))) throw error; }
+  }
+  return discoverable;
 }

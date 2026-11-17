@@ -8,6 +8,11 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+- Fixed discovery of additional permissions for the existing public ChatGPT
+  connection. Eligible tool definitions now declare their required scopes and
+  prompt for additional consent when needed. Every call still requires its
+  granted scopes, member permissions and selected sources; other clients retain
+  their existing discovery behavior. No database migration or app ID change.
 - Updated application and build dependencies, including Next.js, the editor,
   authentication, MCP, queue and storage libraries. The authentication packages
   now resolve to a matching version across workspaces, and the combined lockfile

@@ -103,13 +103,36 @@ web account only. A private synthetic connection completed OAuth and consent;
 desktop, mobile and other account/workspace eligibility remain unverified. No account identifiers, credentials
 or private screenshots belong in public receipts.
 
-The installed MCP SDK is v2.3.1, protocol2026-07-28. It accepts titles, annotations
+The installed MCP server SDK is v2.4.0, protocol2026-07-28. It accepts titles, annotations
 and `_meta`, but its `registerTool` implementation does not accept the top-level
 `securitySchemes` option shown in OpenAI's SDK examples. The current gateway
 authenticates before discovery and publishes the HTTP OAuth challenge. Actual
 ChatGPT linking and reauthorization worked on this account without changing that
 SDK metadata contract. Do not solve other client mismatches by allowing anonymous household reads,
 removing authorization checks or silently enabling legacy transport.
+
+### Additional permissions on the existing public ChatGPT connection
+
+The approved ChatGPT CIMD client can discover static definitions for tools whose
+scopes are offered by both the deployment and its stored client ceiling, even if
+the connection has not granted those scopes yet. Other clients retain their
+grant-filtered discovery. Module availability, subscription entitlements and the
+direct-action operator ceiling still limit this catalog. Definitions contain no
+household data. `get_connection_context.tools` continues to report only what the
+connection can actually use.
+
+Every tool declares OAuth requirements in `_meta.securitySchemes`. A call needing
+new scopes returns an error with `_meta["mcp/www_authenticate"]`, including
+`insufficient_scope`, a bounded explanation, resource metadata and the tool's
+required scopes. ChatGPT can request new consent once the definitions pass its
+review. This does not update the initial scopes requested by Reconnect or bypass
+tool review. Existing app/plugin IDs stay unchanged.
+
+Discovery and a challenge never enable an action. Every execution still checks
+the token, current grant, member capability, selected sources and tenant boundary.
+A held scope with its capability switched off is not treated as missing consent;
+the tool stays unavailable. New consent uses the normal member review and grant
+replacement flow. A denied upgrade leaves the existing grant usable.
 
 ## Start the local synthetic lab
 

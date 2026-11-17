@@ -1,5 +1,16 @@
 # Current state
 
+## ChatGPT incremental consent (2026-11-17)
+
+- The enabled published ChatGPT CIMD client can discover eligible static tool
+  definitions outside its current grant, within both client and operator scope
+  ceilings. `_meta.securitySchemes` and tool-level `mcp/www_authenticate`
+  insufficient-scope errors support additional consent on the existing app IDs.
+- Execution still checks current scopes, member capabilities, selected sources,
+  entitlements and tenant isolation. Held-but-disabled capabilities stay hidden;
+  context lists only executable tools. Other clients keep grant-filtered
+  discovery. OpenAI tool review and actual-client verification remain required.
+
 ## Dependency maintenance (2026-11-15)
 
 - Bundled the overlapping Dependabot maintenance, Next.js, Tiptap, Hono, re2js and
