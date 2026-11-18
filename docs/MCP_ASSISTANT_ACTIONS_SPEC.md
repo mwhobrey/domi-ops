@@ -490,9 +490,13 @@ tests in 7 files.
 ### Stage 1, shopping add (built, not deployed)
 
 - `add_shopping_item` is in the default registry
-  ([direct-tools.ts](../apps/api/src/mcp/direct-tools.ts)). It is listed and callable
+  ([direct-tools.ts](../apps/api/src/mcp/direct-tools.ts)). It is callable
   only when the operator lists `shopping.add` in `MCP_DIRECT_ACTIONS`, the connection
   holds `shopping:write`, and the member has switched the capability on.
+  The approved ChatGPT CIMD client may discover its static definition before
+  granting that scope, within the client/operator and module/subscription ceilings,
+  so ChatGPT can request additional consent. Discovery does not authorize a call;
+  other clients retain grant-filtered discovery. See [ChatGPT](MCP_CHATGPT.md#additional-permissions-on-the-existing-public-chatgpt-connection).
 - Input is a single-line name of up to 120 characters, with an optional quantity and
   unit. Control characters, line separators and bidirectional overrides are refused.
   Any other field is refused by the strict schema.

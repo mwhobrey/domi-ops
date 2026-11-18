@@ -6,7 +6,7 @@ import { and, eq, gt, sql } from "drizzle-orm";
 import { mcpActionEvents, type Database } from "@domi-ops/db";
 import { mcpSupportedScopes, type Env } from "@domi-ops/config";
 import { admit, finish, metadataContext, tagTool } from "./activity.js";
-import { actionRateLimitMessage, checkOperation, permittedTools, MCP_LIMITS, McpActionRateLimitError, McpGatewayError } from "./access.js";
+import { actionRateLimitMessage, checkOperation, discoverableTools, permittedTools, MCP_LIMITS, McpActionRateLimitError, McpGatewayError } from "./access.js";
 import { approvedToolNames, directToolNames, toolTitles, contextTool, type McpTool } from "./tools.js";
 import { readMcpBody } from "./bounds.js";
 import { readTools } from "./read-tools.js";
@@ -73,17 +73,32 @@ export function mcpGateway(db: Database, auth: Authorization, env: Env, tools: r
           if (Array.isArray(parsedBody)) { outcome = "invalid_request"; return failure("batch_not_supported", 400); }
           const method = parsedBody && typeof parsedBody === "object" && "method" in parsedBody ? parsedBody.method : undefined;
           if (typeof method === "string" && !["server/discover", "tools/list", "tools/call", "initialize", "notifications/initialized", "ping"].includes(method)) return failure("method_not_allowed", 400);
-          const available = await auth.withGrantContext(bearerRequest, [], (tx, current) => permittedTools(tx, env, current, tools));
+          const available = await auth.withGrantContext(bearerRequest, [], (tx, current) => discoverableTools(tx, env, current, tools));
           handler = createMcpHandler(() => {
             const server = new McpServer({ name: "domi-ops", version: "1.0.0" }, { capabilities: { tools: { listChanged: false } } });
             server.server.onerror = () => {}; // Never forward protocol errors/arguments to telemetry.
             for (const tool of available) {
-              server.registerTool(tool.name, { title: toolTitles[tool.name], description: tool.description, inputSchema: tool.input, outputSchema: tool.output, annotations: { title: toolTitles[tool.name], readOnlyHint: tool.access === "read", destructiveHint: false, idempotentHint: true, openWorldHint: false } }, async (args) => {
+              server.registerTool(tool.name, { title: toolTitles[tool.name], description: tool.description, inputSchema: tool.input, outputSchema: tool.output,
+                _meta: { securitySchemes: [{ type: "oauth2", scopes: tool.scopes }] },
+                annotations: { title: toolTitles[tool.name], readOnlyHint: tool.access === "read", destructiveHint: false, idempotentHint: true, openWorldHint: false } }, async (args) => {
                 outcome = "tool_denied";
                 let committed = false;
                 let afterCommit: ((tx: Database) => Promise<void>) | undefined;
                 await tagTool(db, identity!, admission!.id, tool.name);
                 try {
+                  if (tool.scopes.some(scope => !identity!.scopes.includes(scope))) {
+                    const upgrade = await auth.withGrantContext(bearerRequest, [], async (tx, current) =>
+                      tool.scopes.some(scope => !current.scopes.includes(scope)) &&
+                      (await discoverableTools(tx, env, current, tools)).some(candidate => candidate.name === tool.name));
+                    if (upgrade) {
+                      outcome = "consent_required";
+                      // Consent replaces the grant: retain its existing token scopes, including refresh access.
+                      const requestedScopes = [...new Set([...identity!.scopes, ...tool.scopes])];
+                      return { isError: true, content: [{ type: "text" as const,
+                        text: "Additional permission is required. Nothing was saved. Review Domi Ops consent before continuing; discovering this tool does not enable it." }],
+                        _meta: { "mcp/www_authenticate": [`${challenge}, error="insufficient_scope", error_description="Additional Domi Ops permission is required", scope="${requestedScopes.join(" ")}"`] } };
+                    }
+                  }
                   const result = tool.execution === "direct" ? await auth.withDirectActionContext(bearerRequest, tool.scopes, async (tx, current) => {
                     // Authority, capability, budget, the write and its activity row share one transaction.
                     await checkOperation(tx, env, current, tool);

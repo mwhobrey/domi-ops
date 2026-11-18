@@ -15,7 +15,7 @@ import { planMcpClient, provisionMcpClient } from "@domi-ops/auth/mcp-client-pro
 import { envSchema, type Env } from "@domi-ops/config";
 import {
   createDb, closeDb, households, householdMembers, users, notes, mcpConnections, mcpPendingConsents,
-  mcpNoteSelections, mcpClientProfiles, noteShares, oauthClient, oauthRefreshToken, jwks, withHouseholdContext, withUserLookupContext,
+  mcpNoteSelections, mcpConnectionCapabilities, mcpActionEvents, mcpClientProfiles, noteShares, oauthClient, oauthResource, oauthRefreshToken, jwks, withHouseholdContext, withUserLookupContext,
   withMcpProviderContext, withSystemContext, withWorkerScanContext, type Database,
 } from "@domi-ops/db";
 import { mcpAuthorizationRoutes } from "./mcp-authorization.js";
@@ -365,6 +365,129 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
       await limited.mcp.setHouseholdEnabled(owner.headers, owner.householdId, true);
       await expect(limited.mcp.authorize(bearer(next.access_token))).rejects.toBeTruthy();
     } finally { auth = originalAuth; }
+  });
+  it("ChatGPT discovers incremental consent tools but cannot use them before explicit scope and capability consent", async () => {
+    const originalAuth = auth, id = CHATGPT_CLIENT_ID;
+    const initial = ["shopping:read", "chores:read", "offline_access"];
+    const full = [...initial, "health:read", "calendar:read", "shopping:write", "health:write"];
+    const capabilities = ["shopping.read", "chores.read", "shopping.add", "health.groups.read", "health.groups.log", "calendar.availability"];
+    const wide: Env = { ...env, MCP_CHATGPT_ENABLED: true, MCP_READ_SCOPES: ["shopping:read", "chores:read", "health:read", "calendar:read"],
+      MCP_DIRECT_ACTIONS_ENABLED: true, MCP_DIRECT_ACTIONS: ["shopping.add", "health.groups.log"], MODULES_ENABLED: ["core", "health", "calendar_sync"] };
+    const keys = await generateKeyPair("RS256"), kid = randomUUID();
+    const metadata = { client_id: id, client_name: "ChatGPT", client_uri: "https://chatgpt.com/", redirect_uris: [CHATGPT_CALLBACK],
+      grant_types: ["authorization_code", "refresh_token"], response_types: ["code"], token_endpoint_auth_method: "private_key_jwt", jwks_uri: CHATGPT_JWKS_URI };
+    const transport = async (input: string | Request | URL) => {
+      if (String(input) === CHATGPT_JWKS_URI) return Response.json({ keys: [{ ...await exportJWK(keys.publicKey), kid, alg: "RS256", use: "sig" }] });
+      if (String(input) !== id) throw new Error("Unexpected metadata fetch");
+      return Response.json(metadata, { headers: { "cache-control": "no-store" } });
+    };
+    const limited = createBetterAuth(db, wide, { cookiePrefix, mcpMetadataFetch: transport });
+    const [householdBefore] = await owned(owner, tx => tx.select().from(households).where(eq(households.id, owner.householdId)));
+    const [subscriptionBefore] = await owned(owner, tx => tx.select().from(householdSubscriptions).where(eq(householdSubscriptions.householdId, owner.householdId)));
+    const [resourceBefore] = await withMcpProviderContext(db, tx => tx.select().from(oauthResource).where(eq(oauthResource.identifier, origin + "/api/mcp")));
+    auth = limited; clientIds.push(id);
+    let sequence = 0;
+    let createdItemId: string | undefined;
+    let shoppingUpgradeScopes: string[] = [];
+    const target = (overrides: Partial<Env> = {}) => mcpGateway(db, limited.mcp, { ...wide, ...overrides });
+    async function rpc(token: string, method: string, params?: Record<string, unknown>, overrides: Partial<Env> = {}) {
+      const response = await target(overrides).request(origin + "/api/mcp", { method: "POST", headers: {
+        host: new URL(origin).host, authorization: "Bearer " + token, "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": "2025-06-18" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: ++sequence, method, ...(params ? { params } : {}) }) });
+      const text = await response.text();
+      return { status: response.status, body: JSON.parse(response.headers.get("content-type")?.includes("text/event-stream") ? text.split("\n").find(line => line.startsWith("data: "))!.slice(6) : text) };
+    }
+    const names = async (token: string, overrides: Partial<Env> = {}) => (await rpc(token, "tools/list", undefined, overrides)).body.result.tools.map((t: { name: string }) => t.name) as string[];
+    async function establish(requested: string[], selected?: string[]) {
+      const query = await begin(owner, requested, id, CHATGPT_CALLBACK);
+      const pending = await limited.mcp.prepareConsent(owner.headers, { householdId: owner.householdId, oauthQuery: query, noteIds: [],
+        adultAttested: true, privacyAttested: true, providerSettingsReviewed: true, policyVersion: MCP_POLICY_VERSION, ...(selected ? { capabilities: selected } : {}) });
+      const decision = await limited.mcp.decideConsent(owner.headers, { pendingId: pending.pendingId, oauthQuery: query, accept: true });
+      if (!decision.accepted) throw new Error("Fictional consent denied");
+      const assertion = await new SignJWT({}).setProtectedHeader({ alg: "RS256", kid }).setIssuer(id).setSubject(id).setAudience(origin + "/auth/oauth2/token")
+        .setIssuedAt().setExpirationTime("60s").setJti(randomUUID()).sign(keys.privateKey);
+      const response = await exchange(new URL(decision.redirectUri).searchParams.get("code")!, { client_id: id, redirect_uri: CHATGPT_CALLBACK,
+        client_assertion_type: "urn:ietf:params:oauth:client-assertion-type:jwt-bearer", client_assertion: assertion });
+      expect(response.status, await response.clone().text()).toBe(200);
+      const tokens = await response.json() as Tokens;
+      expect(String(decodeJwt(tokens.access_token).scope).split(" ").sort()).toEqual([...requested].sort());
+      return { ...tokens, connectionId: decision.connectionId };
+    }
+    try {
+      await owned(owner, tx => tx.update(households).set({ modulesEnabled: '["core","health","calendar_sync"]' }).where(eq(households.id, owner.householdId)));
+      await owned(owner, tx => tx.insert(householdSubscriptions).values({ householdId: owner.householdId, modulesEntitled: '["core","health","calendar_sync"]', status: "active" })
+        .onConflictDoUpdate({ target: householdSubscriptions.householdId, set: { modulesEntitled: '["core","health","calendar_sync"]', status: "active" } }));
+      // The stored client ceiling is authoritative even though this deployment offers seven scopes.
+      await begin(owner, initial, id, CHATGPT_CALLBACK);
+      // The suite's base provider booted with a narrower resource; mirror the real deployed seven-scope ceiling.
+      await withMcpProviderContext(db, tx => tx.update(oauthResource).set({ allowedScopes: full }).where(eq(oauthResource.identifier, origin + "/api/mcp")));
+      const token = await establish(initial);
+      await withMcpProviderContext(db, tx => tx.update(oauthClient).set({ scopes: initial }).where(eq(oauthClient.clientId, id)));
+      expect(await names(token.access_token)).toEqual(["get_connection_context", "list_shopping_items", "list_chores"]);
+      await withMcpProviderContext(db, tx => tx.update(oauthClient).set({ scopes: full }).where(eq(oauthClient.clientId, id)));
+      const listed = (await rpc(token.access_token, "tools/list")).body.result.tools as { name: string; _meta: Record<string, unknown> }[];
+      expect(listed.map(t => t.name)).toEqual(["get_connection_context", "list_shopping_items", "list_chores", "add_shopping_item", "get_medication_group_schedule", "log_medication_group", "get_calendar_availability"]);
+      expect(listed.find(t => t.name === "log_medication_group")!._meta.securitySchemes).toEqual([{ type: "oauth2", scopes: ["health:read", "health:write"] }]);
+      const context = (await rpc(token.access_token, "tools/call", { name: "get_connection_context", arguments: {} })).body.result.structuredContent;
+      expect(context.tools).toEqual(["get_connection_context", "list_shopping_items", "list_chores"]);
+      const snapshot = await domainSnapshot();
+      const beforeCapabilities = await owned(owner, tx => tx.select().from(mcpConnectionCapabilities).where(eq(mcpConnectionCapabilities.connectionId, token.connectionId)));
+      for (const [name, args, required] of [
+        ["add_shopping_item", { title: "Fictional incremental consent item" }, "shopping:write"],
+        ["get_medication_group_schedule", {}, "health:read"],
+        ["log_medication_group", { occurrenceRef: "untrusted-reference" }, "health:read health:write"],
+        ["get_calendar_availability", { from: "2026-11-17" }, "calendar:read"],
+      ] as const) {
+        const denied = await rpc(token.access_token, "tools/call", { name, arguments: args });
+        expect(denied.status).toBe(200); expect(denied.body.result.isError).toBe(true);
+        const [challenge] = denied.body.result._meta["mcp/www_authenticate"];
+        expect(challenge).toContain('error="insufficient_scope"'); expect(challenge).toContain('error_description="');
+        const requestedScopes = /(?:^|, )scope="([^"]+)"/.exec(challenge)![1].split(" ");
+        expect([...requestedScopes].sort()).toEqual([...new Set([...initial, ...required.split(" ")])].sort());
+        if (name === "add_shopping_item") shoppingUpgradeScopes = requestedScopes;
+        expect(challenge).toContain(`resource_metadata="${origin}/.well-known/oauth-protected-resource/api/mcp"`);
+        expect(JSON.stringify(denied.body)).not.toContain(token.access_token);
+      }
+      expect(await domainSnapshot()).toEqual(snapshot);
+      expect(await owned(owner, tx => tx.select().from(mcpConnectionCapabilities).where(eq(mcpConnectionCapabilities.connectionId, token.connectionId)))).toEqual(beforeCapabilities);
+      expect(await owned(owner, tx => tx.select().from(mcpActionEvents).where(eq(mcpActionEvents.connectionId, token.connectionId)))).toEqual([]);
+      for (const name of ["add_shopping_item", "log_medication_group"]) expect(await names(token.access_token, { MCP_DIRECT_ACTIONS_ENABLED: false })).not.toContain(name);
+      expect(await names(token.access_token, { MODULES_ENABLED: ["core"] })).not.toContain("get_calendar_availability");
+      expect(await names(token.access_token, { MCP_READ_SCOPES: ["shopping:read", "chores:read"] })).not.toContain("get_medication_group_schedule");
+      // A denied upgrade leaves the original grant usable and does not switch on capabilities.
+      const deniedQuery = await begin(owner, full, id, CHATGPT_CALLBACK);
+      const deniedPending = await limited.mcp.prepareConsent(owner.headers, { householdId: owner.householdId, oauthQuery: deniedQuery, noteIds: [],
+        adultAttested: true, privacyAttested: true, providerSettingsReviewed: true, policyVersion: MCP_POLICY_VERSION });
+      expect(await limited.mcp.decideConsent(owner.headers, { pendingId: deniedPending.pendingId, oauthQuery: deniedQuery, accept: false })).toEqual({ accepted: false });
+      await expect(limited.mcp.authorize(bearer(token.access_token))).resolves.toMatchObject({ scopes: initial });
+      const shoppingUpgrade = await establish(shoppingUpgradeScopes, ["shopping.read", "chores.read", "shopping.add"]);
+      expect(await names(shoppingUpgrade.access_token)).toEqual(expect.arrayContaining(["list_shopping_items", "list_chores", "add_shopping_item"]));
+      await expect(limited.mcp.authorize(bearer(shoppingUpgrade.access_token))).resolves.toMatchObject({ scopes: shoppingUpgradeScopes });
+      const partial = await establish([...initial, "health:read"]);
+      const partialNames = await names(partial.access_token);
+      expect(partialNames).not.toContain("get_medication_group_schedule");
+      expect(partialNames).not.toContain("log_medication_group");
+      const upgraded = await establish(full, capabilities);
+      expect((await rpc(token.access_token, "tools/list")).status).toBe(401);
+      await limited.mcp.withDirectActionContext(bearer(upgraded.access_token), ["shopping:write"], async () => true);
+      const saved = await rpc(upgraded.access_token, "tools/call", { name: "add_shopping_item", arguments: { title: "Fictional explicit incremental consent item" } });
+      expect(saved.body.result.isError, JSON.stringify(saved)).not.toBe(true); expect(saved.body.result.structuredContent.outcome).toBe("added");
+      createdItemId = saved.body.result.structuredContent.item.id;
+      // A scope already held with its capability switched off never prompts to undo the member's choice.
+      await limited.mcp.setCapabilities(owner.headers, upgraded.connectionId, { capabilities: capabilities.filter(c => c !== "shopping.add") });
+      expect(await names(upgraded.access_token)).not.toContain("add_shopping_item");
+      const switchedOff = await rpc(upgraded.access_token, "tools/call", { name: "add_shopping_item", arguments: { title: "Fictional disabled item" } });
+      expect(switchedOff.body.error).toBeDefined(); expect(JSON.stringify(switchedOff.body)).not.toContain("mcp/www_authenticate");
+      await limited.mcp.revokeConnection(owner.headers, upgraded.connectionId);
+      expect((await rpc(upgraded.access_token, "tools/list")).status).toBe(401);
+    } finally {
+      if (createdItemId) await owned(owner, tx => tx.delete(shoppingItems).where(and(eq(shoppingItems.id, createdItemId!), eq(shoppingItems.householdId, owner.householdId), eq(shoppingItems.item, "Fictional explicit incremental consent item"))));
+      await owned(owner, tx => tx.update(households).set({ modulesEnabled: householdBefore.modulesEnabled }).where(eq(households.id, owner.householdId)));
+      if (subscriptionBefore) await owned(owner, tx => tx.update(householdSubscriptions).set({ modulesEntitled: subscriptionBefore.modulesEntitled, status: subscriptionBefore.status }).where(eq(householdSubscriptions.householdId, owner.householdId)));
+      else await owned(owner, tx => tx.delete(householdSubscriptions).where(eq(householdSubscriptions.householdId, owner.householdId)));
+      if (resourceBefore) await withMcpProviderContext(db, tx => tx.update(oauthResource).set({ allowedScopes: resourceBefore.allowedScopes }).where(eq(oauthResource.identifier, origin + "/api/mcp")));
+      auth = originalAuth;
+    }
   });
   it("Grok Bot on a deployment that offers health and calendar: any part of the offer connects and a scope outside it is refused whole", async () => {
     const originalAuth = auth, id = GROK_BOT_CLIENT_ID, redirect = GROK_BOT_CALLBACK;
