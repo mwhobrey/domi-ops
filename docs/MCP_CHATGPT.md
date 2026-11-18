@@ -124,7 +124,8 @@ connection can actually use.
 Every tool declares OAuth requirements in `_meta.securitySchemes`. A call needing
 new scopes returns an error with `_meta["mcp/www_authenticate"]`, including
 `insufficient_scope`, a bounded explanation, resource metadata and the tool's
-required scopes. ChatGPT can request new consent once the definitions pass its
+required scopes together with those already held, including refresh access, so
+the replacement grant retains existing access. ChatGPT can request new consent once the definitions pass its
 review. This does not update the initial scopes requested by Reconnect or bypass
 tool review. Existing app/plugin IDs stay unchanged.
 

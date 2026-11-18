@@ -387,6 +387,8 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
     const [resourceBefore] = await withMcpProviderContext(db, tx => tx.select().from(oauthResource).where(eq(oauthResource.identifier, origin + "/api/mcp")));
     auth = limited; clientIds.push(id);
     let sequence = 0;
+    let createdItemId: string | undefined;
+    let shoppingUpgradeScopes: string[] = [];
     const target = (overrides: Partial<Env> = {}) => mcpGateway(db, limited.mcp, { ...wide, ...overrides });
     async function rpc(token: string, method: string, params?: Record<string, unknown>, overrides: Partial<Env> = {}) {
       const response = await target(overrides).request(origin + "/api/mcp", { method: "POST", headers: {
@@ -440,7 +442,10 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
         expect(denied.status).toBe(200); expect(denied.body.result.isError).toBe(true);
         const [challenge] = denied.body.result._meta["mcp/www_authenticate"];
         expect(challenge).toContain('error="insufficient_scope"'); expect(challenge).toContain('error_description="');
-        expect(challenge).toContain(`scope="${required}"`); expect(challenge).toContain(`resource_metadata="${origin}/.well-known/oauth-protected-resource/api/mcp"`);
+        const requestedScopes = /(?:^|, )scope="([^"]+)"/.exec(challenge)![1].split(" ");
+        expect([...requestedScopes].sort()).toEqual([...new Set([...initial, ...required.split(" ")])].sort());
+        if (name === "add_shopping_item") shoppingUpgradeScopes = requestedScopes;
+        expect(challenge).toContain(`resource_metadata="${origin}/.well-known/oauth-protected-resource/api/mcp"`);
         expect(JSON.stringify(denied.body)).not.toContain(token.access_token);
       }
       expect(await domainSnapshot()).toEqual(snapshot);
@@ -455,6 +460,9 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
         adultAttested: true, privacyAttested: true, providerSettingsReviewed: true, policyVersion: MCP_POLICY_VERSION });
       expect(await limited.mcp.decideConsent(owner.headers, { pendingId: deniedPending.pendingId, oauthQuery: deniedQuery, accept: false })).toEqual({ accepted: false });
       await expect(limited.mcp.authorize(bearer(token.access_token))).resolves.toMatchObject({ scopes: initial });
+      const shoppingUpgrade = await establish(shoppingUpgradeScopes, ["shopping.read", "chores.read", "shopping.add"]);
+      expect(await names(shoppingUpgrade.access_token)).toEqual(expect.arrayContaining(["list_shopping_items", "list_chores", "add_shopping_item"]));
+      await expect(limited.mcp.authorize(bearer(shoppingUpgrade.access_token))).resolves.toMatchObject({ scopes: shoppingUpgradeScopes });
       const partial = await establish([...initial, "health:read"]);
       const partialNames = await names(partial.access_token);
       expect(partialNames).not.toContain("get_medication_group_schedule");
@@ -464,6 +472,7 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
       await limited.mcp.withDirectActionContext(bearer(upgraded.access_token), ["shopping:write"], async () => true);
       const saved = await rpc(upgraded.access_token, "tools/call", { name: "add_shopping_item", arguments: { title: "Fictional explicit incremental consent item" } });
       expect(saved.body.result.isError, JSON.stringify(saved)).not.toBe(true); expect(saved.body.result.structuredContent.outcome).toBe("added");
+      createdItemId = saved.body.result.structuredContent.item.id;
       // A scope already held with its capability switched off never prompts to undo the member's choice.
       await limited.mcp.setCapabilities(owner.headers, upgraded.connectionId, { capabilities: capabilities.filter(c => c !== "shopping.add") });
       expect(await names(upgraded.access_token)).not.toContain("add_shopping_item");
@@ -472,6 +481,7 @@ for (const mode of ["single", "shared"] as const) suite(`MCP delegated authoriza
       await limited.mcp.revokeConnection(owner.headers, upgraded.connectionId);
       expect((await rpc(upgraded.access_token, "tools/list")).status).toBe(401);
     } finally {
+      if (createdItemId) await owned(owner, tx => tx.delete(shoppingItems).where(and(eq(shoppingItems.id, createdItemId!), eq(shoppingItems.householdId, owner.householdId), eq(shoppingItems.item, "Fictional explicit incremental consent item"))));
       await owned(owner, tx => tx.update(households).set({ modulesEnabled: householdBefore.modulesEnabled }).where(eq(households.id, owner.householdId)));
       if (subscriptionBefore) await owned(owner, tx => tx.update(householdSubscriptions).set({ modulesEntitled: subscriptionBefore.modulesEntitled, status: subscriptionBefore.status }).where(eq(householdSubscriptions.householdId, owner.householdId)));
       else await owned(owner, tx => tx.delete(householdSubscriptions).where(eq(householdSubscriptions.householdId, owner.householdId)));

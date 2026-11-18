@@ -92,9 +92,11 @@ export function mcpGateway(db: Database, auth: Authorization, env: Env, tools: r
                       (await discoverableTools(tx, env, current, tools)).some(candidate => candidate.name === tool.name));
                     if (upgrade) {
                       outcome = "consent_required";
+                      // Consent replaces the grant: retain its existing token scopes, including refresh access.
+                      const requestedScopes = [...new Set([...identity!.scopes, ...tool.scopes])];
                       return { isError: true, content: [{ type: "text" as const,
                         text: "Additional permission is required. Nothing was saved. Review Domi Ops consent before continuing; discovering this tool does not enable it." }],
-                        _meta: { "mcp/www_authenticate": [`${challenge}, error="insufficient_scope", error_description="Additional Domi Ops permission is required", scope="${tool.scopes.join(" ")}"`] } };
+                        _meta: { "mcp/www_authenticate": [`${challenge}, error="insufficient_scope", error_description="Additional Domi Ops permission is required", scope="${requestedScopes.join(" ")}"`] } };
                     }
                   }
                   const result = tool.execution === "direct" ? await auth.withDirectActionContext(bearerRequest, tool.scopes, async (tx, current) => {
