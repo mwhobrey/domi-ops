@@ -3,6 +3,14 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: "standalone",
   transpilePackages: ["@domi-ops/marketing-ui"],
+  // Standalone traces only files webpack can see. Blog markdown is read at
+  // request time from content/blog, so include it in the traced output as well
+  // as copying it in apps/www/Dockerfile.
+  outputFileTracingIncludes: {
+    "/blog": ["./content/blog/**/*"],
+    "/blog/[slug]": ["./content/blog/**/*"],
+    "/sitemap.xml": ["./content/blog/**/*"],
+  },
   async headers() {
     return [
       {

@@ -66,6 +66,7 @@ export function MarketingShell({
               <LinkButton href="/health" variant="ghost" size="sm">Health</LinkButton>
               <LinkButton href="/faq" variant="ghost" size="sm">FAQ</LinkButton>
               <LinkButton href="/about" variant="ghost" size="sm">Our story</LinkButton>
+              <LinkButton href="/blog" variant="ghost" size="sm">Blog</LinkButton>
               <AnchorButton href={urls.appLogin} variant="secondary" size="sm">Log in</AnchorButton>
               {urls.demo && <AnchorButton href={urls.demo} variant="ghost" size="sm">Try the demo</AnchorButton>}
               {urls.ossRepoPublic && <AnchorButton href={urls.setupDocs} variant="ghost" size="sm">Self-host guide</AnchorButton>}
@@ -86,6 +87,9 @@ export function MarketingShell({
             )}
             <Link href="/about" className="min-h-11 inline-flex items-center hover:text-[var(--color-text)]">
               Our story
+            </Link>
+            <Link href="/blog" className="min-h-11 inline-flex items-center hover:text-[var(--color-text)]">
+              Blog
             </Link>
             <a
               href="https://chatgpt.com/plugins/plugin_asdk_app_6ae0aba26a6481919c67125a963fa4f9"

@@ -17,18 +17,22 @@ export function pageSocial(opts: {
   description: string;
   path: string;
   image?: keyof typeof OG_IMAGES;
+  type?: "website" | "article";
+  publishedTime?: string;
 }): Pick<Metadata, "openGraph" | "twitter"> {
   const img = OG_IMAGES[opts.image ?? "default"];
   const images = [{ url: img.path, ...OG_IMAGE_SIZE, alt: img.alt }];
+  const type = opts.type ?? "website";
   return {
     openGraph: {
-      type: "website",
+      type,
       siteName: "Domi Ops",
       locale: "en_US",
       title: opts.title,
       description: opts.description,
       url: opts.path,
       images,
+      ...(type === "article" && opts.publishedTime ? { publishedTime: opts.publishedTime } : {}),
     },
     twitter: {
       card: "summary_large_image",

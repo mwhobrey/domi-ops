@@ -8,6 +8,8 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+- Added a blog at [domi-ops.com/blog](https://domi-ops.com/blog). Posts are markdown files in the repo, and they stay off the index, the post URL, and the sitemap until their date in America/Chicago.
+
 - Fixed discovery of additional permissions for the existing public ChatGPT
   connection. Eligible tool definitions now declare their required scopes and
   prompt for additional consent when needed. Every call still requires its
