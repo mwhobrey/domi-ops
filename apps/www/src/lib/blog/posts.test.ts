@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { getPublishedPost, listPublishedPosts, loadAllPosts } from "./posts";
 
 const fixtures: string[] = [];
@@ -69,6 +69,26 @@ describe("published post helpers", () => {
     expect(getPublishedPost("future-post", atMidnight, dir)?.slug).toBe("future-post");
   });
 
+  it("skips a malformed file, logs the filename, and still returns valid posts", () => {
+    const dir = writeFixture({
+      "already-out.md": past,
+      "broken.md": "this is not a post\n",
+    });
+    const errors: string[] = [];
+    const spy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      errors.push(args.map(String).join(" "));
+    });
+    try {
+      const all = loadAllPosts(dir);
+      expect(all.map((post) => post.slug)).toEqual(["already-out"]);
+      const now = new Date("2026-11-23T16:00:00.000Z");
+      expect(listPublishedPosts(now, dir).map((post) => post.slug)).toEqual(["already-out"]);
+      expect(errors.some((line) => line.includes("broken.md"))).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it("reads the real Caregivers Day draft as unpublished before February 19, 2027", () => {
     const now = new Date("2026-11-23T16:00:00.000Z");
     expect(getPublishedPost("national-caregivers-day-coordination", now)).toBeNull();
@@ -80,6 +100,7 @@ describe("published post helpers", () => {
       new Date("2027-02-19T00:00:00.000-06:00"),
     );
     expect(live?.title).toBe("National Caregivers Day: Caregiving Is Also Coordination");
+    expect(live?.author).toBe("Mike Whobrey");
     expect(live?.body).toContain("By Mike Whobrey");
     expect(live?.body).not.toMatch(/^# /);
   });

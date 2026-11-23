@@ -27,18 +27,25 @@ export function loadAllPosts(dir: string = getBlogContentDir()): BlogPost[] {
   // Turbopack would otherwise trace the whole project; markdown is copied into
   // the image by the Dockerfile and outputFileTracingIncludes.
   const files = fs.readdirSync(/*turbopackIgnore: true*/ dir).filter((name) => name.endsWith(".md"));
-  const posts = files.map((name) => {
+  const posts: BlogPost[] = [];
+  const slugs = new Map<string, string>();
+  for (const name of files) {
     const filePath = path.join(/*turbopackIgnore: true*/ dir, name);
-    const raw = fs.readFileSync(/*turbopackIgnore: true*/ filePath, "utf8");
-    const parsed = parseBlogMarkdown(raw, filePath);
-    return { ...parsed.frontmatter, body: parsed.body };
-  });
-  const slugs = new Set<string>();
-  for (const post of posts) {
-    if (slugs.has(post.slug)) {
-      throw new Error(`Duplicate blog slug "${post.slug}"`);
+    try {
+      const raw = fs.readFileSync(/*turbopackIgnore: true*/ filePath, "utf8");
+      const parsed = parseBlogMarkdown(raw, filePath);
+      const post = { ...parsed.frontmatter, body: parsed.body };
+      const existing = slugs.get(post.slug);
+      if (existing) {
+        console.error(`Skipping blog post ${name}: duplicate slug "${post.slug}" (already used by ${existing})`);
+        continue;
+      }
+      slugs.set(post.slug, name);
+      posts.push(post);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`Skipping malformed blog post ${name}: ${message}`);
     }
-    slugs.add(post.slug);
   }
   return posts.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.slug.localeCompare(b.slug)));
 }

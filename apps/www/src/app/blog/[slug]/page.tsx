@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { MarketingShell, resolveMarketingUrls } from "@domi-ops/marketing-ui";
 import { BlogMarkdown } from "@/components/BlogMarkdown";
-import { formatPostDate, getPublishedPost } from "@/lib/blog";
+import { formatPostDate, getPublishedPost, serializeJsonLd } from "@/lib/blog";
 import { SITE_URL } from "@/lib/faq";
 import { pageSocial } from "@/lib/og";
 
@@ -62,7 +62,7 @@ export default async function BlogPostPage({ params }: PostPageProps) {
     <MarketingShell urls={urls}>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
       />
       <article className="mx-auto max-w-2xl px-4 py-12 sm:px-6 sm:py-16">
         <p className="text-label text-[var(--color-accent)]">

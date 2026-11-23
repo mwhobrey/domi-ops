@@ -5,6 +5,7 @@ date: 2027-02-19
 description: "Friday, February 19, 2027 is National Caregivers Day. The work worth honoring includes the coordination that keeps daily care on track."
 tags: [national-caregivers-day, caregiving, medications, household]
 canonical_url: https://domi-ops.com/blog/national-caregivers-day-coordination
+author: Mike Whobrey
 ---
 
 # National Caregivers Day: Caregiving Is Also Coordination
