@@ -19,7 +19,7 @@
     "better-sqlite3": "^11.10.0",
     "commander": "^15.1.0",
     "drizzle-orm": "^0.45.4",
-    "postgres": "^3.4.7",
+    "postgres": "^4.1.1",
     "yaml": "^2.9.1"
   },
   "devDependencies": {
