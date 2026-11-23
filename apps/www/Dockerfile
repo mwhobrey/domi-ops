@@ -14,6 +14,12 @@ ENV NODE_ENV=production
 COPY --from=builder /app/apps/www/.next/standalone ./
 COPY --from=builder /app/apps/www/.next/static ./apps/www/.next/static
 COPY --from=builder /app/apps/www/public ./apps/www/public
+# Markdown posts are read at request time for America/Chicago date-gating, so they
+# must be present in the image even if file tracing misses them. Copy to both
+# process.cwd() locations used by getBlogContentDir: /content (image root) and
+# /apps/www/content (standalone layout).
+COPY --from=builder /app/apps/www/content ./content
+COPY --from=builder /app/apps/www/content ./apps/www/content
 EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
