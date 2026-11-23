@@ -104,4 +104,13 @@ describe("published post helpers", () => {
     expect(live?.body).toContain("By Mike Whobrey");
     expect(live?.body).not.toMatch(/^# /);
   });
+
+  it("treats the Why I Built Domi Ops post as published on November 23, 2026", () => {
+    const now = new Date("2026-11-23T16:00:00.000Z");
+    const launch = getPublishedPost("why-i-built-domi-ops", now);
+    expect(launch?.title).toBe("Why I Built Domi Ops");
+    expect(launch?.author).toBe("Mike Whobrey");
+    expect(listPublishedPosts(now).map((post) => post.slug)).toEqual(["why-i-built-domi-ops"]);
+    expect(getPublishedPost("why-i-built-domi-ops", new Date("2026-11-23T05:59:59.000Z"))).toBeNull();
+  });
 });
