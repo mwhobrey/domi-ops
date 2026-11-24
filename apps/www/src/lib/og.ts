@@ -8,6 +8,9 @@ export const OG_IMAGES = {
   health: { path: "/og/og-health.png", alt: "Domi Ops health tracking: medications, scheduled checks, reminders and reports" },
 } as const;
 
+/** A same-origin 1200x630 image, such as a generated per-post card. */
+export type SocialImage = { path: string; alt: string };
+
 /**
  * Open Graph and Twitter tags for one page. A page-level `openGraph` replaces the layout's rather
  * than merging, so each page that sets its own title has to bring its own image and url too.
@@ -16,11 +19,11 @@ export function pageSocial(opts: {
   title: string;
   description: string;
   path: string;
-  image?: keyof typeof OG_IMAGES;
+  image?: keyof typeof OG_IMAGES | SocialImage;
   type?: "website" | "article";
   publishedTime?: string;
 }): Pick<Metadata, "openGraph" | "twitter"> {
-  const img = OG_IMAGES[opts.image ?? "default"];
+  const img = typeof opts.image === "object" ? opts.image : OG_IMAGES[opts.image ?? "default"];
   const images = [{ url: img.path, ...OG_IMAGE_SIZE, alt: img.alt }];
   const type = opts.type ?? "website";
   return {

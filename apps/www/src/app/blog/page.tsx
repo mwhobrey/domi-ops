@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { MarketingShell, resolveMarketingUrls } from "@domi-ops/marketing-ui";
-import { formatPostDate, listPublishedPosts } from "@/lib/blog";
+import { BLOG_FEED_ALTERNATE_TYPES, formatPostDate, listPublishedPosts } from "@/lib/blog";
 import { pageSocial } from "@/lib/og";
 
 const TITLE = "Blog | Domi Ops";
@@ -10,7 +10,10 @@ const DESCRIPTION =
 export const metadata = {
   title: TITLE,
   description: DESCRIPTION,
-  alternates: { canonical: "/blog" },
+  alternates: {
+    canonical: "/blog",
+    types: BLOG_FEED_ALTERNATE_TYPES,
+  },
   ...pageSocial({ title: TITLE, description: DESCRIPTION, path: "/blog" }),
 };
 
