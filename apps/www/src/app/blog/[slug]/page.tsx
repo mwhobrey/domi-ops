@@ -3,9 +3,8 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { MarketingShell, resolveMarketingUrls } from "@domi-ops/marketing-ui";
 import { BlogMarkdown } from "@/components/BlogMarkdown";
-import { formatPostDate, getPublishedPost, serializeJsonLd } from "@/lib/blog";
+import { formatPostDate, getPublishedPost, postMetadata, postShareImagePath, serializeJsonLd } from "@/lib/blog";
 import { SITE_URL } from "@/lib/faq";
-import { pageSocial } from "@/lib/og";
 
 type PostPageProps = {
   params: Promise<{ slug: string }>;
@@ -21,20 +20,7 @@ export async function generateMetadata({ params }: PostPageProps): Promise<Metad
   if (!post) {
     return { title: "Post not found | Domi Ops" };
   }
-  const title = `${post.title} | Domi Ops`;
-  const path = `/blog/${post.slug}`;
-  return {
-    title,
-    description: post.description,
-    alternates: { canonical: post.canonicalUrl ?? path },
-    ...pageSocial({
-      title,
-      description: post.description,
-      path,
-      type: "article",
-      publishedTime: post.date,
-    }),
-  };
+  return postMetadata(post);
 }
 
 export default async function BlogPostPage({ params }: PostPageProps) {
@@ -52,6 +38,7 @@ export default async function BlogPostPage({ params }: PostPageProps) {
     datePublished: post.date,
     url: canonical,
     mainEntityOfPage: canonical,
+    image: `${SITE_URL}${postShareImagePath(post.slug)}`,
     author: post.author
       ? { "@type": "Person", name: post.author }
       : { "@type": "Organization", name: "Domi Ops" },
