@@ -4,10 +4,9 @@ import {
   PrivacyPolicyContent,
   resolveMarketingUrls,
 } from "@domi-ops/marketing-ui";
+import { PRIVACY_METADATA } from "@/lib/page-metadata";
 
-export const metadata = {
-  title: "Privacy Policy | Domi Ops",
-};
+export const metadata = PRIVACY_METADATA;
 
 // Reads NEXT_PUBLIC_* env vars at render time — see app/page.tsx for why this has to be forced
 // dynamic or those values freeze at build time.
