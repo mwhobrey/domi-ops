@@ -16,7 +16,7 @@
     "@aws-sdk/client-s3": "^3.1167.0",
     "@domi-ops/config": "*",
     "@domi-ops/db": "*",
-    "better-sqlite3": "^11.10.0",
+    "better-sqlite3": "^13.2.0",
     "commander": "^15.1.0",
     "drizzle-orm": "^0.45.4",
     "postgres": "^3.4.7",
