@@ -125,5 +125,19 @@ describe("buildRssFeed", () => {
     });
     expect(xml).toContain("<link>https://domi-ops.com/blog/why-i-built-domi-ops</link>");
     expect(xml).not.toContain("national-caregivers-day-coordination");
+    expect(xml).not.toContain("poison-prevention-household-routine");
+  });
+
+  it("keeps the real Poison Prevention Week post out of a feed until America/Chicago midnight on March 23, 2027", () => {
+    const feedAt = (iso: string) =>
+      buildRssFeed({ siteUrl: "https://domi-ops.com", posts: listPublishedPosts(new Date(iso)) });
+
+    const before = feedAt("2027-03-23T04:59:59.999Z");
+    expect(before).toContain("<link>https://domi-ops.com/blog/why-i-built-domi-ops</link>");
+    expect(before).not.toContain("poison-prevention-household-routine");
+    expect(feedAt("2027-03-23T00:00:00.000Z")).not.toContain("poison-prevention-household-routine");
+
+    const after = feedAt("2027-03-23T05:00:00.000Z");
+    expect(after).toContain("<link>https://domi-ops.com/blog/poison-prevention-household-routine</link>");
   });
 });
