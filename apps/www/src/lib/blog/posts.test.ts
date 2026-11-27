@@ -104,4 +104,23 @@ describe("published post helpers", () => {
     expect(live?.body).toContain("By Mike Whobrey");
     expect(live?.body).not.toMatch(/^# /);
   });
+  it("reads the real Poison Prevention Week draft as unpublished before March 23, 2027", () => {
+    const now = new Date("2026-11-26T16:00:00.000Z");
+    expect(getPublishedPost("poison-prevention-household-routine", now)).toBeNull();
+    expect(listPublishedPosts(now).some((post) => post.slug === "poison-prevention-household-routine")).toBe(
+      false,
+    );
+    // 2027-03-23 is CDT (UTC-5) after the March 14 DST change. UTC midnight is still March 22 in Chicago.
+    expect(getPublishedPost("poison-prevention-household-routine", new Date("2027-03-23T00:00:00.000Z"))).toBeNull();
+    expect(getPublishedPost("poison-prevention-household-routine", new Date("2027-03-23T04:59:59.000Z"))).toBeNull();
+    const live = getPublishedPost(
+      "poison-prevention-household-routine",
+      new Date("2027-03-23T00:00:00.000-05:00"),
+    );
+    expect(live?.title).toBe("Poison Prevention Week: Turn Safe Storage Into a Household Routine");
+    expect(live?.author).toBe("Mike Whobrey");
+    expect(live?.date).toBe("2027-03-23");
+    expect(live?.body).toContain("By Mike Whobrey");
+    expect(live?.body).not.toMatch(/^# /);
+  });
 });

@@ -32,4 +32,26 @@ describe("renderPostShareImage", () => {
     const res = renderPostShareImage("national-caregivers-day-coordination", new Date("2027-02-19T06:00:00.000Z"));
     expect(res.status).toBe(200);
   });
+
+  it("404s the Poison Prevention Week card before America/Chicago midnight on March 23, 2027", () => {
+    for (const now of [
+      new Date("2026-11-26T16:00:00.000Z"),
+      new Date("2027-03-23T00:00:00.000Z"),
+      new Date("2027-03-23T04:59:59.000Z"),
+    ]) {
+      const res = renderPostShareImage("poison-prevention-household-routine", now);
+      expect(res.status).toBe(404);
+      expect(res.headers.get("cache-control")).toBe("private, no-cache, no-store");
+    }
+  });
+
+  it("renders the Poison Prevention Week card from its Chicago midnight", async () => {
+    const res = renderPostShareImage("poison-prevention-household-routine", new Date("2027-03-23T05:00:00.000Z"));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("image/png");
+    const png = Buffer.from(await res.arrayBuffer());
+    expect(png.subarray(1, 4).toString("ascii")).toBe("PNG");
+    expect(png.readUInt32BE(16)).toBe(1200);
+    expect(png.readUInt32BE(20)).toBe(630);
+  }, 30_000);
 });
