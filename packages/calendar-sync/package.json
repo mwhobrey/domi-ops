@@ -22,7 +22,7 @@
     "bullmq": "^6.7.5",
     "drizzle-orm": "^0.45.4",
     "ioredis": "^5.11.1",
-    "web-push": "^3.6.7"
+    "web-push": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
