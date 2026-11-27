@@ -599,8 +599,9 @@ export function TermsOfServiceContent({ privacyHref }: { privacyHref: string }) 
           Hosted Starter is currently <strong className="text-[var(--color-text)]">$12/month</strong>{" "}
           or <strong className="text-[var(--color-text)]">$120/year</strong>, with a 14-day trial
           that requires a card and renews automatically unless canceled. Prices may change with
-          notice. Cloud availability is shown on the pricing page. The household owner can manage
-          web billing and cancel renewal in Settings; store purchases are managed through the store.
+          notice. Cloud availability is shown on the pricing page. Billing is through the web: the
+          household owner can manage billing and cancel renewal in Settings. If purchases through an
+          app store become available, those are managed through that store.
           Scheduled cancellation keeps paid access through the current period. Failed payments
           receive a 72-hour grace period from the recorded payment failure before product writes
           and background jobs pause. After access ends, household members can still read and export

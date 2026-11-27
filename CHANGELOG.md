@@ -8,6 +8,7 @@ This file starts tracking from 2026-08-30. Earlier history lives in `git log` an
 
 ## [Unreleased]
 
+- The About, Privacy, and Terms pages on domi-ops.com now have their own share title, description, and URL instead of the homepage's. The Terms now say billing is through the web, with store purchases covered only if an app store option becomes available.
 - Added a National Poison Prevention Week blog post, date-gated to March 23, 2027 in America/Chicago.
 - Added an RSS feed at [domi-ops.com/blog/rss.xml](https://domi-ops.com/blog/rss.xml) and a generated share image for each blog post. Both follow the same America/Chicago date gate as the index, post pages, and sitemap.
 - Added a blog at [domi-ops.com/blog](https://domi-ops.com/blog). Posts are markdown files in the repo, and they stay off the index, the post URL, and the sitemap until their date in America/Chicago.

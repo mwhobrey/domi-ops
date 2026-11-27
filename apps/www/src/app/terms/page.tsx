@@ -4,10 +4,9 @@ import {
   resolveMarketingUrls,
   TermsOfServiceContent,
 } from "@domi-ops/marketing-ui";
+import { TERMS_METADATA } from "@/lib/page-metadata";
 
-export const metadata = {
-  title: "Terms of Service | Domi Ops",
-};
+export const metadata = TERMS_METADATA;
 
 // Reads NEXT_PUBLIC_* env vars at render time — see app/page.tsx for why this has to be forced
 // dynamic or those values freeze at build time.

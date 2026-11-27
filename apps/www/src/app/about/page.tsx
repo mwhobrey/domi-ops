@@ -1,11 +1,7 @@
 import { AnchorButton, LinkButton, MarketingShell, resolveMarketingUrls } from "@domi-ops/marketing-ui";
+import { ABOUT_METADATA } from "@/lib/page-metadata";
 
-export const metadata = {
-  title: "Our story | Domi Ops",
-  description:
-    "Why Mike Whobrey built Domi Ops: a homeschooling family that needed school records, a reliable calendar, and health tracking that fits a complicated medication schedule.",
-  alternates: { canonical: "/about" },
-};
+export const metadata = ABOUT_METADATA;
 
 // Reads NEXT_PUBLIC_* env vars at render time; see app/page.tsx.
 export const dynamic = "force-dynamic";
