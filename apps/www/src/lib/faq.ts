@@ -71,7 +71,7 @@ export const FAQ_ITEMS: FaqItem[] = [
   },
   {
     q: "What happens to my data if I cancel Cloud?",
-    a: "Cancel renewal in household Settings; store subscriptions are managed through the store. Scheduled cancellation keeps paid access through the current period. When the subscription ends, you can still read and export records your permissions allow, while changes and background jobs pause. Cancellation does not itself delete household data. See the privacy policy or contact privacy@domi-ops.com to request household deletion.",
+    a: "Billing is through the web, and the household owner manages it, including canceling renewal, in household Settings. If purchases through an app store become available, those are managed through that store. Scheduled cancellation keeps paid access through the current period. When the subscription ends, you can still read and export records your permissions allow, while changes and background jobs pause. Cancellation does not itself delete household data. See the privacy policy or contact privacy@domi-ops.com to request household deletion.",
   },
   {
     q: "Does it work on my phone?",
